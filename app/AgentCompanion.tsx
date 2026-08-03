@@ -32,7 +32,9 @@ export default function AgentCompanion() {
     const mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     let merged: HTMLElement | null = null;
     let sitting = false;
+    let satAt = 0;
     let stripW = 0;
+    let stripH = 14;
     let sitOff = 0; // face settle offset, lerped
     let raf = 0;
 
@@ -79,6 +81,7 @@ export default function AgentCompanion() {
         const near = Math.abs(pos.x - tx) < 24 && Math.abs(pos.y - ty) < 24;
         if (near && !sitting && merged) {
           sitting = true;
+          satAt = now;
           merged.classList.add("agent-merged");
           stage.classList.remove("agent-melting");
         }
@@ -115,16 +118,25 @@ export default function AgentCompanion() {
       // Body blob (44px) inside the stage; shrinks as it pours into the strip.
       body.style.transform = `translate3d(${pos.x - 22 - sx}px, ${pos.y - 22 - sy + bob}px, 0) scale(${sitting ? 0.6 : 1})`;
 
-      // Border strip: appears at the landing point, then stretches along the card border.
+      // Border strip: appears at the landing point, stretches along the border
+      // (staying clear of the rounded corners), then settles to near-border thickness.
       if (rect) {
-        const targetW = sitting ? rect.width + 6 : 96;
+        const inset = 26; // keep off the 2rem rounded corners
+        const settled = sitting && now - satAt > 550;
+        const targetW = sitting ? rect.width - inset * 2 : 96;
+        const targetH = settled ? 9 : 14;
         stripW += (targetW - stripW) * 0.13;
-        const cx = sitting ? rect.left - 3 + (rect.width + 6) / 2 : tx;
+        stripH += (targetH - stripH) * 0.08;
+        let cx = sitting ? rect.left + rect.width / 2 : tx;
+        cx = Math.max(rect.left + inset + stripW / 2, Math.min(rect.right - inset - stripW / 2, cx));
         strip.style.opacity = "1";
         strip.style.width = `${stripW}px`;
-        strip.style.transform = `translate3d(${cx - stripW / 2 - sx}px, ${rect.top - 7 - sy}px, 0)`;
+        strip.style.height = `${stripH}px`;
+        strip.style.borderRadius = `${stripH / 2}px`;
+        strip.style.transform = `translate3d(${cx - stripW / 2 - sx}px, ${rect.top - stripH / 2 - sy}px, 0)`;
       } else {
         stripW = 0;
+        stripH = 14;
         strip.style.opacity = "0";
       }
 
