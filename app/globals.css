@@ -109,17 +109,15 @@ body {
   100% { transform: translate(-24px, 26px) scale(0); }
 }
 
-/* The card-border strip: same liquid layer, so the bot truly fuses with it. */
-.agent-strip {
+/* The card border itself, living inside the liquid layer. */
+.agent-ring {
   position: absolute;
   left: 0;
   top: 0;
-  height: 14px;
-  border-radius: 8px;
-  background: #5b4be8;
   opacity: 0;
+  overflow: visible;
   transition: opacity 0.25s ease;
-  will-change: transform, width;
+  will-change: transform;
 }
 
 .agent-face2 {
@@ -138,12 +136,10 @@ body {
   97.5% { transform: scaleY(0.08); }
 }
 
-/* Once fused, the rest of the card outline lights up to complete "the border". */
+/* The liquid ring IS the border now — the card just gets a soft glow. */
 .agent-merged {
-  box-shadow:
-    0 0 0 3px #5b4be8,
-    0 10px 34px rgba(91, 75, 232, 0.32) !important;
-  transition: box-shadow 0.45s ease 0.1s;
+  box-shadow: 0 12px 36px rgba(91, 75, 232, 0.3) !important;
+  transition: box-shadow 0.45s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {

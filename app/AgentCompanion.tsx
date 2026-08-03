@@ -13,7 +13,8 @@ export default function AgentCompanion() {
   const rootRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const stripRef = useRef<HTMLDivElement>(null);
+  const ringSvgRef = useRef<SVGSVGElement>(null);
+  const ringPathRef = useRef<SVGPathElement>(null);
   const faceRef = useRef<SVGSVGElement>(null);
   const pupilL = useRef<SVGCircleElement>(null);
   const pupilR = useRef<SVGCircleElement>(null);
@@ -23,8 +24,8 @@ export default function AgentCompanion() {
     if (window.matchMedia("(pointer: coarse)").matches) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const root = rootRef.current, stage = stageRef.current, body = bodyRef.current,
-      strip = stripRef.current, face = faceRef.current;
-    if (!root || !stage || !body || !strip || !face) return;
+      ringSvg = ringSvgRef.current, ringPath = ringPathRef.current, face = faceRef.current;
+    if (!root || !stage || !body || !ringSvg || !ringPath || !face) return;
     root.style.opacity = "1";
 
     const pos = { x: window.innerWidth - 92, y: window.innerHeight * 0.42 };
@@ -32,11 +33,19 @@ export default function AgentCompanion() {
     const mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     let merged: HTMLElement | null = null;
     let sitting = false;
-    let satAt = 0;
-    let stripW = 0;
-    let stripH = 14;
     let sitOff = 0; // face settle offset, lerped
+    let ringCard: HTMLElement | null = null;
+    let ringLen = 0;
+    let seg = 60; // visible dash segment, centered on the landing point
     let raf = 0;
+
+    // Rounded-rect outline path that STARTS at the landing point on the top edge,
+    // so the border "pours" symmetrically both ways from where the bot lands.
+    const buildRing = (w: number, h: number) => {
+      const r = 32;
+      const x0 = Math.max(r + 8, Math.min(w - r - 8, w - 64));
+      return `M ${x0} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h} H ${r} A ${r} ${r} 0 0 1 0 ${h - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
+    };
 
     const cards = Array.from(document.querySelectorAll<HTMLElement>("[data-agent-card]"));
 
@@ -81,7 +90,6 @@ export default function AgentCompanion() {
         const near = Math.abs(pos.x - tx) < 24 && Math.abs(pos.y - ty) < 24;
         if (near && !sitting && merged) {
           sitting = true;
-          satAt = now;
           merged.classList.add("agent-merged");
           stage.classList.remove("agent-melting");
         }
@@ -100,13 +108,13 @@ export default function AgentCompanion() {
       const bob = merged ? 0 : Math.sin(now / 620) * 3;
       sitOff += ((sitting ? 9 : 0) - sitOff) * 0.12;
 
-      // Stage: covers bot + card strip so the goo filter can bridge them.
+      // Stage: covers bot + whole card so the goo filter can bridge them.
       let sx: number, sy: number, sw: number, sh: number;
       if (rect) {
-        const minX = Math.min(pos.x - 60, rect.left - 20);
-        const maxX = Math.max(pos.x + 60, rect.right + 20);
-        const minY = Math.min(pos.y - 60, rect.top - 26);
-        const maxY = Math.max(pos.y + 60, rect.top + 40);
+        const minX = Math.min(pos.x - 60, rect.left - 24);
+        const maxX = Math.max(pos.x + 60, rect.right + 24);
+        const minY = Math.min(pos.y - 60, rect.top - 24);
+        const maxY = Math.max(pos.y + 60, rect.bottom + 24);
         sx = minX; sy = minY; sw = maxX - minX; sh = maxY - minY;
       } else {
         sx = pos.x - 80; sy = pos.y - 80; sw = 160; sh = 160;
@@ -118,26 +126,28 @@ export default function AgentCompanion() {
       // Body blob (44px) inside the stage; shrinks as it pours into the strip.
       body.style.transform = `translate3d(${pos.x - 22 - sx}px, ${pos.y - 22 - sy + bob}px, 0) scale(${sitting ? 0.6 : 1})`;
 
-      // Border strip: appears at the landing point, stretches along the border
-      // (staying clear of the rounded corners), then settles to near-border thickness.
-      if (rect) {
-        const inset = 26; // keep off the 2rem rounded corners
-        const settled = sitting && now - satAt > 550;
-        const targetW = sitting ? rect.width - inset * 2 : 96;
-        const targetH = settled ? 9 : 14;
-        stripW += (targetW - stripW) * 0.13;
-        stripH += (targetH - stripH) * 0.08;
-        let cx = sitting ? rect.left + rect.width / 2 : tx;
-        cx = Math.max(rect.left + inset + stripW / 2, Math.min(rect.right - inset - stripW / 2, cx));
-        strip.style.opacity = "1";
-        strip.style.width = `${stripW}px`;
-        strip.style.height = `${stripH}px`;
-        strip.style.borderRadius = `${stripH / 2}px`;
-        strip.style.transform = `translate3d(${cx - stripW / 2 - sx}px, ${rect.top - stripH / 2 - sy}px, 0)`;
+      // The card border itself, inside the liquid layer: an SVG outline whose
+      // visible dash segment grows from the landing point around the whole card.
+      if (rect && merged) {
+        if (ringCard !== merged) {
+          ringCard = merged;
+          ringPath.setAttribute("d", buildRing(rect.width, rect.height));
+          ringSvg.setAttribute("viewBox", `0 0 ${rect.width} ${rect.height}`);
+          ringSvg.style.width = `${rect.width}px`;
+          ringSvg.style.height = `${rect.height}px`;
+          ringLen = ringPath.getTotalLength();
+          seg = 60;
+        }
+        ringSvg.style.opacity = "1";
+        ringSvg.style.transform = `translate3d(${rect.left - sx}px, ${rect.top - sy}px, 0)`;
+        const targetSeg = sitting ? ringLen : 84;
+        seg += (targetSeg - seg) * (sitting ? 0.055 : 0.12);
+        ringPath.setAttribute("stroke-dasharray", `${seg} ${Math.max(1, ringLen - seg)}`);
+        ringPath.setAttribute("stroke-dashoffset", `${seg / 2}`);
       } else {
-        stripW = 0;
-        stripH = 14;
-        strip.style.opacity = "0";
+        ringCard = null;
+        seg = 60;
+        ringSvg.style.opacity = "0";
       }
 
       // Crisp face rides on top.
@@ -170,7 +180,7 @@ export default function AgentCompanion() {
       <svg width="0" height="0" aria-hidden style={{ position: "absolute" }}>
         <defs>
           <filter id="agent-goo">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur" />
+            <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
             <feColorMatrix
               in="blur"
               mode="matrix"
@@ -194,7 +204,9 @@ export default function AgentCompanion() {
             <span className="agent-drop2 agent-drop2-2" />
             <span className="agent-drop2 agent-drop2-3" />
           </div>
-          <div ref={stripRef} className="agent-strip" />
+          <svg ref={ringSvgRef} className="agent-ring">
+            <path ref={ringPathRef} fill="none" stroke="#5B4BE8" strokeWidth="8" strokeLinecap="round" />
+          </svg>
         </div>
 
         {/* Crisp face layer */}
