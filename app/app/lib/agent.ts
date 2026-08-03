@@ -129,7 +129,7 @@ export type SessionStreamHandlers = {
   /** Contenido completo y autoritativo del mensaje que acaba de cerrar. */
   onMessageComplete?: (content: string) => void;
   onToolProgress?: (toolName: string) => void;
-  /** Mensajes finales del run (puede haber varios si hubo tools). */
+  /** OJO: viene la sesión ENTERA (verificado: 327 mensajes), no este turno. */
   onRunComplete?: (messages: RunMessage[]) => void;
 };
 

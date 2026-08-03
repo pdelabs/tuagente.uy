@@ -259,11 +259,15 @@ export default function ChatPage() {
             if (tools[tools.length - 1] !== tool) tools.push(tool);
             setLiveTools([...tools]);
           },
+          // OJO: run.completed trae TODA la historia de la sesión, no los
+          // mensajes de este turno. Solo lo usamos de red de seguridad si no
+          // llegó nada por los deltas, y ahí vale el último del asistente.
           onRunComplete: (messages) => {
-            const finals = messages
-              .filter((m) => m.role === "assistant" && m.content?.trim())
-              .map((m) => m.content as string);
-            if (finals.length) paint(finals.join("\n\n"));
+            if (segments.some((s) => s.trim())) return;
+            const last = [...messages]
+              .reverse()
+              .find((m) => m.role === "assistant" && m.content?.trim());
+            if (last?.content) paint(last.content);
           },
         }, ac.signal);
       } else {
