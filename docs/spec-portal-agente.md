@@ -15,9 +15,11 @@ que el agente del cliente.
    Hermes del cliente. El portal no tiene base de datos.
 2. **El portal es estático.** Next.js en Vercel (repo tuagente.uy, ya deployado).
    Un solo deploy sirve a todos los clientes.
-3. **El humano aprueba.** El approval gate no es una feature del portal: es EL
-   producto. En cada instancia, el cliente ocupa el rol de aprobador que Luis
-   ocupa en La Mano (su SOUL lo nombra explícitamente).
+3. **El portal es una ventana, no una jaula.** Cada agente es su mundo con su
+   propósito; el portal se adapta al agente vía un manifest de capacidades y
+   JAMÁS limita ni intermedia sus poderes nativos (channels, skills, crons,
+   proactividad). El approval gate es un módulo que se muestra solo si el
+   agente usa ese patrón — La Mano lo usa; otros agentes no tienen por qué.
 4. **Nada de tocar la DB del kanban directamente.** Lección del 2026-08-03:
    sqlite con locks, claims y dispatcher + segundo escritor = corrupción.
    Toda escritura pasa por los módulos internos de Hermes (como hace el propio
@@ -53,6 +55,7 @@ sobrevive updates de imagen; versionado en el git del agente).
 
 | Método | Ruta | Qué hace |
 |---|---|---|
+| GET | `/portal/manifest` | capacidades de ESTE agente: módulos activos (kanban, approvals, files…), channels conectados. El portal se renderiza según esto |
 | GET | `/portal/health` | agente vivo, modelo activo, versión |
 | GET | `/portal/approvals` | tickets `blocked` con `needs_input` → `[{id, título, resumen, draft, fecha}]` |
 | POST | `/portal/approvals/{id}/approve` | comenta "aprobado vía portal" + unblock → el worker ejecuta (mecanismo comment→worker VERIFICADO el 2026-08-03) |
@@ -73,14 +76,22 @@ sobrevive updates de imagen; versionado en el git del agente).
 - `/portal/files`: siempre `text/plain` inline, nunca el mime real (lección
   anti-XSS del parche de attachments).
 
+## Coexistencia con los channels nativos
+
+Los channels de Hermes (Telegram, WhatsApp, etc.) siguen siendo de primera
+clase: la proactividad del agente vive ahí (él te busca). El portal es una
+ventana más al mismo agente — las sesiones de Hermes comparten memoria y
+estado (verificado: es cómo funciona el puente de aprobaciones de La Mano),
+así que lo conversado por Telegram y lo visto en el portal son el mismo mundo.
+
 ## Portal (repo tuagente.uy)
 
 Ruta `/app` (SPA dentro del Next existente):
 
 - **Login**: el cliente pega su magic link (`app.tuagente.uy/#endpoint=...&key=...`)
   → localStorage. Sin usuarios, sin DB, sin backend.
-- **Pantallas** (en orden de prioridad de build):
-  1. **Aprobaciones** (home): la bandeja con Aprobar/Rechazar — el producto
+- **Pantallas** (modulares según el manifest; orden de build):
+  1. **Aprobaciones**: la bandeja con Aprobar/Rechazar — home si el agente usa el patrón
   2. **Chat**: streaming + markdown (Vercel AI SDK `useChat` + react-markdown)
   3. **Pipeline**: kanban read-only con filtros por tenant/tags
   4. **Actividad**: timeline de lo que hizo el agente
