@@ -135,6 +135,14 @@ Ruta `/app` (SPA dentro del Next existente):
    (módulo desconocido → oculto). ANTI-PATRÓN declarado: jamás cachear/espejar
    estado del agente en el portal.
 
+## Presupuesto del plugin (regla anti-engorde)
+
+El plugin adapta SOLO donde la frontera de auth lo exige (:9119) o donde no
+existe endpoint (manifest). Hoy: kanban + manifest, y nada más. Si un tercer
+tipo de dato lo necesita → contribuir el endpoint upstream a Hermes (PR al
+api server), no engordar el adapter. Dos superficies: :8642 bearer = directo
+sin proxy; :9119 cookie = únicas candidatas a adapter.
+
 ## Qué NO se re-implementa (capa de datos)
 
 Chat, sesiones+historial y crons/jobs (incl. pause/resume/run) ya tienen REST
