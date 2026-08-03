@@ -102,6 +102,21 @@ export const jobAction = (c: PortalConfig, id: string, action: "pause" | "resume
 export const getSessions = (c: PortalConfig) => get<any>(c.endpoint, "/api/sessions", c);
 export const getSessionMessages = (c: PortalConfig, id: string) =>
   get<any>(c.endpoint, `/api/sessions/${id}/messages`, c);
+export const deleteSession = async (c: PortalConfig, id: string) => {
+  const res = await fetch(`${c.endpoint}/api/sessions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: headers(c),
+  });
+  if (!res.ok) throw new Error(`${res.status} al borrar la sesión`);
+};
+export const renameSession = async (c: PortalConfig, id: string, title: string) => {
+  const res = await fetch(`${c.endpoint}/api/sessions/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { ...headers(c), "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error(`${res.status} al renombrar la sesión`);
+};
 
 export type ChatMessage = { role: "user" | "assistant" | "system"; content: string };
 

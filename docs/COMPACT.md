@@ -25,13 +25,26 @@ no jaula (manifest de capacidades) · adapter solo donde la auth lo exige.
   app.tuagente.uy; para dev Next agregar http://localhost:3000 si hace falta)
 
 ## Endpoints VERIFICADOS en :8642 (bearer, sin adapter)
-- POST /v1/chat/completions (stream OK) · GET /v1/models
-- GET /api/sessions · GET /api/sessions/{id}/messages · POST /api/sessions/{id}/chat[/stream]
-- GET /api/jobs · POST /api/jobs/{id}/pause|resume|run · GET/PATCH/DELETE /api/jobs/{id}
+- POST /v1/chat/completions (stream OK, formato OpenAI) · GET /v1/models
+- GET /api/sessions (epoch en SEGUNDOS; `?limit=`) · GET /api/sessions/{id}/messages
+- POST /api/sessions (crea; devuelve {object, session:{id,…}})
+- PATCH /api/sessions/{id} {title} → 200 renombra · DELETE /api/sessions/{id} → 200
+  (PUT da 405; no existe /rename)
+- POST /api/sessions/{id}/chat/stream — body {"message": "..."} SINGULAR y SSE
+  NATIVO de Hermes (run.started / message.started / assistant.delta {delta} /
+  tool.progress {tool_name, "_thinking"} / assistant.completed / run.completed /
+  done). NO es compatible con el parser OpenAI: mandar {messages} da 400.
+- GET /api/jobs — ¡EXCLUYE los pausados! usar ?include_disabled=true
+- POST /api/jobs/{id}/pause|resume|run · GET/PATCH/DELETE /api/jobs/{id}
 - GET /health
 
-## En :8643 (adapter PoC, a extender)
-- GET /portal/manifest · GET /portal/tickets (bearer, CORS por env PORTAL_CORS_ORIGINS)
+## En :8643 (adapter propio, portal_adapter.py — v0.3.0)
+Todos bearer + CORS por env PORTAL_CORS_ORIGINS; nombre del agente por env AGENT_NAME.
+- GET /portal/manifest (módulos por detección real) · GET /portal/tickets
+- GET /portal/tickets/{id} → {ticket, comments[], events[]}
+- GET /portal/approvals · POST /portal/approvals/{id}/approve|reject {reason}
+- GET /portal/activity (job_run + eventos del kanban) · GET /portal/usage (+daily 14d)
+- GET /portal/files · GET /portal/files/{path} (siempre text/plain)
 
 ## Lecciones duras (NO repetir)
 1. kanban.db: JAMÁS escribir SQL directo (locks/claims/dispatcher → corrupción).

@@ -15,6 +15,7 @@ import {
   type PortalConfig, type Manifest,
 } from "./lib/agent";
 import { Btn, Spinner, inputCls } from "./lib/ui";
+import { INTROS, ModuleIntro, useIntroGate } from "./lib/intros";
 
 // Orden y rótulos de módulos; se muestran solo los que el manifest habilita.
 export const MODULES: { key: string; path: string; label: string; icon: LucideIcon }[] = [
@@ -65,6 +66,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [state, setState] = useState<"loading" | "login" | "error" | "ok">("loading");
+  const { seen, dismiss } = useIntroGate();
 
   const boot = () => {
     const c = loadConfig();
@@ -95,6 +97,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const enabled = MODULES.filter((m) => manifest.modules[m.key]);
+  // Bienvenida por módulo: se ve una sola vez, hasta que el cliente da "Ok".
+  const current = MODULES.find((m) => pathname.startsWith(m.path));
+  const intro = current && INTROS[current.key];
+  const showIntro = Boolean(current && intro && seen && !seen[current.key]);
   return (
     <div className="app-shell flex min-h-screen bg-surface">
       <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-black/[0.07] px-3 py-4">
@@ -140,7 +146,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </aside>
-      <main className="min-w-0 flex-1">{children}</main>
+      <main className="min-w-0 flex-1">
+        {showIntro && current && intro ? (
+          <ModuleIntro intro={intro} icon={current.icon} onOk={() => dismiss(current.key)} />
+        ) : (
+          children
+        )}
+      </main>
     </div>
   );
 }
