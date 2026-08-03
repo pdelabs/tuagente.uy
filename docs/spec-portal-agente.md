@@ -96,7 +96,11 @@ Ruta `/app` (SPA dentro del Next existente):
   3. **Pipeline**: kanban read-only con filtros por tenant/tags
   4. **Actividad**: timeline de lo que hizo el agente
   5. **Archivos**: deliverables navegables
-  6. **Uso**: tokens/costo del mes
+  6. **Tareas programadas**: los crons del agente — schedule, último estado,
+     pausar/reanudar ("modo vacaciones"), correr ahora. Vía `/api/jobs` que YA
+     existe en :8642 con bearer (list/pause/resume/run) — cero código de datos.
+     Crear/editar crons queda en la consola de operador (es config del agente).
+  7. **Uso**: tokens/costo del mes
 - Lo que NO tiene: gestión de modelos, skills, logs, config del agente →
   eso queda en el dashboard de Hermes (:9119), que es la consola de soporte
   de pdelabs por cliente.
@@ -133,6 +137,7 @@ Ruta `/app` (SPA dentro del Next existente):
 
 ## Qué NO se re-implementa (capa de datos)
 
-Chat, sesiones+historial y jobs ya tienen REST bearer en :8642 (verificado).
+Chat, sesiones+historial y crons/jobs (incl. pause/resume/run) ya tienen REST
+bearer en :8642 (verificado).
 El plugin solo adapta kanban/manifest/files/usage como pass-through a los
 módulos internos — el mismo patrón del dashboard oficial.
