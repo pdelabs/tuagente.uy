@@ -133,12 +133,16 @@ export type SessionStreamHandlers = {
   onRunComplete?: (messages: RunMessage[]) => void;
 };
 
-// Streaming SSE NATIVO de Hermes para continuar una sesión existente:
-//   POST /api/sessions/{id}/chat/stream   body {"message": "<texto>"}
+// Streaming SSE NATIVO de Hermes para continuar una sesión existente.
 // Eventos: run.started / message.started / assistant.delta {delta} /
 // tool.progress {tool_name} / assistant.completed {content} /
 // run.completed {messages} / done. Incompatible con el formato OpenAI de
 // chatStream() en request y respuesta (mandar {messages} da 400).
+//
+// Va por el adapter, NO por el gateway: el gateway responde
+// /api/sessions/{id}/chat/stream sin Access-Control-Allow-Origin (solo la
+// manda en el preflight), así que el browser descarta la respuesta con
+// "Failed to fetch". El sidecar lo proxea agregando CORS.
 export async function sessionChatStream(
   cfg: PortalConfig,
   sessionId: string,
@@ -147,7 +151,7 @@ export async function sessionChatStream(
   signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch(
-    `${cfg.endpoint}/api/sessions/${encodeURIComponent(sessionId)}/chat/stream`,
+    `${cfg.adapter}/portal/sessions/${encodeURIComponent(sessionId)}/chat/stream`,
     {
       method: "POST",
       headers: { ...headers(cfg), "Content-Type": "application/json" },
