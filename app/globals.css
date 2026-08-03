@@ -68,3 +68,87 @@ body {
     transform: none !important;
   }
 }
+
+/* ── El agentito (embodied companion) ─────────────────────────────────── */
+
+.agent-inner {
+  animation: agentBob 3.4s ease-in-out infinite;
+}
+
+@keyframes agentBob {
+  0%, 100% { transform: rotate(var(--agent-tilt, 0deg)) translateY(0); }
+  50% { transform: rotate(var(--agent-tilt, 0deg)) translateY(-5px); }
+}
+
+.agent-goo {
+  filter: url(#agent-goo);
+}
+
+.agent-blob {
+  position: absolute;
+  background: #5b4be8;
+  border-radius: 50%;
+}
+
+.agent-body-blob {
+  left: 14px;
+  top: 14px;
+  width: 44px;
+  height: 44px;
+  transition: transform 0.45s cubic-bezier(0.3, 1.4, 0.4, 1);
+}
+
+.agent-drop {
+  width: 13px;
+  height: 13px;
+  left: 30px;
+  top: 32px;
+  transform: scale(0);
+}
+
+/* Flying toward a card: droplets stretch behind, gooey trail. */
+.agent-melting .agent-drop-1 { animation: agentDrip 0.9s ease-in-out infinite; }
+.agent-melting .agent-drop-2 { animation: agentDrip 0.9s ease-in-out 0.18s infinite; }
+.agent-melting .agent-drop-3 { animation: agentDrip 0.9s ease-in-out 0.36s infinite; }
+
+@keyframes agentDrip {
+  0% { transform: translate(0, 0) scale(0.9); }
+  55% { transform: translate(10px, 22px) scale(0.55); }
+  100% { transform: translate(2px, 34px) scale(0); }
+}
+
+/* Landed: the body squashes into a puddle that hugs the card border. */
+.agent-sitting .agent-body-blob {
+  transform: scale(1.6, 0.4) translateY(30px);
+}
+.agent-sitting .agent-drop { animation: none; transform: scale(0); }
+.agent-sitting .agent-face {
+  transform: translateY(13px) scale(0.94);
+}
+.agent-sitting .agent-smile { opacity: 0; }
+
+.agent-face {
+  transition: transform 0.45s cubic-bezier(0.3, 1.4, 0.4, 1);
+}
+
+.agent-eyes {
+  animation: agentBlink 4.6s infinite;
+  transform-origin: 36px 34px;
+}
+
+@keyframes agentBlink {
+  0%, 95.5%, 99.5%, 100% { transform: scaleY(1); }
+  97.5% { transform: scaleY(0.08); }
+}
+
+/* The hovered card "receives" the agent: its border comes alive. */
+.agent-merged {
+  box-shadow:
+    0 0 0 3px #5b4be8,
+    0 10px 34px rgba(91, 75, 232, 0.32) !important;
+  transition: box-shadow 0.4s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-inner, .agent-eyes, .agent-drop { animation: none !important; }
+}

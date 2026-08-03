@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import Reveal from "./Reveal";
 import CountUp from "./CountUp";
+import AgentCompanion from "./AgentCompanion";
 
 const WHATSAPP = "https://wa.me/59899002835";
 const EMAIL = "mailto:hola@tuagente.uy";
@@ -44,6 +45,7 @@ export default function Page() {
       <Faq />
       <Reveal><FinalCta /></Reveal>
       <Footer />
+      <AgentCompanion />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
@@ -193,6 +195,7 @@ function Cards() {
         {CARDS.map(({ Icon, title, body, bg, ink }, i) => (
           <Reveal key={title} delay={i * 90} className="h-full">
             <article
+              data-agent-card
               className={`${bg} ${ink} group h-full rounded-card p-8 transition duration-300 hover:-translate-y-1.5 sm:p-10`}
             >
               <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/60">
