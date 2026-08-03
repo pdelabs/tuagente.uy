@@ -15,8 +15,8 @@ import {
   type PortalConfig, type ChatMessage,
 } from "../lib/agent";
 import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
-import { EntityProvider } from "../lib/entities";
-import Markdown from "./Markdown";
+import { EntityProvider } from "../lib/EntityViewer";
+import Markdown from "../lib/Markdown";
 import Sessions, { sessionTitle, type SessionSummary } from "./Sessions";
 
 type StoredMessage = {

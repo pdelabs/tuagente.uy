@@ -17,7 +17,7 @@ import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { Image as ImageIcon } from "lucide-react";
-import { detectEntity, EntityChip } from "../lib/entities";
+import { detectEntity, EntityChip } from "./entities";
 import Artifact from "./Artifact";
 import CodeBlock from "./CodeBlock";
 import Mermaid from "./Mermaid";
