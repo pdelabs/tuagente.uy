@@ -125,3 +125,14 @@ Ruta `/app` (SPA dentro del Next existente):
    acá necesitamos rutas HTTP — revisar cómo el kanban registra las suyas).
 3. Semántica de "aprobado vía portal" en el SOUL de cada cliente: el texto
    debe nombrar al cliente como aprobador válido por ese canal.
+4. `kanban_db` es API interna de Hermes (sin contrato): mitigar con imagen
+   pinneada por cliente, adapter mínimo, y self-test del plugin post-update.
+5. Desfase portal↔flota: el manifest lleva versión; el portal es defensivo
+   (módulo desconocido → oculto). ANTI-PATRÓN declarado: jamás cachear/espejar
+   estado del agente en el portal.
+
+## Qué NO se re-implementa (capa de datos)
+
+Chat, sesiones+historial y jobs ya tienen REST bearer en :8642 (verificado).
+El plugin solo adapta kanban/manifest/files/usage como pass-through a los
+módulos internos — el mismo patrón del dashboard oficial.
