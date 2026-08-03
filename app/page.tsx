@@ -71,6 +71,7 @@ function Header() {
           ["Casos", "#casos"],
           ["Planes", "#planes"],
           ["FAQ", "#faq"],
+          ["Blog", "/blog"],
         ].map(([label, href]) => (
           <a
             key={href}
@@ -831,6 +832,9 @@ function Footer() {
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-semibold text-ink-soft">
+          <a href="/blog" className="hover:text-primary">
+            Blog
+          </a>
           <a href={WHATSAPP} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
             WhatsApp +598 99 002 835
           </a>
