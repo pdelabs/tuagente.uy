@@ -12,8 +12,10 @@ contratos que consumen D y F (ver 03 y 05). Reglas:
   activity vía `hermes cron list --json` + runs si existe (explorar CLI),
   usage vía lo que exponga `hermes insights` o state.db ro (explorar; si es
   frágil, devolver lo que haya y documentar).
-- manifest v2: declarar módulos según detección real (kanban si existe db,
-  approvals si hay blocked, files/usage/activity true) + version.
+- manifest v2: GENÉRICO — agent name desde env AGENT_NAME (fallback: leer el
+  branding del config del agente; jamás hardcodear), módulos por detección
+  real (kanban si existe db, approvals si hay blocked, files/usage/activity
+  según disponibilidad) + version del adapter.
 - Restart para probar: `docker compose restart portal-adapter` (repo hermes).
 - DoD: cada endpoint probado con curl (con y sin auth, con Origin) y los
   resultados pegados en el reporte final. Commit en el repo hermes.

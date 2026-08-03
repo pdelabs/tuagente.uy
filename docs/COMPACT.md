@@ -2,6 +2,13 @@
 
 Contexto destilado para humanos y subagentes. Fuente de verdad de hechos VERIFICADOS.
 
+## PRINCIPIO CERO — Producto genérico
+El portal sirve a CUALQUIER agente Hermes de cualquier cliente. Nada específico
+de La Mano/pdelabs/leads en el código: ni nombres, ni parseo de títulos, ni
+supuestos de dominio. La Mano es SOLO el entorno de prueba local (fixture).
+Lo que el portal sabe del agente lo sabe por el manifest y por datos genéricos
+de Hermes (tickets, jobs, sesiones, archivos).
+
 ## Qué es
 Portal web client-facing para agentes Hermes (producto tuagente, by pdelabs).
 Spec madre: docs/spec-portal-agente.md (v1.4). Principios: agente = única infra
