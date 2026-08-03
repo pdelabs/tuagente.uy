@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import Reveal from "./Reveal";
 import CountUp from "./CountUp";
+import AgentWidget from "./AgentWidget";
 
 const WHATSAPP = "https://wa.me/59899002835";
 const EMAIL = "mailto:hola@tuagente.uy";
@@ -44,6 +45,7 @@ export default function Page() {
       <Faq />
       <Reveal><FinalCta /></Reveal>
       <Footer />
+      <AgentWidget />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
@@ -791,7 +793,7 @@ function Proof() {
 
 function FinalCta() {
   return (
-    <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-24">
+    <section id="contacto" className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-24">
       <div className="relative overflow-hidden rounded-card bg-primary px-6 py-16 text-center text-white sm:px-12 sm:py-24">
         <div className="animate-floaty pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
         <div className="animate-floaty pointer-events-none absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-white/10 blur-2xl" style={{ animationDelay: "-3s" }} />
