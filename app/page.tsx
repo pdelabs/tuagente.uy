@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import Reveal from "./Reveal";
 import CountUp from "./CountUp";
-import AgentCompanion from "./AgentCompanion";
 
 const WHATSAPP = "https://wa.me/59899002835";
 const EMAIL = "mailto:hola@tuagente.uy";
@@ -45,7 +44,6 @@ export default function Page() {
       <Faq />
       <Reveal><FinalCta /></Reveal>
       <Footer />
-      <AgentCompanion />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
