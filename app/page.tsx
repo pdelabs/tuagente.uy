@@ -2,12 +2,20 @@ import Image from "next/image";
 import {
   ArrowRight,
   Bot,
+  Check,
+  ChevronDown,
   Clock,
+  FileText,
+  Headphones,
+  Megaphone,
   MessageCircle,
+  Package,
   Plug,
+  Receipt,
   Rocket,
   ShieldCheck,
   Sparkles,
+  TrendingUp,
   Trophy,
   Zap,
 } from "lucide-react";
@@ -25,9 +33,17 @@ export default function Page() {
       <Cards />
       <Reveal><Stats /></Reveal>
       <Steps />
+      <UseCases />
+      <Integrations />
+      <Pricing />
       <Reveal><Proof /></Reveal>
+      <Faq />
       <Reveal><FinalCta /></Reveal>
       <Footer />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+      />
     </main>
   );
 }
@@ -45,6 +61,22 @@ function Header() {
           tuagente<span className="text-primary">.uy</span>
         </span>
       </div>
+      <nav className="hidden items-center gap-1 rounded-pill bg-white/70 px-2 py-1 text-sm font-bold text-ink-soft backdrop-blur md:flex">
+        {[
+          ["Cómo funciona", "#como-funciona"],
+          ["Casos", "#casos"],
+          ["Planes", "#planes"],
+          ["FAQ", "#faq"],
+        ].map(([label, href]) => (
+          <a
+            key={href}
+            href={href}
+            className="rounded-pill px-4 py-1.5 transition hover:bg-primary/10 hover:text-primary"
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
       <a
         href={WHATSAPP}
         target="_blank"
@@ -261,6 +293,366 @@ function Steps() {
   );
 }
 
+/* ─────────────────────────────────────────── Use cases */
+
+const USE_CASES = [
+  {
+    Icon: TrendingUp,
+    title: "Agente de ventas",
+    body: "Califica leads, responde consultas, agenda reuniones y deja tu CRM al día. Solo.",
+  },
+  {
+    Icon: Headphones,
+    title: "Agente de soporte",
+    body: "Atiende WhatsApp y mail las 24 hs. Resuelve lo repetitivo y escala a un humano solo cuando hace falta.",
+  },
+  {
+    Icon: Receipt,
+    title: "Agente de cobranzas",
+    body: "Persigue facturas vencidas, manda recordatorios con buena onda y concilia pagos contra tu contabilidad.",
+  },
+  {
+    Icon: Package,
+    title: "Agente de operaciones",
+    body: "Controla stock, genera órdenes de compra y te avisa antes de que algo se rompa en la logística.",
+  },
+  {
+    Icon: FileText,
+    title: "Agente de back-office",
+    body: "Lee PDFs, facturas y mails, extrae los datos y los carga prolijos en tus sistemas. Cero tipeo manual.",
+  },
+  {
+    Icon: Megaphone,
+    title: "Agente de contenido",
+    body: "Redacta publicaciones, responde comentarios y mantiene tus redes y tu blog vivos todos los días.",
+  },
+];
+
+function UseCases() {
+  return (
+    <section id="casos" className="mx-auto max-w-7xl px-5 py-6 sm:px-8 sm:py-10">
+      <div className="mx-auto max-w-2xl text-center">
+        <span className="inline-flex items-center gap-2 rounded-pill bg-primary/10 px-4 py-1.5 text-sm font-bold text-primary">
+          <Bot size={15} /> Agentes reales, trabajo real
+        </span>
+        <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
+          ¿Qué puede hacer tu agente?
+        </h2>
+        <p className="mt-4 text-lg text-ink-soft">
+          Cualquier proceso repetitivo que hoy hace una persona con una computadora, lo puede hacer
+          un agente. Estos son los que más pedidos tienen:
+        </p>
+      </div>
+
+      <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {USE_CASES.map(({ Icon, title, body }, i) => (
+          <Reveal key={title} delay={(i % 3) * 90} className="h-full">
+            <article className="group h-full rounded-card border border-ink/5 bg-white p-7 shadow-soft transition duration-300 hover:-translate-y-1">
+              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-white">
+                <Icon size={23} />
+              </span>
+              <h3 className="mt-5 text-xl font-extrabold tracking-tight text-ink">{title}</h3>
+              <p className="mt-2 text-ink-soft">{body}</p>
+            </article>
+          </Reveal>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────── Integrations */
+
+const INTEGRATIONS = [
+  "WhatsApp Business",
+  "Gmail",
+  "Google Sheets",
+  "HubSpot",
+  "Odoo",
+  "Mercado Libre",
+  "Slack",
+  "Notion",
+  "PostgreSQL",
+  "APIs propias",
+  "+ 50 más",
+];
+
+function Integrations() {
+  return (
+    <section className="mx-auto max-w-7xl px-5 py-6 sm:px-8">
+      <Reveal>
+        <div className="rounded-card bg-c-green px-6 py-10 text-center sm:px-12">
+          <p className="text-sm font-bold uppercase tracking-wider text-c-green-ink/60">
+            Se conecta con lo que ya usás
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+            {INTEGRATIONS.map((x) => (
+              <span
+                key={x}
+                className="rounded-pill bg-white/70 px-5 py-2 text-sm font-extrabold text-c-green-ink/80"
+              >
+                {x}
+              </span>
+            ))}
+          </div>
+          <p className="mx-auto mt-6 max-w-xl text-sm font-medium text-c-green-ink/70">
+            ¿Tu sistema no está en la lista? Escribimos la integración a medida. Esa es literalmente
+            nuestra especialidad.
+          </p>
+        </div>
+      </Reveal>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────── Pricing */
+
+const PLANS = [
+  {
+    name: "Starter",
+    tag: "Tu primer agente",
+    price: "USD 1.900",
+    period: "setup · desde USD 290/mes",
+    features: [
+      "1 agente con 1 flujo automatizado",
+      "Conectado a WhatsApp o mail",
+      "Reporte semanal de lo que hizo",
+      "Soporte directo por WhatsApp",
+    ],
+    cta: "Empezar con Starter",
+    featured: false,
+  },
+  {
+    name: "Pro",
+    tag: "El más elegido",
+    price: "USD 4.900",
+    period: "setup · desde USD 690/mes",
+    features: [
+      "Agente conectado a tus sistemas (CRM, ERP, base de datos)",
+      "Flujos autónomos corriendo 24/7 en cronograma",
+      "Aprobación humana para acciones sensibles",
+      "Monitoreo, ajustes y mejoras todos los meses",
+    ],
+    cta: "Quiero el Pro",
+    featured: true,
+  },
+  {
+    name: "Flota",
+    tag: "Para escalar en serio",
+    price: "A medida",
+    period: "varios agentes orquestados",
+    features: [
+      "Equipo de agentes trabajando en conjunto",
+      "Integraciones ilimitadas",
+      "SLA y soporte prioritario",
+      "Roadmap de automatización trimestral",
+    ],
+    cta: "Hablemos de tu flota",
+    featured: false,
+  },
+];
+
+function Pricing() {
+  return (
+    <section id="planes" className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-24">
+      <div className="mx-auto max-w-2xl text-center">
+        <span className="inline-flex items-center gap-2 rounded-pill bg-primary/10 px-4 py-1.5 text-sm font-bold text-primary">
+          <Sparkles size={15} /> Sin sorpresas
+        </span>
+        <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
+          Cuánto cuesta tu agente
+        </h2>
+        <p className="mt-4 text-lg text-ink-soft">
+          Mucho menos que un sueldo — y trabaja las 24 horas. Precios desde, según integraciones.
+        </p>
+      </div>
+
+      <div className="mt-12 grid gap-5 md:grid-cols-3">
+        {PLANS.map((p, i) => (
+          <Reveal key={p.name} delay={i * 110} className="h-full">
+            <article
+              className={
+                p.featured
+                  ? "relative flex h-full flex-col rounded-card bg-primary p-8 text-white shadow-lift"
+                  : "flex h-full flex-col rounded-card border border-ink/5 bg-white p-8 shadow-soft"
+              }
+            >
+              {p.featured && (
+                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-pill bg-ink px-4 py-1.5 text-xs font-extrabold uppercase tracking-wider text-white">
+                  {p.tag}
+                </span>
+              )}
+              <p
+                className={`text-sm font-bold uppercase tracking-wider ${
+                  p.featured ? "text-white/70" : "text-primary"
+                }`}
+              >
+                {p.name}
+              </p>
+              <div className="mt-4 text-4xl font-extrabold tracking-tight">{p.price}</div>
+              <p className={`mt-1 text-sm font-medium ${p.featured ? "text-white/70" : "text-ink-soft"}`}>
+                {p.period}
+              </p>
+              <ul className="mt-6 flex-1 space-y-3">
+                {p.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2.5">
+                    <span
+                      className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${
+                        p.featured ? "bg-white/20" : "bg-c-green"
+                      }`}
+                    >
+                      <Check size={13} className={p.featured ? "text-white" : "text-c-green-ink"} />
+                    </span>
+                    <span className={p.featured ? "text-white/90" : "text-ink-soft"}>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <a
+                href={WHATSAPP}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`mt-8 inline-flex items-center justify-center gap-2 rounded-pill px-6 py-3.5 text-sm font-extrabold transition hover:-translate-y-0.5 ${
+                  p.featured
+                    ? "bg-white text-primary shadow-lift"
+                    : "bg-ink text-white shadow-soft hover:bg-primary"
+                }`}
+              >
+                {p.cta}
+                <ArrowRight size={16} />
+              </a>
+            </article>
+          </Reveal>
+        ))}
+      </div>
+
+      <p className="mt-8 text-center text-sm font-medium text-ink-soft">
+        La demo es gratis siempre: te mostramos con tu caso cuánto ahorra un agente antes de que
+        pongas un peso.
+      </p>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────── FAQ */
+
+const FAQS = [
+  {
+    q: "¿Qué es un agente de IA?",
+    a: "Es software que usa un modelo de IA (como Claude o GPT) para ejecutar trabajo real: lee tus sistemas, decide qué hacer y lo hace. No es un chat al que hay que hablarle — es un empleado digital que corre solo, 24/7.",
+  },
+  {
+    q: "¿En qué se diferencia de un chatbot?",
+    a: "Un chatbot responde preguntas. Un agente actúa: entra a tu CRM, manda mails, genera facturas, actualiza planillas y ejecuta procesos completos con permisos controlados. El chatbot conversa; el agente trabaja.",
+  },
+  {
+    q: "¿Por qué no usar ChatGPT o Claude directo?",
+    a: "Porque esas herramientas necesitan que una persona las use: vos escribís, ellas responden. Un agente de tuagente corre flujos autónomos en un cronograma, conectado a tus sistemas con herramientas escritas a medida, sin que nadie lo empuje. Es la diferencia entre tener un asistente y tener un empleado.",
+  },
+  {
+    q: "¿Cuánto cuesta?",
+    a: "El plan Starter arranca en USD 1.900 de setup más una mensualidad desde USD 290. El Pro, conectado a tus sistemas, desde USD 4.900. La demo es gratis y ahí te damos el número exacto para tu caso.",
+  },
+  {
+    q: "¿Cuánto demora estar funcionando?",
+    a: "Entre 2 y 4 semanas para el primer agente, según cuántos sistemas haya que conectar. De la primera llamada a un agente en producción, semanas — no meses.",
+  },
+  {
+    q: "¿A qué sistemas se conecta?",
+    a: "CRM (HubSpot, Odoo), WhatsApp Business, Gmail, Google Sheets, Mercado Libre, bases de datos (PostgreSQL, MySQL) y cualquier sistema propio con API. Si no existe la integración, la escribimos nosotros a medida.",
+  },
+  {
+    q: "¿Es seguro? ¿Qué pasa con mis datos?",
+    a: "Cada agente opera con permisos acotados: solo ve y toca lo que le habilitás. Las acciones sensibles (pagos, borrados, mails a clientes) pasan por aprobación humana. Tus datos no se usan para entrenar ningún modelo.",
+  },
+  {
+    q: "¿Dónde trabajan y quién está detrás?",
+    a: "Atendemos toda Latinoamérica de forma remota, con base en Uruguay. tuagente es un producto de pdelabs, un estudio de ingeniería de software con años construyendo sistemas en producción — no somos una agencia de marketing que descubrió la IA el mes pasado.",
+  },
+];
+
+function Faq() {
+  return (
+    <section id="faq" className="mx-auto max-w-4xl px-5 py-16 sm:px-8 sm:py-24">
+      <div className="mx-auto max-w-2xl text-center">
+        <h2 className="text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
+          Preguntas frecuentes
+        </h2>
+        <p className="mt-4 text-lg text-ink-soft">
+          Las dudas que nos llegan todos los días, respondidas sin vueltas.
+        </p>
+      </div>
+
+      <div className="mt-12 space-y-4">
+        {FAQS.map(({ q, a }, i) => (
+          <Reveal key={q} delay={Math.min(i, 4) * 60}>
+            <details className="group rounded-card border border-ink/5 bg-white p-6 shadow-soft open:shadow-lift sm:p-7">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-lg font-extrabold tracking-tight text-ink [&::-webkit-details-marker]:hidden">
+                {q}
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary transition group-open:rotate-180">
+                  <ChevronDown size={18} />
+                </span>
+              </summary>
+              <p className="mt-4 text-ink-soft">{a}</p>
+            </details>
+          </Reveal>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────── Structured data (SEO / AEO) */
+
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "ProfessionalService",
+      "@id": "https://tuagente.uy/#org",
+      name: "tuagente.uy",
+      url: "https://tuagente.uy",
+      description:
+        "Configuramos agentes de IA autónomos para empresas de Latinoamérica: conectados a tus sistemas, operando 24/7, listos en semanas.",
+      slogan: "Agentes de IA que trabajan por vos",
+      email: "hola@tuagente.uy",
+      telephone: "+59899002835",
+      priceRange: "USD 1.900 – USD 10.000+",
+      address: {
+        "@type": "PostalAddress",
+        addressLocality: "Montevideo",
+        addressCountry: "UY",
+      },
+      areaServed: ["Uruguay", "Argentina", "Chile", "México", "Latinoamérica"],
+      parentOrganization: {
+        "@type": "Organization",
+        name: "pdelabs",
+        url: "https://www.pdelabs.com",
+      },
+      knowsAbout: [
+        "Agentes de IA",
+        "Automatización de procesos",
+        "Inteligencia artificial para empresas",
+        "Integraciones a medida",
+      ],
+      makesOffer: PLANS.filter((p) => p.price.startsWith("USD")).map((p) => ({
+        "@type": "Offer",
+        name: `Plan ${p.name} — ${p.tag}`,
+        price: p.price.replace("USD ", "").replace(".", ""),
+        priceCurrency: "USD",
+      })),
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://tuagente.uy/#faq",
+      mainEntity: FAQS.map(({ q, a }) => ({
+        "@type": "Question",
+        name: q,
+        acceptedAnswer: { "@type": "Answer", text: a },
+      })),
+    },
+  ],
+};
+
 /* ─────────────────────────────────────────── Social proof (placeholder) */
 
 function Proof() {
@@ -336,13 +728,14 @@ function Footer() {
           </span>
         </div>
 
-        <div className="flex items-center gap-6 text-sm font-semibold text-ink-soft">
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-semibold text-ink-soft">
           <a href={WHATSAPP} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
-            WhatsApp
+            WhatsApp +598 99 002 835
           </a>
           <a href={EMAIL} className="hover:text-primary">
-            Email
+            hola@tuagente.uy
           </a>
+          <span>Montevideo, Uruguay</span>
         </div>
 
         <a

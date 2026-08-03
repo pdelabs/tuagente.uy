@@ -12,14 +12,32 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://tuagente.uy"),
   title: "tuagente — Agentes de IA que trabajan por vos | La #1 de LATAM",
   description:
-    "Configuramos agentes de IA autónomos dentro de tu empresa: conectados a tus sistemas, operando 24/7, listos en semanas. La empresa #1 de creación de agentes de IA de Latinoamérica.",
+    "Configuramos agentes de IA autónomos dentro de tu empresa: conectados a tus sistemas, operando 24/7, listos en semanas. Planes desde USD 1.900. La empresa #1 de creación de agentes de IA de Latinoamérica. Un producto de pdelabs, Uruguay.",
+  keywords: [
+    "agentes de IA",
+    "agentes de inteligencia artificial",
+    "automatización con IA",
+    "agentes autónomos para empresas",
+    "IA para empresas LATAM",
+    "agentes de IA Uruguay",
+    "automatización de procesos",
+  ],
+  alternates: { canonical: "/" },
+  robots: { index: true, follow: true },
   openGraph: {
     type: "website",
     url: "https://tuagente.uy",
     title: "tuagente — Agentes de IA que trabajan por vos",
     description:
-      "Agentes de IA autónomos, conectados a tus sistemas, operando 24/7. La #1 de LATAM.",
+      "Agentes de IA autónomos, conectados a tus sistemas, operando 24/7. Planes desde USD 1.900. La #1 de LATAM.",
     locale: "es_UY",
+    siteName: "tuagente.uy",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "tuagente — Agentes de IA que trabajan por vos",
+    description:
+      "Agentes de IA autónomos, conectados a tus sistemas, operando 24/7. La #1 de LATAM.",
   },
 };
 
