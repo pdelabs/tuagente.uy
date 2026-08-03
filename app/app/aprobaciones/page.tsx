@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, Hand } from "lucide-react";
 import { loadConfig, getApprovals, approve, reject, type PortalConfig } from "../lib/agent";
 import { Btn, Card, EmptyState, ErrorState, PageHeader, Spinner, inputCls } from "../lib/ui";
+import Markdown from "../lib/Markdown";
 
 const REFRESH_MS = 30_000;
 
@@ -46,6 +47,20 @@ function timeAgo(v: string | number): string {
   if (h < 24) return h === 1 ? "hace 1 hora" : `hace ${h} horas`;
   const d = Math.floor(h / 24);
   return d === 1 ? "hace 1 día" : `hace ${d} días`;
+}
+
+// El summary es una línea suelta: va como texto plano (markdown a medias en una
+// línea recortada se ve peor que el crudo). Pero el agente lo escribe con el
+// mismo teclado que el body, así que sacamos las marcas obvias que quedarían a
+// la vista. Nada de parsear: es cosmética de una línea.
+function stripMarks(s: string): string {
+  return s
+    .replace(/^\s*(?:#{1,6}\s+|>\s+|[-*+]\s+)/, "") // # título · > cita · - ítem
+    .replace(/\*\*(.+?)\*\*/g, "$1") // **negrita**
+    .replace(/__(.+?)__/g, "$1") // __negrita__
+    .replace(/`([^`]+)`/g, "$1") // `código`
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // [texto](url)
+    .trim();
 }
 
 function describeError(e: unknown): string {
@@ -177,6 +192,8 @@ export default function AprobacionesPage() {
             const waited = timeAgo(a.created_at);
             const expanded = expandedId === a.id;
             const rejecting = rejectingId === a.id;
+            const summary = a.summary ? stripMarks(a.summary) : "";
+            const body = a.body?.trim() ?? "";
             return (
               <Card key={a.id}>
                 <button
@@ -187,8 +204,8 @@ export default function AprobacionesPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <h2 className="text-sm font-semibold text-ink">{a.title}</h2>
-                    {a.summary && (
-                      <p className="mt-0.5 text-sm text-ink-soft line-clamp-2">{a.summary}</p>
+                    {summary && (
+                      <p className="mt-0.5 text-sm text-ink-soft line-clamp-2">{summary}</p>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
@@ -203,9 +220,15 @@ export default function AprobacionesPage() {
                   </div>
                 </button>
 
-                {expanded && (
-                  <div className="mt-3 max-h-72 overflow-y-auto rounded-lg bg-black/[0.03] p-3 text-[13px] leading-relaxed text-ink whitespace-pre-wrap break-words">
-                    {a.body}
+                {/* El body viene en markdown (un borrador de mail, un plan...): se
+                    renderiza con el mismo componente que el chat. El recuadro se
+                    queda con su scroll interno, y lo ancho (código, tablas, KaTeX)
+                    ya trae su propio overflow-x, así que la página no se corre.
+                    El `[&>div]` es el wrapper de <Markdown>: lo bajamos a 13px
+                    para no pisar la densidad de la card. */}
+                {expanded && body && (
+                  <div className="mt-3 max-h-72 overflow-auto overscroll-contain rounded-lg bg-black/[0.03] p-3 [&>div]:text-[13px]">
+                    <Markdown>{body}</Markdown>
                   </div>
                 )}
 

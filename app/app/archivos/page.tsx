@@ -8,12 +8,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  File, FileCode, FileJson, FileText, Folder, FolderOpen, X, type LucideIcon,
+  Code2, File, FileCode, FileJson, FileText, Folder, FolderOpen, X, type LucideIcon,
 } from "lucide-react";
 import { loadConfig, getFiles, getFileText, type PortalConfig } from "../lib/agent";
 import {
   Btn, Card, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner,
 } from "../lib/ui";
+import { FileBody } from "../lib/EntityViewer";
 
 type FileEntry = { path: string; size?: number; mtime?: string | number };
 
@@ -87,6 +88,8 @@ export default function ArchivosPage() {
   const [err, setErr] = useState<string | null>(null);
   const [dir, setDir] = useState("");
   const [viewer, setViewer] = useState<Viewer | null>(null);
+  // El visor formatea por defecto; "original" muestra el texto crudo (para copiar).
+  const [raw, setRaw] = useState(false);
 
   useEffect(() => { setCfg(loadConfig()); }, []);
 
@@ -103,6 +106,7 @@ export default function ArchivosPage() {
 
   const openFile = (path: string) => {
     if (!cfg) return;
+    setRaw(false);
     setViewer({ path, text: null, err: null });
     getFileText(cfg, path)
       .then((t) => setViewer({ path, text: t, err: null }))
@@ -234,9 +238,19 @@ export default function ArchivosPage() {
                 {toMs(viewerMeta?.mtime) ? ` · ${relTime(toMs(viewerMeta?.mtime))}` : ""}
               </p>
             </div>
-            <IconBtn label="Cerrar" onClick={() => setViewer(null)}>
-              <X className="h-4 w-4" />
-            </IconBtn>
+            <div className="flex shrink-0 items-center gap-0.5">
+              {viewer.text !== null && viewer.text.trim() !== "" && (
+                <IconBtn
+                  label={raw ? "Ver formateado" : "Ver original"}
+                  onClick={() => setRaw((v) => !v)}
+                >
+                  {raw ? <FileText className="h-4 w-4" /> : <Code2 className="h-4 w-4" />}
+                </IconBtn>
+              )}
+              <IconBtn label="Cerrar" onClick={() => setViewer(null)}>
+                <X className="h-4 w-4" />
+              </IconBtn>
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
             {viewer.text === null && viewer.err === null && <Spinner />}
@@ -249,10 +263,12 @@ export default function ArchivosPage() {
             {viewer.text !== null && (
               viewer.text.trim() === "" ? (
                 <p className="text-sm text-ink-soft">El archivo está vacío.</p>
-              ) : (
+              ) : raw ? (
                 <pre className="whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-ink">
                   {viewer.text}
                 </pre>
+              ) : (
+                <FileBody path={viewer.path} text={viewer.text} />
               )
             )}
           </div>

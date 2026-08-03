@@ -3,8 +3,9 @@
 // Pipeline — kanban read-only de tickets del agente (GET {adapter}/portal/tickets)
 // + detalle con comentarios (GET {adapter}/portal/tickets/{id}).
 // GENÉRICO: títulos, tenants, estados, autores y eventos se muestran tal cual
-// llegan; cero parseo de dominio. Todo texto del agente se renderiza como texto
-// plano preformateado (anti-XSS).
+// llegan; cero parseo de dominio. La prosa larga del agente (descripción y
+// comentarios) viene en markdown y se dibuja con <Markdown> — el mismo renderer
+// del chat, con HTML sanitizado. Las cards del tablero quedan en texto plano.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Inbox, RefreshCw, Search, SearchX, X } from "lucide-react";
@@ -26,6 +27,7 @@ import {
   Spinner,
   inputCls,
 } from "../lib/ui";
+import Markdown from "../lib/Markdown";
 
 const REFRESH_MS = 30_000;
 const SIN_TENANT = "__sin_tenant__"; // sentinel para tickets con tenant null
@@ -335,11 +337,11 @@ export default function PipelinePage() {
             </IconBtn>
           </div>
 
-          <div className="overflow-y-auto px-5 py-4">
-            {abierto.body ? (
-              <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-ink">
-                {abierto.body}
-              </pre>
+          {/* min-w-0: sin esto una tabla o un bloque de código ancho estira el
+              modal en vez de scrollear dentro de su propio contenedor. */}
+          <div className="min-w-0 overflow-y-auto px-5 py-4">
+            {abierto.body?.trim() ? (
+              <Markdown>{abierto.body}</Markdown>
             ) : (
               <p className="text-sm text-ink-soft">Este ticket no tiene descripción.</p>
             )}
@@ -354,14 +356,18 @@ export default function PipelinePage() {
             ) : detalle && detalle.comments.length > 0 ? (
               <ul className="flex flex-col gap-4">
                 {detalle.comments.map((c, i) => (
-                  <li key={i}>
+                  <li key={i} className="min-w-0">
                     <div className="flex items-baseline gap-2">
                       <span className="text-[13px] font-semibold text-ink">{c.author}</span>
                       <span className="text-[11px] text-ink-soft">{fmtRelativa(c.created_at)}</span>
                     </div>
-                    <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-ink">
-                      {c.body}
-                    </pre>
+                    {c.body?.trim() ? (
+                      <div className="mt-1">
+                        <Markdown>{c.body}</Markdown>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-sm text-ink-soft">(sin texto)</p>
+                    )}
                   </li>
                 ))}
               </ul>

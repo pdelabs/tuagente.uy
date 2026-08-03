@@ -97,8 +97,11 @@ function isFetchable(src: string): boolean {
 /* ── Componentes ────────────────────────────────────────────────────────── */
 
 // El agente también nombra tickets y archivos en prosa, sin backticks.
+// El \b va DENTRO de cada alternativa: si estuviera antes del prefijo opcional
+// /opt/data/, nunca casaría (el `/` no es carácter de palabra) y el prefijo
+// quedaría suelto como texto al lado del chip.
 const INLINE_ENTITY_RE =
-  /\b(t_[0-9a-f]{6,16}|(?:\/opt\/data\/)?workspace\/[\w./-]+\.(?:md|txt|csv|json|ya?ml|log|py|ts|tsx|js|sh|sql|html))\b/gi;
+  /(\bt_[0-9a-f]{6,16}\b|(?:\/opt\/data\/)?\bworkspace\/[\w./-]+\.(?:md|txt|csv|json|ya?ml|log|py|ts|tsx|js|sh|sql|html)\b)/gi;
 
 function linkify(children: ReactNode): ReactNode {
   return Children.map(children, (child) => {
