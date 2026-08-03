@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #fbfaff;
+  color: #14131f;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Soft aurora backdrop for the hero. */
+.aurora {
+  background:
+    radial-gradient(60% 55% at 15% 10%, rgba(91, 75, 232, 0.22), transparent 60%),
+    radial-gradient(50% 50% at 92% 20%, rgba(0, 166, 126, 0.18), transparent 60%),
+    radial-gradient(55% 55% at 70% 95%, rgba(255, 122, 89, 0.16), transparent 60%);
+}
