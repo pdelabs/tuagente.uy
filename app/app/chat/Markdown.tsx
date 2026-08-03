@@ -14,8 +14,11 @@ import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { Image as ImageIcon } from "lucide-react";
 import { detectEntity, EntityChip } from "../lib/entities";
+import Artifact from "./Artifact";
 import CodeBlock from "./CodeBlock";
 import Mermaid from "./Mermaid";
 import "katex/dist/katex.min.css";
@@ -191,8 +194,13 @@ function makeComponents(streaming: boolean): Components {
           </pre>
         );
       }
-      if (fence.lang?.trim().toLowerCase() === "mermaid") {
+      const lang = fence.lang?.trim().toLowerCase() ?? "";
+      if (lang === "mermaid") {
         return <Mermaid chart={fence.code} streaming={streaming} />;
+      }
+      // HTML/SVG completo: mostrarlo como código no sirve de nada, se dibuja.
+      if (lang === "html" || lang === "svg") {
+        return <Artifact code={fence.code} lang={lang} streaming={streaming} />;
       }
       return <CodeBlock code={fence.code} lang={fence.lang} />;
     },
@@ -262,9 +270,27 @@ const STATIC_COMPONENTS = makeComponents(false);
 const STREAMING_COMPONENTS = makeComponents(true);
 
 const remarkPlugins: Options["remarkPlugins"] = [remarkGfm, remarkMath];
+
+// El agente a veces escribe HTML dentro del markdown (una tabla, un <details>).
+// Sin rehype-raw se ve escapado como texto; con raw a secas sería XSS. Va raw +
+// sanitize con allowlist: se permite marcado de contenido, jamás script, iframe,
+// style, event handlers ni javascript: en href. El HTML "de verdad" (una página
+// entera) llega como bloque ```html y se dibuja aislado en Artifact.
+const schema = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), "details", "summary", "figure", "figcaption", "mark"],
+  attributes: {
+    ...defaultSchema.attributes,
+    "*": [...(defaultSchema.attributes?.["*"] ?? []), "align"],
+    details: ["open"],
+  },
+};
+
 // rehype-katex ya fuerza throwOnError:false; el errorColor apagado evita el
 // rojo chillón mientras una fórmula está a medio escribir.
 const rehypePlugins: Options["rehypePlugins"] = [
+  rehypeRaw,
+  [rehypeSanitize, schema],
   [rehypeKatex, { errorColor: "#4B4A5C", strict: "ignore" }],
 ];
 
