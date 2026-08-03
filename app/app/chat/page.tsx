@@ -7,14 +7,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowDown, ArrowUp, Check, ChevronRight, Copy, Download, Menu,
-  MessageSquare, Pencil, RefreshCw, Square, Wrench, X,
+  ArrowDown, ArrowUp, Brain, Check, ChevronRight, Copy, Download, Menu,
+  MessageSquare, Pencil, RefreshCw, Square, Wrench,
 } from "lucide-react";
 import {
   loadConfig, chatStream, sessionChatStream, getSessions, getSessionMessages,
   type PortalConfig, type ChatMessage,
 } from "../lib/agent";
 import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
+import { EntityProvider } from "../lib/entities";
 import Markdown from "./Markdown";
 import Sessions, { sessionTitle, type SessionSummary } from "./Sessions";
 
@@ -31,8 +32,10 @@ type Msg = {
   tools?: string[]; // herramientas usadas en el run (solo en vivo)
 };
 
+const THINKING = "_thinking";
+
 function toolLabel(tool: string): string {
-  if (tool === "_thinking") return "Pensando";
+  if (tool === THINKING) return "Pensando";
   return tool.replace(/_/g, " ");
 }
 
@@ -41,6 +44,13 @@ function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
   const [open, setOpen] = useState(false);
   if (!tools.length) return null;
   const last = tools[tools.length - 1];
+  const used = tools.filter((t) => t !== THINKING);
+  const summary =
+    used.length === 0
+      ? "Pensó un momento"
+      : used.length === 1
+        ? `Usó ${toolLabel(used[0])}`
+        : `Trabajó con ${used.length} herramientas`;
   return (
     <div className="mb-2">
       <button
@@ -51,14 +61,12 @@ function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
         {live ? (
           <>
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-            {toolLabel(last)}…
+            {last === THINKING ? "Pensando" : `Usando ${toolLabel(last)}`}…
           </>
         ) : (
           <>
-            <Wrench className="h-3 w-3" />
-            {tools.length === 1
-              ? `Usó ${toolLabel(tools[0])}`
-              : `Trabajó con ${tools.length} herramientas`}
+            {used.length > 0 ? <Wrench className="h-3 w-3" /> : <Brain className="h-3 w-3" />}
+            {summary}
           </>
         )}
       </button>
@@ -373,6 +381,7 @@ export default function ChatPage() {
   );
 
   return (
+    <EntityProvider cfg={cfg}>
     <div className="flex h-screen">
       {/* ── Sidebar (fija en desktop, drawer en mobile) ── */}
       <aside className="hidden w-64 shrink-0 border-r border-black/[0.07] md:block">
@@ -559,5 +568,6 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
+    </EntityProvider>
   );
 }

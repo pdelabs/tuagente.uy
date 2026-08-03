@@ -8,13 +8,14 @@
 // roto la mayor parte del tiempo: fences a medio abrir, tablas sin cuerpo,
 // `$$` sin cerrar. La regla es que nada de eso explote ni parpadee feo.
 
-import { memo, useMemo } from "react";
+import { Children, memo, useMemo, type ReactNode } from "react";
 import type { Element, ElementContent } from "hast";
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { Image as ImageIcon } from "lucide-react";
+import { detectEntity, EntityChip } from "../lib/entities";
 import CodeBlock from "./CodeBlock";
 import Mermaid from "./Mermaid";
 import "katex/dist/katex.min.css";
@@ -92,10 +93,32 @@ function isFetchable(src: string): boolean {
 
 /* ── Componentes ────────────────────────────────────────────────────────── */
 
+// El agente también nombra tickets y archivos en prosa, sin backticks.
+const INLINE_ENTITY_RE =
+  /\b(t_[0-9a-f]{6,16}|(?:\/opt\/data\/)?workspace\/[\w./-]+\.(?:md|txt|csv|json|ya?ml|log|py|ts|tsx|js|sh|sql|html))\b/gi;
+
+function linkify(children: ReactNode): ReactNode {
+  return Children.map(children, (child) => {
+    if (typeof child !== "string") return child;
+    const parts: ReactNode[] = [];
+    let last = 0;
+    for (const m of Array.from(child.matchAll(INLINE_ENTITY_RE))) {
+      const entity = detectEntity(m[0]);
+      if (!entity || m.index === undefined) continue;
+      if (m.index > last) parts.push(child.slice(last, m.index));
+      parts.push(<EntityChip key={m.index} entity={entity} label={m[0]} />);
+      last = m.index + m[0].length;
+    }
+    if (!parts.length) return child;
+    if (last < child.length) parts.push(child.slice(last));
+    return parts;
+  });
+}
+
 function makeComponents(streaming: boolean): Components {
   return {
     p: ({ children }) => (
-      <p className="my-2 leading-relaxed first:mt-0 last:mb-0">{children}</p>
+      <p className="my-2 leading-relaxed first:mt-0 last:mb-0">{linkify(children)}</p>
     ),
     a: ({ href, children }) => (
       <a
@@ -117,7 +140,7 @@ function makeComponents(streaming: boolean): Components {
             : "leading-relaxed"
         }
       >
-        {children}
+        {linkify(children)}
       </li>
     ),
     input: ({ type, checked }) =>
@@ -173,11 +196,18 @@ function makeComponents(streaming: boolean): Components {
       }
       return <CodeBlock code={fence.code} lang={fence.lang} />;
     },
-    code: ({ children }) => (
-      <code className="rounded bg-black/[0.06] px-1.5 py-0.5 font-mono text-[0.88em] text-ink">
-        {children}
-      </code>
-    ),
+    // El agente nombra sus tickets y archivos en código inline: los volvemos
+    // chips que abren el detalle sin salir del chat.
+    code: ({ children }) => {
+      const raw = Array.isArray(children) ? children.join("") : String(children ?? "");
+      const entity = detectEntity(raw);
+      if (entity) return <EntityChip entity={entity} label={raw.trim()} />;
+      return (
+        <code className="rounded bg-black/[0.06] px-1.5 py-0.5 font-mono text-[0.88em] text-ink">
+          {children}
+        </code>
+      );
+    },
 
     hr: () => <hr className="my-4 border-black/[0.08]" />,
     table: ({ children }) => (
