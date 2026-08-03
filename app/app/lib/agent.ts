@@ -22,7 +22,7 @@ export type Ticket = {
   body: string | null;
   status: string;
   tenant: string | null;
-  created_at: string;
+  created_at: string | number; // Hermes lo emite como epoch en segundos
 };
 
 const DEFAULTS = { endpoint: "http://localhost:8642", adapter: "http://localhost:8643" };
@@ -89,7 +89,8 @@ export const getFileText = async (c: PortalConfig, path: string) => {
 export const getUsage = (c: PortalConfig) => get<any>(c.adapter, "/portal/usage", c);
 
 // ── Agente (:8642) ──
-export const getJobs = (c: PortalConfig) => get<any>(c.endpoint, "/api/jobs", c);
+// include_disabled: el listado pelado excluye los jobs pausados.
+export const getJobs = (c: PortalConfig) => get<any>(c.endpoint, "/api/jobs?include_disabled=true", c);
 export const jobAction = (c: PortalConfig, id: string, action: "pause" | "resume" | "run") =>
   post<any>(c.endpoint, `/api/jobs/${id}/${action}`, c);
 export const getSessions = (c: PortalConfig) => get<any>(c.endpoint, "/api/sessions", c);
@@ -97,6 +98,93 @@ export const getSessionMessages = (c: PortalConfig, id: string) =>
   get<any>(c.endpoint, `/api/sessions/${id}/messages`, c);
 
 export type ChatMessage = { role: "user" | "assistant" | "system"; content: string };
+
+export type RunMessage = { role: string; content: string | null };
+
+export type SessionStreamHandlers = {
+  onMessageStart?: () => void;
+  /** Delta crudo (NO acumulado, a diferencia de chatStream). */
+  onDelta?: (delta: string) => void;
+  /** Contenido completo y autoritativo del mensaje que acaba de cerrar. */
+  onMessageComplete?: (content: string) => void;
+  onToolProgress?: (toolName: string) => void;
+  /** Mensajes finales del run (puede haber varios si hubo tools). */
+  onRunComplete?: (messages: RunMessage[]) => void;
+};
+
+// Streaming SSE NATIVO de Hermes para continuar una sesión existente:
+//   POST /api/sessions/{id}/chat/stream   body {"message": "<texto>"}
+// Eventos: run.started / message.started / assistant.delta {delta} /
+// tool.progress {tool_name} / assistant.completed {content} /
+// run.completed {messages} / done. Incompatible con el formato OpenAI de
+// chatStream() en request y respuesta (mandar {messages} da 400).
+export async function sessionChatStream(
+  cfg: PortalConfig,
+  sessionId: string,
+  message: string,
+  h: SessionStreamHandlers,
+): Promise<void> {
+  const res = await fetch(
+    `${cfg.endpoint}/api/sessions/${encodeURIComponent(sessionId)}/chat/stream`,
+    {
+      method: "POST",
+      headers: { ...headers(cfg), "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    },
+  );
+  if (!res.ok || !res.body) {
+    let detail = `${res.status} en chat de sesión`;
+    try {
+      const err = await res.json();
+      if (err?.error?.message) detail = err.error.message;
+    } catch { /* sin cuerpo JSON */ }
+    throw new Error(detail);
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  let event = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.startsWith("event: ")) {
+        event = line.slice(7).trim();
+        continue;
+      }
+      if (!line.startsWith("data: ")) continue;
+      let data: any;
+      try {
+        data = JSON.parse(line.slice(6));
+      } catch {
+        continue; // chunk parcial
+      }
+      switch (event) {
+        case "message.started":
+          h.onMessageStart?.();
+          break;
+        case "assistant.delta":
+          if (typeof data.delta === "string" && data.delta) h.onDelta?.(data.delta);
+          break;
+        case "tool.progress":
+          if (typeof data.tool_name === "string") h.onToolProgress?.(data.tool_name);
+          break;
+        case "assistant.completed":
+          if (typeof data.content === "string") h.onMessageComplete?.(data.content);
+          break;
+        case "run.completed":
+          if (Array.isArray(data.messages)) h.onRunComplete?.(data.messages);
+          break;
+        case "done":
+          return;
+      }
+    }
+  }
+}
 
 // Streaming SSE OpenAI-compatible. onDelta recibe texto incremental.
 export async function chatStream(
