@@ -5,13 +5,16 @@ import {
   Check,
   ChevronDown,
   Clock,
+  Eye,
   FileText,
   Headphones,
   Megaphone,
   MessageCircle,
   Package,
+  Pause,
   Plug,
   Receipt,
+  SlidersHorizontal,
   Rocket,
   ShieldCheck,
   Sparkles,
@@ -34,6 +37,7 @@ export default function Page() {
       <Reveal><Stats /></Reveal>
       <Steps />
       <UseCases />
+      <Control />
       <Integrations />
       <Pricing />
       <Reveal><Proof /></Reveal>
@@ -361,6 +365,99 @@ function UseCases() {
   );
 }
 
+/* ─────────────────────────────────────────── Control (you stay in charge) */
+
+const CONTROL_POINTS = [
+  {
+    Icon: MessageCircle,
+    title: "Chateá con tu agente",
+    body: "Le hablás por WhatsApp o Slack como a un empleado más: le pedís tareas, le preguntás qué hizo y te responde al momento.",
+  },
+  {
+    Icon: SlidersHorizontal,
+    title: "Lo ajustás hablándole",
+    body: "¿Querés que salude distinto o priorice otra cosa? Se lo decís y cambia. Sin proyecto, sin código, sin esperar a nadie.",
+  },
+  {
+    Icon: Eye,
+    title: "Ves todo lo que hace",
+    body: "Cada acción queda registrada y te llega un reporte claro. Cero cajas negras: siempre sabés qué hizo y por qué.",
+  },
+  {
+    Icon: Pause,
+    title: "Lo frenás con un botón",
+    body: "Pausa inmediata cuando quieras. Y las acciones sensibles — pagos, mails a clientes — siempre pasan por tu aprobación.",
+  },
+];
+
+function Control() {
+  return (
+    <section id="control" className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-16">
+      <Reveal>
+        <div className="rounded-card bg-c-amber px-6 py-12 sm:px-12 sm:py-16">
+          <div className="grid items-center gap-10 lg:grid-cols-2">
+            <div>
+              <span className="inline-flex items-center gap-2 rounded-pill bg-white/60 px-4 py-1.5 text-sm font-bold text-c-amber-ink">
+                <ShieldCheck size={15} /> Cero cajas negras
+              </span>
+              <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-c-amber-ink sm:text-5xl">
+                ¿Y quién controla al agente? <span className="underline decoration-4 underline-offset-4">Vos.</span>
+              </h2>
+              <p className="mt-4 max-w-lg text-lg text-c-amber-ink/80">
+                Autónomo no significa descontrolado. Tu agente trabaja solo, pero vos lo dirigís
+                como a cualquier persona de tu equipo — hablándole.
+              </p>
+              <div className="mt-8 grid gap-5 sm:grid-cols-2">
+                {CONTROL_POINTS.map(({ Icon, title, body }) => (
+                  <div key={title}>
+                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-white/60 text-c-amber-ink">
+                      <Icon size={19} />
+                    </span>
+                    <h3 className="mt-3 text-lg font-extrabold tracking-tight text-c-amber-ink">
+                      {title}
+                    </h3>
+                    <p className="mt-1 text-sm text-c-amber-ink/75">{body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Chat mock: the owner directing their agent */}
+            <div className="mx-auto w-full max-w-md rounded-card bg-white p-5 shadow-lift sm:p-6">
+              <div className="flex items-center gap-3 border-b border-ink/5 pb-4">
+                <span className="grid h-10 w-10 place-items-center rounded-2xl bg-primary text-white">
+                  <Bot size={20} />
+                </span>
+                <div>
+                  <p className="text-sm font-extrabold text-ink">Tu agente</p>
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-ink-soft">
+                    <span className="h-2 w-2 rounded-full bg-c-green-ink" /> en línea · trabajando
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 font-medium text-white">
+                  ¿Qué hiciste hoy?
+                </div>
+                <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-ink shadow-soft">
+                  Respondí 34 consultas, agendé 5 reuniones y dejé el CRM al día ✅ Tenés 2
+                  facturas esperando tu aprobación.
+                </div>
+                <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 font-medium text-white">
+                  Aprobá la primera. Y de ahora en más contestá más formal, ¿puede ser?
+                </div>
+                <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-ink shadow-soft">
+                  Hecho: factura aprobada y ya ajusté mi tono. ¿Algo más? 🫡
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Reveal>
+    </section>
+  );
+}
+
 /* ─────────────────────────────────────────── Integrations */
 
 const INTEGRATIONS = [
@@ -411,8 +508,8 @@ const PLANS = [
   {
     name: "Starter",
     tag: "Tu primer agente",
-    price: "USD 1.900",
-    period: "setup · desde USD 290/mes",
+    price: "USD 990",
+    period: "setup · desde USD 190/mes",
     features: [
       "1 agente con 1 flujo automatizado",
       "Conectado a WhatsApp o mail",
@@ -425,10 +522,11 @@ const PLANS = [
   {
     name: "Pro",
     tag: "El más elegido",
-    price: "USD 4.900",
-    period: "setup · desde USD 690/mes",
+    price: "USD 2.900",
+    period: "setup · desde USD 490/mes",
     features: [
       "Agente conectado a tus sistemas (CRM, ERP, base de datos)",
+      "Chat directo con tu agente por WhatsApp o Slack",
       "Flujos autónomos corriendo 24/7 en cronograma",
       "Aprobación humana para acciones sensibles",
       "Monitoreo, ajustes y mejoras todos los meses",
@@ -550,7 +648,7 @@ const FAQS = [
   },
   {
     q: "¿Cuánto cuesta?",
-    a: "El plan Starter arranca en USD 1.900 de setup más una mensualidad desde USD 290. El Pro, conectado a tus sistemas, desde USD 4.900. La demo es gratis y ahí te damos el número exacto para tu caso.",
+    a: "El plan Starter arranca en USD 990 de setup más una mensualidad desde USD 190. El Pro, conectado a tus sistemas, desde USD 2.900. Bastante menos que un sueldo — y la demo es gratis: ahí te damos el número exacto para tu caso.",
   },
   {
     q: "¿Cuánto demora estar funcionando?",
@@ -563,6 +661,10 @@ const FAQS = [
   {
     q: "¿Es seguro? ¿Qué pasa con mis datos?",
     a: "Cada agente opera con permisos acotados: solo ve y toca lo que le habilitás. Las acciones sensibles (pagos, borrados, mails a clientes) pasan por aprobación humana. Tus datos no se usan para entrenar ningún modelo.",
+  },
+  {
+    q: "¿Puedo hablar con mi agente y modificarlo?",
+    a: "Sí, y es de lo mejor que tiene. Cada agente viene con un canal de chat directo (WhatsApp o Slack): le preguntás qué hizo, le pedís tareas nuevas y le cambiás las instrucciones hablándole, como a un empleado. Y si algo no te cierra, lo pausás con un botón. Autonomía no significa perder el control.",
   },
   {
     q: "¿Dónde trabajan y quién está detrás?",
@@ -616,7 +718,7 @@ const JSON_LD = {
       slogan: "Agentes de IA que trabajan por vos",
       email: "hola@tuagente.uy",
       telephone: "+59899002835",
-      priceRange: "USD 1.900 – USD 10.000+",
+      priceRange: "USD 990 – USD 10.000+",
       address: {
         "@type": "PostalAddress",
         addressLocality: "Montevideo",

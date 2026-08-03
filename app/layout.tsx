@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://tuagente.uy"),
   title: "tuagente — Agentes de IA que trabajan por vos | La #1 de LATAM",
   description:
-    "Configuramos agentes de IA autónomos dentro de tu empresa: conectados a tus sistemas, operando 24/7, listos en semanas. Planes desde USD 1.900. La empresa #1 de creación de agentes de IA de Latinoamérica. Un producto de pdelabs, Uruguay.",
+    "Configuramos agentes de IA autónomos dentro de tu empresa: conectados a tus sistemas, operando 24/7, listos en semanas. Planes desde USD 990. La empresa #1 de creación de agentes de IA de Latinoamérica. Un producto de pdelabs, Uruguay.",
   keywords: [
     "agentes de IA",
     "agentes de inteligencia artificial",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     url: "https://tuagente.uy",
     title: "tuagente — Agentes de IA que trabajan por vos",
     description:
-      "Agentes de IA autónomos, conectados a tus sistemas, operando 24/7. Planes desde USD 1.900. La #1 de LATAM.",
+      "Agentes de IA autónomos, conectados a tus sistemas, operando 24/7. Planes desde USD 990. La #1 de LATAM.",
     locale: "es_UY",
     siteName: "tuagente.uy",
   },
