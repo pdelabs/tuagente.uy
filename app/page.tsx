@@ -11,6 +11,8 @@ import {
   Trophy,
   Zap,
 } from "lucide-react";
+import Reveal from "./Reveal";
+import CountUp from "./CountUp";
 
 const WHATSAPP = "https://wa.me/59899002835";
 const EMAIL = "mailto:hola@tuagente.uy";
@@ -21,10 +23,10 @@ export default function Page() {
       <Header />
       <Hero />
       <Cards />
-      <Stats />
+      <Reveal><Stats /></Reveal>
       <Steps />
-      <Proof />
-      <FinalCta />
+      <Reveal><Proof /></Reveal>
+      <Reveal><FinalCta /></Reveal>
       <Footer />
     </main>
   );
@@ -61,22 +63,31 @@ function Hero() {
   return (
     <section className="aurora relative">
       <div className="mx-auto max-w-5xl px-5 pb-16 pt-14 text-center sm:px-8 sm:pb-24 sm:pt-20">
-        <span className="inline-flex items-center gap-2 rounded-pill border border-primary/20 bg-white/70 px-4 py-1.5 text-sm font-bold text-primary backdrop-blur">
+        <span className="animate-fadeup inline-flex items-center gap-2 rounded-pill border border-primary/20 bg-white/70 px-4 py-1.5 text-sm font-bold text-primary backdrop-blur">
           <Trophy size={15} /> La #1 en agentes de IA de LATAM
         </span>
 
-        <h1 className="mx-auto mt-7 max-w-4xl text-5xl font-extrabold leading-[1.05] tracking-tight text-ink sm:text-7xl">
+        <h1
+          className="animate-fadeup mx-auto mt-7 max-w-4xl text-5xl font-extrabold leading-[1.05] tracking-tight text-ink sm:text-7xl"
+          style={{ animationDelay: "80ms" }}
+        >
           Agentes de IA que trabajan{" "}
           <span className="text-primary">solos</span>, adentro de tu empresa.
         </h1>
 
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-ink-soft sm:text-xl">
+        <p
+          className="animate-fadeup mx-auto mt-6 max-w-2xl text-lg text-ink-soft sm:text-xl"
+          style={{ animationDelay: "180ms" }}
+        >
           Los configuramos, los conectamos a tus sistemas y los dejamos corriendo{" "}
           <strong className="text-ink">24/7</strong>. Sin equipo técnico, sin dolores de cabeza.
           Vos mirás los resultados.
         </p>
 
-        <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <div
+          className="animate-fadeup mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
+          style={{ animationDelay: "280ms" }}
+        >
           <a
             href={WHATSAPP}
             target="_blank"
@@ -94,7 +105,10 @@ function Hero() {
           </a>
         </div>
 
-        <p className="mt-6 text-sm font-medium text-ink-soft">
+        <p
+          className="animate-fadeup mt-6 text-sm font-medium text-ink-soft"
+          style={{ animationDelay: "380ms" }}
+        >
           +150 agentes desplegados · empresas líderes de toda la región
         </p>
       </div>
@@ -139,17 +153,18 @@ function Cards() {
   return (
     <section className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-16">
       <div className="grid gap-5 sm:grid-cols-2">
-        {CARDS.map(({ Icon, title, body, bg, ink }) => (
-          <article
-            key={title}
-            className={`${bg} ${ink} group rounded-card p-8 transition duration-300 hover:-translate-y-1.5 sm:p-10`}
-          >
-            <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/60">
-              <Icon size={28} />
-            </span>
-            <h3 className="mt-6 text-3xl font-extrabold tracking-tight">{title}</h3>
-            <p className="mt-3 max-w-md text-lg opacity-80">{body}</p>
-          </article>
+        {CARDS.map(({ Icon, title, body, bg, ink }, i) => (
+          <Reveal key={title} delay={i * 90} className="h-full">
+            <article
+              className={`${bg} ${ink} group h-full rounded-card p-8 transition duration-300 hover:-translate-y-1.5 sm:p-10`}
+            >
+              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/60">
+                <Icon size={28} />
+              </span>
+              <h3 className="mt-6 text-3xl font-extrabold tracking-tight">{title}</h3>
+              <p className="mt-3 max-w-md text-lg opacity-80">{body}</p>
+            </article>
+          </Reveal>
         ))}
       </div>
     </section>
@@ -158,11 +173,17 @@ function Cards() {
 
 /* ─────────────────────────────────────────── Hype stats */
 
-const STATS = [
-  { n: "+150", l: "agentes desplegados" },
-  { n: "40+", l: "empresas en LATAM" },
-  { n: "24/7", l: "operando sin parar" },
-  { n: "3×", l: "más productividad" },
+const STATS: {
+  l: string;
+  value?: number;
+  prefix?: string;
+  suffix?: string;
+  static?: string;
+}[] = [
+  { prefix: "+", value: 150, l: "agentes desplegados" },
+  { value: 40, suffix: "+", l: "empresas en LATAM" },
+  { static: "24/7", l: "operando sin parar" },
+  { value: 3, suffix: "×", l: "más productividad" },
 ];
 
 function Stats() {
@@ -170,10 +191,16 @@ function Stats() {
     <section className="mx-auto max-w-7xl px-5 sm:px-8">
       <div className="rounded-card bg-c-ink px-6 py-12 text-white sm:px-12">
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
-          {STATS.map(({ n, l }) => (
-            <div key={l} className="text-center">
-              <div className="text-4xl font-extrabold tracking-tight sm:text-6xl">{n}</div>
-              <div className="mt-2 text-sm font-medium text-white/60 sm:text-base">{l}</div>
+          {STATS.map((s) => (
+            <div key={s.l} className="text-center">
+              <div className="text-4xl font-extrabold tracking-tight sm:text-6xl">
+                {s.static ? (
+                  s.static
+                ) : (
+                  <CountUp value={s.value!} prefix={s.prefix} suffix={s.suffix} />
+                )}
+              </div>
+              <div className="mt-2 text-sm font-medium text-white/60 sm:text-base">{s.l}</div>
             </div>
           ))}
         </div>
@@ -216,19 +243,18 @@ function Steps() {
 
       <div className="mt-12 grid gap-5 md:grid-cols-3">
         {STEPS.map(({ Icon, title, body }, i) => (
-          <article
-            key={title}
-            className="rounded-card border border-ink/5 bg-white p-8 shadow-soft"
-          >
-            <div className="flex items-center gap-3">
-              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-primary text-white">
-                <Icon size={20} />
-              </span>
-              <span className="text-sm font-extrabold text-primary">PASO {i + 1}</span>
-            </div>
-            <h3 className="mt-5 text-2xl font-extrabold tracking-tight text-ink">{title}</h3>
-            <p className="mt-2 text-lg text-ink-soft">{body}</p>
-          </article>
+          <Reveal key={title} delay={i * 120} className="h-full">
+            <article className="h-full rounded-card border border-ink/5 bg-white p-8 shadow-soft">
+              <div className="flex items-center gap-3">
+                <span className="grid h-11 w-11 place-items-center rounded-2xl bg-primary text-white">
+                  <Icon size={20} />
+                </span>
+                <span className="text-sm font-extrabold text-primary">PASO {i + 1}</span>
+              </div>
+              <h3 className="mt-5 text-2xl font-extrabold tracking-tight text-ink">{title}</h3>
+              <p className="mt-2 text-lg text-ink-soft">{body}</p>
+            </article>
+          </Reveal>
         ))}
       </div>
     </section>
@@ -272,8 +298,8 @@ function FinalCta() {
   return (
     <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-24">
       <div className="relative overflow-hidden rounded-card bg-primary px-6 py-16 text-center text-white sm:px-12 sm:py-24">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
+        <div className="animate-floaty pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
+        <div className="animate-floaty pointer-events-none absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-white/10 blur-2xl" style={{ animationDelay: "-3s" }} />
         <h2 className="relative mx-auto max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
           ¿Listo para tener tu primer agente trabajando?
         </h2>

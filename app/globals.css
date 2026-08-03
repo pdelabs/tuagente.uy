@@ -24,3 +24,47 @@ body {
     radial-gradient(50% 50% at 92% 20%, rgba(0, 166, 126, 0.18), transparent 60%),
     radial-gradient(55% 55% at 70% 95%, rgba(255, 122, 89, 0.16), transparent 60%);
 }
+
+/* ── Animations ────────────────────────────────────────────────────────── */
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Hero entrance (above the fold) — plays on load, staggered via inline delay. */
+.animate-fadeup {
+  opacity: 0;
+  animation: fadeUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+/* Scroll-reveal — toggled by the <Reveal> component. */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1),
+    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeup,
+  .reveal {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
