@@ -10,8 +10,9 @@
 // después lo deciden las reglas del agente. El copy no promete "se envía ya".
 
 import { useCallback, useEffect, useState } from "react";
+import { ChevronDown, Hand } from "lucide-react";
 import { loadConfig, getApprovals, approve, reject, type PortalConfig } from "../lib/agent";
-import { Btn, Card, EmptyState, ErrorState, Spinner } from "../lib/ui";
+import { Btn, Card, EmptyState, ErrorState, PageHeader, Spinner, inputCls } from "../lib/ui";
 
 const REFRESH_MS = 30_000;
 
@@ -20,12 +21,23 @@ type Approval = {
   title: string;
   summary: string;
   body: string;
-  created_at: string;
+  created_at: string | number; // Hermes puede emitir epoch en segundos
 };
 
-function timeAgo(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return "";
+// Tolerante: epoch en segundos (número o string numérica), epoch en ms, o ISO.
+function toMs(v: string | number): number {
+  if (typeof v === "number") return v < 1e12 ? v * 1000 : v;
+  if (v && /^\d+(\.\d+)?$/.test(v)) {
+    const n = Number(v);
+    return n < 1e12 ? n * 1000 : n;
+  }
+  const t = new Date(v).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+function timeAgo(v: string | number): string {
+  const t = toMs(v);
+  if (!t) return "";
   const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
   if (s < 60) return "hace un momento";
   const m = Math.floor(s / 60);
@@ -63,7 +75,7 @@ export default function AprobacionesPage() {
       const data = await getApprovals(c);
       const list = (Array.isArray(data.approvals) ? data.approvals : []) as Approval[];
       // La que más espera, arriba.
-      list.sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
+      list.sort((a, b) => toMs(a.created_at) - toMs(b.created_at));
       setApprovals(list);
       setLoadError(null);
       // Limpiar ids ocultos que el adapter ya no devuelve (acción confirmada).
@@ -80,7 +92,7 @@ export default function AprobacionesPage() {
   useEffect(() => {
     if (!cfg) return;
     load(cfg);
-    const t = setInterval(() => load(cfg), REFRESH_MS);
+    const t = setInterval(() => load(cfg), REFRESH_MS); // refresh silencioso
     return () => clearInterval(t);
   }, [cfg, load]);
 
@@ -124,22 +136,25 @@ export default function AprobacionesPage() {
     });
   };
 
-  if (!cfg) return <Spinner />;
+  const toggle = (id: string) => {
+    setExpandedId((cur) => (cur === id ? null : id));
+    if (rejectingId === id) {
+      setRejectingId(null);
+      setReason("");
+    }
+  };
 
   const visible = approvals ? approvals.filter((a) => !hidden.has(a.id)) : null;
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <header className="mb-6">
-        <h1 className="text-2xl font-extrabold text-ink tracking-tight">Aprobaciones</h1>
-        <p className="text-sm text-ink-soft mt-1">
-          Tu agente frenó estas tareas hasta tener tu ok. Aprobar las desbloquea;
-          el próximo paso lo deciden sus reglas.
-        </p>
-      </header>
+    <div className="mx-auto max-w-3xl px-6 py-6 md:px-8">
+      <PageHeader
+        title="Aprobaciones"
+        subtitle="Aprobar desbloquea el ticket; el próximo paso lo deciden las reglas de tu agente."
+      />
 
-      {visible === null ? (
-        loadError ? (
+      {!cfg || visible === null ? (
+        cfg && loadError ? (
           <ErrorState
             message={loadError}
             onRetry={() => {
@@ -152,89 +167,98 @@ export default function AprobacionesPage() {
         )
       ) : visible.length === 0 ? (
         <EmptyState
-          emoji="✋"
+          icon={Hand}
           title="Nada esperando tu aprobación"
           hint="Cuando tu agente necesite tu ok, lo vas a ver acá."
         />
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           {visible.map((a) => {
             const waited = timeAgo(a.created_at);
             const expanded = expandedId === a.id;
+            const rejecting = rejectingId === a.id;
             return (
-              <Card key={a.id} tone="surface">
+              <Card key={a.id}>
                 <button
                   type="button"
-                  onClick={() => setExpandedId(expanded ? null : a.id)}
-                  className="w-full text-left"
+                  aria-expanded={expanded}
+                  onClick={() => toggle(a.id)}
+                  className="flex w-full items-start justify-between gap-3 text-left"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-extrabold text-ink leading-snug">{a.title}</h2>
-                      {a.summary && <p className="text-sm text-ink-soft mt-1">{a.summary}</p>}
-                    </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-sm font-semibold text-ink">{a.title}</h2>
+                    {a.summary && (
+                      <p className="mt-0.5 text-sm text-ink-soft line-clamp-2">{a.summary}</p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
                     {waited && (
-                      <span className="shrink-0 whitespace-nowrap text-xs text-ink-soft mt-1.5">
+                      <span className="whitespace-nowrap text-[12px] text-ink-soft">
                         espera {waited}
                       </span>
                     )}
+                    <ChevronDown
+                      className={`h-4 w-4 text-ink-soft transition-transform ${expanded ? "rotate-180" : ""}`}
+                    />
                   </div>
-                  <p className="text-xs font-bold text-primary mt-3">
-                    {expanded ? "Ocultar contenido ▴" : "Ver contenido completo ▾"}
-                  </p>
                 </button>
 
                 {expanded && (
-                  <pre className="mt-3 rounded-2xl bg-surface p-4 font-sans text-[13px] leading-relaxed text-ink whitespace-pre-wrap break-words">
+                  <div className="mt-3 max-h-72 overflow-y-auto rounded-lg bg-black/[0.03] p-3 text-[13px] leading-relaxed text-ink whitespace-pre-wrap break-words">
                     {a.body}
-                  </pre>
+                  </div>
                 )}
 
                 {cardErrors[a.id] && (
-                  <p className="mt-3 rounded-pill bg-c-coral px-4 py-2 text-sm font-bold text-c-coral-ink">
+                  <p className="mt-3 rounded-lg border border-c-coral bg-c-coral/40 px-3 py-2 text-[13px] text-c-coral-ink">
                     {cardErrors[a.id]}
                   </p>
                 )}
 
-                {rejectingId === a.id ? (
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <input
-                      autoFocus
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && doReject(a)}
-                      placeholder="Contale a tu agente por qué lo rechazás"
-                      className="flex-1 rounded-pill border border-c-coral bg-surface px-4 py-2 text-sm text-ink outline-none focus:border-primary"
-                    />
-                    <div className="flex gap-2">
-                      <Btn kind="danger" disabled={!reason.trim()} onClick={() => doReject(a)}>
-                        Rechazar
-                      </Btn>
+                {expanded &&
+                  (rejecting ? (
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <input
+                        autoFocus
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && doReject(a)}
+                        placeholder="Contale a tu agente por qué lo rechazás"
+                        className={inputCls + " flex-1"}
+                      />
+                      <div className="flex shrink-0 justify-end gap-2">
+                        <Btn
+                          kind="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setRejectingId(null);
+                            setReason("");
+                          }}
+                        >
+                          Cancelar
+                        </Btn>
+                        <Btn kind="danger" size="sm" disabled={!reason.trim()} onClick={() => doReject(a)}>
+                          Confirmar rechazo
+                        </Btn>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 flex justify-end gap-2">
                       <Btn
-                        kind="ghost"
+                        kind="danger"
+                        size="sm"
                         onClick={() => {
-                          setRejectingId(null);
+                          setRejectingId(a.id);
                           setReason("");
                         }}
                       >
-                        Cancelar
+                        Rechazar
+                      </Btn>
+                      <Btn kind="primary" size="sm" onClick={() => doApprove(a)}>
+                        Aprobar
                       </Btn>
                     </div>
-                  </div>
-                ) : (
-                  <div className="mt-4 flex gap-2">
-                    <Btn onClick={() => doApprove(a)}>Aprobar</Btn>
-                    <Btn
-                      kind="danger"
-                      onClick={() => {
-                        setRejectingId(a.id);
-                        setReason("");
-                      }}
-                    >
-                      Rechazar
-                    </Btn>
-                  </div>
-                )}
+                  ))}
               </Card>
             );
           })}

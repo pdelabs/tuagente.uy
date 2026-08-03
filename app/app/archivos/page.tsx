@@ -1,14 +1,19 @@
 "use client";
 
 // Archivos: workspace del agente, solo lectura (sin subir, sin borrar).
-// Contrato (spec 05):
+// Contrato (adapter v0.3):
 //   GET {adapter}/portal/files        → { files: [{ path, size, mtime }] }
 //   GET {adapter}/portal/files/{path} → text/plain
-// Lista navegable por carpetas (derivadas de los paths) + viewer monoespaciado.
+// Lista navegable por carpetas (derivadas de los paths) + viewer en Modal.
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  File, FileCode, FileJson, FileText, Folder, FolderOpen, X, type LucideIcon,
+} from "lucide-react";
 import { loadConfig, getFiles, getFileText, type PortalConfig } from "../lib/agent";
-import { Btn, Card, EmptyState, ErrorState, Spinner } from "../lib/ui";
+import {
+  Btn, Card, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner,
+} from "../lib/ui";
 
 type FileEntry = { path: string; size?: number; mtime?: string | number };
 
@@ -16,9 +21,17 @@ type Viewer = { path: string; text: string | null; err: string | null };
 
 // Extensiones que abrimos en el viewer de texto.
 const TEXT_EXT =
-  /\.(md|markdown|txt|text|json|jsonl|csv|tsv|log|ya?ml|toml|ini|cfg|conf|py|rb|sh|sql|xml|html?|css|js|jsx|ts|tsx|mjs|env|rst)$/i;
+  /\.(md|markdown|txt|text|json|jsonl|csv|tsv|log|ya?ml|toml|ini|cfg|conf|py|rb|sh|sql|xml|html?|css|js|jsx|ts|tsx|mjs|env|rst|out)$/i;
 
 const is404 = (msg: string) => /^404\b/.test(msg);
+
+function fileIcon(name: string): LucideIcon {
+  const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
+  if (/^(md|markdown|txt|text|rst|log|out)$/.test(ext)) return FileText;
+  if (/^(json|jsonl)$/.test(ext)) return FileJson;
+  if (/^(py|rb|sh|sql|xml|html?|css|js|jsx|ts|tsx|mjs|ya?ml|toml|ini|cfg|conf|env)$/.test(ext)) return FileCode;
+  return File;
+}
 
 function toMs(mtime?: string | number): number {
   if (mtime == null) return 0;
@@ -96,61 +109,16 @@ export default function ArchivosPage() {
       .catch((e: Error) => setViewer({ path, text: null, err: e.message || "error" }));
   };
 
-  // ── Viewer ──
-  if (viewer) {
-    const name = viewer.path.split("/").pop() || viewer.path;
-    const meta = files?.find((f) => (f.path || "").replace(/^\/+/, "") === viewer.path);
-    return (
-      <div className="max-w-3xl">
-        <header className="mb-6">
-          <button
-            onClick={() => setViewer(null)}
-            className="text-sm font-bold text-primary hover:text-primary-dark"
-          >
-            ← Volver a archivos
-          </button>
-          <h1 className="text-2xl font-extrabold text-ink tracking-tight mt-2 break-words">
-            {name}
-          </h1>
-          <p className="text-xs text-ink-soft mt-1 break-words">
-            {viewer.path}
-            {meta?.size != null && ` · ${fmtSize(meta.size)}`}
-            {toMs(meta?.mtime) ? ` · ${relTime(toMs(meta?.mtime))}` : ""}
-          </p>
-        </header>
-        {viewer.text === null && viewer.err === null && <Spinner />}
-        {viewer.err && (
-          <ErrorState
-            message={`No pude abrir el archivo (${viewer.err}).`}
-            onRetry={() => openFile(viewer.path)}
-          />
-        )}
-        {viewer.text !== null && (
-          <Card>
-            {viewer.text.trim() === "" ? (
-              <p className="text-sm text-ink-soft">El archivo está vacío.</p>
-            ) : (
-              <pre className="font-mono text-xs leading-relaxed text-ink whitespace-pre-wrap break-words">
-                {viewer.text}
-              </pre>
-            )}
-          </Card>
-        )}
-      </div>
-    );
-  }
-
-  // ── Lista ──
   const body = () => {
     if (err && is404(err)) {
       return (
         <>
           <EmptyState
-            emoji="📁"
+            icon={FolderOpen}
             title="Los archivos no están disponibles en este agente"
             hint="Tu agente todavía no comparte los archivos de su workspace."
           />
-          <div className="flex justify-center"><Btn kind="ghost" onClick={load}>Reintentar</Btn></div>
+          <div className="flex justify-center"><Btn kind="ghost" size="sm" onClick={load}>Reintentar</Btn></div>
         </>
       );
     }
@@ -159,7 +127,7 @@ export default function ArchivosPage() {
     if (files.length === 0) {
       return (
         <EmptyState
-          emoji="🗂️"
+          icon={FolderOpen}
           title="Todavía no hay archivos"
           hint="Cuando tu agente genere reportes o documentos, van a aparecer acá."
         />
@@ -171,10 +139,10 @@ export default function ArchivosPage() {
 
     return (
       <>
-        <nav className="mb-3 flex flex-wrap items-center gap-1 px-1 text-sm text-ink-soft">
+        <nav className="mb-3 flex flex-wrap items-center gap-1 px-1 text-sm">
           <button
             onClick={() => setDir("")}
-            className={`font-bold ${dir ? "text-primary hover:text-primary-dark" : "text-ink"}`}
+            className={dir ? "font-medium text-ink-soft transition hover:text-ink" : "font-semibold text-ink"}
           >
             Workspace
           </button>
@@ -182,10 +150,10 @@ export default function ArchivosPage() {
             const isLast = i === crumbs.length - 1;
             return (
               <span key={i} className="flex items-center gap-1">
-                <span>/</span>
+                <span className="text-ink-soft/50">/</span>
                 <button
                   onClick={() => setDir(crumbs.slice(0, i + 1).join("/"))}
-                  className={`font-bold ${isLast ? "text-ink" : "text-primary hover:text-primary-dark"}`}
+                  className={isLast ? "font-semibold text-ink" : "font-medium text-ink-soft transition hover:text-ink"}
                 >
                   {seg}
                 </button>
@@ -193,17 +161,17 @@ export default function ArchivosPage() {
             );
           })}
         </nav>
-        <Card className="!p-0">
-          <ul className="divide-y divide-surface">
+        <Card className="overflow-hidden !p-0">
+          <ul className="divide-y divide-black/[0.06]">
             {folderList.map((f) => (
               <li key={`d-${f.name}`}>
                 <button
                   onClick={() => setDir(dir ? `${dir}/${f.name}` : f.name)}
-                  className="flex w-full items-center gap-3 px-5 py-3.5 text-left hover:bg-surface transition"
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-black/[0.02]"
                 >
-                  <span className="text-lg">📁</span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{f.name}</span>
-                  <span className="shrink-0 text-xs text-ink-soft">
+                  <Folder className="h-4 w-4 shrink-0 text-ink-soft" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{f.name}</span>
+                  <span className="shrink-0 text-[12px] tabular-nums text-ink-soft">
                     {f.count === 1 ? "1 archivo" : `${f.count} archivos`}
                   </span>
                 </button>
@@ -212,23 +180,24 @@ export default function ArchivosPage() {
             {inDir.map((f) => {
               const name = f.path.split("/").pop() || f.path;
               const texty = TEXT_EXT.test(name);
+              const Icon = fileIcon(name);
               const meta = [fmtSize(f.size), relTime(toMs(f.mtime))].filter(Boolean).join(" · ");
               return (
                 <li key={`f-${f.path}`}>
                   {texty ? (
                     <button
                       onClick={() => openFile(f.path)}
-                      className="flex w-full items-center gap-3 px-5 py-3.5 text-left hover:bg-surface transition"
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-black/[0.02]"
                     >
-                      <span className="text-lg">📄</span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{name}</span>
-                      <span className="shrink-0 text-xs text-ink-soft">{meta}</span>
+                      <Icon className="h-4 w-4 shrink-0 text-ink-soft" />
+                      <span className="min-w-0 flex-1 truncate text-sm text-ink">{name}</span>
+                      <span className="shrink-0 text-[12px] tabular-nums text-ink-soft">{meta}</span>
                     </button>
                   ) : (
-                    <div className="flex w-full items-center gap-3 px-5 py-3.5 opacity-60">
-                      <span className="text-lg">📄</span>
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{name}</span>
-                      <span className="shrink-0 text-xs text-ink-soft">
+                    <div className="flex w-full items-center gap-3 px-4 py-2.5 opacity-55">
+                      <Icon className="h-4 w-4 shrink-0 text-ink-soft" />
+                      <span className="min-w-0 flex-1 truncate text-sm text-ink">{name}</span>
+                      <span className="shrink-0 text-[12px] tabular-nums text-ink-soft">
                         {meta ? `${meta} · ` : ""}sin vista previa
                       </span>
                     </div>
@@ -237,7 +206,7 @@ export default function ArchivosPage() {
               );
             })}
             {folderList.length === 0 && inDir.length === 0 && (
-              <li className="px-5 py-6 text-center text-sm text-ink-soft">Esta carpeta está vacía.</li>
+              <li className="px-4 py-6 text-center text-sm text-ink-soft">Esta carpeta está vacía.</li>
             )}
           </ul>
         </Card>
@@ -245,15 +214,50 @@ export default function ArchivosPage() {
     );
   };
 
+  const viewerName = viewer ? viewer.path.split("/").pop() || viewer.path : "";
+  const viewerMeta = viewer
+    ? files?.find((f) => (f.path || "").replace(/^\/+/, "") === viewer.path)
+    : undefined;
+
   return (
-    <div className="max-w-3xl">
-      <header className="mb-6">
-        <h1 className="text-2xl font-extrabold text-ink tracking-tight">Archivos</h1>
-        <p className="text-sm text-ink-soft mt-1">
-          Los documentos del workspace de tu agente. Solo lectura.
-        </p>
-      </header>
+    <div className="mx-auto max-w-4xl px-6 py-6 md:px-8">
+      <PageHeader title="Archivos" subtitle="Lo que tu agente escribió en su workspace" />
       {body()}
+      {viewer && (
+        <Modal wide onClose={() => setViewer(null)}>
+          <div className="flex items-center justify-between gap-3 border-b border-black/[0.07] px-4 py-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-ink">{viewerName}</p>
+              <p className="truncate text-[11px] text-ink-soft">
+                {viewer.path}
+                {viewerMeta?.size != null ? ` · ${fmtSize(viewerMeta.size)}` : ""}
+                {toMs(viewerMeta?.mtime) ? ` · ${relTime(toMs(viewerMeta?.mtime))}` : ""}
+              </p>
+            </div>
+            <IconBtn label="Cerrar" onClick={() => setViewer(null)}>
+              <X className="h-4 w-4" />
+            </IconBtn>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            {viewer.text === null && viewer.err === null && <Spinner />}
+            {viewer.err && (
+              <ErrorState
+                message={`No pude abrir el archivo (${viewer.err}).`}
+                onRetry={() => openFile(viewer.path)}
+              />
+            )}
+            {viewer.text !== null && (
+              viewer.text.trim() === "" ? (
+                <p className="text-sm text-ink-soft">El archivo está vacío.</p>
+              ) : (
+                <pre className="whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-ink">
+                  {viewer.text}
+                </pre>
+              )
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -72,9 +72,15 @@ async function post<T>(base: string, path: string, cfg: PortalConfig, body?: unk
   return res.json();
 }
 
+export type TicketComment = { author: string; body: string; created_at: number };
+export type TicketEvent = { kind: string; created_at: number };
+export type TicketDetail = { ticket: Ticket; comments: TicketComment[]; events: TicketEvent[] };
+
 // ── Adapter (:8643) ──
 export const getManifest = (c: PortalConfig) => get<Manifest>(c.adapter, "/portal/manifest", c);
 export const getTickets = (c: PortalConfig) => get<{ tickets: Ticket[] }>(c.adapter, "/portal/tickets", c);
+export const getTicketDetail = (c: PortalConfig, id: string) =>
+  get<TicketDetail>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}`, c);
 export const getApprovals = (c: PortalConfig) => get<{ approvals: any[] }>(c.adapter, "/portal/approvals", c);
 export const approve = (c: PortalConfig, id: string) => post<{ ok: boolean }>(c.adapter, `/portal/approvals/${id}/approve`, c);
 export const reject = (c: PortalConfig, id: string, reason: string) =>
@@ -123,6 +129,7 @@ export async function sessionChatStream(
   sessionId: string,
   message: string,
   h: SessionStreamHandlers,
+  signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch(
     `${cfg.endpoint}/api/sessions/${encodeURIComponent(sessionId)}/chat/stream`,
@@ -130,6 +137,7 @@ export async function sessionChatStream(
       method: "POST",
       headers: { ...headers(cfg), "Content-Type": "application/json" },
       body: JSON.stringify({ message }),
+      signal,
     },
   );
   if (!res.ok || !res.body) {
@@ -191,12 +199,13 @@ export async function chatStream(
   cfg: PortalConfig,
   messages: ChatMessage[],
   onDelta: (text: string) => void,
-  sessionPath = "/v1/chat/completions",
+  signal?: AbortSignal,
 ): Promise<string> {
-  const res = await fetch(cfg.endpoint + sessionPath, {
+  const res = await fetch(cfg.endpoint + "/v1/chat/completions", {
     method: "POST",
     headers: { ...headers(cfg), "Content-Type": "application/json" },
     body: JSON.stringify({ messages, stream: true }),
+    signal,
   });
   if (!res.ok || !res.body) throw new Error(`${res.status} en chat`);
   const reader = res.body.getReader();

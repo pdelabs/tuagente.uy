@@ -17,6 +17,32 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* ── Portal /app ──────────────────────────────────────────────────────── */
+
+/* Scrollbars finos y discretos en todo el portal (el default de macOS
+   queda pesado dentro de paneles). */
+.app-shell * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 19, 31, 0.16) transparent;
+}
+.app-shell *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.app-shell *::-webkit-scrollbar-thumb {
+  background: rgba(20, 19, 31, 0.14);
+  border-radius: 999px;
+}
+.app-shell *::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 19, 31, 0.28);
+}
+.app-shell *::-webkit-scrollbar-track {
+  background: transparent;
+}
+.app-shell *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Soft aurora backdrop for the hero. */
 .aurora {
   background:

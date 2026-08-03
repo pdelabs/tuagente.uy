@@ -1,43 +1,40 @@
 "use client";
 
-// Actividad: timeline de lo que hizo el agente (corridas de jobs, entregas).
-// Contrato (spec 05): GET {adapter}/portal/activity → { events: [{ ts, kind, label, status }] }
-// Agrupado por día, fecha relativa, kind como chip, status con color semántico.
-// Refresh silencioso cada 30 s.
+// Actividad: todo lo que hizo el agente, en orden cronológico.
+// Contrato (adapter v0.3): GET {adapter}/portal/activity →
+//   { events: [{ ts, kind: "job_run" | "ticket", label, status }] }
+// Agrupado por día (Hoy/Ayer/fecha), refresh silencioso cada 30 s.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Activity } from "lucide-react";
 import { loadConfig, getActivity, type PortalConfig } from "../lib/agent";
-import { Btn, Card, Chip, EmptyState, ErrorState, Spinner } from "../lib/ui";
+import { Btn, Card, Chip, EmptyState, ErrorState, PageHeader, Spinner } from "../lib/ui";
 
 type ActivityEvent = { ts: string; kind: string; label: string; status: string };
 
 const REFRESH_MS = 30_000;
 
-function statusTone(status: string): "green" | "coral" | "amber" | "ink" {
-  const s = (status || "").toLowerCase();
-  if (/(ok|success|done|complet|deliver|sent|entregad|listo)/.test(s)) return "green";
-  if (/(error|fail|timeout|cancel|rechaz)/.test(s)) return "coral";
-  if (/(run|progress|pend|start|queue|curso|proceso)/.test(s)) return "amber";
-  return "ink";
-}
-
-const DOT: Record<string, string> = {
-  green: "bg-c-green-ink",
-  coral: "bg-c-coral-ink",
-  amber: "bg-c-amber-ink",
-  ink: "bg-ink-soft",
+// Kind crudo del adapter → rótulo legible.
+const KIND_LABEL: Record<string, string> = {
+  job_run: "Tarea programada",
+  ticket: "Ticket",
 };
 
-function relTime(ts: string): string {
-  const t = new Date(ts).getTime();
-  if (Number.isNaN(t)) return "";
-  const min = Math.floor((Date.now() - t) / 60_000);
-  if (min < 1) return "recién";
-  if (min < 60) return `hace ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `hace ${h} h`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? "hace 1 día" : `hace ${d} días`;
+// Puntito de estado: verde OK · coral falla · ámbar en curso ·
+// violeta evento de ticket neutral · gris resto.
+function dotCls(kind: string, status: string): string {
+  const s = (status || "").toLowerCase();
+  if (/(^ok$|complet|success|done|deliver|sent|unblock|resolv|entregad|listo)/.test(s)) return "bg-c-green-ink";
+  if (/(fail|error|timeout|cancel|reject|rechaz)/.test(s)) return "bg-c-coral-ink";
+  if (/(run|progress|pend|claim|start|queue|block|curso|proceso)/.test(s)) return "bg-c-amber-ink";
+  if (kind === "ticket") return "bg-c-violet-ink";
+  return "bg-ink-soft/50";
+}
+
+function hourLabel(ts: string): string {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" });
 }
 
 function dayKey(ts: string): string {
@@ -94,11 +91,11 @@ export default function ActividadPage() {
       return (
         <>
           <EmptyState
-            emoji="📈"
+            icon={Activity}
             title="La actividad no está disponible en este agente"
             hint="Tu agente todavía no publica su historial de actividad."
           />
-          <div className="flex justify-center"><Btn kind="ghost" onClick={() => load()}>Reintentar</Btn></div>
+          <div className="flex justify-center"><Btn kind="ghost" size="sm" onClick={() => load()}>Reintentar</Btn></div>
         </>
       );
     }
@@ -107,7 +104,7 @@ export default function ActividadPage() {
     if (events.length === 0) {
       return (
         <EmptyState
-          emoji="🌱"
+          icon={Activity}
           title="Todavía no hay actividad"
           hint="Cuando tu agente haga algo, lo vas a ver acá."
         />
@@ -129,30 +126,28 @@ export default function ActividadPage() {
       <div className="flex flex-col gap-6">
         {groups.map((g) => (
           <section key={g.key}>
-            <h2 className="text-xs font-bold uppercase tracking-wide text-ink-soft mb-2 px-1 capitalize">
+            <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
               {g.label}
             </h2>
-            <Card className="!p-0">
-              <ul className="divide-y divide-surface">
-                {g.items.map((ev, i) => {
-                  const tone = statusTone(ev.status);
-                  return (
-                    <li key={`${ev.ts}-${i}`} className="flex items-center gap-3 px-5 py-3.5">
-                      <span
-                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${DOT[tone]}`}
-                        title={ev.status}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-ink truncate">{ev.label}</p>
-                        <div className="mt-1 flex items-center gap-2">
-                          {ev.kind && <Chip tone="violet">{ev.kind}</Chip>}
-                          {ev.status && <Chip tone={tone}>{ev.status}</Chip>}
-                        </div>
-                      </div>
-                      <span className="shrink-0 text-xs text-ink-soft">{relTime(ev.ts)}</span>
-                    </li>
-                  );
-                })}
+            <Card className="overflow-hidden !p-0">
+              <ul className="divide-y divide-black/[0.06]">
+                {g.items.map((ev, i) => (
+                  <li key={`${ev.ts}-${i}`} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="w-12 shrink-0 text-[12px] tabular-nums text-ink-soft">
+                      {hourLabel(ev.ts)}
+                    </span>
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-full ${dotCls(ev.kind, ev.status)}`}
+                    />
+                    <p className="min-w-0 flex-1 truncate text-sm text-ink">{ev.label}</p>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <Chip>{KIND_LABEL[ev.kind] ?? ev.kind}</Chip>
+                      {ev.status && (
+                        <span className="text-[11px] text-ink-soft">{ev.status}</span>
+                      )}
+                    </span>
+                  </li>
+                ))}
               </ul>
             </Card>
           </section>
@@ -162,11 +157,8 @@ export default function ActividadPage() {
   };
 
   return (
-    <div className="max-w-2xl">
-      <header className="mb-6">
-        <h1 className="text-2xl font-extrabold text-ink tracking-tight">Actividad</h1>
-        <p className="text-sm text-ink-soft mt-1">Lo que tu agente estuvo haciendo, día a día.</p>
-      </header>
+    <div className="mx-auto max-w-4xl px-6 py-6 md:px-8">
+      <PageHeader title="Actividad" subtitle="Todo lo que tu agente hizo, en orden" />
       {body()}
     </div>
   );

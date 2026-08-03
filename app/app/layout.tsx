@@ -1,26 +1,30 @@
 "use client";
 
-// Shell del portal: sidebar por manifest + header con el nombre del agente.
+// Shell del portal: sidebar por manifest + estado de conexión con el agente.
 // Los features viven en subcarpetas y NO tocan este archivo.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Activity, BarChart3, Clock, Columns3, Folder, Hand, LogOut, MessageSquare,
+  Unplug, type LucideIcon,
+} from "lucide-react";
+import {
   loadConfig, clearConfig, getManifest,
   type PortalConfig, type Manifest,
 } from "./lib/agent";
-import { Btn, Spinner } from "./lib/ui";
+import { Btn, Spinner, inputCls } from "./lib/ui";
 
 // Orden y rótulos de módulos; se muestran solo los que el manifest habilita.
-export const MODULES: { key: string; path: string; label: string; emoji: string }[] = [
-  { key: "chat", path: "/app/chat", label: "Chat", emoji: "💬" },
-  { key: "kanban", path: "/app/pipeline", label: "Pipeline", emoji: "📋" },
-  { key: "approvals", path: "/app/aprobaciones", label: "Aprobaciones", emoji: "✋" },
-  { key: "crons", path: "/app/tareas", label: "Tareas", emoji: "⏰" },
-  { key: "activity", path: "/app/actividad", label: "Actividad", emoji: "📈" },
-  { key: "files", path: "/app/archivos", label: "Archivos", emoji: "📁" },
-  { key: "usage", path: "/app/uso", label: "Uso", emoji: "📊" },
+export const MODULES: { key: string; path: string; label: string; icon: LucideIcon }[] = [
+  { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
+  { key: "kanban", path: "/app/pipeline", label: "Pipeline", icon: Columns3 },
+  { key: "approvals", path: "/app/aprobaciones", label: "Aprobaciones", icon: Hand },
+  { key: "crons", path: "/app/tareas", label: "Tareas", icon: Clock },
+  { key: "activity", path: "/app/actividad", label: "Actividad", icon: Activity },
+  { key: "files", path: "/app/archivos", label: "Archivos", icon: Folder },
+  { key: "usage", path: "/app/uso", label: "Uso", icon: BarChart3 },
 ];
 
 function Login({ onReady }: { onReady: () => void }) {
@@ -33,11 +37,13 @@ function Login({ onReady }: { onReady: () => void }) {
     onReady();
   };
   return (
-    <main className="min-h-screen bg-surface flex items-center justify-center p-6">
-      <div className="bg-white rounded-card shadow-soft p-8 max-w-md w-full">
-        <div className="text-4xl mb-3">✋</div>
-        <h1 className="text-2xl font-extrabold text-ink tracking-tight">tuagente</h1>
-        <p className="text-ink-soft text-sm mt-1 mb-6">
+    <main className="app-shell flex min-h-screen items-center justify-center bg-surface p-6">
+      <div className="w-full max-w-md rounded-xl border border-black/[0.07] bg-white p-8">
+        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+          <Hand className="h-5 w-5 text-white" />
+        </div>
+        <h1 className="text-xl font-bold tracking-tight text-ink">tuagente</h1>
+        <p className="mb-6 mt-1 text-sm text-ink-soft">
           Pegá el magic link que te dimos para entrar al portal de tu agente.
         </p>
         <input
@@ -45,9 +51,9 @@ function Login({ onReady }: { onReady: () => void }) {
           onChange={(e) => { setLink(e.target.value); setErr(""); }}
           onKeyDown={(e) => e.key === "Enter" && enter()}
           placeholder="https://app.tuagente.uy/app#key=…"
-          className="w-full rounded-pill border border-c-violet bg-surface px-5 py-3 text-sm text-ink outline-none focus:border-primary"
+          className={inputCls}
         />
-        {err && <p className="text-sm text-c-coral-ink mt-2">{err}</p>}
+        {err && <p className="mt-2 text-sm text-c-coral-ink">{err}</p>}
         <div className="mt-4"><Btn onClick={enter}>Entrar</Btn></div>
       </div>
     </main>
@@ -70,17 +76,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
   useEffect(boot, []);
 
-  if (state === "loading") return <main className="min-h-screen bg-surface"><Spinner /></main>;
+  if (state === "loading") return <main className="app-shell min-h-screen bg-surface"><Spinner /></main>;
   if (state === "login") return <Login onReady={boot} />;
   if (state === "error" || !manifest || !cfg) {
     return (
-      <main className="min-h-screen bg-surface flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-4xl mb-3">😴</div>
-        <p className="font-bold text-ink">No pude conectar con tu agente</p>
-        <p className="text-sm text-ink-soft mt-1 mb-4">Puede estar apagado, o el link venció.</p>
-        <div className="flex gap-3">
-          <Btn onClick={boot}>Reintentar</Btn>
-          <Btn kind="ghost" onClick={() => { clearConfig(); setState("login"); }}>Cambiar link</Btn>
+      <main className="app-shell flex min-h-screen flex-col items-center justify-center bg-surface p-6 text-center">
+        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-black/[0.04]">
+          <Unplug className="h-5 w-5 text-ink-soft" />
+        </div>
+        <p className="text-sm font-semibold text-ink">No pude conectar con tu agente</p>
+        <p className="mb-4 mt-1 text-sm text-ink-soft">Puede estar apagado, o el link venció.</p>
+        <div className="flex gap-2">
+          <Btn size="sm" onClick={boot}>Reintentar</Btn>
+          <Btn kind="secondary" size="sm" onClick={() => { clearConfig(); setState("login"); }}>Cambiar link</Btn>
         </div>
       </main>
     );
@@ -88,36 +96,51 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const enabled = MODULES.filter((m) => manifest.modules[m.key]);
   return (
-    <div className="min-h-screen bg-surface flex">
-      <aside className="w-56 shrink-0 p-4 flex flex-col gap-1 sticky top-0 h-screen">
-        <div className="px-3 py-4">
-          <p className="font-extrabold text-ink tracking-tight">✋ tuagente</p>
-          <p className="text-xs text-ink-soft mt-0.5">{manifest.agent}</p>
+    <div className="app-shell flex min-h-screen bg-surface">
+      <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-black/[0.07] px-3 py-4">
+        <div className="mb-4 flex items-center gap-2.5 px-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+            <Hand className="h-4 w-4 text-white" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold tracking-tight text-ink">{manifest.agent}</p>
+            <p className="flex items-center gap-1 text-[11px] text-ink-soft">
+              <span className="h-1.5 w-1.5 rounded-full bg-c-green-ink" />
+              conectado
+            </p>
+          </div>
         </div>
-        {enabled.map((m) => {
-          const active = pathname.startsWith(m.path);
-          return (
-            <Link
-              key={m.key}
-              href={m.path}
-              className={`rounded-pill px-4 py-2.5 text-sm font-bold transition ${
-                active ? "bg-primary text-white" : "text-ink hover:bg-c-violet hover:text-c-violet-ink"
-              }`}
-            >
-              <span className="mr-2">{m.emoji}</span>{m.label}
-            </Link>
-          );
-        })}
-        <div className="mt-auto px-3 py-2">
+        <nav className="flex flex-col gap-0.5">
+          {enabled.map((m) => {
+            const active = pathname.startsWith(m.path);
+            const Icon = m.icon;
+            return (
+              <Link
+                key={m.key}
+                href={m.path}
+                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition ${
+                  active
+                    ? "bg-c-violet/60 font-semibold text-primary"
+                    : "text-ink-soft hover:bg-black/[0.04] hover:text-ink"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {m.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="mt-auto px-1">
           <button
             onClick={() => { clearConfig(); setState("login"); }}
-            className="text-xs text-ink-soft hover:text-ink"
+            className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-[13px] text-ink-soft transition hover:text-ink"
           >
+            <LogOut className="h-3.5 w-3.5" />
             Salir
           </button>
         </div>
       </aside>
-      <main className="flex-1 min-w-0 p-6">{children}</main>
+      <main className="min-w-0 flex-1">{children}</main>
     </div>
   );
 }

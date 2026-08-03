@@ -1,22 +1,47 @@
 "use client";
 
-// Pipeline — kanban read-only de tickets del agente (GET {adapter}/portal/tickets).
-// GENÉRICO: títulos, tenants y estados se muestran tal cual llegan; cero parseo
-// de dominio. El body se renderiza como texto plano preformateado (anti-XSS).
+// Pipeline — kanban read-only de tickets del agente (GET {adapter}/portal/tickets)
+// + detalle con comentarios (GET {adapter}/portal/tickets/{id}).
+// GENÉRICO: títulos, tenants, estados, autores y eventos se muestran tal cual
+// llegan; cero parseo de dominio. Todo texto del agente se renderiza como texto
+// plano preformateado (anti-XSS).
 
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { loadConfig, getTickets, type PortalConfig, type Ticket } from "../lib/agent";
-import { Btn, Card, Chip, EmptyState, ErrorState, Spinner } from "../lib/ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Inbox, RefreshCw, Search, SearchX, X } from "lucide-react";
+import {
+  loadConfig,
+  getTickets,
+  getTicketDetail,
+  type PortalConfig,
+  type Ticket,
+  type TicketDetail,
+} from "../lib/agent";
+import {
+  Chip,
+  EmptyState,
+  ErrorState,
+  IconBtn,
+  Modal,
+  PageHeader,
+  Spinner,
+  inputCls,
+} from "../lib/ui";
 
 const REFRESH_MS = 30_000;
 const SIN_TENANT = "__sin_tenant__"; // sentinel para tickets con tenant null
 
 type ColKey = "blocked" | "active" | "done";
 
-const COLUMNS: { key: ColKey; label: string; chip: string; tone: "violet" | "amber" | "green" }[] = [
-  { key: "blocked", label: "Esperando aprobación", chip: "Esperando aprobación", tone: "violet" },
-  { key: "active", label: "En curso", chip: "En curso", tone: "amber" },
-  { key: "done", label: "Completados", chip: "Completado", tone: "green" },
+const COLUMNS: {
+  key: ColKey;
+  label: string;
+  chip: string;
+  tone: "violet" | "amber" | "green";
+  dot: string;
+}[] = [
+  { key: "blocked", label: "Esperando aprobación", chip: "Esperando aprobación", tone: "violet", dot: "bg-primary" },
+  { key: "active", label: "En curso", chip: "En curso", tone: "amber", dot: "bg-c-amber-ink" },
+  { key: "done", label: "Completados", chip: "Completado", tone: "green", dot: "bg-c-green-ink" },
 ];
 
 // blocked y done tienen columna propia; ready, running y cualquier estado
@@ -27,8 +52,8 @@ function columnOf(status: string): ColKey {
   return "active";
 }
 
-// created_at llega del adapter como epoch en SEGUNDOS (int), aunque la lib lo
-// tipa string. Acepto número, string numérico o fecha parseable.
+// created_at llega del adapter como epoch en SEGUNDOS (int), aunque a veces la
+// lib lo tipa string. Acepto número, string numérico o fecha parseable.
 function toDate(v: string | number): Date | null {
   const n = typeof v === "number" ? v : Number(v);
   if (Number.isFinite(n) && String(v).trim() !== "") return new Date(n > 1e12 ? n : n * 1000);
@@ -36,14 +61,19 @@ function toDate(v: string | number): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function fmtFecha(v: string | number): string {
+// Fecha relativa compacta; pasada una semana, fecha corta absoluta.
+function fmtRelativa(v: string | number): string {
   const d = toDate(v);
   if (!d) return "";
-  const hoy = new Date();
-  if (d.toDateString() === hoy.toDateString())
-    return d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" });
+  const min = Math.round((Date.now() - d.getTime()) / 60_000);
+  if (min < 1) return "recién";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const dias = Math.round(h / 24);
+  if (dias < 7) return dias === 1 ? "hace 1 día" : `hace ${dias} días`;
   const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
-  if (d.getFullYear() !== hoy.getFullYear()) opts.year = "numeric";
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
   return d.toLocaleDateString("es-UY", opts);
 }
 
@@ -52,12 +82,20 @@ function normalizar(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-function FiltroChip({ activo, onClick, children }: {
-  activo: boolean; onClick: () => void; children: ReactNode;
+function FiltroTenant({ activo, onClick, children }: {
+  activo: boolean; onClick: () => void; children: string;
 }) {
   return (
-    <button onClick={onClick} aria-pressed={activo} className="transition hover:opacity-80">
-      <Chip tone={activo ? "ink" : "violet"}>{children}</Chip>
+    <button
+      onClick={onClick}
+      aria-pressed={activo}
+      className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition ${
+        activo
+          ? "bg-ink text-white"
+          : "bg-black/[0.05] text-ink-soft hover:bg-black/[0.08] hover:text-ink"
+      }`}
+    >
+      {children}
     </button>
   );
 }
@@ -71,6 +109,9 @@ export default function PipelinePage() {
   const [tenant, setTenant] = useState<string | null>(null); // null = todos
   const [busqueda, setBusqueda] = useState("");
   const [abierto, setAbierto] = useState<Ticket | null>(null);
+  const [detalle, setDetalle] = useState<TicketDetail | null>(null);
+  const [detalleError, setDetalleError] = useState(false);
+  const [detalleCargando, setDetalleCargando] = useState(false);
   const enVuelo = useRef(false);
 
   const cargar = useCallback(async () => {
@@ -95,6 +136,20 @@ export default function PipelinePage() {
     const id = setInterval(cargar, REFRESH_MS);
     return () => clearInterval(id);
   }, [cargar]);
+
+  // Detalle del ticket abierto (comentarios + historial).
+  useEffect(() => {
+    if (!abierto || !cfg) return;
+    let vivo = true; // descarta respuestas de un ticket ya cerrado/cambiado
+    setDetalle(null);
+    setDetalleError(false);
+    setDetalleCargando(true);
+    getTicketDetail(cfg, abierto.id)
+      .then((d) => { if (vivo) setDetalle(d); })
+      .catch(() => { if (vivo) setDetalleError(true); })
+      .finally(() => { if (vivo) setDetalleCargando(false); });
+    return () => { vivo = false; };
+  }, [abierto, cfg]);
 
   // Modal: cerrar con Escape y bloquear el scroll de fondo.
   useEffect(() => {
@@ -142,115 +197,122 @@ export default function PipelinePage() {
     return m;
   }, [visibles]);
 
-  if (!cfg) return <Spinner />; // el layout muestra el login
-  if (tickets === null && error) return <ErrorState message={error} onRetry={cargar} />;
-  if (tickets === null) return <Spinner />;
+  const wrap = "mx-auto max-w-6xl px-6 py-6 md:px-8";
+
+  if (!cfg) return <div className={wrap}><Spinner /></div>; // el layout muestra el login
+  if (tickets === null && error)
+    return <div className={wrap}><ErrorState message={error} onRetry={cargar} /></div>;
+  if (tickets === null) return <div className={wrap}><Spinner /></div>;
 
   const colDe = (t: Ticket) => COLUMNS.find((c) => c.key === columnOf(t.status))!;
+  // Historial más reciente primero, pase como pase del adapter.
+  const eventos = detalle
+    ? [...detalle.events].sort(
+        (a, b) => (toDate(b.created_at)?.getTime() ?? 0) - (toDate(a.created_at)?.getTime() ?? 0),
+      )
+    : [];
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <header className="flex flex-wrap items-end justify-between gap-3 mb-5">
-        <div>
-          <h1 className="text-2xl font-extrabold text-ink tracking-tight">📋 Pipeline</h1>
-          <p className="text-sm text-ink-soft mt-0.5">Lo que tu agente tiene entre manos.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {ultima && (
-            <span className="text-xs text-ink-soft">
-              Actualizado {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}
-            </span>
-          )}
-          <Btn kind="ghost" disabled={cargando} onClick={cargar}>
-            {cargando ? "Actualizando…" : "Actualizar"}
-          </Btn>
-        </div>
-      </header>
+    <div className={wrap}>
+      <PageHeader
+        title="Pipeline"
+        subtitle="Lo que tu agente tiene entre manos."
+        actions={
+          <>
+            {ultima && (
+              <span className="hidden text-xs text-ink-soft sm:inline">
+                Actualizado{" "}
+                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+            <div className="relative w-56">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft/60" />
+              <input
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar por título…"
+                className={`${inputCls} pl-8`}
+              />
+            </div>
+            <IconBtn label="Actualizar" disabled={cargando} onClick={cargar}>
+              <RefreshCw className={`h-4 w-4 ${cargando ? "animate-spin" : ""}`} />
+            </IconBtn>
+          </>
+        }
+      />
 
       {error && (
-        <p className="inline-block rounded-pill bg-c-coral text-c-coral-ink text-xs font-bold px-4 py-2 mb-4">
+        <p className="mb-4 inline-flex items-center rounded-lg border border-c-coral bg-c-coral/40 px-3 py-1.5 text-[12px] font-medium text-c-coral-ink">
           No pude actualizar recién ({error}). Te muestro lo último que tengo.
         </p>
       )}
 
       {tickets.length === 0 ? (
         <EmptyState
-          emoji="📋"
+          icon={Inbox}
           title="Todavía no hay tickets"
           hint="Cuando tu agente empiece a trabajar, los vas a ver acá."
         />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-6">
-            <input
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar por título…"
-              className="w-full sm:w-72 rounded-pill border border-c-violet bg-white px-5 py-2.5 text-sm text-ink outline-none focus:border-primary"
-            />
-            {tenants.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                <FiltroChip activo={tenant === null} onClick={() => setTenant(null)}>
-                  Todos
-                </FiltroChip>
-                {tenants.map((t) => (
-                  <FiltroChip
-                    key={t}
-                    activo={tenant === t}
-                    onClick={() => setTenant(tenant === t ? null : t)}
-                  >
-                    {t === SIN_TENANT ? "Sin etiqueta" : t}
-                  </FiltroChip>
-                ))}
-              </div>
-            )}
-          </div>
+          {tenants.length > 0 && (
+            <div className="mb-5 flex flex-wrap items-center gap-1.5">
+              <FiltroTenant activo={tenant === null} onClick={() => setTenant(null)}>
+                Todos
+              </FiltroTenant>
+              {tenants.map((t) => (
+                <FiltroTenant
+                  key={t}
+                  activo={tenant === t}
+                  onClick={() => setTenant(tenant === t ? null : t)}
+                >
+                  {t === SIN_TENANT ? "Sin etiqueta" : t}
+                </FiltroTenant>
+              ))}
+            </div>
+          )}
 
           {visibles.length === 0 ? (
             <EmptyState
-              emoji="🔍"
+              icon={SearchX}
               title="Ningún ticket coincide"
               hint="Probá con otra búsqueda o sacá el filtro."
             />
           ) : (
-            <div className="grid gap-4 md:grid-cols-3 items-start">
+            <div className="grid items-start gap-4 md:grid-cols-3">
               {COLUMNS.map((col) => (
-                <Card key={col.key} tone={col.tone}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-extrabold uppercase tracking-wide">{col.label}</h2>
-                    <span className="rounded-pill bg-white/70 px-2.5 py-0.5 text-xs font-bold">
-                      {porColumna[col.key].length}
-                    </span>
+                <section key={col.key} className="rounded-xl bg-black/[0.02] p-2">
+                  <div className="flex items-center gap-2 px-2 pb-2 pt-1.5">
+                    <span className={`h-1.5 w-1.5 rounded-full ${col.dot}`} />
+                    <h2 className="text-[12px] font-semibold text-ink">{col.label}</h2>
+                    <span className="text-[12px] text-ink-soft">{porColumna[col.key].length}</span>
                   </div>
                   {porColumna[col.key].length === 0 ? (
-                    <p className="py-4 text-center text-sm opacity-70">Sin tickets</p>
+                    <p className="px-2 py-3 text-center text-[12px] text-ink-soft">Sin tickets</p>
                   ) : (
-                    <ul className="flex flex-col gap-3">
+                    <ul className="flex flex-col gap-1.5">
                       {porColumna[col.key].map((t) => (
                         <li key={t.id}>
                           <button
                             onClick={() => setAbierto(t)}
                             aria-haspopup="dialog"
-                            className="block w-full text-left"
+                            className="block w-full rounded-lg border border-black/[0.07] bg-white p-3 text-left transition hover:border-primary/40"
                           >
-                            <Card className="cursor-pointer transition hover:shadow-lift">
-                              <p className="text-sm font-bold text-ink leading-snug line-clamp-3">
-                                {t.title}
-                              </p>
-                              <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                                {t.tenant && <Chip tone="violet">{t.tenant}</Chip>}
-                                {t.status === "running" && <Chip tone="amber">En ejecución</Chip>}
-                                <span className="ml-auto text-xs text-ink-soft">
-                                  {fmtFecha(t.created_at)}
-                                </span>
-                              </div>
-                            </Card>
+                            <p className="line-clamp-3 text-[13px] font-medium leading-snug text-ink">
+                              {t.title}
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              {t.tenant && <Chip tone="neutral">{t.tenant}</Chip>}
+                              <span className="ml-auto text-[11px] text-ink-soft">
+                                {fmtRelativa(t.created_at)}
+                              </span>
+                            </div>
                           </button>
                         </li>
                       ))}
                     </ul>
                   )}
-                </Card>
+                </section>
               ))}
             </div>
           )}
@@ -258,50 +320,72 @@ export default function PipelinePage() {
       )}
 
       {abierto && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={abierto.title}
-          onClick={() => setAbierto(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4 sm:p-8"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-card bg-white shadow-lift"
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-surface p-6 pb-4">
-              <div className="min-w-0">
-                <h2 className="text-lg font-extrabold leading-snug text-ink">{abierto.title}</h2>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Chip tone={colDe(abierto).tone}>{colDe(abierto).chip}</Chip>
-                  {abierto.tenant && <Chip tone="ink">{abierto.tenant}</Chip>}
-                  <span className="text-xs text-ink-soft">{fmtFecha(abierto.created_at)}</span>
-                </div>
+        <Modal wide onClose={() => setAbierto(null)}>
+          <div className="flex items-start justify-between gap-4 border-b border-black/[0.07] px-5 py-4">
+            <div className="min-w-0">
+              <h2 className="text-base font-bold leading-snug text-ink">{abierto.title}</h2>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <Chip tone={colDe(abierto).tone}>{colDe(abierto).chip}</Chip>
+                {abierto.tenant && <Chip tone="neutral">{abierto.tenant}</Chip>}
+                <span className="text-[11px] text-ink-soft">{fmtRelativa(abierto.created_at)}</span>
               </div>
-              <button
-                onClick={() => setAbierto(null)}
-                aria-label="Cerrar"
-                className="shrink-0 text-xl leading-none text-ink-soft transition hover:text-ink"
-              >
-                ✕
-              </button>
             </div>
-            <div className="overflow-y-auto p-6">
-              {abierto.body ? (
-                <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-ink">
-                  {abierto.body}
-                </pre>
-              ) : (
-                <p className="text-sm text-ink-soft">Este ticket no tiene descripción.</p>
-              )}
-            </div>
-            <div className="flex justify-end border-t border-surface p-4">
-              <Btn kind="ghost" onClick={() => setAbierto(null)}>
-                Cerrar
-              </Btn>
-            </div>
+            <IconBtn label="Cerrar" onClick={() => setAbierto(null)}>
+              <X className="h-4 w-4" />
+            </IconBtn>
           </div>
-        </div>
+
+          <div className="overflow-y-auto px-5 py-4">
+            {abierto.body ? (
+              <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-ink">
+                {abierto.body}
+              </pre>
+            ) : (
+              <p className="text-sm text-ink-soft">Este ticket no tiene descripción.</p>
+            )}
+
+            <h3 className="mb-2 mt-6 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
+              Comentarios
+            </h3>
+            {detalleCargando ? (
+              <Spinner />
+            ) : detalleError ? (
+              <p className="text-sm text-ink-soft">No pude cargar los comentarios.</p>
+            ) : detalle && detalle.comments.length > 0 ? (
+              <ul className="flex flex-col gap-4">
+                {detalle.comments.map((c, i) => (
+                  <li key={i}>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-[13px] font-semibold text-ink">{c.author}</span>
+                      <span className="text-[11px] text-ink-soft">{fmtRelativa(c.created_at)}</span>
+                    </div>
+                    <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-ink">
+                      {c.body}
+                    </pre>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-ink-soft">Sin comentarios.</p>
+            )}
+
+            {eventos.length > 0 && (
+              <>
+                <h3 className="mb-2 mt-6 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
+                  Historial
+                </h3>
+                <ul className="flex flex-col gap-1">
+                  {eventos.map((e, i) => (
+                    <li key={i} className="flex items-baseline gap-2 text-[12px] text-ink-soft">
+                      <span className="font-medium">{e.kind}</span>
+                      <span>{fmtRelativa(e.created_at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   );

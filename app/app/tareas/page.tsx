@@ -1,17 +1,15 @@
 "use client";
 
 // Tareas: consola de operador sobre los crons del agente (GET /api/jobs).
-// Lista + pausar/reanudar/correr ahora con confirmación inline.
-// Sin crear/editar/borrar: el portal es ventana, no jaula.
-//
-// Nota de API (verificado con curl): el listado por defecto de /api/jobs
-// EXCLUYE los jobs pausados (hace falta ?include_disabled=true, que getJobs
-// de la lib todavía no manda). Mientras tanto, retenemos localmente los
-// jobs que vimos pausarse para que no desaparezcan de la lista.
+// Lista plana en una Card con filas divididas + pausar/reanudar/correr ahora
+// con confirmación inline. Sin crear/editar/borrar: ventana, no jaula.
+// getJobs ya pide ?include_disabled=true, así que los pausados vienen en el
+// listado y no hace falta retención local.
 
-import { useCallback, useEffect, useState } from "react";
+import { ReactNode, useCallback, useEffect, useState } from "react";
+import { Clock, Pause, Play, Zap } from "lucide-react";
 import { loadConfig, getJobs, jobAction, type PortalConfig } from "../lib/agent";
-import { Btn, Card, Chip, EmptyState, ErrorState, Spinner } from "../lib/ui";
+import { Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
 
 // ── Tipos (shape real de /api/jobs, verificado contra el agente) ──
 
@@ -33,27 +31,21 @@ type Job = {
   last_run_at?: string | null;
   last_status?: string | null; // "ok" | "error" | ...
   last_error?: string | null;
-  model?: string | null;
 };
 
 type Action = "pause" | "resume" | "run";
 
 // ── Copy ──
 
-const CONFIRM_TEXT: Record<Action, string> = {
-  pause: "¿Pausar esta tarea? No va a correr hasta que la reanudes.",
-  resume: "¿Reanudar esta tarea? Vuelve a correr según su cadencia.",
-  run: "¿Correr esta tarea ahora, fuera de su horario?",
+const CONFIRM_Q: Record<Action, (name: string) => string> = {
+  pause: (n) => `¿Pausar «${n}»?`,
+  resume: (n) => `¿Reanudar «${n}»?`,
+  run: (n) => `¿Correr «${n}» ahora?`,
 };
-const CONFIRM_YES: Record<Action, string> = {
-  pause: "Sí, pausar",
-  resume: "Sí, reanudar",
-  run: "Sí, correr",
-};
-const NOTICE_OK: Record<Action, string> = {
-  pause: "Tarea pausada.",
-  resume: "Tarea reanudada.",
-  run: "Corrida disparada.",
+const NOTICE_OK: Record<Action, (name: string) => string> = {
+  pause: (n) => `Tarea «${n}» pausada.`,
+  resume: (n) => `Tarea «${n}» reanudada.`,
+  run: (n) => `Corrida de «${n}» disparada.`,
 };
 
 // ── Cadencia legible ──
@@ -103,7 +95,7 @@ function cronLegible(expr: string): string | null {
   return null;
 }
 
-// Devuelve la cadencia legible y, si difiere, el cron crudo como detalle.
+// Devuelve la cadencia legible y, si difiere, el cron/schedule crudo como detalle.
 function cadencia(job: Job): { legible: string; cruda: string | null } {
   const s = job.schedule;
   if (s?.kind === "interval" && typeof s.minutes === "number") {
@@ -156,24 +148,23 @@ function proximaLegible(iso: string | null | undefined): string | null {
 
 const ordenar = (jobs: Job[]) => [...jobs].sort((a, b) => a.name.localeCompare(b.name));
 
+// El shell no pone padding: cada página envuelve su contenido.
+function Shell({ children }: { children: ReactNode }) {
+  return <div className="mx-auto max-w-4xl px-6 py-6 md:px-8">{children}</div>;
+}
+
 export default function TareasPage() {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ id: string; action: Action } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ id: string; text: string; ok: boolean } | null>(null);
+  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
 
   const refresh = useCallback((c: PortalConfig) => {
     getJobs(c)
       .then((d) => {
-        const fetched: Job[] = d?.jobs ?? [];
-        setJobs((prev) => {
-          const ids = new Set(fetched.map((j) => j.id));
-          // El listado por defecto oculta los pausados: retenemos los que ya vimos.
-          const retenidos = (prev ?? []).filter((j) => !ids.has(j.id) && !j.enabled);
-          return ordenar([...fetched, ...retenidos]);
-        });
+        setJobs(ordenar(d?.jobs ?? []));
         setError(null);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "sin detalle"));
@@ -204,45 +195,64 @@ export default function TareasPage() {
       if (actualizado) {
         setJobs((prev) => ordenar([...(prev ?? []).filter((j) => j.id !== actualizado.id), actualizado]));
       }
-      setNotice({ id: job.id, text: NOTICE_OK[action], ok: true });
+      setNotice({ text: NOTICE_OK[action](job.name), ok: true });
       refresh(cfg);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "error";
-      setNotice({ id: job.id, text: `No se pudo (${msg}). Probá de nuevo.`, ok: false });
+      setNotice({ text: `No se pudo (${msg}). Probá de nuevo.`, ok: false });
     } finally {
       setBusy(null);
     }
   };
 
-  if (!cfg || (jobs === null && !error)) return <Spinner />;
+  if (!cfg || (jobs === null && !error)) {
+    return (
+      <Shell>
+        <Spinner />
+      </Shell>
+    );
+  }
 
   if (jobs === null && error) {
-    return <ErrorState message={error} onRetry={() => refresh(cfg)} />;
+    return (
+      <Shell>
+        <ErrorState message={error} onRetry={() => refresh(cfg)} />
+      </Shell>
+    );
   }
 
   return (
-    <div className="max-w-3xl">
-      <header className="mb-6">
-        <h1 className="text-2xl font-extrabold text-ink tracking-tight">⏰ Tareas</h1>
-        <p className="text-sm text-ink-soft mt-1">
-          Lo que tu agente hace solo, según agenda. Se actualiza cada 30 segundos.
-        </p>
-      </header>
+    <Shell>
+      <PageHeader title="Tareas" subtitle="Lo que tu agente hace solo, y cuándo" />
+
+      {notice && (
+        <div
+          className={`mb-3 rounded-lg border px-3 py-2 text-[13px] font-medium ${
+            notice.ok
+              ? "border-c-green bg-c-green/40 text-c-green-ink"
+              : "border-c-coral bg-c-coral/40 text-c-coral-ink"
+          }`}
+        >
+          {notice.text}
+        </div>
+      )}
 
       {error && (
-        <div className="rounded-card bg-c-amber text-c-amber-ink px-5 py-3 text-sm font-bold mb-4">
+        <div className="mb-3 rounded-lg border border-c-amber bg-c-amber/40 px-3 py-2 text-[13px] font-medium text-c-amber-ink">
           No pude actualizar recién ({error}). Te muestro lo último que vi.
         </div>
       )}
 
       {jobs!.length === 0 ? (
-        <EmptyState
-          emoji="⏰"
-          title="Sin tareas programadas"
-          hint="Cuando tu agente tenga tareas automáticas, van a aparecer acá."
-        />
+        <Card>
+          <EmptyState
+            icon={Clock}
+            title="Sin tareas programadas"
+            hint="Cuando tu agente tenga tareas automáticas, van a aparecer acá."
+          />
+        </Card>
       ) : (
-        <div className="flex flex-col gap-4">
+        <Card className="divide-y divide-black/[0.06] py-1">
           {jobs!.map((job) => {
             const { legible, cruda } = cadencia(job);
             const ultima = haceLegible(job.last_run_at);
@@ -252,88 +262,100 @@ export default function TareasPage() {
             const ocupado = busy === job.id;
 
             return (
-              <Card key={job.id}>
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <p className="font-bold text-ink truncate">{job.name}</p>
-                      {job.state === "running" ? (
-                        <Chip tone="violet">Corriendo</Chip>
-                      ) : job.enabled ? (
-                        <Chip tone="green">Activa</Chip>
+              <div
+                key={job.id}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 py-3.5 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto]"
+              >
+                {/* Izquierda: nombre + cadencia humana + cron crudo */}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-ink">{job.name}</p>
+                  <p className="text-[13px] text-ink-soft">{legible}</p>
+                  {cruda && cruda !== legible && (
+                    <p className="font-mono text-[11px] text-ink-soft/60">{cruda}</p>
+                  )}
+                </div>
+
+                {/* Centro: estado + última corrida */}
+                <div className="order-3 col-span-2 flex flex-wrap items-center gap-2 md:order-none md:col-span-1">
+                  {job.state === "running" ? (
+                    <Chip tone="violet">Corriendo</Chip>
+                  ) : job.enabled ? (
+                    <Chip tone="green">Activa</Chip>
+                  ) : (
+                    <Chip tone="amber">Pausada</Chip>
+                  )}
+                  {ultima ? (
+                    fallo ? (
+                      <>
+                        <span className="text-[12px] text-ink-soft">{ultima}</span>
+                        <span title={job.last_error ?? undefined}>
+                          <Chip tone="coral">falló</Chip>
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-[12px] text-ink-soft">{ultima} · ok</span>
+                    )
+                  ) : (
+                    <span className="text-[12px] text-ink-soft">todavía no corrió</span>
+                  )}
+                </div>
+
+                {/* Derecha: próxima corrida + acciones (o confirmación inline) */}
+                <div className="flex items-center justify-end justify-self-end">
+                  {enConfirm ? (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <span className="text-[13px] text-ink-soft">
+                        {CONFIRM_Q[enConfirm.action](job.name)}
+                      </span>
+                      <Btn
+                        size="sm"
+                        kind={enConfirm.action === "pause" ? "danger" : "primary"}
+                        disabled={ocupado}
+                        onClick={() => ejecutar(job, enConfirm.action)}
+                      >
+                        Sí
+                      </Btn>
+                      <Btn size="sm" kind="ghost" disabled={ocupado} onClick={() => setConfirm(null)}>
+                        Cancelar
+                      </Btn>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      {proxima && (
+                        <span className="mr-1 text-[12px] text-ink-soft">Próxima {proxima}</span>
+                      )}
+                      <IconBtn
+                        label="Correr ahora"
+                        disabled={ocupado}
+                        onClick={() => setConfirm({ id: job.id, action: "run" })}
+                      >
+                        <Zap className="h-4 w-4" />
+                      </IconBtn>
+                      {job.enabled ? (
+                        <IconBtn
+                          label="Pausar"
+                          disabled={ocupado}
+                          onClick={() => setConfirm({ id: job.id, action: "pause" })}
+                        >
+                          <Pause className="h-4 w-4" />
+                        </IconBtn>
                       ) : (
-                        <Chip tone="amber">Pausada</Chip>
+                        <IconBtn
+                          label="Reanudar"
+                          disabled={ocupado}
+                          onClick={() => setConfirm({ id: job.id, action: "resume" })}
+                        >
+                          <Play className="h-4 w-4" />
+                        </IconBtn>
                       )}
                     </div>
-                    <p className="text-sm text-ink mt-1">
-                      {legible}
-                      {cruda && cruda !== legible && (
-                        <span className="ml-2 font-mono text-xs text-ink-soft">({cruda})</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-ink-soft mt-1.5">
-                      {ultima ? (
-                        <>
-                          Última corrida {ultima} ·{" "}
-                          {fallo ? (
-                            <span className="font-bold text-c-coral-ink" title={job.last_error ?? undefined}>
-                              falló
-                            </span>
-                          ) : (
-                            <span className="font-bold text-c-green-ink">OK</span>
-                          )}
-                        </>
-                      ) : (
-                        "Todavía no corrió"
-                      )}
-                      {proxima && <> · Próxima {proxima}</>}
-                      {job.model && <> · {job.model}</>}
-                    </p>
-                  </div>
-
-                  <div className="shrink-0 max-w-full">
-                    {enConfirm ? (
-                      <div className="flex items-center gap-2 flex-wrap justify-end">
-                        <span className="text-sm text-ink-soft">{CONFIRM_TEXT[enConfirm.action]}</span>
-                        <Btn
-                          kind={enConfirm.action === "pause" ? "danger" : "primary"}
-                          disabled={ocupado}
-                          onClick={() => ejecutar(job, enConfirm.action)}
-                        >
-                          {CONFIRM_YES[enConfirm.action]}
-                        </Btn>
-                        <Btn kind="ghost" disabled={ocupado} onClick={() => setConfirm(null)}>
-                          Cancelar
-                        </Btn>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 flex-wrap justify-end">
-                        {job.enabled ? (
-                          <Btn kind="ghost" disabled={ocupado} onClick={() => setConfirm({ id: job.id, action: "pause" })}>
-                            Pausar
-                          </Btn>
-                        ) : (
-                          <Btn kind="primary" disabled={ocupado} onClick={() => setConfirm({ id: job.id, action: "resume" })}>
-                            Reanudar
-                          </Btn>
-                        )}
-                        <Btn kind="ghost" disabled={ocupado} onClick={() => setConfirm({ id: job.id, action: "run" })}>
-                          Correr ahora
-                        </Btn>
-                      </div>
-                    )}
-                    {notice?.id === job.id && (
-                      <p className={`text-xs mt-2 text-right font-bold ${notice.ok ? "text-c-green-ink" : "text-c-coral-ink"}`}>
-                        {notice.text}
-                      </p>
-                    )}
-                  </div>
+                  )}
                 </div>
-              </Card>
+              </div>
             );
           })}
-        </div>
+        </Card>
       )}
-    </div>
+    </Shell>
   );
 }
