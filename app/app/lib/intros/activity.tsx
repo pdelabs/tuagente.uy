@@ -27,7 +27,7 @@ type Evento = {
 
 // Más nuevo arriba, como en la pantalla real.
 const HOY: Evento[] = [
-  { hora: "14:20", tono: "green", texto: "Tarjeta cerrada en el tablero", tipo: "Ticket", estado: "listo" },
+  { hora: "14:20", tono: "green", texto: "Tarjeta cerrada", tipo: "Ticket", estado: "listo" },
   { hora: "12:05", tono: "amber", texto: "Tarjeta movida a En curso", tipo: "Ticket", estado: "en curso", enCurso: true },
   { hora: "11:15", tono: "coral", texto: "Chequeo de novedades", tipo: "Tarea programada", estado: "falló" },
   { hora: "08:00", tono: "green", texto: "Resumen de la mañana", tipo: "Tarea programada", estado: "ok" },
