@@ -10,6 +10,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -17,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.11.0"
+VERSION = "0.13.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -432,6 +433,70 @@ def comment_ticket(task_id, body, author):
     # moverse; uno creado con `--initial-status blocked` se fue solo a 'ready'
     # antes siquiera de comentarlo. Nuestro create nunca usa esa opcion.
     hermes_cli("comment", f"--author={author}", "--", task_id, body)
+
+
+# --- Avisarle al agente que el humano comento -------------------------------
+# Hermes tiene `kanban notify-subscribe`, pero en un deploy sin demonio de
+# kanban nadie consume esos eventos: el comentario queda ahi y el agente no se
+# entera. Como el portal es el unico lugar donde el humano comenta, avisamos
+# nosotros: una corrida corta del agente con el contexto del ticket.
+#
+# Se dispara SOLO desde este endpoint (o sea, solo cuando escribe una persona),
+# nunca desde los comentarios que deja el propio agente: sin eso habria loop.
+NOTIFY_ON_COMMENT = os.environ.get("NOTIFY_AGENT_ON_COMMENT", "1") != "0"
+
+
+def notify_agent_of_comment(task_id, body, author):
+    if not NOTIFY_ON_COMMENT:
+        return
+    # El contexto va ADENTRO del aviso. El agente no tiene herramienta nativa de
+    # kanban y el binario esta vetado desde el gateway, asi que si le decimos
+    # "leelo vos" se va media docena de tool calls peleando con el terminal
+    # (verificado: dos corridas, una termino en SyntaxError). Nosotros ya
+    # tenemos la db abierta: se la damos servida.
+    ficha = ""
+    try:
+        detalle = ticket_detail(task_id)
+        if detalle:
+            t = detalle["ticket"]
+            previos = [c for c in detalle["comments"] if c["body"] != body][-4:]
+            ficha = (
+                f"\n\n--- Ficha del ticket (ya te la traigo, no la busques) ---\n"
+                f"Título: {t['title']}\nEstado: {t['status']}\n"
+                + (f"Etiqueta: {t['tenant']}\n" if t.get("tenant") else "")
+                + f"\nDescripción:\n{(t['body'] or '(sin descripción)')[:2000]}\n"
+            )
+            if previos:
+                ficha += "\nComentarios anteriores:\n" + "\n".join(
+                    f"- {c['author']}: {c['body'][:300]}" for c in previos
+                )
+    except sqlite3.Error:
+        pass
+
+    mensaje = (
+        f"[Aviso del portal] {author} comentó en el ticket {task_id}:\n\n"
+        f"{body}\n{ficha}\n\n"
+        "Con esto ya tenés todo el contexto. Si el comentario pide algo, hacelo "
+        "o contestá por el canal habitual; si no pide nada, respondé en una línea "
+        "que lo viste y listo. No cambies el estado del ticket salvo que te lo "
+        "pidan, y no te desvíes a otra cosa: esto es solo un aviso de comentario."
+    )
+
+    def _enviar():
+        try:
+            req = urllib.request.Request(
+                f"{AGENT_BASE}/v1/chat/completions",
+                data=json.dumps({"messages": [{"role": "user", "content": mensaje}]}).encode(),
+                headers={"Authorization": f"Bearer {TOKEN}",
+                         "Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=600).read()
+        except Exception:  # noqa: BLE001 — el aviso jamas puede tumbar el comentario
+            pass
+
+    # En hilo aparte: el cliente no espera a que el agente piense.
+    threading.Thread(target=_enviar, daemon=True).start()
 
 
 def set_ticket_status(task_id, status):
@@ -996,10 +1061,11 @@ class Handler(BaseHTTPRequestHandler):
                 if action == "comment":
                     # Default = el humano del portal; si el cliente manda
                     # `author`, lo respetamos (sanitizado).
-                    comment_ticket(
-                        task_id, text,
-                        safe_author(body.get("author"), AUTHOR_HUMAN),
-                    )
+                    autor = safe_author(body.get("author"), AUTHOR_HUMAN)
+                    comment_ticket(task_id, text, autor)
+                    # Y le avisamos al agente: si no, el comentario queda ahi
+                    # y nadie se entera (ver notify_agent_of_comment).
+                    notify_agent_of_comment(task_id, text, autor)
                 else:
                     set_ticket_status(task_id, status)
             except (RuntimeError, subprocess.TimeoutExpired) as exc:
