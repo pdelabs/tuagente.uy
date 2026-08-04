@@ -76,6 +76,20 @@ escribe nada. Contra el agente fixture: 13 ok, 0 fallas.
 python3 tools/portal-check.py --key <API_SERVER_KEY>
 ```
 
+## Trampa de despliegue: las skills locales no se auto-descubren
+
+Verificado el 2026-08-04: crear `data/skills/<nombre>/SKILL.md` **no alcanza**
+para que el agente sepa que existe. `hermes skills list` la muestra habilitada
+(lee el directorio), pero el índice que se le inyecta al prompt
+(`data/.skills_prompt_snapshot.json`) queda viejo — reiniciar el gateway no lo
+regenera y no hay comando de reindexado. Resultado: el agente contesta que "esa
+skill no existe" y sigue de largo.
+
+**Lo que sí funciona:** documentar la skill en el SOUL/system prompt con su
+comando exacto. Probado con `artifact` (el agente la usó bien a la primera) y
+ahora con `entregable` y `aprobacion`. Para el alta de un cliente: el kit tiene
+que traer el bloque de SOUL junto con la skill, no solo los archivos.
+
 ## Lección que atraviesa todo
 
 El modelo pone las palabras; el código pone el formato. Cada vez que dependimos de
