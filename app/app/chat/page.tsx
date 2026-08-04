@@ -7,12 +7,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowDown, ArrowUp, Brain, Check, ChevronRight, Copy, Download, Menu,
-  MessageSquare, Pencil, RefreshCw, Square, Wrench,
+  ArrowDown, ArrowUp, Brain, Check, ChevronRight, Copy, Download, Loader2, Menu,
+  MessageSquare, Paperclip, Pencil, RefreshCw, Square, Wrench,
 } from "lucide-react";
 import {
   loadConfig, chatStream, sessionChatStream, getSessions, getSessionMessages,
-  type PortalConfig, type ChatMessage,
+  uploadFile, type PortalConfig, type ChatMessage,
 } from "../lib/agent";
 import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
 import { EntityProvider } from "../lib/EntityViewer";
@@ -128,6 +128,9 @@ export default function ChatPage() {
   const [mention, setMention] = useState<{ kind: MentionKind; term: string; start: number } | null>(null);
   const [mentionIdx, setMentionIdx] = useState(0);
 
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
   const sendingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const openSeq = useRef(0);
@@ -190,6 +193,24 @@ export default function ChatPage() {
       el?.focus();
       el?.setSelectionRange(pos, pos);
     });
+  };
+
+  // Adjuntar: el archivo va al buzón del agente y en el mensaje queda su ruta,
+  // que el chat muestra como chip y el agente sabe abrir.
+  const attach = async (file: File) => {
+    if (!cfg || uploading) return;
+    setUploading(true);
+    setSendErr(null);
+    try {
+      const r = await uploadFile(cfg, file);
+      setInput((prev) => (prev ? `${prev.trimEnd()} ${r.path} ` : `${r.path} `));
+      taRef.current?.focus();
+    } catch (e) {
+      setSendErr(e instanceof Error ? e.message : "no pude subir el archivo");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   };
 
   const syncMention = (text: string, caret: number) => {
@@ -566,7 +587,27 @@ export default function ChatPage() {
                 onPick={pickMention}
               />
             )}
-            <div className="flex items-end gap-2 rounded-2xl border border-black/10 bg-white p-2 pl-4 transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
+            <div className="flex items-end gap-2 rounded-2xl border border-black/10 bg-white p-2 pl-2 transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
+              <input
+                ref={fileRef}
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) attach(f);
+                }}
+              />
+              <button
+                aria-label="Adjuntar un archivo"
+                title="Adjuntar un archivo"
+                onClick={() => fileRef.current?.click()}
+                disabled={sending || uploading}
+                className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-soft transition hover:bg-black/[0.05] hover:text-ink disabled:opacity-40"
+              >
+                {uploading
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Paperclip className="h-4 w-4" />}
+              </button>
               <textarea
                 ref={taRef}
                 value={input}

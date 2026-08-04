@@ -122,6 +122,19 @@ export const getFileText = async (c: PortalConfig, path: string) => {
 };
 export const getUsage = (c: PortalConfig) => get<any>(c.adapter, "/portal/usage", c);
 
+/** Sube un archivo al buzón del agente (workspace/entrada) y devuelve su ruta. */
+export async function uploadFile(c: PortalConfig, file: File) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  // De a pedazos: con archivos grandes, un solo apply revienta la pila.
+  let bin = "";
+  for (let i = 0; i < buf.length; i += 8192) {
+    bin += String.fromCharCode.apply(null, Array.from(buf.subarray(i, i + 8192)));
+  }
+  return post<{ ok: boolean; path: string; bytes: number }>(
+    c.adapter, "/portal/upload", c, { name: file.name, content_b64: btoa(bin) },
+  );
+}
+
 export type ArtifactMeta = {
   id: string; title: string; kind: string; summary: string;
   created_at: number; bytes: number;
