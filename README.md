@@ -10,6 +10,7 @@ install.sh                  instala o compara el kit contra un agente existente
 adapter/portal_adapter.py   el sidecar que el portal consume (:8643)
 skills/                     artifact · entregable · aprobacion
 soul/                       los bloques del system prompt, con placeholders
+onboarding/                 la primera tarea del agente (brief de la empresa)
 compose/                    plantilla de docker-compose
 tools/portal-check.py       verifica que un agente cumpla el contrato del portal
 ```

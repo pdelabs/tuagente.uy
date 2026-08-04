@@ -72,6 +72,9 @@ Lo que falta, en orden:
   3. docker compose up -d
   4. python3 $KIT/tools/portal-check.py --key <API_SERVER_KEY>
      0 fallas o no se entrega.
+  5. Primera tarea del agente: que investigue la web de la empresa y entregue
+     su brief — ver onboarding/brief-empresa.md. Sale un borrador para revisar,
+     y de ahí salen 3-4 líneas para el SOUL.
 
 Runbook completo (canales, WhatsApp, tiempos): tuagente.uy/docs/alta-cliente.md
 FIN
