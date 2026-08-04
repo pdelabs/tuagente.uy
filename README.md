@@ -12,6 +12,7 @@ skills/                     artifact · entregable · aprobacion
 soul/                       los bloques del system prompt, con placeholders
 onboarding/                 la primera tarea del agente (brief de la empresa)
 compose/                    plantilla de docker-compose
+tools/agente-check.py       revisa el data/ de un agente sin prenderlo (offline)
 tools/portal-check.py       verifica que un agente cumpla el contrato del portal
 ```
 
@@ -28,8 +29,9 @@ bloques— le instala el kit y hace el primer commit. Después, a mano:
 1. **Componer el SOUL** con los bloques de `soul/` — ver `soul/README.md`.
    Es el único trabajo verdaderamente artesanal y donde está el valor.
 2. Completar el compose (`AGENT_NAME`, `TZ`, los dos CORS) y el `.env`.
-3. `docker compose up -d`
-4. `python3 tools/portal-check.py --key <API_SERVER_KEY>` → **0 fallas o no se
+3. `python3 tools/agente-check.py <ruta>/data` → **0 fallas antes de prender.**
+4. `docker compose up -d`
+5. `python3 tools/portal-check.py --key <API_SERVER_KEY>` → **0 fallas o no se
    entrega.**
 
 El runbook completo, con los canales (Telegram, WhatsApp oficial vs puente QR) y

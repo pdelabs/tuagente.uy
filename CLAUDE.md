@@ -39,6 +39,9 @@ Las escrituras van por subprocess del CLI `hermes kanban ...` desde el sidecar.
 - **Frontmatter obligatorio** en cada `SKILL.md` (`name` + `description` que diga
   qué hace **y cuándo usarla**). Sin él se indexa con descripción vacía y el
   agente no la usa. Hermes reindexa solo, pero tarda unos minutos.
+  Lo chequea `tools/agente-check.py`, y por algo: esta regla estaba escrita acá
+  y aun así un agente en producción tenía sin frontmatter **la skill que manda
+  mail a un lead**. Una regla que no chequea nadie no es una regla.
 - **Archivos al browser: siempre `text/plain`.** El HTML de un artefacto viaja
   dentro del JSON y lo dibuja el portal en un iframe aislado.
 - **Confinamiento:** todo path del cliente se resuelve con `resolve()` +
@@ -54,6 +57,18 @@ borrado, la evidencia y lo aprendido están en `plugins/kanban_tools/DECISION.md
 Leelo antes de tocar nada ahí.
 
 ## Verificar antes de entregar
+
+Dos chequeos, en este orden. El primero es offline y va **antes** de prender:
+
+```bash
+python3 tools/agente-check.py <ruta>/data
+```
+
+Mira el kit instalado, el frontmatter de todas las skills, el índice vivo, que el
+SOUL no tenga huecos `<CLIENTE>` de la plantilla, y los tres olvidos clásicos del
+alta (`api_server` apagado, `model.default` vacío, plugin de kanban sin habilitar).
+
+El segundo corre contra el agente ya encendido:
 
 ```bash
 python3 tools/portal-check.py --key <API_SERVER_KEY> \

@@ -82,8 +82,13 @@ Instalado. Lo que falta hacer a mano:
       con Python y falla). Requiere reiniciar el gateway.
   2. En el docker-compose: AGENT_NAME, TZ y los dos CORS
      (API_SERVER_CORS_ORIGINS y PORTAL_CORS_ORIGINS).
-  3. docker compose up -d
-  4. Verificar:  python3 tools/portal-check.py --key <API_SERVER_KEY>
+  3. Verificar el data/ ANTES de prender:
+       python3 tools/agente-check.py <ruta>/data
+     Agarra los olvidos del alta (SOUL con huecos, skills sin frontmatter,
+     modelo por defecto vacío) sin necesidad de levantar nada.
+  4. docker compose up -d
+  5. Verificar el contrato con el portal, ya encendido:
+       python3 tools/portal-check.py --key <API_SERVER_KEY>
      0 fallas o no se entrega.
 
 Las skills tardan unos minutos en aparecer en el índice del agente: es normal,
