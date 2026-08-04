@@ -45,6 +45,14 @@ Las escrituras van por subprocess del CLI `hermes kanban ...` desde el sidecar.
   `relative_to`, y en artefactos además se compara el padre — sin eso, un `.`
   borraba la carpeta entera.
 
+## Deuda conocida: el plugin de kanban es provisorio
+
+`plugins/kanban_tools/` duplica herramientas que **Hermes ya trae y mejor**.
+Existe solo porque es el único camino que verificamos funcionando; se borra
+cuando el toolset nativo llegue a la sesión del agente. La condición exacta de
+borrado, la evidencia y lo aprendido están en `plugins/kanban_tools/DECISION.md`.
+Leelo antes de tocar nada ahí.
+
 ## Verificar antes de entregar
 
 ```bash
