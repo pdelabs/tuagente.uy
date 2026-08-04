@@ -10,7 +10,7 @@ SOUL y el chequeo de conformidad. Leé `README.md` para el uso.
 |---|---|
 | `hermes-kit` (este) | lo que se despliega en cada cliente |
 | `tuagente.uy` | la landing pública + el portal (`app/app/`) + `docs/` |
-| `hermes` | el agente de pdelabs — **cliente 0**, y el fixture de pruebas |
+| `agente-pdelabs` | el agente de pdelabs — **cliente 0**, y el fixture de pruebas |
 
 **El kit es la fuente de la verdad.** Si arreglás el adapter o una skill mientras
 depurás dentro de un agente, ese cambio hay que traerlo acá: `install.sh --diff`
