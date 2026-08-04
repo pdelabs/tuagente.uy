@@ -38,6 +38,33 @@ ENV
 
 printf 'data/.env\ndata/*.db*\ndata/cache/\ndata/logs/\n__pycache__/\n.DS_Store\n' > .gitignore
 
+# Config mínima. Hermes la completa y la migra sola en el primer arranque; acá
+# solo dejamos lo que el kit necesita y que nadie adivinaría.
+cat > data/config.yaml <<'CFG'
+model:
+  provider: openrouter
+  api_key: ${OPENROUTER_API_KEY}
+  default: openai/gpt-5.6-luna
+
+api_server:
+  enabled: true
+  host: 0.0.0.0
+  port: 8642
+  key: ${API_SERVER_KEY}
+
+plugins:
+  enabled:
+    # Herramientas de kanban para el agente. Sin esto no puede tocar sus
+    # propios tickets: los improvisa por terminal y falla.
+    # PROVISORIO — ver plugins/kanban_tools/DECISION.md en el kit.
+    - kanban_tools
+
+# Hermes trae su propio toolset de kanban, cerrado salvo que el perfil lo pida.
+# Lo dejamos pedido: el día que llegue a la sesion, se saca el plugin de arriba.
+toolsets:
+  - kanban
+CFG
+
 # Borrador del SOUL: los bloques pegados, con los placeholders intactos.
 {
   for bloque in 00-identidad 01-aprobaciones 02-entrega 03-canales; do
@@ -69,6 +96,8 @@ Lo que falta, en orden:
      completar. Es el trabajo real: quién es, qué hace, qué NO hace y qué
      requiere aprobación. Sin esto el agente tiene herramientas y ninguna regla.
   2. cp data/.env.example data/.env  y completar las claves.
+     (data/config.yaml ya viene con el modelo, el api server y el plugin de
+      kanban habilitado — revisalo si el cliente usa otro proveedor.)
   3. docker compose up -d
   4. python3 $KIT/tools/portal-check.py --key <API_SERVER_KEY>
      0 fallas o no se entrega.
