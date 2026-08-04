@@ -135,6 +135,17 @@ export async function uploadFile(c: PortalConfig, file: File) {
   );
 }
 
+export type Capability = {
+  name: string; summary: string; origen: string; categoria?: string;
+};
+export type Capabilities = {
+  skills: Capability[];
+  plugins: { name: string; summary: string }[];
+  mcp: { name: string; detalle: string }[];
+};
+export const getCapabilities = (c: PortalConfig) =>
+  get<Capabilities>(c.adapter, "/portal/capabilities", c);
+
 export type ArtifactMeta = {
   id: string; title: string; kind: string; summary: string;
   created_at: number; bytes: number;

@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, Clock, Columns3, Folder, Hand, Home, LayoutDashboard,
-  LogOut, MessageSquare, Unplug, type LucideIcon,
+  LogOut, MessageSquare, Puzzle, Unplug, type LucideIcon,
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest, getApprovals,
@@ -29,6 +29,7 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   { key: "activity", path: "/app/actividad", label: "Actividad", icon: Activity },
   { key: "files", path: "/app/archivos", label: "Archivos", icon: Folder },
   { key: "usage", path: "/app/uso", label: "Uso", icon: BarChart3 },
+  { key: "capabilities", path: "/app/capacidades", label: "Capacidades", icon: Puzzle },
 ];
 
 function Login({ onReady }: { onReady: () => void }) {
@@ -118,7 +119,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const enabled = MODULES.filter((m) => m.key === "home" || manifest.modules[m.key]);
+  const enabled = MODULES.filter(
+    (m) => m.key === "home" || m.key === "capabilities" || manifest.modules[m.key]);
   // Bienvenida por módulo: se ve una sola vez, hasta que el cliente da "Ok".
   const current = MODULES.find((m) => pathname.startsWith(m.path));
   const Intro = current ? INTROS[current.key] : undefined;

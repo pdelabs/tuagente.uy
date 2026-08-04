@@ -1,5 +1,40 @@
 # Portal tuagente — features por pestaña
 
+## Temas grandes por definir (planteados por Luis, 2026-08-04)
+
+### 1. Descubrir e instalar skills
+Hermes ya trae el mecanismo: `hermes skills browse | search | inspect | install |
+check | update | audit | uninstall`, contra skills.sh, ClawHub, GitHub y
+endpoints "well-known". O sea que **el problema no es técnico, es de producto y
+de seguridad**:
+- Instalar una skill = **ejecutar código de terceros dentro del agente de un
+  cliente**, con sus credenciales al alcance. Por eso el SOUL ya prohíbe que el
+  agente instale nada sin aprobación explícita.
+- La postura que propongo: **el cliente pide, nosotros instalamos y auditamos.**
+  El portal muestra qué sabe hacer (pestaña Capacidades, ya hecha) y permite
+  *pedir* una capacidad nueva; el alta la hace pdelabs con `skills audit`.
+- Pendiente de definir: catálogo curado propio (una lista corta de skills que ya
+  auditamos) vs. exponer los registries completos. Yo iría por el catálogo.
+- **Trampa ya verificada:** una skill instalada no llega sola al prompt del
+  agente (ver `toolkit-agentes.md`). Cualquier flujo de instalación tiene que
+  incluir el paso de dejarla documentada en el SOUL, o queda invisible.
+
+### 2. Conexiones externas y MCP
+`hermes mcp add | remove | list | test | configure | login | reauth | catalog |
+install` — incluye OAuth (`login`/`reauth`) y un catálogo. Hoy: **cero servidores
+configurados** en el fixture.
+- Es el camino natural para conectar al cliente con lo suyo (su CRM, su Drive,
+  su ERP) sin que escribamos una skill por integración.
+- Lo difícil no es conectar: es **el ciclo de vida de las credenciales** — quién
+  las carga, dónde viven, qué pasa cuando vence un OAuth, y cómo se lo avisamos
+  al cliente sin que el agente quede mudo sin explicación.
+- Mínimo indispensable antes de vender esto: que el portal muestre el estado de
+  cada conexión (viva / caída / necesita reautorizar), porque una integración
+  rota en silencio es peor que no tenerla.
+- Pendiente: decidir si las credenciales las carga el cliente (necesita UI y
+  cifrado) o nosotros (más simple y más seguro, menos autónomo).
+
+
 Lista de trabajo para editar entre los dos: agregá, sacá o cambiá lo que quieras.
 
 Marcas de viabilidad:
