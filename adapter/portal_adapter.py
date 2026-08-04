@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Adapter del portal tuagente: sidecar stdlib-only sobre los datos de Hermes.
-# Lecturas: sqlite en mode=ro + filesystem. Escrituras al kanban: SOLO via
+# Lecturas: sqlite con PRAGMA query_only + filesystem. Escrituras al kanban: SOLO via
 # subprocess del CLI `hermes kanban ...` (jamas SQL de escritura).
 # Artefactos: solo filesystem (workspace/artifacts), el HTML viaja en el JSON.
 # Bearer auth con API_SERVER_KEY + CORS por PORTAL_CORS_ORIGINS.
@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.16.0"
+VERSION = "0.17.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -55,7 +55,22 @@ MAX_AUTHOR_LEN = 60
 
 
 def ro(db):
-    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    """Conexion de SOLO LECTURA, pero abierta en modo lectura-escritura.
+
+    Parece contradictorio y no lo es. Con `mode=ro` sobre una base en WAL,
+    SQLite crea el archivo auxiliar `-shm` SIN permiso de escritura, y mientras
+    esa conexion vive, cualquier otro proceso que quiera escribir falla:
+        "kanban.db is not writable: kanban.db-shm is read-only for this user"
+    Lo vimos romper el stream del dashboard de Hermes de forma intermitente, al
+    ritmo de nuestro polling (y es candidato a explicar escrituras fallidas del
+    propio agente).
+
+    La garantia de no escribir la da `PRAGMA query_only`, que hace que SQLite
+    rechace cualquier INSERT/UPDATE/DELETE a nivel motor. Asi el `-shm` nace
+    con permisos normales y nosotros seguimos sin poder tocar nada.
+    """
+    conn = sqlite3.connect(f"file:{db}", uri=True)
+    conn.execute("PRAGMA query_only = ON")
     conn.row_factory = sqlite3.Row
     return conn
 
