@@ -1,4 +1,4 @@
-# Spec — Adapter backend (owner: subagente A · repo ~/Desktop/Luis/Projects/hermes)
+# Spec — Adapter backend (owner: subagente A · repo ~/Desktop/Luis/Projects/agente-pdelabs)
 
 Extender data/scripts/portal_adapter.py (stdlib only, mismo estilo) con los
 contratos que consumen D y F (ver 03 y 05). Reglas:

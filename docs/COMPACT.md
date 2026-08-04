@@ -16,11 +16,11 @@ y fuente de verdad · portal estático (Next 14 en Vercel, este repo) · ventana
 no jaula (manifest de capacidades) · adapter solo donde la auth lo exige.
 
 ## Infraestructura local (demo con La Mano)
-- Agente Hermes "La Mano": docker, repo ~/Desktop/Luis/Projects/hermes
+- Agente Hermes "La Mano": docker, repo ~/Desktop/Luis/Projects/agente-pdelabs
 - API server (gateway): http://localhost:8642 — bearer = API_SERVER_KEY
-  (en ~/Desktop/Luis/Projects/hermes/data/.env; los subagentes la leen de ahí)
+  (en ~/Desktop/Luis/Projects/agente-pdelabs/data/.env; los subagentes la leen de ahí)
 - Adapter sidecar PoC: http://localhost:8643 (data/scripts/portal_adapter.py,
-  servicio portal-adapter en el docker-compose del repo hermes)
+  servicio portal-adapter en el docker-compose del repo agente-pdelabs)
 - CORS: resuelto vía env API_SERVER_CORS_ORIGINS (ya incluye localhost:8090 y
   app.tuagente.uy; para dev Next agregar http://localhost:3000 si hace falta)
 
@@ -38,7 +38,7 @@ no jaula (manifest de capacidades) · adapter solo donde la auth lo exige.
 - POST /api/jobs/{id}/pause|resume|run · GET/PATCH/DELETE /api/jobs/{id}
 - GET /health
 
-## En :8643 (adapter propio, portal_adapter.py — v0.3.0)
+## En :8643 (adapter propio, hoy v0.11.0 — vive en el repo hermes-kit)
 Todos bearer + CORS por env PORTAL_CORS_ORIGINS; nombre del agente por env AGENT_NAME.
 - GET /portal/manifest (módulos por detección real) · GET /portal/tickets
 - GET /portal/tickets/{id} → {ticket, comments[], events[]}
