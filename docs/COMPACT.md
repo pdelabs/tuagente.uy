@@ -46,7 +46,23 @@ Todos bearer + CORS por env PORTAL_CORS_ORIGINS; nombre del agente por env AGENT
 - GET /portal/activity (job_run + eventos del kanban) · GET /portal/usage (+daily 14d)
 - GET /portal/files · GET /portal/files/{path} (siempre text/plain)
 
+## Bloqueo "pegajoso" del kanban (leído del código y verificado, 2026-08-03)
+Un ticket `blocked` vuelve solo a `ready` salvo que el bloqueo sea **sticky**, y
+sticky significa: el último evento `blocked`/`unblocked` del ticket es `blocked`.
+Quien promueve es `recompute_ready()` del dispatcher — y **`hermes kanban list`
+también la ejecuta**, así que basta con LISTAR para dispararla.
+- Bloquear con `hermes kanban block` → deja el evento → aguanta (verificado: 10s+
+  de dispatcher y varios comentarios sin moverse).
+- Crear con `--initial-status blocked` (o meterlo por SQL) → NO deja el evento →
+  se auto-promueve enseguida (verificado: ya estaba `ready` antes de comentarlo).
+- Comentar NO promueve nada por sí mismo (era nuestra hipótesis vieja, es falsa).
+Consecuencia para el adapter: los caminos de escritura no llaman a `list` ni a
+`unblock`, y el estado se lee por SQL en modo lectura.
+
 ## Lecciones duras (NO repetir)
+0. Al commitear en un repo donde hay subagentes escribiendo, NUNCA `git add -A`:
+   se lleva su trabajo a medio hacer (ya pasó, partió un cambio en dos commits).
+   Stagear rutas explícitas.
 1. kanban.db: JAMÁS escribir SQL directo (locks/claims/dispatcher → corrupción).
    Escrituras vía CLI `hermes kanban ...` por subprocess DESDE EL SIDECAR
    (fuera del gateway el guard no aplica — patrón verificado) o módulos internos.

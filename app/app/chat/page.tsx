@@ -18,6 +18,10 @@ import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
 import { EntityProvider } from "../lib/EntityViewer";
 import Markdown from "../lib/Markdown";
 import Sessions, { sessionTitle, type SessionSummary } from "./Sessions";
+import {
+  MentionList, mentionAt, useMentionItems,
+  type MentionItem, type MentionKind,
+} from "./Mentions";
 
 type StoredMessage = {
   id: number;
@@ -120,6 +124,9 @@ export default function ChatPage() {
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [atBottom, setAtBottom] = useState(true);
+  // Menciones: `#` referencia tickets, `@` archivos del workspace.
+  const [mention, setMention] = useState<{ kind: MentionKind; term: string; start: number } | null>(null);
+  const [mentionIdx, setMentionIdx] = useState(0);
 
   const sendingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -166,6 +173,30 @@ export default function ChatPage() {
     () => (activeId ? sessions?.find((s) => s.id === activeId) : undefined),
     [activeId, sessions],
   );
+
+  const mentionItems = useMentionItems(cfg, mention?.kind ?? null, mention?.term ?? "");
+
+  // Reemplaza el token `#…`/`@…` por la referencia elegida.
+  const pickMention = (item: MentionItem) => {
+    if (!mention) return;
+    const el = taRef.current;
+    const caret = el?.selectionStart ?? input.length;
+    const next = `${input.slice(0, mention.start)}${item.insert} ${input.slice(caret)}`;
+    setInput(next);
+    setMention(null);
+    setMentionIdx(0);
+    requestAnimationFrame(() => {
+      const pos = mention.start + item.insert.length + 1;
+      el?.focus();
+      el?.setSelectionRange(pos, pos);
+    });
+  };
+
+  const syncMention = (text: string, caret: number) => {
+    const found = mentionAt(text, caret);
+    setMention(found);
+    if (!found) setMentionIdx(0);
+  };
 
   const newConversation = useCallback(() => {
     if (sendingRef.current) return;
@@ -527,12 +558,44 @@ export default function ChatPage() {
                 </Btn>
               </div>
             )}
+            {mention && (
+              <MentionList
+                kind={mention.kind}
+                items={mentionItems}
+                activeIdx={mentionIdx}
+                onPick={pickMention}
+              />
+            )}
             <div className="flex items-end gap-2 rounded-2xl border border-black/10 bg-white p-2 pl-4 transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
               <textarea
                 ref={taRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  syncMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
+                }}
+                onClick={(e) => syncMention(input, e.currentTarget.selectionStart ?? 0)}
+                onBlur={() => setMention(null)}
                 onKeyDown={(e) => {
+                  const open = mention && mentionItems && mentionItems.length > 0;
+                  if (open) {
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setMentionIdx((i) => (i + 1) % mentionItems!.length);
+                      return;
+                    }
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setMentionIdx((i) => (i - 1 + mentionItems!.length) % mentionItems!.length);
+                      return;
+                    }
+                    if (e.key === "Enter" || e.key === "Tab") {
+                      e.preventDefault();
+                      pickMention(mentionItems![mentionIdx]);
+                      return;
+                    }
+                    if (e.key === "Escape") { e.preventDefault(); setMention(null); return; }
+                  }
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
                 }}
                 rows={1}
@@ -562,7 +625,8 @@ export default function ChatPage() {
               )}
             </div>
             <p className="mt-1.5 text-center text-[11px] text-ink-soft/60">
-              Enter envía · Shift+Enter salto de línea · ⌘K buscar · ⌘⇧O nueva
+              Enter envía · Shift+Enter salto de línea · <b className="font-semibold">#</b> ticket ·{" "}
+              <b className="font-semibold">@</b> archivo · ⌘K buscar
             </p>
           </div>
         </div>

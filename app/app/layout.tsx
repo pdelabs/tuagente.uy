@@ -7,21 +7,22 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity, BarChart3, Clock, Columns3, Folder, Hand, LogOut, MessageSquare,
-  Unplug, type LucideIcon,
+  Activity, BarChart3, Clock, Columns3, Folder, Hand, LayoutDashboard, LogOut,
+  MessageSquare, Unplug, type LucideIcon,
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest,
   type PortalConfig, type Manifest,
 } from "./lib/agent";
 import { Btn, Spinner, inputCls } from "./lib/ui";
-import { INTROS, ModuleIntro, useIntroGate } from "./lib/intros";
+import { INTROS, useIntroGate } from "./lib/intros";
 
 // Orden y rótulos de módulos; se muestran solo los que el manifest habilita.
 export const MODULES: { key: string; path: string; label: string; icon: LucideIcon }[] = [
   { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
   { key: "kanban", path: "/app/pipeline", label: "Pipeline", icon: Columns3 },
   { key: "approvals", path: "/app/aprobaciones", label: "Aprobaciones", icon: Hand },
+  { key: "artifacts", path: "/app/artefactos", label: "Artefactos", icon: LayoutDashboard },
   { key: "crons", path: "/app/tareas", label: "Tareas", icon: Clock },
   { key: "activity", path: "/app/actividad", label: "Actividad", icon: Activity },
   { key: "files", path: "/app/archivos", label: "Archivos", icon: Folder },
@@ -66,6 +67,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [state, setState] = useState<"loading" | "login" | "error" | "ok">("loading");
+  const [online, setOnline] = useState(true);
   const { seen, dismiss } = useIntroGate();
 
   const boot = () => {
@@ -73,10 +75,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!c) { setState("login"); return; }
     setCfg(c);
     getManifest(c)
-      .then((m) => { setManifest(m); setState("ok"); })
+      .then((m) => { setManifest(m); setOnline(true); setState("ok"); })
       .catch(() => setState("error"));
   };
   useEffect(boot, []);
+
+  // El indicador tiene que decir la verdad: si el agente se apaga mientras el
+  // portal está abierto, el punto verde mintiendo es peor que no tenerlo.
+  useEffect(() => {
+    if (state !== "ok" || !cfg) return;
+    const tick = () =>
+      getManifest(cfg).then((m) => { setManifest(m); setOnline(true); })
+        .catch(() => setOnline(false));
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, [state, cfg]);
 
   if (state === "loading") return <main className="app-shell min-h-screen bg-surface"><Spinner /></main>;
   if (state === "login") return <Login onReady={boot} />;
@@ -99,8 +112,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const enabled = MODULES.filter((m) => manifest.modules[m.key]);
   // Bienvenida por módulo: se ve una sola vez, hasta que el cliente da "Ok".
   const current = MODULES.find((m) => pathname.startsWith(m.path));
-  const intro = current && INTROS[current.key];
-  const showIntro = Boolean(current && intro && seen && !seen[current.key]);
+  const Intro = current ? INTROS[current.key] : undefined;
+  const showIntro = Boolean(current && Intro && seen && !seen[current.key]);
   return (
     <div className="app-shell flex min-h-screen bg-surface">
       <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-black/[0.07] px-3 py-4">
@@ -111,8 +124,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="min-w-0">
             <p className="truncate text-sm font-bold tracking-tight text-ink">{manifest.agent}</p>
             <p className="flex items-center gap-1 text-[11px] text-ink-soft">
-              <span className="h-1.5 w-1.5 rounded-full bg-c-green-ink" />
-              conectado
+              <span className={`h-1.5 w-1.5 rounded-full ${online ? "bg-c-green-ink" : "bg-c-coral-ink"}`} />
+              {online ? "conectado" : "sin conexión"}
             </p>
           </div>
         </div>
@@ -147,8 +160,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       <main className="min-w-0 flex-1">
-        {showIntro && current && intro ? (
-          <ModuleIntro intro={intro} icon={current.icon} onOk={() => dismiss(current.key)} />
+        {showIntro && current && Intro ? (
+          <Intro onOk={() => dismiss(current.key)} />
         ) : (
           children
         )}

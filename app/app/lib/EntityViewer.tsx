@@ -7,13 +7,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import {
-  getTicketDetail, getFileText,
-  type PortalConfig, type TicketDetail,
+  getTicketDetail, getFileText, getArtifact,
+  type ArtifactMeta, type PortalConfig, type TicketDetail,
 } from "./agent";
 import { EntityContext, type Entity } from "./entities";
 import { Chip, IconBtn, Modal, Spinner } from "./ui";
 import Markdown from "./Markdown";
 import CodeBlock from "./CodeBlock";
+import Artifact from "./Artifact";
 
 export function EntityProvider({ cfg, children }: { cfg: PortalConfig; children: ReactNode }) {
   const [open, setOpen] = useState<Entity | null>(null);
@@ -35,6 +36,11 @@ function fmtDate(value: number | string): string {
 
 const STATUS_TONE: Record<string, "violet" | "amber" | "green" | "neutral"> = {
   blocked: "violet", ready: "amber", running: "amber", done: "green",
+};
+
+export const KIND_LABEL: Record<string, string> = {
+  chart: "Gráfico", table: "Tabla", report: "Informe",
+  dashboard: "Panel", diagram: "Diagrama", other: "Artefacto",
 };
 
 const CODE_EXT: Record<string, string> = {
@@ -60,30 +66,40 @@ function EntityViewer({ cfg, entity, onClose }: {
 }) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [text, setText] = useState<string | null>(null);
+  const [artifact, setArtifact] = useState<(ArtifactMeta & { html: string }) | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     setErr(null);
-    const p = entity.kind === "ticket"
-      ? getTicketDetail(cfg, entity.id).then((d) => { if (alive) setTicket(d); })
-      : getFileText(cfg, entity.path).then((t) => { if (alive) setText(t); });
+    const p =
+      entity.kind === "ticket"
+        ? getTicketDetail(cfg, entity.id).then((d) => { if (alive) setTicket(d); })
+        : entity.kind === "artifact"
+          ? getArtifact(cfg, entity.id).then((a) => { if (alive) setArtifact(a); })
+          : getFileText(cfg, entity.path).then((t) => { if (alive) setText(t); });
     p.catch((e) => {
       if (!alive) return;
       const msg = e instanceof Error ? e.message : "error";
-      setErr(
-        msg.startsWith("404")
-          ? entity.kind === "ticket"
-            ? "Ese ticket ya no existe."
-            : "No encontré ese archivo en el workspace."
-          : msg,
-      );
+      const faltante = {
+        ticket: "Ese ticket ya no existe.",
+        artifact: "Ese artefacto ya no está disponible.",
+        file: "No encontré ese archivo en el workspace.",
+      }[entity.kind];
+      setErr(msg.startsWith("404") ? faltante : msg);
     });
     return () => { alive = false; };
   }, [cfg, entity]);
 
-  const title = entity.kind === "ticket" ? ticket?.ticket.title ?? entity.id : entity.path;
-  const loading = !err && (entity.kind === "ticket" ? !ticket : text === null);
+  const title =
+    entity.kind === "ticket" ? ticket?.ticket.title ?? entity.id
+      : entity.kind === "artifact" ? artifact?.title ?? entity.id
+        : entity.path;
+  const loading = !err && (
+    entity.kind === "ticket" ? !ticket
+      : entity.kind === "artifact" ? !artifact
+        : text === null
+  );
 
   return (
     <Modal onClose={onClose} wide>
@@ -103,6 +119,15 @@ function EntityViewer({ cfg, entity, onClose }: {
                   </span>
                 )}
               </>
+            ) : entity.kind === "artifact" ? (
+              <>
+                <Chip tone="violet">{KIND_LABEL[artifact?.kind ?? ""] ?? "Artefacto"}</Chip>
+                {artifact && (
+                  <span className="text-[11px] text-ink-soft">
+                    {fmtDate(artifact.created_at)}
+                  </span>
+                )}
+              </>
             ) : (
               <Chip>archivo del workspace</Chip>
             )}
@@ -116,6 +141,13 @@ function EntityViewer({ cfg, entity, onClose }: {
           <p className="py-6 text-center text-sm text-ink-soft">{err}</p>
         ) : loading ? (
           <Spinner />
+        ) : entity.kind === "artifact" ? (
+          <>
+            {artifact?.summary && (
+              <p className="mb-3 text-sm text-ink-soft">{artifact.summary}</p>
+            )}
+            <Artifact code={artifact?.html ?? ""} lang="html" />
+          </>
         ) : entity.kind === "file" ? (
           <FileBody path={entity.path} text={text ?? ""} />
         ) : (

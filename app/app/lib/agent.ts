@@ -94,6 +94,15 @@ export const getFileText = async (c: PortalConfig, path: string) => {
 };
 export const getUsage = (c: PortalConfig) => get<any>(c.adapter, "/portal/usage", c);
 
+export type ArtifactMeta = {
+  id: string; title: string; kind: string; summary: string;
+  created_at: number; bytes: number;
+};
+export const getArtifacts = (c: PortalConfig) =>
+  get<{ artifacts: ArtifactMeta[] }>(c.adapter, "/portal/artifacts", c);
+export const getArtifact = (c: PortalConfig, id: string) =>
+  get<ArtifactMeta & { html: string }>(c.adapter, `/portal/artifacts/${encodeURIComponent(id)}`, c);
+
 // ── Agente (:8642) ──
 // include_disabled: el listado pelado excluye los jobs pausados.
 export const getJobs = (c: PortalConfig) => get<any>(c.endpoint, "/api/jobs?include_disabled=true", c);
