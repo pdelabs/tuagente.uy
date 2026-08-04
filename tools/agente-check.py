@@ -174,18 +174,27 @@ def main():
             )
         return m.group(1)
 
-    def _plugin():
+    def _kanban():
+        """Las tools nativas de kanban necesitan LAS DOS claves. Verificado."""
         texto = conf(data)
-        if "kanban_tools" not in texto:
+        faltan = []
+        if not re.search(r"^toolsets:(?:\s*\n\s+-\s*.*)*?\n\s+-\s*kanban\b", texto, re.M) and not re.search(
+            r"^toolsets:\s*\[[^\]]*\bkanban\b", texto, re.M
+        ):
+            faltan.append("toolsets: [kanban] (abre la compuerta del check_fn)")
+        if not re.search(r"^platform_toolsets:(?:.|\n)*?\bkanban\b", texto, re.M):
+            faltan.append("platform_toolsets con kanban por plataforma (pasa el filtro)")
+        if faltan:
             raise AssertionError(
-                "kanban_tools no está en plugins.enabled — el agente improvisa "
-                "con scripts de Python sobre su propio tablero"
+                "; ".join(faltan)
+                + " — sin las dos el agente no ve ninguna tool de kanban y "
+                "termina improvisando por terminal sobre su propio tablero"
             )
-        return "kanban_tools habilitado"
+        return "toolsets + platform_toolsets"
 
     check("config: api_server", _api)
     check("config: modelo por defecto", _modelo)
-    check("config: plugin de kanban", _plugin)
+    check("config: kanban nativo", _kanban)
 
     # --- lo que las skills dan por sentado ---
     def _workspace():

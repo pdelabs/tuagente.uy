@@ -48,13 +48,13 @@ Las escrituras van por subprocess del CLI `hermes kanban ...` desde el sidecar.
   `relative_to`, y en artefactos además se compara el padre — sin eso, un `.`
   borraba la carpeta entera.
 
-## Deuda conocida: el plugin de kanban es provisorio
+## Las tools de kanban se habilitan con DOS claves
 
-`plugins/kanban_tools/` duplica herramientas que **Hermes ya trae y mejor**.
-Existe solo porque es el único camino que verificamos funcionando; se borra
-cuando el toolset nativo llegue a la sesión del agente. La condición exacta de
-borrado, la evidencia y lo aprendido están en `plugins/kanban_tools/DECISION.md`.
-Leelo antes de tocar nada ahí.
+No hay plugin: Hermes ya las trae. Pero hace falta `toolsets: [kanban]` **y**
+`platform_toolsets` con `kanban` en cada plataforma. Con una sola, el agente no
+ve ninguna y improvisa con Python sobre su propio tablero. La receta completa, la
+reproducción y por qué no era adivinable están en `notas/kanban-nativo.md`.
+Lo chequea `tools/agente-check.py`.
 
 ## Verificar antes de entregar
 

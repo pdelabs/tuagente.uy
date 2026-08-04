@@ -52,17 +52,23 @@ api_server:
   port: 8642
   key: ${API_SERVER_KEY}
 
-plugins:
-  enabled:
-    # Herramientas de kanban para el agente. Sin esto no puede tocar sus
-    # propios tickets: los improvisa por terminal y falla.
-    # PROVISORIO — ver plugins/kanban_tools/DECISION.md en el kit.
-    - kanban_tools
-
-# Hermes trae su propio toolset de kanban, cerrado salvo que el perfil lo pida.
-# Lo dejamos pedido: el día que llegue a la sesion, se saca el plugin de arriba.
+# Herramientas nativas de kanban. Hacen falta LAS DOS claves de abajo y no es
+# adivinable: `toolsets` abre la compuerta (check_fn), y `platform_toolsets`
+# pasa el filtro por plataforma. Con una sola, el agente no ve ninguna tool de
+# kanban y termina improvisando por terminal. Verificado el 4/8/2026.
 toolsets:
   - kanban
+
+platform_toolsets:
+  api_server:
+    - hermes-api-server
+    - kanban
+  telegram:
+    - hermes-telegram
+    - kanban
+  cron:
+    - hermes-cron
+    - kanban
 CFG
 
 # Borrador del SOUL: los bloques pegados, con los placeholders intactos.
@@ -96,10 +102,13 @@ Lo que falta, en orden:
      completar. Es el trabajo real: quién es, qué hace, qué NO hace y qué
      requiere aprobación. Sin esto el agente tiene herramientas y ninguna regla.
   2. cp data/.env.example data/.env  y completar las claves.
-     (data/config.yaml ya viene con el modelo, el api server y el plugin de
-      kanban habilitado — revisalo si el cliente usa otro proveedor.)
-  3. docker compose up -d
-  4. python3 $KIT/tools/portal-check.py --key <API_SERVER_KEY>
+     (data/config.yaml ya viene con el modelo, el api server y las tools
+      nativas de kanban — revisalo si el cliente usa otro proveedor.)
+  3. python3 $KIT/tools/agente-check.py $DESTINO/data
+     0 fallas ANTES de prender: agarra el SOUL con huecos, las skills sin
+     frontmatter y los olvidos de config, sin levantar nada.
+  4. docker compose up -d
+  5. python3 $KIT/tools/portal-check.py --key <API_SERVER_KEY>
      0 fallas o no se entrega.
   5. Primera tarea del agente: que investigue la web de la empresa y entregue
      su brief — ver onboarding/brief-empresa.md. Sale un borrador para revisar,
