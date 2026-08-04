@@ -45,6 +45,13 @@ Todos bearer + CORS por env PORTAL_CORS_ORIGINS; nombre del agente por env AGENT
 - GET /portal/approvals · POST /portal/approvals/{id}/approve|reject {reason}
 - GET /portal/activity (job_run + eventos del kanban) · GET /portal/usage (+daily 14d)
 - GET /portal/files · GET /portal/files/{path} (siempre text/plain)
+- POST /portal/tickets · POST /portal/tickets/{id}/comment · .../status
+- POST /portal/approvals/{id}/approve — acepta `{correction}` opcional
+- GET /portal/artifacts · GET/DELETE /portal/artifacts/{id}
+- GET /portal/crons/{id} → {job (con el prompt real), runs[]}
+- POST /portal/upload {name, content_b64} → guarda en workspace/entrada/
+- POST /portal/sessions/{id}/chat/stream — proxy del stream (el gateway lo
+  sirve sin CORS y el browser lo descarta)
 
 ## Bloqueo "pegajoso" del kanban (leído del código y verificado, 2026-08-03)
 Un ticket `blocked` vuelve solo a `ready` salvo que el bloqueo sea **sticky**, y
