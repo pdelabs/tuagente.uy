@@ -31,7 +31,7 @@ function fmtDate(value: number | string): string {
   const d = new Date(Number.isFinite(n) ? (n > 1e12 ? n : n * 1000) : String(value));
   return Number.isNaN(d.getTime())
     ? ""
-    : d.toLocaleString("es-UY", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    : d.toLocaleString("es-UY", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 const STATUS_TONE: Record<string, "violet" | "amber" | "green" | "neutral"> = {

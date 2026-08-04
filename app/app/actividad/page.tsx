@@ -100,7 +100,7 @@ function desdeRango(key: RangoKey): number | null {
 function hourLabel(ts: string): string {
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function dayKey(ts: string): string {
@@ -372,7 +372,7 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
             {ultima && (
               <span className="hidden text-xs text-ink-soft sm:inline">
                 Actualizado{" "}
-                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}
+                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false })}
               </span>
             )}
             <IconBtn label="Actualizar" disabled={cargando} onClick={refrescar}>

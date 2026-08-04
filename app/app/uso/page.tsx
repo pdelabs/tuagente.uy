@@ -381,7 +381,7 @@ export default function UsoPage() {
             {ultima && (
               <span className="hidden text-xs tabular-nums text-ink-soft sm:inline">
                 Actualizado{" "}
-                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}
+                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false })}
               </span>
             )}
             <IconBtn label="Actualizar" disabled={cargando} onClick={() => load(true)}>

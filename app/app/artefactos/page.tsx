@@ -386,7 +386,7 @@ export default function ArtefactosPage() {
             {ultima && (
               <span className="hidden text-xs text-ink-soft sm:inline">
                 Actualizado{" "}
-                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}
+                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false })}
               </span>
             )}
             <div className="relative w-56">

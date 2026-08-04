@@ -111,7 +111,7 @@ const saludo = (): string => {
   return "Buenas noches";
 };
 
-const hora = (d: Date) => d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" });
+const hora = (d: Date) => d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false });
 
 /** Momento de un evento: hoy sólo la hora; antes, con el día adelante. */
 function cuando(ts: string): string {

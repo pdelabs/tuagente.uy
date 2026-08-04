@@ -532,7 +532,7 @@ export default function PipelinePage() {
             {ultima && (
               <span className="hidden text-xs text-ink-soft sm:inline">
                 Actualizado{" "}
-                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit" })}
+                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false })}
               </span>
             )}
             <div className="relative w-56">
@@ -549,7 +549,7 @@ export default function PipelinePage() {
             </IconBtn>
             <Btn onClick={() => setCrearAbierto(true)}>
               <Plus className="h-4 w-4" />
-              Nuevo ticket
+              Nueva tarea
             </Btn>
           </>
         }
@@ -565,7 +565,7 @@ export default function PipelinePage() {
         <EmptyState
           icon={Inbox}
           title="Todavía no hay tickets"
-          hint="Creá el primero con “Nuevo ticket”, o esperá a que tu agente arranque uno."
+          hint="Creá la primera con “Nueva tarea”, o esperá a que tu agente arranque una."
         />
       ) : (
         <>
@@ -638,7 +638,7 @@ export default function PipelinePage() {
         <Modal onClose={() => !creando && cerrarCrear()}>
           <div className="flex items-start justify-between gap-4 border-b border-black/[0.07] px-5 py-4">
             <div className="min-w-0">
-              <h2 className="text-base font-bold leading-snug text-ink">Nuevo ticket</h2>
+              <h2 className="text-base font-bold leading-snug text-ink">Nueva tarea</h2>
               <p className="mt-0.5 text-sm text-ink-soft">
                 Entra al tablero de tu agente como cualquier otro.
               </p>
