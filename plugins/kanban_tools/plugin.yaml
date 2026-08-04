@@ -1,0 +1,18 @@
+name: kanban_tools
+version: 0.1.0
+description: >-
+  Native ticket tools for the Kanban board: one compressed `kanban` tool with
+  read actions (show, list, runs) and write actions (create, comment, complete,
+  block, unblock, archive). Fills the gap between the built-in worker
+  lifecycle tools — which only exist inside a dispatcher-spawned worker — and a
+  normal agent session, where the board was previously reachable only by
+  hand-written Python against the internal modules. Worker orchestration
+  (assign, claim, dispatch, swarm, decompose), board management and attachments
+  are deliberately out of scope.
+author: Hermes contributors
+kind: standalone
+platforms:
+  - linux
+  - macos
+provides_tools:
+  - kanban
