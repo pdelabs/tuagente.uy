@@ -6,7 +6,10 @@ Dos cosas viven en este repo, en la misma app Next 14:
 - **El portal del cliente** (`app/app/`) — el producto: la interfaz con la que un
   cliente ve y dirige a su agente. Es estático; toda la lógica vive en el browser.
 
-Además: `docs/` (la memoria del proyecto) y `tools/portal-check.py`.
+Además: `docs/` — la memoria del proyecto.
+
+**Lo que se instala en el agente de un cliente NO vive acá**: el adapter, las
+skills y el chequeo de conformidad están en el repo hermano `hermes-kit`.
 
 ## Qué es el producto
 
@@ -24,7 +27,7 @@ fijo. "La Mano" (el agente de pdelabs) es SOLO el entorno de prueba local.
 Dos servicios del agente del cliente, nunca un backend nuestro:
 
 - **`:8642` — el gateway de Hermes** (nativo): chat, sesiones, jobs.
-- **`:8643` — el adapter** (`portal_adapter.py`, hoy en el repo `hermes`):
+- **`:8643` — el adapter** (`portal_adapter.py`, en el repo `hermes-kit`):
   lo que el nativo no expone — tickets, aprobaciones, artefactos, archivos,
   actividad, uso, capacidades, subida de archivos.
 
@@ -62,10 +65,15 @@ pipeline, aprobaciones, artefactos y tareas, marcados con TODO).
 
 ```bash
 npx tsc --noEmit && npm run build
-npx next start -p 8090          # el portal, contra el agente local
-python3 tools/portal-check.py --key <API_SERVER_KEY>   # 0 fallas o no se entrega
+npx next start -p 8090     # el portal, contra el agente local
 ```
 
-`tools/portal-check.py` verifica que un agente cumpla el contrato del portal
-(manifiesto, auth, CORS de ambos servicios, cada módulo declarado, archivos como
-text/plain, proxy del chat). Es lo que separa "creo que anda" de "anda".
+Para verificar que un agente cumple el contrato del portal (manifiesto, auth,
+CORS de ambos servicios, cada módulo declarado, archivos como text/plain, proxy
+del chat), el chequeo vive en el kit:
+
+```bash
+python3 ../hermes-kit/tools/portal-check.py --key <API_SERVER_KEY>
+```
+
+Es lo que separa "creo que anda" de "anda".
