@@ -1,0 +1,51 @@
+# Plantilla para el agente de un cliente. Un agente por cliente: su propio
+# volumen, su propia clave. Nunca compartir nada entre clientes.
+services:
+  hermes:
+    image: nousresearch/hermes-agent:latest
+    container_name: ${CLIENTE}-hermes
+    restart: unless-stopped
+    command: gateway run
+    ports:
+      # Solo loopback: el portal llega por el adapter o por un túnel, nunca
+      # exponiendo el gateway a internet.
+      - "127.0.0.1:8642:8642"   # API server
+      - "127.0.0.1:9119:9119"   # dashboard (interno, no es para el cliente)
+    volumes:
+      - ./data:/opt/data
+    environment:
+      - TZ=America/Montevideo
+      - HERMES_DASHBOARD=1
+      # Sin esto el browser descarta todas las respuestas del gateway.
+      - API_SERVER_CORS_ORIGINS=https://app.tuagente.uy
+    env_file:
+      - ./data/.env
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+
+  portal-adapter:
+    image: nousresearch/hermes-agent:latest
+    container_name: ${CLIENTE}-portal-adapter
+    restart: unless-stopped
+    entrypoint: ["python3", "/opt/data/scripts/portal_adapter.py"]
+    ports:
+      - "127.0.0.1:8643:8643"
+    volumes:
+      - ./data:/opt/data
+    environment:
+      - TZ=America/Montevideo
+      - PORTAL_CORS_ORIGINS=https://app.tuagente.uy
+      # El nombre que el cliente ve en su portal. Si falta, dice "Agente".
+      - AGENT_NAME=${AGENT_NAME}
+    env_file:
+      - ./data/.env
+
+# data/.env (nunca se commitea):
+#   API_SERVER_KEY=          openssl rand -hex 32, única por cliente
+#   OPENROUTER_API_KEY=      o la del proveedor que uses
+#   TELEGRAM_BOT_TOKEN=      de @BotFather
+#   TELEGRAM_ALLOWED_USERS=  ids autorizados; sin esto le escribe cualquiera
+#   SMTP_USER= / SMTP_APP_PASSWORD=   si manda mails
