@@ -1,58 +1,117 @@
-# Alta de un cliente nuevo — de cero a portal andando
+# Alta de un cliente nuevo — paso a paso
 
-Procedimiento sacado de lo que efectivamente funcionó con el agente fixture.
-Cada paso que dice "verificado" es algo que ya probamos, no una suposición.
+Sacado de haberlo hecho una vez (La Mano). Lo marcado "verificado" ya lo probamos.
 
-## 0. Lo que se necesita antes de empezar
+---
 
-- Un servidor para el agente (hoy: la Mac; después Railway).
-- Claves: `API_SERVER_KEY` (`openssl rand -hex 32`), la del proveedor de modelos,
-  y las del canal que use el cliente (Telegram, WhatsApp Cloud, mail).
-- Una decisión de negocio: **qué hace este agente y qué requiere aprobación.**
-  Si eso no está claro, no arranques: es lo que define el SOUL.
+## Fase 0 — Lo que hay que juntar antes de tocar nada
 
-## 1. Levantar el agente
+**Del cliente:**
+- El **proceso** concreto que quiere resolver, con su gente y sus pasos.
+- **Qué jamás puede pasar sin su OK.** Esta respuesta define el SOUL entero.
+- Acceso a los sistemas que el agente va a usar (casilla, planilla, CRM).
+- Quién es el humano responsable: el que aprueba y al que se le avisa.
 
-Copiar el `docker-compose.yml` del fixture. Dos servicios:
+**Nuestro:**
+- `API_SERVER_KEY` (`openssl rand -hex 32`) — única por cliente, nunca reusada.
+- Clave del proveedor de modelos (OpenRouter en nuestro caso).
+- Servidor: Railway si necesita WhatsApp o que el portal se vea desde afuera.
 
-- `hermes` — el gateway. Puertos 8642 (API) y 9119 (dashboard), **solo loopback**.
-- `portal-adapter` — nuestro sidecar, puerto 8643, misma imagen y mismo volumen.
+**Costo real de operación** (medido en un mes de La Mano): **USD 2 de cómputo**.
+Lo que se cobra es la operación, no los tokens.
 
-Variables que no se pueden olvidar:
+---
 
-| Variable | Dónde | Para qué |
+## Fase 1 — Elegir el canal (la decisión con más consecuencias)
+
+### Telegram — 5 minutos, gratis, funciona hoy
+1. `@BotFather` → `/newbot` → nombre y usuario → devuelve el **token**.
+2. El cliente le escribe a `@userinfobot` para sacar su **user id**.
+3. `TELEGRAM_BOT_TOKEN` y `TELEGRAM_ALLOWED_USERS` (allowlist: sin esto le
+   escribe cualquiera), y el home channel para los avisos proactivos.
+
+Es el canal para arrancar, para pilotos y para el equipo interno. Verificado.
+
+### WhatsApp — dos caminos, y uno es una trampa
+- **`hermes whatsapp` (puente por QR, Baileys/whatsmeow):** se aparea escaneando
+  un QR con un WhatsApp normal. Rápido y gratis, pero **es un cliente no oficial:
+  Meta puede banear el número**. Jamás en la línea comercial de un cliente. Como
+  mucho, en un número descartable para una prueba interna.
+- **`hermes whatsapp-cloud` (API oficial de Meta):** lo que se usa en producción.
+  Requiere:
+  - Cuenta de **WhatsApp Business** y Business Manager verificado.
+  - Un **número que NO esté activo en WhatsApp común** (si lo está, hay que
+    migrarlo y pierde el uso normal).
+  - Una **URL pública de webhook** → obliga a hosting real (Railway), no sirve
+    una máquina en la oficina.
+  - **Plantillas aprobadas por Meta** para iniciar conversación fuera de la
+    ventana de 24 h. Sin esto el agente solo puede responder, no avisar.
+  - Aprobación de Meta: son días, no minutos. **Empezar por acá el proyecto.**
+
+### Otros
+- **Email:** casilla propia del cliente + app password (o SMTP). Verificado.
+- **Formulario web:** un POST al API server, como hace la landing de pdelabs.
+
+---
+
+## Fase 2 — Levantar el agente
+
+Copiar el `docker-compose.yml` del fixture. Dos servicios, **uno por cliente**,
+cada uno con su volumen y su clave — nunca compartidos:
+
+- `hermes` — gateway, puertos 8642 (API) y 9119 (dashboard), **solo loopback**.
+- `portal-adapter` — nuestro sidecar, 8643, misma imagen y mismo volumen.
+
+Variables que si faltan rompen algo silenciosamente:
+
+| Variable | Servicio | Si falta |
 |---|---|---|
-| `AGENT_NAME` | portal-adapter | el nombre que el cliente ve en el portal |
-| `API_SERVER_CORS_ORIGINS` | hermes | el origen del portal, o el browser rechaza todo |
-| `PORTAL_CORS_ORIGINS` | portal-adapter | ídem para el adapter |
-| `TZ` | ambos | los horarios de las tareas se leen mal sin esto |
+| `AGENT_NAME` | adapter | el portal muestra "Agente" |
+| `API_SERVER_CORS_ORIGINS` | hermes | el browser descarta todo |
+| `PORTAL_CORS_ORIGINS` | adapter | ídem |
+| `TZ` | ambos | las tareas corren a la hora equivocada |
 
-## 2. Instalar el kit
+---
+
+## Fase 3 — Instalar el kit
 
 Copiar a `data/skills/`: `artifact`, `entregable`, `aprobacion`.
 Copiar `data/scripts/portal_adapter.py`.
 
-**Paso que parece opcional y no lo es:** agregar al SOUL el bloque que documenta
-cada skill con su comando exacto. Verificado el 2026-08-04: una skill que existe
-en el directorio y aparece en `hermes skills list` **igual es invisible para el
-agente** si no está en el prompt — el índice interno no se regenera solo, ni
-siquiera reiniciando el gateway. El agente contesta "esa skill no existe" y sigue
-de largo. (Ver `toolkit-agentes.md`.)
+**Y documentar cada skill en el SOUL con su comando exacto.** Verificado el
+2026-08-04: una skill que existe en el disco y aparece en `hermes skills list`
+**es invisible para el agente** si no está en el prompt; el índice interno no se
+regenera solo, ni reiniciando el gateway. El agente dice "esa skill no existe".
 
-## 3. Escribir el SOUL
+---
 
-Lo específico del cliente. Como mínimo:
+## Fase 4 — Escribir el SOUL
 
+Lo único verdaderamente artesanal, y donde está el valor. Mínimo:
 - Quién es el agente y para quién trabaja.
-- **La regla dura de aprobación**: qué jamás hace sin permiso explícito.
-- Dónde va cada cosa: entregables por la skill, andamiaje a `workspace/interno/`.
+- **La regla dura de aprobación** (lo que sacamos en la Fase 0).
+- Dónde va cada cosa: entregables por skill, andamiaje a `workspace/interno/`.
 - Cuándo conviene un artefacto en vez de texto.
-- Qué hacer con las referencias que llegan del portal (`t_...`, `workspace/...`).
+- Qué hacer con las referencias del portal y con los archivos de `entrada/`.
 
-La regla de oro: si una convención importa, que la ejecute un script. El SOUL
-sirve para decidir *cuándo*, no para recordar *cómo*.
+Regla de oro: si una convención importa, que la ejecute un script. El SOUL
+decide *cuándo*; el código define *cómo*.
 
-## 4. Verificar antes de entregar
+---
+
+## Fase 5 — Tareas programadas
+
+Se crean **por CLI** (`hermes cron create`), no con un yaml — eso ya lo
+intentamos y no funciona.
+
+**Trampa encontrada el 2026-08-04:** una tarea creada desde una sesión del portal
+queda entregando a esa sesión, que es HTTP pregunta-respuesta y **no puede recibir
+mensajes**. Corre bien y no llega nada, sin aviso. Siempre fijar un canal que
+pueda recibir (Telegram/WhatsApp) al crear la tarea.
+
+---
+
+## Fase 6 — Verificar antes de entregar
 
 ```bash
 python3 tools/portal-check.py --key <API_SERVER_KEY> \
@@ -60,30 +119,34 @@ python3 tools/portal-check.py --key <API_SERVER_KEY> \
     --origin https://app.tuagente.uy
 ```
 
-Tiene que dar **0 fallas**. Los avisos son aceptables (por ejemplo "approvals no
-declarado" cuando todavía no hay nada esperando aprobación: es correcto, el
-módulo aparece cuando hay pendientes).
+**0 fallas** o no se entrega. Después, a mano, el circuito que vende el producto:
 
-Además, probar a mano el circuito que vende el producto:
 1. Pedirle algo por chat → responde.
 2. Pedirle una visualización → crea el artefacto y lo cita.
 3. Pedirle algo que requiera permiso → aparece en Aprobaciones con su tabla.
-4. Corregir y aprobar → el ticket se destraba con tu versión asentada.
+4. Corregir y aprobar → se destraba con tu versión asentada.
 5. Crear una tarea desde el tablero y comentarla → el agente la ve.
+6. Programar un recordatorio → **llega al canal** (ver Fase 5).
 
-## 5. Entregar el acceso
+---
 
-El magic link: `https://app.tuagente.uy/app#endpoint=<api>&adapter=<adapter>&key=<clave>`.
-Queda guardado en el navegador del cliente. **Es la credencial**: quien tiene el
-link tiene el agente. Mandarlo por un canal privado y no reusar la clave entre
-clientes.
+## Fase 7 — Entregar el acceso
 
-## Lo que todavía no está resuelto
+`https://app.tuagente.uy/app#endpoint=<api>&adapter=<adapter>&key=<clave>`
 
-- **Multi-cliente de verdad**: hoy una clave = acceso total. Sin usuarios ni
-  permisos por persona.
-- **Hosting**: mientras el agente viva en una máquina de casa, el portal solo
-  funciona en esa red.
-- **Varios tableros por cliente**: Hermes los soporta (cada board con su propia
-  base), el adapter todavía lee uno fijo.
-- **Adjuntar archivos** desde el portal hacia el agente.
+**El link es la credencial**: quien lo tiene, tiene el agente. Por canal privado,
+y una clave distinta por cliente.
+
+---
+
+## Cuánto lleva hoy
+
+Telegram + un proceso simple: **1 a 2 días** de trabajo real, la mayoría en la
+Fase 0 y la Fase 4. Con WhatsApp oficial: **sumar la espera de Meta**, que no
+depende de nosotros — por eso se arranca por ahí.
+
+## Lo que falta para que sea de un día
+
+- Un repo `hermes-kit` con las skills + el adapter + un script de alta.
+- Plantillas de SOUL por tipo de negocio.
+- Terraform/Railway template en vez de copiar el compose a mano.
