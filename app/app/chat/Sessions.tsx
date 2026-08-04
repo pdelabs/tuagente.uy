@@ -31,8 +31,11 @@ const PINNED_KEY = "tuagente_chat_pinned";
 // internas del sistema (crons, workers del kanban, generación de títulos).
 export function isHumanSession(s: SessionSummary): boolean {
   if (!HUMAN_SOURCES.has(s.source)) return false;
-  const t = s.title ?? s.preview ?? "";
-  return !t.trimStart().startsWith("### Task");
+  const t = (s.title ?? s.preview ?? "").trimStart();
+  // "### Task": las que Hermes usa para titular/etiquetar.
+  // "[Aviso del portal]": la sesión donde el adapter le avisa al agente que
+  // comentaste un ticket. Es maquinaria nuestra, no una conversación tuya.
+  return !t.startsWith("### Task") && !t.startsWith("[Aviso del portal]");
 }
 
 export function sessionTitle(s: SessionSummary): string {
