@@ -58,15 +58,25 @@ function headers(cfg: PortalConfig): HeadersInit {
 
 /** Error de red con el status a mano: los módulos distinguen 404 de caída. */
 export type HttpError = Error & { status?: number };
-function httpError(status: number, path: string): HttpError {
-  const e: HttpError = new Error(`${status} en ${path}`);
+function httpError(status: number, path: string, detail?: string): HttpError {
+  const e: HttpError = new Error(detail || `${status} en ${path}`);
   e.status = status;
   return e;
 }
 
+/** El adapter explica sus 400/409 en `{error}`: ese texto vale más que el número. */
+async function failure(res: Response, path: string): Promise<HttpError> {
+  let detail = "";
+  try {
+    const body = await res.json();
+    if (typeof body?.error === "string") detail = body.error;
+  } catch { /* sin cuerpo JSON */ }
+  return httpError(res.status, path, detail);
+}
+
 async function get<T>(base: string, path: string, cfg: PortalConfig): Promise<T> {
   const res = await fetch(base + path, { headers: headers(cfg) });
-  if (!res.ok) throw httpError(res.status, path);
+  if (!res.ok) throw await failure(res, path);
   return res.json();
 }
 
@@ -76,7 +86,13 @@ async function post<T>(base: string, path: string, cfg: PortalConfig, body?: unk
     headers: { ...headers(cfg), "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw httpError(res.status, path);
+  if (!res.ok) throw await failure(res, path);
+  return res.json();
+}
+
+async function del<T>(base: string, path: string, cfg: PortalConfig): Promise<T> {
+  const res = await fetch(base + path, { method: "DELETE", headers: headers(cfg) });
+  if (!res.ok) throw await failure(res, path);
   return res.json();
 }
 
@@ -90,7 +106,11 @@ export const getTickets = (c: PortalConfig) => get<{ tickets: Ticket[] }>(c.adap
 export const getTicketDetail = (c: PortalConfig, id: string) =>
   get<TicketDetail>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}`, c);
 export const getApprovals = (c: PortalConfig) => get<{ approvals: any[] }>(c.adapter, "/portal/approvals", c);
-export const approve = (c: PortalConfig, id: string) => post<{ ok: boolean }>(c.adapter, `/portal/approvals/${id}/approve`, c);
+/** `correction` (opcional): tu versión corregida queda asentada como comentario
+ *  tuyo antes de desbloquear — el ticket original no se modifica. */
+export const approve = (c: PortalConfig, id: string, correction?: string) =>
+  post<{ ok: boolean }>(c.adapter, `/portal/approvals/${id}/approve`, c,
+    correction ? { correction } : undefined);
 export const reject = (c: PortalConfig, id: string, reason: string) =>
   post<{ ok: boolean }>(c.adapter, `/portal/approvals/${id}/reject`, c, { reason });
 export const getActivity = (c: PortalConfig) => get<{ events: any[] }>(c.adapter, "/portal/activity", c);
@@ -110,6 +130,34 @@ export const getArtifacts = (c: PortalConfig) =>
   get<{ artifacts: ArtifactMeta[] }>(c.adapter, "/portal/artifacts", c);
 export const getArtifact = (c: PortalConfig, id: string) =>
   get<ArtifactMeta & { html: string }>(c.adapter, `/portal/artifacts/${encodeURIComponent(id)}`, c);
+export const deleteArtifact = (c: PortalConfig, id: string) =>
+  del<{ ok: boolean }>(c.adapter, `/portal/artifacts/${encodeURIComponent(id)}`, c);
+
+// ── Escritura en el tablero (el adapter la hace por CLI, nunca por SQL) ──
+export const createTicket = (c: PortalConfig, t: { title: string; body?: string; tenant?: string }) =>
+  post<{ ok: boolean; id: string | null }>(c.adapter, "/portal/tickets", c, t);
+export const commentTicket = (c: PortalConfig, id: string, body: string, author?: string) =>
+  post<{ ok: boolean }>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}/comment`, c,
+    author ? { body, author } : { body });
+export type TicketStatus = "done" | "blocked" | "ready" | "archived";
+export const setTicketStatus = (c: PortalConfig, id: string, status: TicketStatus) =>
+  post<{ ok: boolean }>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}/status`, c, { status });
+
+export type CronRun = {
+  id: string; status: string; claimed_at: string;
+  started_at: string | null; finished_at: string | null; error: string | null;
+};
+export type CronDetail = {
+  job: {
+    id: string; name: string; prompt: string; script: string;
+    schedule_display: string; enabled: boolean; state: string; model: string;
+    deliver: string; last_status: string | null; last_error: string | null;
+    next_run_at: string | null;
+  };
+  runs: CronRun[];
+};
+export const getCronDetail = (c: PortalConfig, id: string) =>
+  get<CronDetail>(c.adapter, `/portal/crons/${encodeURIComponent(id)}`, c);
 
 // ── Agente (:8642) ──
 // include_disabled: el listado pelado excluye los jobs pausados.
