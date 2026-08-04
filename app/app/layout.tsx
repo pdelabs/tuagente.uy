@@ -7,8 +7,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity, BarChart3, Clock, Columns3, Folder, Hand, LayoutDashboard, LogOut,
-  MessageSquare, Unplug, type LucideIcon,
+  Activity, BarChart3, Clock, Columns3, Folder, Hand, Home, LayoutDashboard,
+  LogOut, MessageSquare, Unplug, type LucideIcon,
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest, getApprovals,
@@ -17,8 +17,10 @@ import {
 import { Btn, Spinner, inputCls } from "./lib/ui";
 import { INTROS, useIntroGate } from "./lib/intros";
 
-// Orden y rótulos de módulos; se muestran solo los que el manifest habilita.
+// Orden y rótulos de módulos; se muestran solo los que el manifest habilita
+// (salvo "home", que es nuestro y no depende de lo que exponga el agente).
 export const MODULES: { key: string; path: string; label: string; icon: LucideIcon }[] = [
+  { key: "home", path: "/app/inicio", label: "Inicio", icon: Home },
   { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
   { key: "kanban", path: "/app/pipeline", label: "Pipeline", icon: Columns3 },
   { key: "approvals", path: "/app/aprobaciones", label: "Aprobaciones", icon: Hand },
@@ -116,7 +118,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const enabled = MODULES.filter((m) => manifest.modules[m.key]);
+  const enabled = MODULES.filter((m) => m.key === "home" || manifest.modules[m.key]);
   // Bienvenida por módulo: se ve una sola vez, hasta que el cliente da "Ok".
   const current = MODULES.find((m) => pathname.startsWith(m.path));
   const Intro = current ? INTROS[current.key] : undefined;

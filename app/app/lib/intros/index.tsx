@@ -6,6 +6,7 @@
 
 import { useEffect, useState, type ComponentType } from "react";
 import type { IntroProps } from "./shell";
+import HomeIntro from "./home";
 import ChatIntro from "./chat";
 import PipelineIntro from "./pipeline";
 import ApprovalsIntro from "./approvals";
@@ -18,6 +19,7 @@ import UsageIntro from "./usage";
 const KEY = "tuagente_intro_v2";
 
 export const INTROS: Record<string, ComponentType<IntroProps>> = {
+  home: HomeIntro,
   chat: ChatIntro,
   kanban: PipelineIntro,
   approvals: ApprovalsIntro,
