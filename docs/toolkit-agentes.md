@@ -76,19 +76,36 @@ escribe nada. Contra el agente fixture: 13 ok, 0 fallas.
 python3 tools/portal-check.py --key <API_SERVER_KEY>
 ```
 
-## Trampa de despliegue: las skills locales no se auto-descubren
+## Instalar una skill: cómo funciona de verdad
 
-Verificado el 2026-08-04: crear `data/skills/<nombre>/SKILL.md` **no alcanza**
-para que el agente sepa que existe. `hermes skills list` la muestra habilitada
-(lee el directorio), pero el índice que se le inyecta al prompt
-(`data/.skills_prompt_snapshot.json`) queda viejo — reiniciar el gateway no lo
-regenera y no hay comando de reindexado. Resultado: el agente contesta que "esa
-skill no existe" y sigue de largo.
+**Corrección de una conclusión previa equivocada.** Habíamos anotado que las
+skills locales "no se auto-descubren". Es falso: Hermes las descubre solo.
 
-**Lo que sí funciona:** documentar la skill en el SOUL/system prompt con su
-comando exacto. Probado con `artifact` (el agente la usó bien a la primera) y
-ahora con `entregable` y `aprobacion`. Para el alta de un cliente: el kit tiene
-que traer el bloque de SOUL junto con la skill, no solo los archivos.
+El mecanismo (verificado el 2026-08-04): `data/.skills_prompt_snapshot.json`
+guarda, además del índice que se le inyecta al prompt, un `manifest` con
+`{ruta de cada SKILL.md: [mtime_ns, tamaño]}`. Es un **detector de cambios**:
+cuando un archivo no coincide, Hermes reconstruye el índice **por su cuenta**
+—sin comandos ni reinicios—. Nuestras tres skills entraron solas ~20 minutos
+después de crearlas. La prueba que dio "esa skill no existe" cayó dentro de esa
+ventana, y de ahí salió la conclusión errónea.
+
+**El error real era otro y sí era nuestro: `SKILL.md` sin frontmatter.** Sin él,
+la skill se indexa con `description: ""` — el agente ve el nombre y nada que le
+diga qué hace ni cuándo usarla. Toda skill nuestra tiene que arrancar así:
+
+```yaml
+---
+name: <slug>
+description: "Qué hace + CUÁNDO usarla. Es lo único que el agente lee para
+              decidir si la abre."
+version: 1.0.0
+---
+```
+
+**Qué queda en el SOUL entonces:** no el catálogo de skills (de eso se encarga el
+índice), sino las **reglas de negocio** — qué requiere aprobación, dónde va cada
+cosa, cuándo conviene un artefacto. Documentar el comando exacto en el SOUL sigue
+sirviendo como refuerzo para las skills críticas, pero no es el mecanismo.
 
 ## Lección que atraviesa todo
 

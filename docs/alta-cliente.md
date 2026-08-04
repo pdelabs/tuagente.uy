@@ -78,10 +78,16 @@ Variables que si faltan rompen algo silenciosamente:
 Copiar a `data/skills/`: `artifact`, `entregable`, `aprobacion`.
 Copiar `data/scripts/portal_adapter.py`.
 
-**Y documentar cada skill en el SOUL con su comando exacto.** Verificado el
-2026-08-04: una skill que existe en el disco y aparece en `hermes skills list`
-**es invisible para el agente** si no está en el prompt; el índice interno no se
-regenera solo, ni reiniciando el gateway. El agente dice "esa skill no existe".
+**Cada `SKILL.md` tiene que tener frontmatter con `name` y `description`.** Es lo
+único que el agente lee para decidir si abre la skill; sin frontmatter se indexa
+con la descripción vacía y queda como un nombre suelto que no usa nunca. La
+descripción dice **qué hace y cuándo usarla**.
+
+Hermes se encarga del resto: detecta los archivos nuevos por fecha y tamaño y
+reconstruye su índice solo, sin comandos ni reinicios — pero **no es
+instantáneo** (en nuestra prueba tardó ~20 minutos). Si acabás de copiar el kit y
+el agente dice que no conoce una skill, esperá y volvé a probar antes de
+diagnosticar nada.
 
 ---
 
