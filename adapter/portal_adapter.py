@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.13.0"
+VERSION = "0.15.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -444,6 +444,87 @@ def comment_ticket(task_id, body, author):
 # Se dispara SOLO desde este endpoint (o sea, solo cuando escribe una persona),
 # nunca desde los comentarios que deja el propio agente: sin eso habria loop.
 NOTIFY_ON_COMMENT = os.environ.get("NOTIFY_AGENT_ON_COMMENT", "1") != "0"
+NOTIFY_SESSION_FILE = DATA / ".portal_notify_session"
+
+
+def notify_session_id():
+    """Una unica sesion para todos los avisos del portal.
+
+    Con /v1/chat/completions cada aviso creaba una conversacion nueva y le
+    ensuciaba la lista al cliente. Guardamos el id y lo reusamos; si la sesion
+    fue borrada, se crea otra.
+    """
+    sid = ""
+    try:
+        sid = NOTIFY_SESSION_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        pass
+    if sid:
+        try:
+            req = urllib.request.Request(
+                f"{AGENT_BASE}/api/sessions/{sid}/messages",
+                headers={"Authorization": f"Bearer {TOKEN}"})
+            urllib.request.urlopen(req, timeout=20).read()
+            return sid
+        except Exception:  # noqa: BLE001 — no existe mas: creamos otra
+            sid = ""
+    # OJO: una sesion creada sin modelo nace con el placeholder "hermes-agent",
+    # que el proveedor rechaza con 400. Le pasamos el modelo real del agente.
+    payload = {}
+    modelo = default_model()
+    if modelo:
+        payload["model"] = modelo
+    try:
+        req = urllib.request.Request(
+            f"{AGENT_BASE}/api/sessions", data=json.dumps(payload).encode(),
+            headers={"Authorization": f"Bearer {TOKEN}",
+                     "Content-Type": "application/json"}, method="POST")
+        data = json.loads(urllib.request.urlopen(req, timeout=30).read())
+        sid = (data.get("session") or {}).get("id") or data.get("id") or ""
+        if sid and modelo:
+            NOTIFY_SESSION_FILE.write_text(sid, encoding="utf-8")
+            return sid
+        return ""  # sin modelo confiable, mejor el camino sin sesion
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def default_model():
+    """El modelo por defecto del agente, leido de su config.yaml."""
+    try:
+        dentro = False
+        for line in CONFIG.read_text(encoding="utf-8").splitlines():
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            if not line.startswith((" ", "\t")):
+                dentro = line.split(":", 1)[0].strip() == "model"
+                continue
+            if dentro:
+                m = re.match(r"\s+default:\s*(.+?)\s*$", line)
+                if m:
+                    return m.group(1).strip("\"'")
+    except OSError:
+        pass
+    return ""
+
+
+def _texto_final_sse(raw):
+    """Saca la respuesta del agente del stream nativo de Hermes."""
+    partes, ultimo = [], ""
+    evento = ""
+    for linea in raw.decode("utf-8", "replace").splitlines():
+        if linea.startswith("event: "):
+            evento = linea[7:].strip()
+        elif linea.startswith("data: "):
+            try:
+                d = json.loads(linea[6:])
+            except ValueError:
+                continue
+            if evento == "assistant.delta" and isinstance(d.get("delta"), str):
+                partes.append(d["delta"])
+            elif evento == "assistant.completed" and isinstance(d.get("content"), str):
+                ultimo = d["content"]
+    return (ultimo or "".join(partes)).strip()
 
 
 def notify_agent_of_comment(task_id, body, author):
@@ -476,22 +557,56 @@ def notify_agent_of_comment(task_id, body, author):
     mensaje = (
         f"[Aviso del portal] {author} comentó en el ticket {task_id}:\n\n"
         f"{body}\n{ficha}\n\n"
-        "Con esto ya tenés todo el contexto. Si el comentario pide algo, hacelo "
-        "o contestá por el canal habitual; si no pide nada, respondé en una línea "
-        "que lo viste y listo. No cambies el estado del ticket salvo que te lo "
-        "pidan, y no te desvíes a otra cosa: esto es solo un aviso de comentario."
+        "Con esto ya tenés todo el contexto.\n\n"
+        "**Tu respuesta se publica como comentario en ese mismo ticket**, así que "
+        "escribila dirigida a quien comentó: corta, concreta y sin repetir lo que "
+        "ya está en el ticket. Si el comentario pide algo, hacelo y contá qué "
+        "hiciste; si es una pregunta, respondela; si no pide nada, alcanza con una "
+        "línea. No cambies el estado del ticket salvo que te lo pidan, y no te "
+        "desvíes a otra cosa: esto es solo un aviso de comentario."
     )
 
     def _enviar():
         try:
+            sid = notify_session_id()
+            if sid:
+                # Una sola sesion para todos los avisos: si usaramos
+                # /v1/chat/completions se crearia una conversacion nueva por
+                # cada comentario y le ensuciariamos la lista al cliente.
+                url = f"{AGENT_BASE}/api/sessions/{sid}/chat/stream"
+                payload = {"message": mensaje}
+            else:
+                url = f"{AGENT_BASE}/v1/chat/completions"
+                payload = {"messages": [{"role": "user", "content": mensaje}]}
             req = urllib.request.Request(
-                f"{AGENT_BASE}/v1/chat/completions",
-                data=json.dumps({"messages": [{"role": "user", "content": mensaje}]}).encode(),
+                url, data=json.dumps(payload).encode(),
                 headers={"Authorization": f"Bearer {TOKEN}",
                          "Content-Type": "application/json"},
                 method="POST",
             )
-            urllib.request.urlopen(req, timeout=600).read()
+            raw = urllib.request.urlopen(req, timeout=600).read()
+
+            # La respuesta va al ticket: si el humano comento ahi, ahi espera
+            # la contestacion, no en una sesion que nunca ve. El agente pone
+            # las palabras; el codigo se encarga de publicarlas.
+            if sid:
+                respuesta = _texto_final_sse(raw)
+            else:
+                try:
+                    d = json.loads(raw)
+                    respuesta = (d["choices"][0]["message"]["content"] or "").strip()
+                except Exception:  # noqa: BLE001
+                    respuesta = ""
+            # El gateway a veces streamea sus propios errores como si fueran la
+            # respuesta del agente ("HTTP 400: ... is not a valid model ID").
+            # Publicar eso en el ticket le muestra al cliente una falla nuestra
+            # con la firma del agente: mejor no comentar nada.
+            if re.match(r"^HTTP \d{3}\b", respuesta) or "is not a valid model" in respuesta:
+                respuesta = ""
+            if respuesta and "[SILENT]" not in respuesta:
+                # Firmado con el nombre del agente, distinto de `cliente` y de
+                # `portal`: en el detalle se lee de un vistazo quien dijo que.
+                comment_ticket(task_id, respuesta[:4000], safe_author(agent_name(), "agente"))
         except Exception:  # noqa: BLE001 — el aviso jamas puede tumbar el comentario
             pass
 
