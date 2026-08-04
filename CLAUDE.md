@@ -55,7 +55,8 @@ pipeline, aprobaciones, artefactos y tareas, marcados con TODO).
 
 | Archivo | Para qué |
 |---|---|
-| `docs/COMPACT.md` | endpoints verificados y **lecciones duras**. Empezá acá. |
+| `docs/COMPACT.md` | estado, endpoints verificados y **lecciones duras**. Empezá acá. |
+| `docs/PENDIENTES.md` | qué quedó abierto y quién lo destraba |
 | `docs/alta-cliente.md` | runbook de alta de un cliente nuevo, paso a paso |
 | `docs/toolkit-agentes.md` | qué construimos una vez y reusamos en cada agente |
 | `docs/roadmap-portal.md` | features por pestaña + temas grandes por definir |

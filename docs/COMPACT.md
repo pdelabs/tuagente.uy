@@ -1,86 +1,118 @@
-# COMPACT — Estado del proyecto portal tuagente (2026-08-03 18:20)
+# COMPACT — estado del proyecto (2026-08-04, tarde)
 
-Contexto destilado para humanos y subagentes. Fuente de verdad de hechos VERIFICADOS.
+Contexto destilado para humanos y subagentes. **Fuente de verdad de hechos
+VERIFICADOS.** Lo que no diga "verificado", tratarlo como hipótesis.
 
-## PRINCIPIO CERO — Producto genérico
-El portal sirve a CUALQUIER agente Hermes de cualquier cliente. Nada específico
-de La Mano/pdelabs/leads en el código: ni nombres, ni parseo de títulos, ni
-supuestos de dominio. La Mano es SOLO el entorno de prueba local (fixture).
-Lo que el portal sabe del agente lo sabe por el manifest y por datos genéricos
-de Hermes (tickets, jobs, sesiones, archivos).
+## Los cuatro repos
 
-## Qué es
-Portal web client-facing para agentes Hermes (producto tuagente, by pdelabs).
-Spec madre: docs/spec-portal-agente.md (v1.4). Principios: agente = única infra
-y fuente de verdad · portal estático (Next 14 en Vercel, este repo) · ventana
-no jaula (manifest de capacidades) · adapter solo donde la auth lo exige.
+| Repo | Qué es |
+|---|---|
+| `tuagente.uy` | landing pública + **portal del cliente** (`app/app/`) + `docs/` |
+| `hermes-kit` | **lo que se instala en el agente de cada cliente** (producto) |
+| `agente-pdelabs` | La Mano — el agente de pdelabs, **cliente 0** y fixture |
+| `pdelabs-landing` | pdelabs.com, sin relación con esto |
 
-## Infraestructura local (demo con La Mano)
-- Agente Hermes "La Mano": docker, repo ~/Desktop/Luis/Projects/agente-pdelabs
-- API server (gateway): http://localhost:8642 — bearer = API_SERVER_KEY
-  (en ~/Desktop/Luis/Projects/agente-pdelabs/data/.env; los subagentes la leen de ahí)
-- Adapter sidecar PoC: http://localhost:8643 (data/scripts/portal_adapter.py,
-  servicio portal-adapter en el docker-compose del repo agente-pdelabs)
-- CORS: resuelto vía env API_SERVER_CORS_ORIGINS (ya incluye localhost:8090 y
-  app.tuagente.uy; para dev Next agregar http://localhost:3000 si hace falta)
+**PRINCIPIO CERO:** el portal sirve a CUALQUIER agente Hermes de cualquier
+cliente. Nada específico de un cliente entra al código ni al copy fijo.
 
-## Endpoints VERIFICADOS en :8642 (bearer, sin adapter)
-- POST /v1/chat/completions (stream OK, formato OpenAI) · GET /v1/models
-- GET /api/sessions (epoch en SEGUNDOS; `?limit=`) · GET /api/sessions/{id}/messages
-- POST /api/sessions (crea; devuelve {object, session:{id,…}})
-- PATCH /api/sessions/{id} {title} → 200 renombra · DELETE /api/sessions/{id} → 200
-  (PUT da 405; no existe /rename)
-- POST /api/sessions/{id}/chat/stream — body {"message": "..."} SINGULAR y SSE
-  NATIVO de Hermes (run.started / message.started / assistant.delta {delta} /
-  tool.progress {tool_name, "_thinking"} / assistant.completed / run.completed /
-  done). NO es compatible con el parser OpenAI: mandar {messages} da 400.
-- GET /api/jobs — ¡EXCLUYE los pausados! usar ?include_disabled=true
-- POST /api/jobs/{id}/pause|resume|run · GET/PATCH/DELETE /api/jobs/{id}
-- GET /health
+## Arquitectura
 
-## En :8643 (adapter propio, hoy v0.11.0 — vive en el repo hermes-kit)
-Todos bearer + CORS por env PORTAL_CORS_ORIGINS; nombre del agente por env AGENT_NAME.
-- GET /portal/manifest (módulos por detección real) · GET /portal/tickets
-- GET /portal/tickets/{id} → {ticket, comments[], events[]}
-- GET /portal/approvals · POST /portal/approvals/{id}/approve|reject {reason}
-- GET /portal/activity (job_run + eventos del kanban) · GET /portal/usage (+daily 14d)
-- GET /portal/files · GET /portal/files/{path} (siempre text/plain)
-- POST /portal/tickets · POST /portal/tickets/{id}/comment · .../status
-- POST /portal/approvals/{id}/approve — acepta `{correction}` opcional
-- GET /portal/artifacts · GET/DELETE /portal/artifacts/{id}
-- GET /portal/crons/{id} → {job (con el prompt real), runs[]}
-- POST /portal/upload {name, content_b64} → guarda en workspace/entrada/
-- POST /portal/sessions/{id}/chat/stream — proxy del stream (el gateway lo
-  sirve sin CORS y el browser lo descarta)
+Portal estático (Next 14) → dos servicios **del agente del cliente**:
+- **`:8642`** gateway de Hermes (nativo): chat, sesiones, jobs.
+- **`:8643`** `portal_adapter.py` (nuestro sidecar, vive en el kit): tickets,
+  aprobaciones, artefactos, archivos, actividad, uso, capacidades, subidas, y el
+  **proxy del stream de chat** (el gateway lo sirve sin CORS y el browser lo
+  descarta). Hoy **v0.17.0**.
 
-## Bloqueo "pegajoso" del kanban (leído del código y verificado, 2026-08-03)
-Un ticket `blocked` vuelve solo a `ready` salvo que el bloqueo sea **sticky**, y
-sticky significa: el último evento `blocked`/`unblocked` del ticket es `blocked`.
-Quien promueve es `recompute_ready()` del dispatcher — y **`hermes kanban list`
-también la ejecuta**, así que basta con LISTAR para dispararla.
-- Bloquear con `hermes kanban block` → deja el evento → aguanta (verificado: 10s+
-  de dispatcher y varios comentarios sin moverse).
-- Crear con `--initial-status blocked` (o meterlo por SQL) → NO deja el evento →
-  se auto-promueve enseguida (verificado: ya estaba `ready` antes de comentarlo).
-- Comentar NO promueve nada por sí mismo (era nuestra hipótesis vieja, es falsa).
-Consecuencia para el adapter: los caminos de escritura no llaman a `list` ni a
-`unblock`, y el estado se lee por SQL en modo lectura.
+Auth: bearer con `API_SERVER_KEY` por magic link `#endpoint=&adapter=&key=`.
+`app/app/lib/agent.ts` es el ÚNICO punto de red del portal.
+
+## El portal (10 pestañas)
+
+Inicio · Chat · Pipeline · Aprobaciones · Artefactos · Tareas · Actividad ·
+Archivos · Uso · Capacidades. Cada una con su bienvenida propia
+(`app/app/lib/intros/`). Kit UI sin sombras, hairline, lucide, cero emojis.
+
+Se puede: chatear con markdown rico (código, KaTeX, mermaid, HTML sanitizado,
+artefactos en iframe aislado), adjuntar archivos, referenciar tickets con `#` y
+archivos con `@`, crear/comentar/cambiar estado de tickets, **corregir un
+borrador y aprobarlo**, ver la consigna real de cada tarea programada con su
+historial, y el costo en USD por canal y por modelo.
+
+Un comentario desde el portal **despierta al agente** (el adapter le manda la
+ficha del ticket con fechas) y **su respuesta se publica como comentario en el
+mismo ticket**. Todos los avisos usan una sola sesión, oculta del chat.
+
+## El kit
+
+`nuevo-agente.sh` (crea el repo del cliente: compose, config.yaml, SOUL borrador,
+skills, plugin, adapter) · `install.sh` (instala/actualiza; `--diff` contra la
+deriva) · `adapter/` · `skills/` (artifact, entregable, aprobacion) ·
+`plugins/kanban_tools/` (**provisorio**, ver su `DECISION.md`) · `soul/` (bloques
+con placeholders) · `onboarding/brief-empresa.md` · `tools/portal-check.py`
+(**0 fallas o no se entrega**; hoy 13 ok / 0 fallas).
+
+## Hechos verificados sobre Hermes (MIT, Nous Research)
+
+- **Skills:** se auto-descubren (un manifiesto mtime+tamaño dispara la
+  reindexación, sin comandos ni reinicio) pero **tardan** (~20 min observado).
+  Cada `SKILL.md` **necesita frontmatter con `name` y `description`**: sin eso se
+  indexa con descripción vacía y el agente no la usa nunca.
+- **Bloqueo pegajoso:** un ticket vuelve solo a `ready` salvo que su último
+  evento sea un `blocked` **tipado**. Demostrado con control: uno creado con
+  `--initial-status blocked` pasó a `ready` en ~75 s; uno bloqueado con la acción
+  aguantó. **Un pedido de aprobación creado "bloqueado" se lee como aprobado.**
+  Las herramientas nativas no exponen el estado inicial: por ahí no es alcanzable.
+- **Toolsets:** existe `cronjob` (habilitado) y existe un toolset `kanban` con 12
+  herramientas **cerrado** por `check_fn` (worker del dispatcher o
+  `toolsets: [kanban]` en el perfil). **SIN RESOLVER:** con esa config el
+  presupuesto de esquemas sube de 50 a 70 KB pero el agente responde que NO tiene
+  `kanban_show`. Sospecha no confirmada: el gateway resuelve otro perfil.
+- **Contexto:** ~30 KB de system prompt + ~50 KB de esquemas (27-30 tools). De
+  los 30 KB, ~16 son Hermes hablando de sí mismo (le dice que es "Hermes Agent by
+  Nous Research" y que dar soporte del runtime es parte de su trabajo).
+  `hermes tools disable <toolset>` es la palanca grande, sin usar todavía.
+- **Crons:** se crean por CLI, no por yaml. Una tarea creada desde una sesión del
+  portal entrega a esa sesión, **que no puede recibir mensajes**: corre bien y no
+  llega nada, sin aviso.
+- **Tableros:** el default es `kanban.db`; los demás en
+  `kanban/boards/<slug>/kanban.db` con un `board.json` que ya trae `project_id`.
+  El adapter los lista y acepta `?board=`; las escrituras van al default.
+
+## Endpoints verificados
+
+**:8642** — `POST /v1/chat/completions` (stream OpenAI) · `GET/POST /api/sessions`
+· `PATCH`/`DELETE /api/sessions/{id}` · `POST /api/sessions/{id}/chat/stream`
+(body `{message}` singular, **SSE nativo**, incompatible con el parser OpenAI) ·
+`GET /api/jobs?include_disabled=true` (¡sin eso esconde los pausados!) ·
+`POST /api/jobs/{id}/pause|resume|run` · `GET /health`.
+
+**:8643** — `manifest` · `tickets` (+`/{id}`, POST crear, comentar, estado) ·
+`approvals` (+approve con `{correction}` opcional, reject) · `artifacts`
+(+`/{id}`, DELETE) · `activity` · `usage` · `files` (+`/{path}`, siempre
+text/plain) · `crons/{id}` · `capabilities` · `boards` · `POST upload` ·
+`POST sessions/{id}/chat/stream` (proxy).
 
 ## Lecciones duras (NO repetir)
-0. Al commitear en un repo donde hay subagentes escribiendo, NUNCA `git add -A`:
-   se lleva su trabajo a medio hacer (ya pasó, partió un cambio en dos commits).
-   Stagear rutas explícitas.
-1. kanban.db: JAMÁS escribir SQL directo (locks/claims/dispatcher → corrupción).
-   Escrituras vía CLI `hermes kanban ...` por subprocess DESDE EL SIDECAR
-   (fuera del gateway el guard no aplica — patrón verificado) o módulos internos.
-2. docker exec con heredoc: SIEMPRE -i.
-3. Archivos servidos al browser: siempre text/plain (anti-XSS).
-4. El binario hermes desde el terminal DEL AGENTE está vetado por el guard —
-   pero desde el sidecar/host funciona.
-5. A los agentes LLM: exigir resultado + verificar con script; no prescribir método.
 
-## Estética (de tailwind.config.ts de ESTE repo — usarla, no inventar)
-M3 expressive: primary #5B4BE8, surface #FBFAFF, ink #14131F, cards tonales
-c-violet/c-green/c-coral/c-amber (+ sus *-ink), radius card 2rem / pill,
-shadow-soft, font Plus Jakarta (var --font-jakarta). Simplista: pocas cosas,
-grandes, redondeadas, tonales. Sin dark mode en v1 (la landing no lo tiene).
+0. **Verificar el camino del cliente, no la pieza recién construida.** Todos los
+   huecos de hoy aparecieron cuando Luis empujó, y todos morían con un solo
+   comando. Antes de decir "listo": correr el flujo entero desde el estado en que
+   lo encontraría un cliente, y separar lo verificado de lo inferido.
+1. **kanban.db: jamás SQL de escritura.** Y para leer, `PRAGMA query_only`, NO
+   `mode=ro`: en WAL, una conexión de solo lectura crea el `-shm` sin permiso de
+   escritura y **rompe a todo el que quiera escribir** (nos tumbaba el dashboard
+   de Hermes al ritmo del polling).
+2. **Las memorias del agente pisan las herramientas.** Se había escrito solo la
+   receta del terminal y la siguió usando aun con herramientas nativas
+   disponibles. Dar una herramienta nueva incluye revisar qué tiene memorizado.
+3. **Telegram: jamás diagnosticar con `getUpdates` desde afuera** — hay un solo
+   long-poll por bot: la sonda le corta la conexión al agente y fabrica la falla
+   que quiere medir. Verificar en pasivo con `docker logs`.
+4. `docker exec` con heredoc: siempre `-i`. Archivos al browser: siempre
+   `text/plain`. Nunca `git add -A` con subagentes escribiendo.
+5. `hermes kanban`: opciones `--flag=valor` y `--` antes de los posicionales.
+
+## Estética
+M3 expressive del `tailwind.config.ts`: primary #5B4BE8, surface #FBFAFF,
+ink #14131F, tonales c-violet/c-green/c-coral/c-amber, Jakarta. Sin sombras.
