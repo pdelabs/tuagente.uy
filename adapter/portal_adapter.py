@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.15.0"
+VERSION = "0.16.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -541,15 +541,28 @@ def notify_agent_of_comment(task_id, body, author):
         if detalle:
             t = detalle["ticket"]
             previos = [c for c in detalle["comments"] if c["body"] != body][-4:]
+            # Las FECHAS son imprescindibles: sin ellas el agente no puede
+            # razonar sobre "hoy"/"ayer" y termina adivinando (paso: dijo dos
+            # fechas distintas, ninguna verificada, y cambio de version cuando
+            # el cliente lo apreto en vez de cuando chequeo el dato).
+            def cuando(ts):
+                try:
+                    return time.strftime("%Y-%m-%d %H:%M", time.localtime(float(ts)))
+                except (TypeError, ValueError):
+                    return "?"
+
             ficha = (
                 f"\n\n--- Ficha del ticket (ya te la traigo, no la busques) ---\n"
+                f"Ahora son las {time.strftime('%Y-%m-%d %H:%M')}.\n"
                 f"Título: {t['title']}\nEstado: {t['status']}\n"
+                f"Creado: {cuando(t.get('created_at'))}\n"
                 + (f"Etiqueta: {t['tenant']}\n" if t.get("tenant") else "")
                 + f"\nDescripción:\n{(t['body'] or '(sin descripción)')[:2000]}\n"
             )
             if previos:
-                ficha += "\nComentarios anteriores:\n" + "\n".join(
-                    f"- {c['author']}: {c['body'][:300]}" for c in previos
+                ficha += "\nComentarios anteriores (con su fecha):\n" + "\n".join(
+                    f"- [{cuando(c.get('created_at'))}] {c['author']}: {c['body'][:300]}"
+                    for c in previos
                 )
     except sqlite3.Error:
         pass
