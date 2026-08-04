@@ -29,6 +29,9 @@ ARCHIVOS=(
   "skills/entregable/deliver.py:skills/entregable/deliver.py"
   "skills/aprobacion/SKILL.md:skills/aprobacion/SKILL.md"
   "skills/aprobacion/format_request.py:skills/aprobacion/format_request.py"
+  "plugins/kanban_tools/plugin.yaml:plugins/kanban_tools/plugin.yaml"
+  "plugins/kanban_tools/__init__.py:plugins/kanban_tools/__init__.py"
+  "plugins/kanban_tools/tools.py:plugins/kanban_tools/tools.py"
 )
 
 if [[ "$MODO" == "--diff" ]]; then
@@ -71,6 +74,12 @@ Instalado. Lo que falta hacer a mano:
 
   1. Componer el SOUL con los bloques de soul/ (ver soul/README.md).
      Sin eso el agente tiene las herramientas pero no las reglas.
+  1b. Habilitar el plugin de kanban en data/config.yaml:
+        plugins:
+          enabled:
+            - kanban_tools
+      Sin esto el agente no puede tocar sus propios tickets (los improvisa
+      con Python y falla). Requiere reiniciar el gateway.
   2. En el docker-compose: AGENT_NAME, TZ y los dos CORS
      (API_SERVER_CORS_ORIGINS y PORTAL_CORS_ORIGINS).
   3. docker compose up -d
