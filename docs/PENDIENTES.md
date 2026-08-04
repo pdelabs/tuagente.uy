@@ -38,21 +38,31 @@ Lo que quedó abierto, con quién lo destraba. Cerrar acá cuando se resuelva.
 
 ## Técnicos, priorizados
 
-1. **El gate del toolset `kanban` de Hermes.** Es lo que decide si borramos
-   nuestro plugin (ver `hermes-kit/plugins/kanban_tools/DECISION.md`). Cuando se
-   entienda, mandar el issue upstream con la reproducción.
-2. **Probar el alta completa con un agente descartable**: correr `nuevo-agente.sh`
-   y el runbook entero como si fuera un cliente nuevo, y anotar todo lo que se
-   rompe. Es lo que habría cachado antes los huecos del `config.yaml`.
-3. **Bajar el contexto fijo**: `hermes tools disable` sobre toolsets que un
+1. ~~El gate del toolset `kanban`~~ **RESUELTO el 4/8**: hacen falta `toolsets:
+   [kanban]` **y** `platform_toolsets` con kanban por plataforma. El plugin se
+   borró del kit. Receta y reproducción en `hermes-kit/notas/kanban-nativo.md`.
+   Queda **mandar el issue upstream** con esa reproducción (un toolset gateado
+   por `check_fn` y no declarado configurable queda inalcanzable por config, sin
+   ningún mensaje que lo diga).
+2. **Migrar La Mano a la receta nueva.** Hoy sigue con el plugin `kanban_tools`,
+   que funciona pero ya no existe en el kit. El cambio es en `data/config.yaml`:
+   sacar `plugins.enabled: [kanban_tools]`, agregar el bloque
+   `platform_toolsets` (dejar `toolsets: [kanban]`, que sigue haciendo falta) y
+   reiniciar el gateway **sin trabajo en vuelo**. Verificar después con
+   `hermes-kit/tools/agente-check.py`.
+3. ~~Probar el alta completa con un agente descartable~~ **HECHO el 4/8**: se creó
+   "Acme" desde cero, pasó `portal-check` con 11 ok / 0 fallas, y el agente creó
+   y mostró un ticket con las tools nativas. Lo que salió de ahí: el chequeo
+   offline `agente-check.py`, la receta de kanban y el frontmatter faltante.
+4. **Bajar el contexto fijo**: `hermes tools disable` sobre toolsets que un
    agente de cliente no usa (tts, vision, delegation, browser…), midiendo con
    `hermes prompt-size` antes y después. También sacar del SOUL las muletas que
    ya no hacen falta.
-4. **Graduar los fetchers locales del portal a `lib/agent.ts`** (pipeline,
+5. **Graduar los fetchers locales del portal a `lib/agent.ts`** (pipeline,
    aprobaciones, artefactos, tareas tienen su propia copia, marcada con TODO).
-5. **Vigilar** que el error de `kanban.db-shm` no vuelva (arreglado con
+6. **Vigilar** que el error de `kanban.db-shm` no vuelva (arreglado con
    `PRAGMA query_only`, pero conviene mirarlo un par de días).
-6. **43 dossiers en `workspace/leads/`** cuyos tickets borró la purga del 3/8.
+7. **43 dossiers en `workspace/leads/`** cuyos tickets borró la purga del 3/8.
    Son investigación real de 43 empresas: **recomiendo conservarlos**, son la
    materia prima de la lista de prospección. Cerrar salvo que se decida otra cosa.
 
@@ -60,5 +70,6 @@ Lo que quedó abierto, con quién lo destraba. Cerrar acá cuando se resuelva.
 
 - **Railway / sacar el agente de la Mac**: pospuesto a propósito hasta terminar
   de iterar la interfaz.
-- **Orquestación de workers** y **edición del cuerpo de un ticket**: fuera de la
-  v1 del plugin de kanban.
+- **Orquestación de workers** (asignar, reclamar, despachar, swarm): las tools
+  nativas de Hermes no la exponen fuera de un worker del dispatcher, y no la
+  necesitamos.

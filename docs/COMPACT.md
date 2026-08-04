@@ -63,11 +63,14 @@ con placeholders) · `onboarding/brief-empresa.md` · `tools/portal-check.py`
   `--initial-status blocked` pasó a `ready` en ~75 s; uno bloqueado con la acción
   aguantó. **Un pedido de aprobación creado "bloqueado" se lee como aprobado.**
   Las herramientas nativas no exponen el estado inicial: por ahí no es alcanzable.
-- **Toolsets:** existe `cronjob` (habilitado) y existe un toolset `kanban` con 12
-  herramientas **cerrado** por `check_fn` (worker del dispatcher o
-  `toolsets: [kanban]` en el perfil). **SIN RESOLVER:** con esa config el
-  presupuesto de esquemas sube de 50 a 70 KB pero el agente responde que NO tiene
-  `kanban_show`. Sospecha no confirmada: el gateway resuelve otro perfil.
+- **Toolsets:** el toolset `kanban` (12 herramientas) necesita **dos** claves en
+  `config.yaml`: `toolsets: [kanban]` abre el `check_fn`, y `platform_toolsets`
+  con `kanban` por plataforma pasa el filtro con el que el gateway arma la
+  sesión. Con una sola, cero tools de kanban. `kanban` no está en
+  `CONFIGURABLE_TOOLSETS`, así que no se puede pedir por el camino normal.
+  Verificado el 4/8 con control en un agente descartable; receta y reproducción
+  en `hermes-kit/notas/kanban-nativo.md`. **Nuestro plugin se borró**: lo único
+  que hacía era declarar `kanban` en `provides_tools` y destrabarlo de rebote.
 - **Contexto:** ~30 KB de system prompt + ~50 KB de esquemas (27-30 tools). De
   los 30 KB, ~16 son Hermes hablando de sí mismo (le dice que es "Hermes Agent by
   Nous Research" y que dar soporte del runtime es parte de su trabajo).
