@@ -56,9 +56,17 @@ function headers(cfg: PortalConfig): HeadersInit {
   return { Authorization: `Bearer ${cfg.key}` };
 }
 
+/** Error de red con el status a mano: los módulos distinguen 404 de caída. */
+export type HttpError = Error & { status?: number };
+function httpError(status: number, path: string): HttpError {
+  const e: HttpError = new Error(`${status} en ${path}`);
+  e.status = status;
+  return e;
+}
+
 async function get<T>(base: string, path: string, cfg: PortalConfig): Promise<T> {
   const res = await fetch(base + path, { headers: headers(cfg) });
-  if (!res.ok) throw new Error(`${res.status} en ${path}`);
+  if (!res.ok) throw httpError(res.status, path);
   return res.json();
 }
 
@@ -68,7 +76,7 @@ async function post<T>(base: string, path: string, cfg: PortalConfig, body?: unk
     headers: { ...headers(cfg), "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`${res.status} en ${path}`);
+  if (!res.ok) throw httpError(res.status, path);
   return res.json();
 }
 
@@ -89,7 +97,7 @@ export const getActivity = (c: PortalConfig) => get<{ events: any[] }>(c.adapter
 export const getFiles = (c: PortalConfig) => get<{ files: any[] }>(c.adapter, "/portal/files", c);
 export const getFileText = async (c: PortalConfig, path: string) => {
   const res = await fetch(`${c.adapter}/portal/files/${encodeURIComponent(path)}`, { headers: headers(c) });
-  if (!res.ok) throw new Error(`${res.status}`);
+  if (!res.ok) throw httpError(res.status, path);
   return res.text();
 };
 export const getUsage = (c: PortalConfig) => get<any>(c.adapter, "/portal/usage", c);
@@ -116,7 +124,7 @@ export const deleteSession = async (c: PortalConfig, id: string) => {
     method: "DELETE",
     headers: headers(c),
   });
-  if (!res.ok) throw new Error(`${res.status} al borrar la sesión`);
+  if (!res.ok) throw httpError(res.status, "borrar la sesión");
 };
 export const renameSession = async (c: PortalConfig, id: string, title: string) => {
   const res = await fetch(`${c.endpoint}/api/sessions/${encodeURIComponent(id)}`, {
@@ -124,7 +132,7 @@ export const renameSession = async (c: PortalConfig, id: string, title: string) 
     headers: { ...headers(c), "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
   });
-  if (!res.ok) throw new Error(`${res.status} al renombrar la sesión`);
+  if (!res.ok) throw httpError(res.status, "renombrar la sesión");
 };
 
 export type ChatMessage = { role: "user" | "assistant" | "system"; content: string };

@@ -1,23 +1,39 @@
 "use client";
 
-// Pipeline — kanban read-only de tickets del agente (GET {adapter}/portal/tickets)
+// Pipeline — kanban de tickets del agente (GET {adapter}/portal/tickets)
 // + detalle con comentarios (GET {adapter}/portal/tickets/{id}).
+// Ya no es solo de lectura: el cliente crea tickets, comenta y mueve estados.
 // GENÉRICO: títulos, tenants, estados, autores y eventos se muestran tal cual
 // llegan; cero parseo de dominio. La prosa larga del agente (descripción y
 // comentarios) viene en markdown y se dibuja con <Markdown> — el mismo renderer
 // del chat, con HTML sanitizado. Las cards del tablero quedan en texto plano.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Inbox, RefreshCw, Search, SearchX, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Archive,
+  Check,
+  Inbox,
+  Loader2,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  SearchX,
+  Unlock,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import {
   loadConfig,
   getTickets,
   getTicketDetail,
   type PortalConfig,
   type Ticket,
+  type TicketComment,
   type TicketDetail,
 } from "../lib/agent";
 import {
+  Btn,
   Chip,
   EmptyState,
   ErrorState,
@@ -31,6 +47,102 @@ import Markdown from "../lib/Markdown";
 
 const REFRESH_MS = 30_000;
 const SIN_TENANT = "__sin_tenant__"; // sentinel para tickets con tenant null
+
+/* ── Autoría ─────────────────────────────────────────────────────────────── */
+
+const AUTOR_PROPIO = "cliente";
+// `portal` es como firmaba el adapter antes de que existiera el autor por
+// comentario (aprobaciones): también es el cliente.
+const AUTORES_PROPIOS = new Set([AUTOR_PROPIO, "portal"]);
+
+function esPropio(author: string): boolean {
+  return AUTORES_PROPIOS.has((author || "").trim().toLowerCase());
+}
+
+// Hermes firma los comentarios del agente con el autor del CLI (`default`).
+// Mostrar eso crudo no le dice nada al cliente; cualquier otro nombre sí.
+function rotuloAutor(author: string): string {
+  if (esPropio(author)) return "Vos";
+  const a = (author || "").trim();
+  return !a || a.toLowerCase() === "default" ? "Tu agente" : a;
+}
+
+/* ── Escrituras del portal ───────────────────────────────────────────────────
+   TODO: estas tres funciones DEBERÍAN GRADUARSE a ../lib/agent.ts, que es el
+   único punto de red del portal. Viven acá porque lib/ la está tocando otro
+   agente en paralelo. Al mover: son el mismo `post()` de la lib, con una
+   diferencia que vale la pena conservar — leen el `{error}` del cuerpo para
+   poder mostrárselo al cliente (la lib hoy tira solo el status). Contrato:
+     POST /portal/tickets                {title, body?, tenant?} → {ok, id}
+     POST /portal/tickets/{id}/comment   {body, author?}         → {ok}
+     POST /portal/tickets/{id}/status    {status}                → {ok}
+   ────────────────────────────────────────────────────────────────────────── */
+
+type EstadoDestino = "done" | "blocked" | "ready" | "archived";
+
+class PortalError extends Error {
+  status: number; // 0 = ni siquiera salió el request
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "PortalError";
+    this.status = status;
+  }
+}
+
+async function escribir<T>(cfg: PortalConfig, path: string, body: unknown): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(cfg.adapter + path, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new PortalError(0, "No hay conexión con tu agente.");
+  }
+  let data: unknown = null;
+  try {
+    data = await res.json();
+  } catch {
+    /* el adapter puede contestar sin cuerpo JSON */
+  }
+  if (!res.ok) {
+    const detalle =
+      data && typeof data === "object" && typeof (data as { error?: unknown }).error === "string"
+        ? (data as { error: string }).error
+        : `Error ${res.status}`;
+    throw new PortalError(res.status, detalle);
+  }
+  return data as T;
+}
+
+const crearTicket = (
+  cfg: PortalConfig,
+  input: { title: string; body?: string; tenant?: string },
+) => escribir<{ ok?: boolean; id?: string }>(cfg, "/portal/tickets", input);
+
+const comentarTicket = (cfg: PortalConfig, id: string, body: string) =>
+  escribir<{ ok?: boolean }>(cfg, `/portal/tickets/${encodeURIComponent(id)}/comment`, {
+    body,
+    author: AUTOR_PROPIO,
+  });
+
+const cambiarEstadoTicket = (cfg: PortalConfig, id: string, status: EstadoDestino) =>
+  escribir<{ ok?: boolean }>(cfg, `/portal/tickets/${encodeURIComponent(id)}/status`, { status });
+
+function describirError(e: unknown): string {
+  if (e instanceof PortalError) {
+    if (e.status === 404) return "Tu agente todavía no expone esta acción (falta actualizarlo).";
+    if (e.status === 401 || e.status === 403) return "Tu sesión venció: volvé a entrar con tu link.";
+    return e.message; // el adapter explica los 400 / 409 / 502
+  }
+  const msg = e instanceof Error ? e.message : String(e);
+  if (msg.includes("Failed to fetch") || msg.includes("NetworkError"))
+    return "No hay conexión con tu agente.";
+  return msg;
+}
+
+/* ── Tablero ─────────────────────────────────────────────────────────────── */
 
 type ColKey = "blocked" | "active" | "done";
 
@@ -52,6 +164,18 @@ function columnOf(status: string): ColKey {
   if (status === "blocked") return "blocked";
   if (status === "done") return "done";
   return "active";
+}
+
+// Transiciones que tienen sentido desde el estado actual. Archivar va aparte:
+// se ofrece siempre y con confirmación.
+type Transicion = { status: EstadoDestino; label: string; enCurso: string; icon: LucideIcon };
+
+function transicionesDe(status: string): Transicion[] {
+  if (status === "blocked")
+    return [{ status: "ready", label: "Desbloquear", enCurso: "Desbloqueando…", icon: Unlock }];
+  if (status === "done")
+    return [{ status: "ready", label: "Reabrir", enCurso: "Reabriendo…", icon: RotateCcw }];
+  return [{ status: "done", label: "Marcar completado", enCurso: "Completando…", icon: Check }];
 }
 
 // created_at llega del adapter como epoch en SEGUNDOS (int), aunque a veces la
@@ -102,6 +226,27 @@ function FiltroTenant({ activo, onClick, children }: {
   );
 }
 
+function Aviso({ children }: { children: ReactNode }) {
+  return (
+    <p className="rounded-lg border border-c-coral bg-c-coral/40 px-3 py-2 text-[13px] text-c-coral-ink">
+      {children}
+    </p>
+  );
+}
+
+function Etiqueta({ children, opcional }: { children: string; opcional?: boolean }) {
+  return (
+    <span className="mb-1.5 block text-[12px] font-semibold text-ink">
+      {children}
+      {opcional && <span className="ml-1 font-normal text-ink-soft">(opcional)</span>}
+    </span>
+  );
+}
+
+// Comentario todavía sin confirmar por el agente: se pinta igual que los
+// propios pero atenuado, y desaparece si el POST falla.
+type ComentarioLocal = TicketComment & { local: number };
+
 export default function PipelinePage() {
   const [cfg] = useState<PortalConfig | null>(() => loadConfig());
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
@@ -110,10 +255,36 @@ export default function PipelinePage() {
   const [ultima, setUltima] = useState<Date | null>(null);
   const [tenant, setTenant] = useState<string | null>(null); // null = todos
   const [busqueda, setBusqueda] = useState("");
-  const [abierto, setAbierto] = useState<Ticket | null>(null);
+
+  // Detalle abierto. Guardo el id (no el ticket) para poder abrir uno recién
+  // creado que el tablero todavía no trajo, y para que el header del modal
+  // refleje el estado fresco que devuelve el detalle tras cada acción.
+  const [abiertoId, setAbiertoId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<TicketDetail | null>(null);
   const [detalleError, setDetalleError] = useState(false);
   const [detalleCargando, setDetalleCargando] = useState(false);
+  const abiertoRef = useRef<string | null>(null); // el id vigente, sin esperar al render
+
+  // Alta de ticket.
+  const [crearAbierto, setCrearAbierto] = useState(false);
+  const [nuevoTitulo, setNuevoTitulo] = useState("");
+  const [nuevoBody, setNuevoBody] = useState("");
+  const [nuevoTenant, setNuevoTenant] = useState("");
+  const [creando, setCreando] = useState(false);
+  const [crearError, setCrearError] = useState<string | null>(null);
+
+  // Comentarios.
+  const [borrador, setBorrador] = useState("");
+  const [comentando, setComentando] = useState(false);
+  const [pendientes, setPendientes] = useState<ComentarioLocal[]>([]);
+  const [comentarError, setComentarError] = useState<string | null>(null);
+  const seqLocal = useRef(0);
+
+  // Cambios de estado.
+  const [accionEnCurso, setAccionEnCurso] = useState<EstadoDestino | null>(null);
+  const [accionError, setAccionError] = useState<string | null>(null);
+  const [confirmarArchivo, setConfirmarArchivo] = useState(false);
+
   const enVuelo = useRef(false);
 
   const cargar = useCallback(async () => {
@@ -139,31 +310,80 @@ export default function PipelinePage() {
     return () => clearInterval(id);
   }, [cargar]);
 
-  // Detalle del ticket abierto (comentarios + historial).
-  useEffect(() => {
-    if (!abierto || !cfg) return;
-    let vivo = true; // descarta respuestas de un ticket ya cerrado/cambiado
+  // Detalle: devuelve lo leído para que quien escribe sepa si pudo confirmar.
+  // Descarta la respuesta si el cliente ya cerró o cambió de ticket.
+  const cargarDetalle = useCallback(
+    async (id: string): Promise<TicketDetail | null> => {
+      if (!cfg) return null;
+      try {
+        const d = await getTicketDetail(cfg, id);
+        if (abiertoRef.current === id) {
+          setDetalle(d);
+          setDetalleError(false);
+          setDetalleCargando(false);
+        }
+        return d;
+      } catch {
+        if (abiertoRef.current === id) {
+          setDetalleError(true);
+          setDetalleCargando(false);
+        }
+        return null;
+      }
+    },
+    [cfg],
+  );
+
+  // Todo lo que es "por ticket" se resetea acá; ningún otro lugar toca abiertoId.
+  const abrir = useCallback((id: string) => {
+    abiertoRef.current = id;
+    setAbiertoId(id);
     setDetalle(null);
     setDetalleError(false);
     setDetalleCargando(true);
-    getTicketDetail(cfg, abierto.id)
-      .then((d) => { if (vivo) setDetalle(d); })
-      .catch(() => { if (vivo) setDetalleError(true); })
-      .finally(() => { if (vivo) setDetalleCargando(false); });
-    return () => { vivo = false; };
-  }, [abierto, cfg]);
+    setBorrador("");
+    setPendientes([]);
+    setComentarError(null);
+    setAccionError(null);
+    setAccionEnCurso(null);
+    setConfirmarArchivo(false);
+  }, []);
 
-  // Modal: cerrar con Escape y bloquear el scroll de fondo.
+  const cerrar = useCallback(() => {
+    abiertoRef.current = null;
+    setAbiertoId(null);
+  }, []);
+
+  // El borrador del alta NO se limpia al cerrar: si el cliente cierra sin
+  // querer (click afuera), lo que escribió sigue ahí al volver a abrir.
+  const cerrarCrear = useCallback(() => {
+    setCrearAbierto(false);
+    setCrearError(null);
+  }, []);
+
   useEffect(() => {
-    if (!abierto) return;
-    const fn = (e: KeyboardEvent) => e.key === "Escape" && setAbierto(null);
+    if (abiertoId) cargarDetalle(abiertoId);
+  }, [abiertoId, cargarDetalle]);
+
+  // Modales: cerrar con Escape y bloquear el scroll de fondo.
+  const hayModal = crearAbierto || abiertoId !== null;
+  useEffect(() => {
+    if (!hayModal) return;
+    const fn = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (crearAbierto) {
+        if (!creando) cerrarCrear();
+      } else {
+        cerrar();
+      }
+    };
     window.addEventListener("keydown", fn);
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", fn);
       document.body.style.overflow = "";
     };
-  }, [abierto]);
+  }, [hayModal, crearAbierto, creando, cerrar, cerrarCrear]);
 
   // Tenants presentes en los datos (nunca hardcodeados).
   const tenants = useMemo(() => {
@@ -199,6 +419,89 @@ export default function PipelinePage() {
     return m;
   }, [visibles]);
 
+  // El detalle manda (trae el estado recién cambiado); si todavía no llegó,
+  // uso la card del tablero para pintar el modal sin esperar.
+  const abierto = useMemo<Ticket | null>(() => {
+    if (!abiertoId) return null;
+    return detalle?.ticket ?? (tickets ?? []).find((t) => t.id === abiertoId) ?? null;
+  }, [abiertoId, detalle, tickets]);
+
+  /* ── Acciones ──────────────────────────────────────────────────────────── */
+
+  const crear = async () => {
+    if (!cfg || creando) return;
+    const title = nuevoTitulo.trim();
+    if (!title) return;
+    const body = nuevoBody.trim();
+    const tnt = nuevoTenant.trim();
+    setCreando(true);
+    setCrearError(null);
+    try {
+      const res = await crearTicket(cfg, {
+        title,
+        ...(body ? { body } : {}),
+        ...(tnt ? { tenant: tnt } : {}),
+      });
+      setCrearAbierto(false);
+      setNuevoTitulo("");
+      setNuevoBody("");
+      setNuevoTenant("");
+      cargar(); // el tablero se pone al día por atrás
+      if (res?.id) abrir(res.id); // y abrimos el recién creado
+    } catch (e) {
+      setCrearError(describirError(e));
+    } finally {
+      setCreando(false);
+    }
+  };
+
+  const comentar = async () => {
+    if (!cfg || !abiertoId || comentando) return;
+    const body = borrador.trim();
+    if (!body) return;
+    const id = abiertoId;
+    const local = ++seqLocal.current;
+    setPendientes((p) => [
+      ...p,
+      { local, author: AUTOR_PROPIO, body, created_at: Math.floor(Date.now() / 1000) },
+    ]);
+    setBorrador("");
+    setComentarError(null);
+    setComentando(true);
+    try {
+      await comentarTicket(cfg, id, body);
+      // Releo el detalle para quedarme con el comentario tal como lo guardó el
+      // agente (timestamp y autor reales). Recién si eso vuelve bien saco el
+      // optimista; si la relectura falla, el comentario existe igual y lo dejo.
+      const d = await cargarDetalle(id);
+      if (d) setPendientes((p) => p.filter((c) => c.local !== local));
+    } catch (e) {
+      setPendientes((p) => p.filter((c) => c.local !== local));
+      setBorrador((actual) => actual || body); // le devolvemos lo que escribió
+      setComentarError(describirError(e));
+    } finally {
+      setComentando(false);
+    }
+  };
+
+  const cambiarEstado = async (status: EstadoDestino) => {
+    if (!cfg || !abiertoId || accionEnCurso) return;
+    const id = abiertoId;
+    setAccionEnCurso(status);
+    setAccionError(null);
+    try {
+      await cambiarEstadoTicket(cfg, id, status);
+      cargar();
+      if (status === "archived") cerrar(); // ya no está en el tablero
+      else await cargarDetalle(id);
+      setConfirmarArchivo(false);
+    } catch (e) {
+      setAccionError(describirError(e));
+    } finally {
+      setAccionEnCurso(null);
+    }
+  };
+
   const wrap = "mx-auto max-w-6xl px-6 py-6 md:px-8";
 
   if (!cfg) return <div className={wrap}><Spinner /></div>; // el layout muestra el login
@@ -213,6 +516,11 @@ export default function PipelinePage() {
         (a, b) => (toDate(b.created_at)?.getTime() ?? 0) - (toDate(a.created_at)?.getTime() ?? 0),
       )
     : [];
+  const comentarios: (TicketComment & { local?: number })[] = [
+    ...(detalle?.comments ?? []),
+    ...pendientes,
+  ];
+  const tenantsLibres = tenants.filter((t) => t !== SIN_TENANT);
 
   return (
     <div className={wrap}>
@@ -239,6 +547,10 @@ export default function PipelinePage() {
             <IconBtn label="Actualizar" disabled={cargando} onClick={cargar}>
               <RefreshCw className={`h-4 w-4 ${cargando ? "animate-spin" : ""}`} />
             </IconBtn>
+            <Btn onClick={() => setCrearAbierto(true)}>
+              <Plus className="h-4 w-4" />
+              Nuevo ticket
+            </Btn>
           </>
         }
       />
@@ -253,7 +565,7 @@ export default function PipelinePage() {
         <EmptyState
           icon={Inbox}
           title="Todavía no hay tickets"
-          hint="Cuando tu agente empiece a trabajar, los vas a ver acá."
+          hint="Creá el primero con “Nuevo ticket”, o esperá a que tu agente arranque uno."
         />
       ) : (
         <>
@@ -296,7 +608,7 @@ export default function PipelinePage() {
                       {porColumna[col.key].map((t) => (
                         <li key={t.id}>
                           <button
-                            onClick={() => setAbierto(t)}
+                            onClick={() => abrir(t.id)}
                             aria-haspopup="dialog"
                             className="block w-full rounded-lg border border-black/[0.07] bg-white p-3 text-left transition hover:border-primary/40"
                           >
@@ -321,59 +633,207 @@ export default function PipelinePage() {
         </>
       )}
 
-      {abierto && (
-        <Modal wide onClose={() => setAbierto(null)}>
+      {/* ── Alta de ticket ─────────────────────────────────────────────── */}
+      {crearAbierto && (
+        <Modal onClose={() => !creando && cerrarCrear()}>
           <div className="flex items-start justify-between gap-4 border-b border-black/[0.07] px-5 py-4">
             <div className="min-w-0">
-              <h2 className="text-base font-bold leading-snug text-ink">{abierto.title}</h2>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <Chip tone={colDe(abierto).tone}>{colDe(abierto).chip}</Chip>
-                {abierto.tenant && <Chip tone="neutral">{abierto.tenant}</Chip>}
-                <span className="text-[11px] text-ink-soft">{fmtRelativa(abierto.created_at)}</span>
-              </div>
+              <h2 className="text-base font-bold leading-snug text-ink">Nuevo ticket</h2>
+              <p className="mt-0.5 text-sm text-ink-soft">
+                Entra al tablero de tu agente como cualquier otro.
+              </p>
             </div>
-            <IconBtn label="Cerrar" onClick={() => setAbierto(null)}>
+            <IconBtn label="Cerrar" disabled={creando} onClick={cerrarCrear}>
+              <X className="h-4 w-4" />
+            </IconBtn>
+          </div>
+
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
+            <label className="block">
+              <Etiqueta>Título</Etiqueta>
+              <input
+                autoFocus
+                value={nuevoTitulo}
+                onChange={(e) => setNuevoTitulo(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && crear()}
+                placeholder="Qué necesitás que haga"
+                className={inputCls}
+              />
+            </label>
+
+            <label className="block">
+              <Etiqueta opcional>Descripción</Etiqueta>
+              <textarea
+                rows={5}
+                value={nuevoBody}
+                onChange={(e) => setNuevoBody(e.target.value)}
+                placeholder="Contexto, links, criterios de listo…"
+                className={`${inputCls} resize-y`}
+              />
+              <span className="mt-1 block text-[11px] text-ink-soft">Podés usar markdown.</span>
+            </label>
+
+            <label className="block">
+              <Etiqueta opcional>Etiqueta</Etiqueta>
+              <input
+                list="pipeline-tenants"
+                value={nuevoTenant}
+                onChange={(e) => setNuevoTenant(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && crear()}
+                placeholder="Un cliente, un área, un proyecto…"
+                className={inputCls}
+              />
+              <datalist id="pipeline-tenants">
+                {tenantsLibres.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+              <span className="mt-1 block text-[11px] text-ink-soft">
+                Sirve para filtrar el tablero. Elegí una de las que ya usás o escribí una nueva.
+              </span>
+            </label>
+
+            {crearError && <Aviso>No pude crear el ticket: {crearError}</Aviso>}
+          </div>
+
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-black/[0.07] px-5 py-3">
+            <Btn kind="ghost" size="sm" disabled={creando} onClick={cerrarCrear}>
+              Cancelar
+            </Btn>
+            <Btn kind="primary" size="sm" disabled={!nuevoTitulo.trim() || creando} onClick={crear}>
+              {creando ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creando…
+                </>
+              ) : (
+                "Crear ticket"
+              )}
+            </Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Detalle ────────────────────────────────────────────────────── */}
+      {abiertoId && (
+        <Modal wide onClose={cerrar}>
+          <div className="flex items-start justify-between gap-4 border-b border-black/[0.07] px-5 py-4">
+            <div className="min-w-0">
+              {abierto ? (
+                <>
+                  <h2 className="text-base font-bold leading-snug text-ink">{abierto.title}</h2>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <Chip tone={colDe(abierto).tone}>{colDe(abierto).chip}</Chip>
+                    {abierto.tenant && <Chip tone="neutral">{abierto.tenant}</Chip>}
+                    <span className="text-[11px] text-ink-soft">
+                      {fmtRelativa(abierto.created_at)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <h2 className="text-base font-bold leading-snug text-ink-soft">Abriendo ticket…</h2>
+              )}
+            </div>
+            <IconBtn label="Cerrar" onClick={cerrar}>
               <X className="h-4 w-4" />
             </IconBtn>
           </div>
 
           {/* min-w-0: sin esto una tabla o un bloque de código ancho estira el
               modal en vez de scrollear dentro de su propio contenedor. */}
-          <div className="min-w-0 overflow-y-auto px-5 py-4">
-            {abierto.body?.trim() ? (
+          <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+            {abierto?.body?.trim() ? (
               <Markdown>{abierto.body}</Markdown>
-            ) : (
+            ) : abierto ? (
               <p className="text-sm text-ink-soft">Este ticket no tiene descripción.</p>
-            )}
+            ) : null}
 
             <h3 className="mb-2 mt-6 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
               Comentarios
             </h3>
-            {detalleCargando ? (
+            {detalleCargando && !detalle ? (
               <Spinner />
-            ) : detalleError ? (
+            ) : detalleError && !detalle ? (
               <p className="text-sm text-ink-soft">No pude cargar los comentarios.</p>
-            ) : detalle && detalle.comments.length > 0 ? (
-              <ul className="flex flex-col gap-4">
-                {detalle.comments.map((c, i) => (
-                  <li key={i} className="min-w-0">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-[13px] font-semibold text-ink">{c.author}</span>
-                      <span className="text-[11px] text-ink-soft">{fmtRelativa(c.created_at)}</span>
-                    </div>
-                    {c.body?.trim() ? (
-                      <div className="mt-1">
-                        <Markdown>{c.body}</Markdown>
+            ) : comentarios.length > 0 ? (
+              <ul className="flex flex-col gap-3">
+                {comentarios.map((c, i) => {
+                  const propio = esPropio(c.author);
+                  const pendiente = c.local != null;
+                  return (
+                    <li
+                      key={c.local != null ? `l${c.local}` : `s${i}`}
+                      className={`flex min-w-0 ${propio ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={`min-w-0 max-w-[85%] rounded-lg border px-3 py-2 ${
+                          propio
+                            ? "border-c-violet bg-c-violet/50"
+                            : "border-black/[0.07] bg-black/[0.02]"
+                        } ${pendiente ? "opacity-60" : ""}`}
+                      >
+                        <div className="flex items-baseline gap-2">
+                          <span
+                            className={`text-[12px] font-semibold ${
+                              propio ? "text-c-violet-ink" : "text-ink"
+                            }`}
+                          >
+                            {rotuloAutor(c.author)}
+                          </span>
+                          <span className="text-[11px] text-ink-soft">
+                            {pendiente ? "enviando…" : fmtRelativa(c.created_at)}
+                          </span>
+                        </div>
+                        {c.body?.trim() ? (
+                          <div className="mt-1 [&>div]:text-[13px]">
+                            <Markdown>{c.body}</Markdown>
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-sm text-ink-soft">(sin texto)</p>
+                        )}
                       </div>
-                    ) : (
-                      <p className="mt-1 text-sm text-ink-soft">(sin texto)</p>
-                    )}
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
-              <p className="text-sm text-ink-soft">Sin comentarios.</p>
+              <p className="text-sm text-ink-soft">Sin comentarios todavía.</p>
             )}
+
+            {/* Comentar: el agente lo lee como cualquier otro comentario del ticket. */}
+            <div className="mt-3">
+              <textarea
+                rows={3}
+                value={borrador}
+                onChange={(e) => setBorrador(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") comentar();
+                }}
+                placeholder="Escribile algo a tu agente sobre este ticket…"
+                className={`${inputCls} resize-y`}
+              />
+              {comentarError && <div className="mt-2"><Aviso>{comentarError}</Aviso></div>}
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <span className="text-[11px] text-ink-soft">
+                  Podés usar markdown. Ctrl + Enter para enviar.
+                </span>
+                <Btn
+                  kind="primary"
+                  size="sm"
+                  disabled={!borrador.trim() || comentando}
+                  onClick={comentar}
+                >
+                  {comentando ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Enviando…
+                    </>
+                  ) : (
+                    "Comentar"
+                  )}
+                </Btn>
+              </div>
+            </div>
 
             {eventos.length > 0 && (
               <>
@@ -391,6 +851,77 @@ export default function PipelinePage() {
               </>
             )}
           </div>
+
+          {abierto && (
+            <div className="shrink-0 border-t border-black/[0.07] px-5 py-3">
+              {accionError && <div className="mb-2"><Aviso>{accionError}</Aviso></div>}
+              {confirmarArchivo ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[13px] text-ink">
+                    ¿Archivar el ticket? Sale del tablero.
+                  </p>
+                  <div className="flex shrink-0 gap-2">
+                    <Btn
+                      kind="ghost"
+                      size="sm"
+                      disabled={accionEnCurso !== null}
+                      onClick={() => setConfirmarArchivo(false)}
+                    >
+                      Cancelar
+                    </Btn>
+                    <Btn
+                      kind="danger"
+                      size="sm"
+                      disabled={accionEnCurso !== null}
+                      onClick={() => cambiarEstado("archived")}
+                    >
+                      {accionEnCurso === "archived" ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Archivando…
+                        </>
+                      ) : (
+                        "Sí, archivar"
+                      )}
+                    </Btn>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Btn
+                    kind="ghost"
+                    size="sm"
+                    disabled={accionEnCurso !== null}
+                    onClick={() => setConfirmarArchivo(true)}
+                  >
+                    <Archive className="h-4 w-4" />
+                    Archivar
+                  </Btn>
+                  {transicionesDe(abierto.status).map((t) => (
+                    <Btn
+                      key={t.status}
+                      kind={t.status === "done" ? "primary" : "secondary"}
+                      size="sm"
+                      disabled={accionEnCurso !== null}
+                      onClick={() => cambiarEstado(t.status)}
+                    >
+                      {accionEnCurso === t.status ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          {t.enCurso}
+                        </>
+                      ) : (
+                        <>
+                          <t.icon className="h-4 w-4" />
+                          {t.label}
+                        </>
+                      )}
+                    </Btn>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </Modal>
       )}
     </div>

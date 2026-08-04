@@ -22,7 +22,9 @@ export function IntroPage({ children, onOk, cta = "Empezar", note }: {
     <div className="flex min-h-screen items-center justify-center px-6 py-12">
       <div className="w-full max-w-3xl">
         {children}
-        <div className="mt-8 flex items-center gap-3">
+        {/* flex-wrap: en pantallas muy angostas la nota baja en vez de
+            aplastar el botón (el Btn tiene ancho mínimo propio). */}
+        <div className="mt-8 flex flex-wrap items-center gap-x-3 gap-y-2">
           <Btn onClick={onOk}>{cta}</Btn>
           {note && <span className="text-[12px] text-ink-soft">{note}</span>}
         </div>

@@ -11,7 +11,7 @@ import {
   MessageSquare, Unplug, type LucideIcon,
 } from "lucide-react";
 import {
-  loadConfig, clearConfig, getManifest,
+  loadConfig, clearConfig, getManifest, getApprovals,
   type PortalConfig, type Manifest,
 } from "./lib/agent";
 import { Btn, Spinner, inputCls } from "./lib/ui";
@@ -68,6 +68,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [state, setState] = useState<"loading" | "login" | "error" | "ok">("loading");
   const [online, setOnline] = useState(true);
+  const [pending, setPending] = useState(0);
   const { seen, dismiss } = useIntroGate();
 
   const boot = () => {
@@ -82,11 +83,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // El indicador tiene que decir la verdad: si el agente se apaga mientras el
   // portal está abierto, el punto verde mintiendo es peor que no tenerlo.
+  // De paso traemos los pendientes, que es lo que el cliente quiere ver al entrar.
   useEffect(() => {
     if (state !== "ok" || !cfg) return;
-    const tick = () =>
+    const tick = () => {
       getManifest(cfg).then((m) => { setManifest(m); setOnline(true); })
         .catch(() => setOnline(false));
+      getApprovals(cfg)
+        .then((r) => setPending(r.approvals?.length ?? 0))
+        .catch(() => setPending(0));
+    };
+    tick();
     const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
   }, [state, cfg]);
@@ -116,12 +123,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const showIntro = Boolean(current && Intro && seen && !seen[current.key]);
   return (
     <div className="app-shell flex min-h-screen bg-surface">
-      <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-black/[0.07] px-3 py-4">
-        <div className="mb-4 flex items-center gap-2.5 px-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+      {/* En pantallas chicas la barra se reduce a un riel de íconos: 224px
+          fijos dejaban sin aire al contenido. */}
+      <aside className="sticky top-0 flex h-screen w-14 shrink-0 flex-col border-r border-black/[0.07] px-2 py-4 md:w-56 md:px-3">
+        <div className="mb-4 flex items-center gap-2.5 px-1 md:px-2">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
             <Hand className="h-4 w-4 text-white" />
           </div>
-          <div className="min-w-0">
+          <div className="hidden min-w-0 md:block">
             <p className="truncate text-sm font-bold tracking-tight text-ink">{manifest.agent}</p>
             <p className="flex items-center gap-1 text-[11px] text-ink-soft">
               <span className={`h-1.5 w-1.5 rounded-full ${online ? "bg-c-green-ink" : "bg-c-coral-ink"}`} />
@@ -137,14 +146,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Link
                 key={m.key}
                 href={m.path}
-                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition ${
+                // relative: el badge se posiciona sobre el ícono en el riel.
+                title={m.label}
+                className={`relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition max-md:justify-center max-md:px-0 ${
                   active
                     ? "bg-c-violet/60 font-semibold text-primary"
                     : "text-ink-soft hover:bg-black/[0.04] hover:text-ink"
                 }`}
               >
-                <Icon className="h-4 w-4" />
-                {m.label}
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="hidden flex-1 md:inline">{m.label}</span>
+                {m.key === "approvals" && pending > 0 && (
+                  <span className={`rounded-full text-[10px] font-bold max-md:absolute max-md:right-1 max-md:top-1 max-md:h-4 max-md:w-4 max-md:leading-4 md:px-1.5 md:py-0.5 ${
+                    active ? "bg-white/25 text-white" : "bg-c-coral text-c-coral-ink"
+                  }`}>
+                    {pending}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -152,10 +170,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="mt-auto px-1">
           <button
             onClick={() => { clearConfig(); setState("login"); }}
-            className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-[13px] text-ink-soft transition hover:text-ink"
+            title="Salir"
+            className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-[13px] text-ink-soft transition hover:text-ink max-md:justify-center"
           >
-            <LogOut className="h-3.5 w-3.5" />
-            Salir
+            <LogOut className="h-3.5 w-3.5 shrink-0" />
+            <span className="hidden md:inline">Salir</span>
           </button>
         </div>
       </aside>

@@ -5,14 +5,20 @@
 //   GET {adapter}/portal/files        → { files: [{ path, size, mtime }] }
 //   GET {adapter}/portal/files/{path} → text/plain
 // Lista navegable por carpetas (derivadas de los paths) + viewer en Modal.
+//
+// Convenciones del lado del agente que este módulo respeta:
+//   entregables/ → lo que el agente produce PARA el cliente (front-matter YAML
+//                  puesto por la skill `entregable`). Va primero en la raíz.
+//   interno/     → scripts, pruebas, andamiaje. Oculto salvo que se pida verlo.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Code2, File, FileCode, FileJson, FileText, Folder, FolderOpen, X, type LucideIcon,
+  Check, Code2, Download, File, FileCode, FileJson, FileText, Folder, FolderOpen,
+  Search, X, type LucideIcon,
 } from "lucide-react";
 import { loadConfig, getFiles, getFileText, type PortalConfig } from "../lib/agent";
 import {
-  Btn, Card, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner,
+  Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
 import { FileBody } from "../lib/EntityViewer";
 
@@ -20,11 +26,25 @@ type FileEntry = { path: string; size?: number; mtime?: string | number };
 
 type Viewer = { path: string; text: string | null; err: string | null };
 
+// Front-matter que escribe la skill `entregable` (titulo/tipo/fecha/tags).
+type FrontMatter = { titulo?: string; tipo?: string; fecha?: string; tags: string[] };
+
 // Extensiones que abrimos en el viewer de texto.
 const TEXT_EXT =
   /\.(md|markdown|txt|text|json|jsonl|csv|tsv|log|ya?ml|toml|ini|cfg|conf|py|rb|sh|sql|xml|html?|css|js|jsx|ts|tsx|mjs|env|rst|out)$/i;
 
+const INTERNAL = "interno";     // andamiaje del agente: no es para el cliente
+const DELIVERABLES = "entregables"; // lo que el agente entrega al cliente
+
 const is404 = (msg: string) => /^404\b/.test(msg);
+
+const clean = (p: string) => (p || "").replace(/^\/+/, "");
+
+const isInternal = (path: string) => path === INTERNAL || path.startsWith(`${INTERNAL}/`);
+
+// Comparación insensible a tildes y mayúsculas (búsqueda y títulos duplicados).
+const norm = (s: string) =>
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 function fileIcon(name: string): LucideIcon {
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
@@ -59,12 +79,84 @@ function relTime(ms: number): string {
   return d === 1 ? "hace 1 día" : `hace ${d} días`;
 }
 
+// ── Front-matter ───────────────────────────────────────────────────────────
+// Parser mínimo: solo las claves que escribe la skill. Cualquier cosa rara
+// (bloque sin cerrar, YAML anidado, claves desconocidas) cae en "no hay
+// front-matter" y el archivo se muestra crudo. Nunca rompe el visor.
+
+const TIPO_LABEL: Record<string, string> = {
+  informe: "Informe", lista: "Lista", borrador: "Borrador",
+  nota: "Nota", analisis: "Análisis",
+};
+
+const FM_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+
+const unquote = (s: string) => s.trim().replace(/^(['"])([\s\S]*)\1$/, "$2").trim();
+
+function splitTags(raw: string): string[] {
+  const inline = /^\[([\s\S]*)\]$/.exec(raw); // tags: [a, b]
+  return (inline ? inline[1] : raw)
+    .split(",")
+    .map(unquote)
+    .filter(Boolean);
+}
+
+function parseFrontMatter(path: string, text: string): { fm: FrontMatter | null; body: string } {
+  const plain = { fm: null, body: text };
+  if (!/\.(md|markdown)$/i.test(path)) return plain;
+  try {
+    const m = FM_RE.exec(text);
+    if (!m) return plain;
+    const fm: FrontMatter = { tags: [] };
+    let key = "";
+    for (const line of m[1].split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const item = /^\s*-\s+(.+)$/.exec(line); // ítem de lista YAML del key anterior
+      if (item) {
+        if (key === "tags") fm.tags.push(unquote(item[1]));
+        continue;
+      }
+      const kv = /^([A-Za-z_][\w-]*)[ \t]*:[ \t]*(.*)$/.exec(line);
+      if (!kv) continue;
+      key = kv[1].toLowerCase();
+      const val = unquote(kv[2]);
+      if (!val) continue;
+      if (key === "tags") fm.tags.push(...splitTags(val));
+      else if (key === "titulo") fm.titulo = val;
+      else if (key === "tipo") fm.tipo = val;
+      else if (key === "fecha") fm.fecha = val;
+    }
+    if (!fm.titulo && !fm.tipo && !fm.fecha && fm.tags.length === 0) return plain;
+    let body = text.slice(m[0].length).replace(/^\s*\n/, "");
+    // La skill repite el título como H1; con el título en el encabezado del
+    // modal, mostrarlo de nuevo es ruido.
+    const h1 = /^#[ \t]+(.+?)[ \t]*(?:\r?\n|$)/.exec(body);
+    if (h1 && fm.titulo && norm(h1[1]) === norm(fm.titulo)) {
+      body = body.slice(h1[0].length).replace(/^\s*\n/, "");
+    }
+    return { fm, body };
+  } catch {
+    return plain; // ante la duda, el archivo tal cual
+  }
+}
+
+function fmtFecha(value: string): string {
+  const d = new Date(value.trim().replace(" ", "T"));
+  return Number.isNaN(d.getTime())
+    ? value
+    : d.toLocaleString("es-UY", {
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+}
+
+// ── Listado ────────────────────────────────────────────────────────────────
+
 function entriesFor(files: FileEntry[], dir: string) {
   const prefix = dir ? `${dir}/` : "";
   const folders = new Map<string, number>();
   const inDir: FileEntry[] = [];
   for (const f of files) {
-    const p = (f.path || "").replace(/^\/+/, "");
+    const p = clean(f.path);
     if (!p || !p.startsWith(prefix)) continue;
     const rest = p.slice(prefix.length);
     if (!rest) continue;
@@ -77,7 +169,14 @@ function entriesFor(files: FileEntry[], dir: string) {
   }
   const folderList = Array.from(folders.entries())
     .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+    .sort((a, b) => {
+      // En la raíz, lo que es para el cliente va arriba de todo.
+      if (!dir) {
+        const rank = (n: string) => (n === DELIVERABLES ? 0 : 1);
+        if (rank(a.name) !== rank(b.name)) return rank(a.name) - rank(b.name);
+      }
+      return a.name.localeCompare(b.name, "es");
+    });
   inDir.sort((a, b) => toMs(b.mtime) - toMs(a.mtime) || a.path.localeCompare(b.path, "es"));
   return { folderList, inDir };
 }
@@ -87,6 +186,8 @@ export default function ArchivosPage() {
   const [files, setFiles] = useState<FileEntry[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [dir, setDir] = useState("");
+  const [q, setQ] = useState("");
+  const [showInternal, setShowInternal] = useState(false);
   const [viewer, setViewer] = useState<Viewer | null>(null);
   // El visor formatea por defecto; "original" muestra el texto crudo (para copiar).
   const [raw, setRaw] = useState(false);
@@ -104,6 +205,15 @@ export default function ArchivosPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const goTo = (next: string) => { setDir(next); setQ(""); };
+
+  const toggleInternal = () => {
+    const next = !showInternal;
+    // Si estábamos dentro de interno/, esa carpeta deja de existir: volvemos a la raíz.
+    if (!next && isInternal(dir)) goTo("");
+    setShowInternal(next);
+  };
+
   const openFile = (path: string) => {
     if (!cfg) return;
     setRaw(false);
@@ -112,6 +222,27 @@ export default function ArchivosPage() {
       .then((t) => setViewer({ path, text: t, err: null }))
       .catch((e: Error) => setViewer({ path, text: null, err: e.message || "error" }));
   };
+
+  const viewerName = viewer ? viewer.path.split("/").pop() || viewer.path : "";
+
+  // El archivo baja tal cual está en el workspace (con front-matter incluido).
+  const downloadFile = () => {
+    if (!viewer || viewer.text === null) return;
+    const url = URL.createObjectURL(new Blob([viewer.text], { type: "text/plain;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = viewerName || "archivo";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const { fm, fmBody } = useMemo(() => {
+    if (!viewer || viewer.text === null) return { fm: null, fmBody: "" };
+    const r = parseFrontMatter(viewer.path, viewer.text);
+    return { fm: r.fm, fmBody: r.body };
+  }, [viewer]);
 
   const body = () => {
     if (err && is404(err)) {
@@ -138,43 +269,84 @@ export default function ArchivosPage() {
       );
     }
 
-    const { folderList, inDir } = entriesFor(files, dir);
+    // Lo interno queda afuera salvo que se pida verlo explícitamente.
+    const listed = showInternal ? files : files.filter((f) => !isInternal(clean(f.path)));
+    // Solo ofrecemos el toggle si acá adentro hay algo interno que mostrar.
+    const prefix = dir ? `${dir}/` : "";
+    const hiddenCount = files.filter((f) => {
+      const p = clean(f.path);
+      return isInternal(p) && p.startsWith(prefix);
+    }).length;
+
+    const all = entriesFor(listed, dir);
+    const needle = norm(q.trim());
+    const folderList = needle ? all.folderList.filter((f) => norm(f.name).includes(needle)) : all.folderList;
+    const inDir = needle
+      ? all.inDir.filter((f) => norm(f.path.split("/").pop() || f.path).includes(needle))
+      : all.inDir;
+    const hasEntries = all.folderList.length > 0 || all.inDir.length > 0;
     const crumbs = dir ? dir.split("/") : [];
 
     return (
       <>
-        <nav className="mb-3 flex flex-wrap items-center gap-1 px-1 text-sm">
-          <button
-            onClick={() => setDir("")}
-            className={dir ? "font-medium text-ink-soft transition hover:text-ink" : "font-semibold text-ink"}
-          >
-            Workspace
-          </button>
-          {crumbs.map((seg, i) => {
-            const isLast = i === crumbs.length - 1;
-            return (
-              <span key={i} className="flex items-center gap-1">
-                <span className="text-ink-soft/50">/</span>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <nav className="flex flex-wrap items-center gap-1 px-1 text-sm">
+            <button
+              onClick={() => goTo("")}
+              className={dir ? "font-medium text-ink-soft transition hover:text-ink" : "font-semibold text-ink"}
+            >
+              Workspace
+            </button>
+            {crumbs.map((seg, i) => {
+              const isLast = i === crumbs.length - 1;
+              return (
+                <span key={i} className="flex items-center gap-1">
+                  <span className="text-ink-soft/50">/</span>
+                  <button
+                    onClick={() => goTo(crumbs.slice(0, i + 1).join("/"))}
+                    className={isLast ? "font-semibold text-ink" : "font-medium text-ink-soft transition hover:text-ink"}
+                  >
+                    {seg}
+                  </button>
+                </span>
+              );
+            })}
+          </nav>
+          {hasEntries && (
+            <div className="relative w-full sm:w-56">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-soft/70" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Escape") setQ(""); }}
+                placeholder="Buscar en esta carpeta"
+                className={`${inputCls} py-1.5 pl-8 pr-7 text-[13px]`}
+              />
+              {q && (
                 <button
-                  onClick={() => setDir(crumbs.slice(0, i + 1).join("/"))}
-                  className={isLast ? "font-semibold text-ink" : "font-medium text-ink-soft transition hover:text-ink"}
+                  aria-label="Limpiar búsqueda"
+                  onClick={() => setQ("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-ink-soft hover:text-ink"
                 >
-                  {seg}
+                  <X className="h-3.5 w-3.5" />
                 </button>
-              </span>
-            );
-          })}
-        </nav>
+              )}
+            </div>
+          )}
+        </div>
+
         <Card className="overflow-hidden !p-0">
           <ul className="divide-y divide-black/[0.06]">
             {folderList.map((f) => (
               <li key={`d-${f.name}`}>
                 <button
-                  onClick={() => setDir(dir ? `${dir}/${f.name}` : f.name)}
+                  onClick={() => goTo(dir ? `${dir}/${f.name}` : f.name)}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-black/[0.02]"
                 >
                   <Folder className="h-4 w-4 shrink-0 text-ink-soft" />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{f.name}</span>
+                  <span className="min-w-0 truncate text-sm font-medium text-ink">{f.name}</span>
+                  {!dir && f.name === DELIVERABLES && <Chip tone="violet">para vos</Chip>}
+                  <span className="flex-1" />
                   <span className="shrink-0 text-[12px] tabular-nums text-ink-soft">
                     {f.count === 1 ? "1 archivo" : `${f.count} archivos`}
                   </span>
@@ -210,18 +382,34 @@ export default function ArchivosPage() {
               );
             })}
             {folderList.length === 0 && inDir.length === 0 && (
-              <li className="px-4 py-6 text-center text-sm text-ink-soft">Esta carpeta está vacía.</li>
+              <li className="px-4 py-6 text-center text-sm text-ink-soft">
+                {q ? "Ningún archivo coincide." : "Esta carpeta está vacía."}
+              </li>
             )}
           </ul>
         </Card>
+
+        {hiddenCount > 0 && (
+          <div className="mt-2 flex justify-center">
+            <button
+              onClick={toggleInternal}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] text-ink-soft transition hover:bg-black/[0.04] hover:text-ink"
+            >
+              {showInternal && <Check className="h-3 w-3" />}
+              {showInternal
+                ? "Ocultar archivos internos"
+                : `Ver archivos internos (${hiddenCount})`}
+            </button>
+          </div>
+        )}
       </>
     );
   };
 
-  const viewerName = viewer ? viewer.path.split("/").pop() || viewer.path : "";
   const viewerMeta = viewer
-    ? files?.find((f) => (f.path || "").replace(/^\/+/, "") === viewer.path)
+    ? files?.find((f) => clean(f.path) === viewer.path)
     : undefined;
+  const hasMeta = !!fm && (!!fm.tipo || !!fm.fecha || fm.tags.length > 0);
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-6 md:px-8">
@@ -229,16 +417,30 @@ export default function ArchivosPage() {
       {body()}
       {viewer && (
         <Modal wide onClose={() => setViewer(null)}>
-          <div className="flex items-center justify-between gap-3 border-b border-black/[0.07] px-4 py-3">
+          <div className="flex items-start justify-between gap-3 border-b border-black/[0.07] px-4 py-3">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-ink">{viewerName}</p>
+              <p className="truncate text-sm font-semibold text-ink">{fm?.titulo || viewerName}</p>
               <p className="truncate text-[11px] text-ink-soft">
                 {viewer.path}
                 {viewerMeta?.size != null ? ` · ${fmtSize(viewerMeta.size)}` : ""}
                 {toMs(viewerMeta?.mtime) ? ` · ${relTime(toMs(viewerMeta?.mtime))}` : ""}
               </p>
+              {hasMeta && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {fm?.tipo && (
+                    <Chip tone="violet">{TIPO_LABEL[fm.tipo.toLowerCase()] ?? fm.tipo}</Chip>
+                  )}
+                  {fm?.tags.map((t) => <Chip key={t}>{t}</Chip>)}
+                  {fm?.fecha && <span className="text-[11px] text-ink-soft">{fmtFecha(fm.fecha)}</span>}
+                </div>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
+              {viewer.text !== null && (
+                <IconBtn label="Descargar" onClick={downloadFile}>
+                  <Download className="h-4 w-4" />
+                </IconBtn>
+              )}
               {viewer.text !== null && viewer.text.trim() !== "" && (
                 <IconBtn
                   label={raw ? "Ver formateado" : "Ver original"}
@@ -264,11 +466,12 @@ export default function ArchivosPage() {
               viewer.text.trim() === "" ? (
                 <p className="text-sm text-ink-soft">El archivo está vacío.</p>
               ) : raw ? (
+                // "Original" es el archivo completo, front-matter incluido.
                 <pre className="whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-ink">
                   {viewer.text}
                 </pre>
               ) : (
-                <FileBody path={viewer.path} text={viewer.text} />
+                <FileBody path={viewer.path} text={fm ? fmBody : viewer.text} />
               )
             )}
           </div>

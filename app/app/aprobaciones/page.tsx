@@ -5,12 +5,18 @@
 // mail, un pago, un post...); el portal no asume qué es.
 // Contrato adapter (docs/specs/03-aprobaciones.md):
 //   GET  /portal/approvals → { approvals: [{ id, title, summary, body, created_at }] }
-//   POST /portal/approvals/{id}/approve · POST /portal/approvals/{id}/reject { reason }
+//   POST /portal/approvals/{id}/approve { correction? } · POST .../reject { reason }
 // Semántica honesta: aprobar SOLO comenta y desbloquea el ticket; qué pasa
 // después lo deciden las reglas del agente. El copy no promete "se envía ya".
+//
+// Aprobar con correcciones: el adapter (0.6.0) acepta `{correction}` en approve
+// y, antes de desbloquear, deja un comentario firmado por `cliente` con la
+// versión textual que el agente tiene que usar. NO edita el body del ticket
+// (el CLI de Hermes no lo permite sobre un ticket bloqueado), así que el copy
+// dice exactamente eso: tu versión queda asentada como comentario.
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, Hand } from "lucide-react";
+import { ChevronDown, Hand, PencilLine } from "lucide-react";
 import { loadConfig, getApprovals, approve, reject, type PortalConfig } from "../lib/agent";
 import { Btn, Card, EmptyState, ErrorState, PageHeader, Spinner, inputCls } from "../lib/ui";
 import Markdown from "../lib/Markdown";
@@ -63,6 +69,27 @@ function stripMarks(s: string): string {
     .trim();
 }
 
+// `approve()` de lib/agent.ts postea sin cuerpo, así que la variante con
+// corrección va con un fetch local (mismo Bearer, mismo shape de error que
+// describeError espera: el status en el mensaje). Cuando la lib exponga un
+// approve(cfg, id, {correction}) esto se borra y se usa aquél.
+async function approveWithCorrection(cfg: PortalConfig, id: string, correction: string): Promise<void> {
+  const res = await fetch(`${cfg.adapter}/portal/approvals/${encodeURIComponent(id)}/approve`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ correction }),
+  });
+  if (!res.ok) {
+    // El adapter contesta {error} en 400/409: mostrarlo es más útil que el número.
+    let detail = "";
+    try {
+      const data = await res.json();
+      if (data && typeof data.error === "string") detail = ` (${data.error})`;
+    } catch { /* sin cuerpo JSON */ }
+    throw new Error(`${res.status} al aprobar${detail}`);
+  }
+}
+
 function describeError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   if (msg.includes("404")) return "Tu agente todavía no expone aprobaciones (módulo no disponible).";
@@ -77,6 +104,9 @@ export default function AprobacionesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  // Corrección en curso: la card cuyo body está editable y el texto tipeado.
+  const [correctingId, setCorrectingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   // Optimismo: ids que ya salieron de la lista (POST en vuelo o confirmado).
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
@@ -137,6 +167,29 @@ export default function AprobacionesPage() {
     });
   };
 
+  const stopCorrecting = () => {
+    setCorrectingId(null);
+    setDraft("");
+  };
+
+  // Aprobar con la versión editada. Mismo optimismo que el resto: la card sale
+  // ya; si el POST falla vuelve, con el texto tipeado intacto para reintentar.
+  const doApproveWithCorrection = (a: Approval, original: string) => {
+    if (!cfg) return;
+    const texto = draft.trim();
+    if (!texto || texto === original) return;
+    setCardError(a.id, null);
+    stopCorrecting();
+    hide(a.id);
+    approveWithCorrection(cfg, a.id, texto).catch((e) => {
+      unhide(a.id);
+      setExpandedId(a.id);
+      setCorrectingId(a.id);
+      setDraft(texto);
+      setCardError(a.id, `No se pudo aprobar con correcciones: ${describeError(e)}`);
+    });
+  };
+
   const doReject = (a: Approval) => {
     if (!cfg) return;
     const motivo = reason.trim();
@@ -157,6 +210,7 @@ export default function AprobacionesPage() {
       setRejectingId(null);
       setReason("");
     }
+    if (correctingId === id) stopCorrecting(); // plegar descarta la edición
   };
 
   const visible = approvals ? approvals.filter((a) => !hidden.has(a.id)) : null;
@@ -194,6 +248,9 @@ export default function AprobacionesPage() {
             const rejecting = rejectingId === a.id;
             const summary = a.summary ? stripMarks(a.summary) : "";
             const body = a.body?.trim() ?? "";
+            const correcting = correctingId === a.id;
+            // Sin cambios reales no hay nada que corregir: es una aprobación común.
+            const sinCambios = correcting && draft.trim() === body;
             return (
               <Card key={a.id}>
                 <button
@@ -226,10 +283,28 @@ export default function AprobacionesPage() {
                     ya trae su propio overflow-x, así que la página no se corre.
                     El `[&>div]` es el wrapper de <Markdown>: lo bajamos a 13px
                     para no pisar la densidad de la card. */}
-                {expanded && body && (
+                {expanded && body && !correcting && (
                   <div className="mt-3 max-h-72 overflow-auto overscroll-contain rounded-lg bg-black/[0.03] p-3 [&>div]:text-[13px]">
                     <Markdown>{body}</Markdown>
                   </div>
+                )}
+
+                {/* En modo corrección el recuadro se vuelve editable: se edita
+                    el texto crudo (markdown incluido), que es exactamente lo que
+                    va a leer el agente. Cmd/Ctrl+Enter confirma. */}
+                {expanded && correcting && (
+                  <textarea
+                    autoFocus
+                    rows={12}
+                    aria-label="Versión corregida"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) doApproveWithCorrection(a, body);
+                      if (e.key === "Escape") stopCorrecting();
+                    }}
+                    className={`${inputCls} mt-3 resize-y leading-relaxed`}
+                  />
                 )}
 
                 {cardErrors[a.id] && (
@@ -265,8 +340,35 @@ export default function AprobacionesPage() {
                         </Btn>
                       </div>
                     </div>
+                  ) : correcting ? (
+                    <>
+                      <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                        {sinCambios && (
+                          <span className="mr-auto text-[12px] text-ink-soft">
+                            No cambiaste nada — usá Aprobar
+                          </span>
+                        )}
+                        <Btn kind="ghost" size="sm" onClick={stopCorrecting}>
+                          Cancelar
+                        </Btn>
+                        <Btn
+                          kind="primary"
+                          size="sm"
+                          disabled={!draft.trim() || sinCambios}
+                          onClick={() => doApproveWithCorrection(a, body)}
+                        >
+                          Aprobar con esta versión
+                        </Btn>
+                      </div>
+                      {/* Honestidad: el pedido original queda como está; lo que
+                          manda es tu comentario. Nada de "editamos el ticket". */}
+                      <p className="mt-2 text-[12px] leading-snug text-ink-soft">
+                        Tu versión queda asentada como comentario y es la que el agente tiene que
+                        usar. El texto original del pedido no se modifica.
+                      </p>
+                    </>
                   ) : (
-                    <div className="mt-3 flex justify-end gap-2">
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
                       <Btn
                         kind="danger"
                         size="sm"
@@ -277,6 +379,21 @@ export default function AprobacionesPage() {
                       >
                         Rechazar
                       </Btn>
+                      {body && (
+                        <Btn
+                          kind="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setRejectingId(null);
+                            setReason("");
+                            setCorrectingId(a.id);
+                            setDraft(body); // arranca del borrador tal cual
+                          }}
+                        >
+                          <PencilLine className="h-3.5 w-3.5" />
+                          Corregir y aprobar
+                        </Btn>
+                      )}
                       <Btn kind="primary" size="sm" onClick={() => doApprove(a)}>
                         Aprobar
                       </Btn>
