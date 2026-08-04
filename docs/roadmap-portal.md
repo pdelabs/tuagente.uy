@@ -119,6 +119,22 @@ trabajen sobre repos. `tenant` queda como etiqueta secundaria dentro de un board
 El nombre visible del eje ("Proyecto", "Cliente", "Área") debería salir del
 manifiesto, porque cambia según el cliente.
 
-**Costo de tenerlo:** el adapter hoy lee `/opt/data/kanban.db` fijo; con varios
-boards hay una DB por board, así que hay que resolver la ruta por board y agregar
-el board como parámetro en los endpoints del tablero.
+**Dónde vive cada tablero** (verificado creando y borrando uno de prueba,
+2026-08-04): el board `default` es `/opt/data/kanban.db`; los demás viven en
+`/opt/data/kanban/boards/<slug>/kanban.db`, cada uno con un `board.json`
+(`slug`, `name`, `description`, `icon`, `color`, `default_workdir`,
+**`project_id`**, `created_at`, `archived`). O sea que el link board↔Project de
+Hermes ya está previsto en el propio formato.
+
+**Estado:** el adapter (v0.10.0) ya expone `GET /portal/boards` y acepta
+`?board=<slug>` en las lecturas del tablero (tickets, detalle, aprobaciones),
+con validación de slug y 404 si no existe. Sin el parámetro se comporta igual
+que siempre, así que no rompe nada de lo que hay.
+
+**Lo que falta para usarlo de verdad:**
+1. Las escrituras (crear, comentar, cambiar estado) todavía van al board por
+   defecto: hay que pasarles `--board=<slug>` al CLI.
+2. El portal necesita un selector en el header y llevar el board elegido en la
+   URL, para que compartir un link lleve al mismo lugar.
+3. Decidir el rótulo visible del eje ("Proyecto" / "Cliente" / "Área") desde el
+   manifiesto, porque cambia según el cliente.
