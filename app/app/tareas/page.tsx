@@ -5,18 +5,24 @@
 // con confirmación inline. Sin crear/editar/borrar: ventana, no jaula.
 // getJobs ya pide ?include_disabled=true, así que los pausados vienen en el
 // listado y no hace falta retención local.
+//
+// Cada fila abre un detalle (Modal) con la consigna con la que corre la tarea
+// y el historial de corridas: GET {adapter}/portal/crons/{id}.
 
-import { ReactNode, useCallback, useEffect, useState } from "react";
-import { Clock, Pause, Play, Zap } from "lucide-react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { Clock, Eye, Pause, Play, X, Zap } from "lucide-react";
 import { loadConfig, getJobs, jobAction, type PortalConfig } from "../lib/agent";
-import { Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
+import {
+  Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner,
+} from "../lib/ui";
 
 // ── Tipos (shape real de /api/jobs, verificado contra el agente) ──
 
 type Schedule = {
-  kind?: string; // "cron" | "interval"
+  kind?: string; // "cron" | "interval" | "once"
   expr?: string; // cron de 5 campos
   minutes?: number; // para kind "interval"
+  run_at?: string; // para kind "once"
   display?: string;
 } | null;
 
@@ -34,6 +40,81 @@ type Job = {
 };
 
 type Action = "pause" | "resume" | "run";
+
+// Detalle: shape real de {adapter}/portal/crons/{id} (adapter 0.8.0, verificado
+// contra el agente). El job del detalle es más chico que el del listado —no trae
+// el objeto `schedule`, solo `schedule_display`—, así que la cadencia se sigue
+// calculando con el Job de la lista y esto sólo agrega lo que la lista no tiene.
+type CronRun = {
+  id: string;
+  status?: string | null; // completed | failed | running | claimed | unknown
+  claimed_at?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  error?: string | null;
+};
+
+type CronDetailJob = {
+  id: string;
+  name: string;
+  prompt?: string | null; // "" cuando la tarea es un script
+  script?: string | null; // "" cuando la tarea es un prompt
+  schedule_display?: string | null;
+  enabled?: boolean;
+  state?: string | null;
+  model?: string | null; // "" cuando no corre modelo (script)
+  deliver?: string | null; // telegram | local | origin | ...
+  last_status?: string | null;
+  last_error?: string | null;
+  next_run_at?: string | null;
+};
+
+type CronDetail = { job: CronDetailJob; runs: CronRun[] };
+
+/* ── Lectura del detalle ──────────────────────────────────────────────────────
+   TODO: getCronDetail DEBERÍA GRADUARSE a ../lib/agent.ts, que es el único punto
+   de red del portal. Vive acá porque lib/ la está tocando otro agente en
+   paralelo. Al mover: es el mismo `get()` de la lib contra el adapter, con el
+   status a mano para distinguir el 404 (id inexistente o adapter viejo) de una
+   caída. Contrato (adapter 0.8.0):
+     GET /portal/crons/{id} → {job, runs[]}   ·   404 si el id no existe
+     runs viene ordenado por más reciente primero, hasta 30.
+   ────────────────────────────────────────────────────────────────────────── */
+
+class DetalleError extends Error {
+  status: number; // 0 = ni siquiera salió el request
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "DetalleError";
+    this.status = status;
+  }
+}
+
+async function getCronDetail(cfg: PortalConfig, id: string): Promise<CronDetail> {
+  let res: Response;
+  try {
+    res = await fetch(`${cfg.adapter}/portal/crons/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${cfg.key}` },
+    });
+  } catch {
+    throw new DetalleError(0, "no hay conexión con tu agente");
+  }
+  if (!res.ok) {
+    if (res.status === 404) throw new DetalleError(404, "tu agente no tiene el detalle de esta tarea");
+    if (res.status === 401 || res.status === 403)
+      throw new DetalleError(res.status, "tu sesión venció: volvé a entrar con tu link");
+    throw new DetalleError(res.status, `error ${res.status}`);
+  }
+  return res.json();
+}
+
+function describirError(e: unknown): string {
+  if (e instanceof DetalleError) return e.message;
+  const msg = e instanceof Error ? e.message : String(e);
+  if (msg.includes("Failed to fetch") || msg.includes("NetworkError"))
+    return "no hay conexión con tu agente";
+  return msg;
+}
 
 // ── Copy ──
 
@@ -110,6 +191,10 @@ function cadencia(job: Job): { legible: string; cruda: string | null } {
     const legible = cronLegible(s.expr);
     return legible ? { legible, cruda: s.expr } : { legible: s.expr, cruda: null };
   }
+  if (s?.kind === "once") {
+    const cuando = proximaLegible(s.run_at ?? job.next_run_at);
+    return { legible: cuando ? `Una sola vez, ${cuando}` : "Una sola vez", cruda: s.display ?? null };
+  }
   const raw = s?.display ?? job.schedule_display ?? null;
   return { legible: raw ?? "Sin cadencia", cruda: null };
 }
@@ -144,6 +229,67 @@ function proximaLegible(iso: string | null | undefined): string | null {
   return `${fecha} a las ${hm}`;
 }
 
+// Fecha + hora de una corrida: "hoy 09:56", "ayer 04:07", "1 ago 23:10".
+function fechaHoraCorrida(iso: string | null | undefined): { fecha: string; hora: string } | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const ahora = new Date();
+  const ayer = new Date(ahora);
+  ayer.setDate(ahora.getDate() - 1);
+  const mismoDia = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  const fecha =
+    mismoDia(d, ahora) ? "hoy"
+    : mismoDia(d, ayer) ? "ayer"
+    : d.toLocaleDateString("es-UY", { day: "numeric", month: "short" });
+  return { fecha, hora: `${two(d.getHours())}:${two(d.getMinutes())}` };
+}
+
+// Cuánto tardó una corrida. null si todavía no terminó (o si las fechas no
+// parsean): el chip de estado ya cuenta que sigue en curso.
+function duracionLegible(inicio: string | null | undefined, fin: string | null | undefined): string | null {
+  if (!inicio || !fin) return null;
+  const a = new Date(inicio).getTime();
+  const b = new Date(fin).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b) || b < a) return null;
+  const ms = b - a;
+  if (ms < 1000) return "<1 s";
+  const seg = Math.round(ms / 1000);
+  if (seg < 90) return `${seg} s`;
+  const min = Math.round(seg / 60);
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const resto = min % 60;
+  return resto === 0 ? `${h} h` : `${h} h ${resto} min`;
+}
+
+// ── Estados de corrida ──
+
+type Tone = "violet" | "green" | "coral" | "amber" | "neutral";
+
+const RUN_ESTADO: Record<string, { label: string; tone: Tone }> = {
+  completed: { label: "completada", tone: "green" },
+  failed: { label: "falló", tone: "coral" },
+  running: { label: "corriendo", tone: "amber" },
+  claimed: { label: "arrancando", tone: "amber" },
+  unknown: { label: "sin confirmar", tone: "neutral" },
+};
+
+function estadoCorrida(status: string | null | undefined): { label: string; tone: Tone } {
+  const s = (status ?? "").trim();
+  return RUN_ESTADO[s] ?? { label: s || "sin estado", tone: "neutral" };
+}
+
+// Cómo entrega el resultado. Cualquier canal nuevo del agente se muestra crudo
+// antes que esconderlo.
+const CANAL_LABEL: Record<string, string> = {
+  telegram: "Telegram",
+  whatsapp: "WhatsApp",
+  email: "Email",
+  local: "Queda en el agente",
+  origin: "Donde se pidió",
+};
+
 // ── Página ──
 
 const ordenar = (jobs: Job[]) => [...jobs].sort((a, b) => a.name.localeCompare(b.name));
@@ -153,6 +299,166 @@ function Shell({ children }: { children: ReactNode }) {
   return <div className="mx-auto max-w-4xl px-6 py-6 md:px-8">{children}</div>;
 }
 
+// Mismo chip de estado en la fila y en el detalle: una sola verdad.
+function EstadoChip({ estado, activa }: { estado?: string | null; activa: boolean }) {
+  if (estado === "running") return <Chip tone="violet">Corriendo</Chip>;
+  return activa ? <Chip tone="green">Activa</Chip> : <Chip tone="amber">Pausada</Chip>;
+}
+
+function Rotulo({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft/70">{children}</p>
+  );
+}
+
+function Dato({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <Rotulo>{label}</Rotulo>
+      <div className="mt-0.5 text-[13px] text-ink">{children}</div>
+    </div>
+  );
+}
+
+/** Detalle de una tarea: qué hace y cómo le fue las últimas veces. */
+function DetalleTarea({ job, detalle, error, onRetry, onClose }: {
+  job: Job; // el de la lista: es el único que trae el objeto `schedule` completo
+  detalle: CronDetail | null;
+  error: string | null;
+  onRetry: () => void;
+  onClose: () => void;
+}) {
+  const d = detalle?.job;
+  const { legible, cruda } = cadencia(job);
+  const activa = d?.enabled ?? job.enabled;
+  const estado = d?.state ?? job.state;
+  const proxima = activa ? proximaLegible(d?.next_run_at ?? job.next_run_at) : null;
+  const modelo = (d?.model ?? "").trim();
+  const canal = (d?.deliver ?? "").trim();
+  const prompt = (d?.prompt ?? "").trim();
+  const script = (d?.script ?? "").trim();
+  const esScript = !prompt && !!script;
+  const ultimoError = d?.last_error ?? job.last_error ?? null;
+  const ultimoStatus = d?.last_status ?? job.last_status;
+  const fallo = ultimoStatus != null && ultimoStatus !== "ok";
+  const runs = detalle?.runs ?? [];
+
+  return (
+    <Modal wide onClose={onClose}>
+      <div className="flex items-start justify-between gap-4 border-b border-black/[0.07] px-5 py-4">
+        <div className="min-w-0">
+          <h2 className="text-base font-bold leading-snug text-ink">{job.name}</h2>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <EstadoChip estado={estado} activa={activa} />
+            {fallo && (
+              <span title={ultimoError ?? undefined}>
+                <Chip tone="coral">la última falló</Chip>
+              </span>
+            )}
+          </div>
+        </div>
+        <IconBtn label="Cerrar" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </IconBtn>
+      </div>
+
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-4">
+        {error ? (
+          <ErrorState message={`No pude abrir el detalle (${error}).`} onRetry={onRetry} />
+        ) : !detalle ? (
+          <Spinner />
+        ) : (
+          <>
+            <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <Dato label="Cada cuánto">
+                {legible}
+                {cruda && cruda !== legible && (
+                  <span className="ml-1.5 font-mono text-[11px] tabular-nums text-ink-soft/60">
+                    {cruda}
+                  </span>
+                )}
+              </Dato>
+              {proxima && <Dato label="Próxima corrida">{proxima}</Dato>}
+              {modelo && (
+                <Dato label="Modelo">
+                  <span className="font-mono text-[12px]">{modelo}</span>
+                </Dato>
+              )}
+              {canal && <Dato label="Te llega por">{CANAL_LABEL[canal] ?? canal}</Dato>}
+            </div>
+
+            {/* Lo más valioso del detalle: la consigna tal cual corre. */}
+            <div className="mt-5">
+              <Rotulo>{esScript ? "Corre un script" : "Qué hace esta tarea"}</Rotulo>
+              <p className="mt-0.5 text-[12px] text-ink-soft">
+                {esScript
+                  ? "Esta tarea no pasa por el modelo: ejecuta este script en el servidor de tu agente."
+                  : "Es la consigna con la que corre, tal cual se la damos al agente. No es una descripción escrita a mano."}
+              </p>
+              {prompt || script ? (
+                <div className="mt-2 max-h-64 overflow-y-auto rounded-lg bg-black/[0.03] p-3">
+                  <p
+                    className={`whitespace-pre-wrap break-words leading-relaxed text-ink-soft ${
+                      esScript ? "font-mono text-[12px]" : "text-[12.5px]"
+                    }`}
+                  >
+                    {esScript ? script : prompt}
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-2 text-[13px] text-ink-soft">
+                  Tu agente no guarda una consigna para esta tarea.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-5">
+              <Rotulo>Últimas corridas</Rotulo>
+              {runs.length === 0 ? (
+                <p className="mt-1 text-[13px] text-ink-soft">Todavía no corrió ninguna vez.</p>
+              ) : (
+                <div className="mt-1 divide-y divide-black/[0.06]">
+                  {runs.map((r) => {
+                    const cuando = fechaHoraCorrida(r.started_at ?? r.claimed_at);
+                    const dur = duracionLegible(r.started_at ?? r.claimed_at, r.finished_at);
+                    const { label, tone } = estadoCorrida(r.status);
+                    return (
+                      <div key={r.id} className="py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] text-ink">
+                            {cuando ? (
+                              <>
+                                {cuando.fecha} <span className="tabular-nums">{cuando.hora}</span>
+                              </>
+                            ) : (
+                              "sin fecha"
+                            )}
+                          </span>
+                          {dur && (
+                            <span className="text-[12px] tabular-nums text-ink-soft">· {dur}</span>
+                          )}
+                          <span className="ml-auto shrink-0">
+                            <Chip tone={tone}>{label}</Chip>
+                          </span>
+                        </div>
+                        {r.error && (
+                          <p className="mt-0.5 truncate text-[12px] text-c-coral-ink" title={r.error}>
+                            {r.error}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 export default function TareasPage() {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [jobs, setJobs] = useState<Job[] | null>(null);
@@ -160,6 +466,10 @@ export default function TareasPage() {
   const [confirm, setConfirm] = useState<{ id: string; action: Action } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
+  const [abiertoId, setAbiertoId] = useState<string | null>(null);
+  const [detalle, setDetalle] = useState<CronDetail | null>(null);
+  const [detalleErr, setDetalleErr] = useState<string | null>(null);
+  const pedido = useRef(0); // descarta respuestas de detalles que ya no se ven
 
   const refresh = useCallback((c: PortalConfig) => {
     getJobs(c)
@@ -185,6 +495,62 @@ export default function TareasPage() {
     return () => clearTimeout(t);
   }, [notice]);
 
+  // silencioso: el refresco de fondo no vacía lo que el cliente está leyendo ni
+  // le tira un error encima si justo falla ese pedido.
+  const cargarDetalle = useCallback(
+    (id: string, silencioso = false) => {
+      if (!cfg) return;
+      const n = ++pedido.current;
+      if (!silencioso) {
+        setDetalle(null);
+        setDetalleErr(null);
+      }
+      getCronDetail(cfg, id)
+        .then((d) => {
+          if (pedido.current !== n) return;
+          setDetalle(d);
+          setDetalleErr(null);
+        })
+        .catch((e: unknown) => {
+          if (pedido.current !== n || silencioso) return;
+          setDetalleErr(describirError(e));
+        });
+    },
+    [cfg],
+  );
+
+  useEffect(() => {
+    if (abiertoId) cargarDetalle(abiertoId);
+  }, [abiertoId, cargarDetalle]);
+
+  // Abrir limpia el detalle en el mismo evento: sin esto, el primer frame del
+  // modal nuevo muestra las corridas de la tarea anterior.
+  const abrir = (id: string) => {
+    setAbiertoId(id);
+    setDetalle(null);
+    setDetalleErr(null);
+  };
+
+  // Mientras el detalle está abierto también se refresca solo (misma cadencia
+  // que la lista): una corrida disparada desde acá aparece sin recargar.
+  useEffect(() => {
+    if (!abiertoId) return;
+    const t = setInterval(() => cargarDetalle(abiertoId, true), 30_000);
+    return () => clearInterval(t);
+  }, [abiertoId, cargarDetalle]);
+
+  // Modal: Escape cierra, el fondo no scrollea.
+  useEffect(() => {
+    if (!abiertoId) return;
+    const fn = (e: KeyboardEvent) => e.key === "Escape" && setAbiertoId(null);
+    window.addEventListener("keydown", fn);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", fn);
+      document.body.style.overflow = "";
+    };
+  }, [abiertoId]);
+
   const ejecutar = async (job: Job, action: Action) => {
     if (!cfg) return;
     setConfirm(null);
@@ -197,6 +563,7 @@ export default function TareasPage() {
       }
       setNotice({ text: NOTICE_OK[action](job.name), ok: true });
       refresh(cfg);
+      if (abiertoId === job.id) cargarDetalle(job.id, true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "error";
       setNotice({ text: `No se pudo (${msg}). Probá de nuevo.`, ok: false });
@@ -220,6 +587,9 @@ export default function TareasPage() {
       </Shell>
     );
   }
+
+  // El detalle se ancla al id: la lista se refresca sola y reemplaza los objetos.
+  const abierto = abiertoId ? (jobs!.find((j) => j.id === abiertoId) ?? null) : null;
 
   return (
     <Shell>
@@ -266,24 +636,24 @@ export default function TareasPage() {
                 key={job.id}
                 className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 py-3.5 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto]"
               >
-                {/* Izquierda: nombre + cadencia humana + cron crudo */}
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink">{job.name}</p>
-                  <p className="text-[13px] text-ink-soft">{legible}</p>
+                {/* Izquierda: nombre + cadencia humana + cron crudo. Abre el detalle. */}
+                <button
+                  type="button"
+                  onClick={() => abrir(job.id)}
+                  className="min-w-0 rounded-lg text-left outline-none transition hover:opacity-70 focus-visible:ring-2 focus-visible:ring-primary/25"
+                  title="Ver detalle"
+                >
+                  {/* spans, no <p>: adentro de un button el markup tiene que ser inline */}
+                  <span className="block truncate text-sm font-semibold text-ink">{job.name}</span>
+                  <span className="block text-[13px] text-ink-soft">{legible}</span>
                   {cruda && cruda !== legible && (
-                    <p className="font-mono text-[11px] text-ink-soft/60">{cruda}</p>
+                    <span className="block font-mono text-[11px] text-ink-soft/60">{cruda}</span>
                   )}
-                </div>
+                </button>
 
                 {/* Centro: estado + última corrida */}
                 <div className="order-3 col-span-2 flex flex-wrap items-center gap-2 md:order-none md:col-span-1">
-                  {job.state === "running" ? (
-                    <Chip tone="violet">Corriendo</Chip>
-                  ) : job.enabled ? (
-                    <Chip tone="green">Activa</Chip>
-                  ) : (
-                    <Chip tone="amber">Pausada</Chip>
-                  )}
+                  <EstadoChip estado={job.state} activa={job.enabled} />
                   {ultima ? (
                     fallo ? (
                       <>
@@ -324,6 +694,9 @@ export default function TareasPage() {
                       {proxima && (
                         <span className="mr-1 text-[12px] text-ink-soft">Próxima {proxima}</span>
                       )}
+                      <IconBtn label="Ver detalle" onClick={() => abrir(job.id)}>
+                        <Eye className="h-4 w-4" />
+                      </IconBtn>
                       <IconBtn
                         label="Correr ahora"
                         disabled={ocupado}
@@ -355,6 +728,16 @@ export default function TareasPage() {
             );
           })}
         </Card>
+      )}
+
+      {abierto && (
+        <DetalleTarea
+          job={abierto}
+          detalle={detalle}
+          error={detalleErr}
+          onRetry={() => cargarDetalle(abierto.id)}
+          onClose={() => setAbiertoId(null)}
+        />
       )}
     </Shell>
   );
