@@ -27,6 +27,14 @@ Lo que quedó abierto, con quién lo destraba. Cerrar acá cuando se resuelva.
   abiertos. Sin decidir.
 - **Multi-tablero en el portal** (el eje "proyecto"): el adapter ya lee cualquier
   tablero; falta el selector y que las escrituras respeten el elegido.
+- **El cliente no tiene cómo personalizar su agente desde el portal.** Hoy toda
+  personalización (reglas de negocio, tono, qué requiere aprobación) se hace
+  editando el `SOUL.md` a mano en el repo del agente — o sea, la hacemos
+  nosotros. Regla de Luis (4/8): lo específico de un cliente se pide **como
+  cliente, por el portal**; si el portal no alcanza, eso es hueco de producto.
+  Falta decidir la forma: probablemente una pestaña de "Instrucciones" que
+  escriba un bloque acotado del SOUL, versionado y reversible, sin dejar que el
+  cliente pise las reglas duras (la puerta de aprobación no es negociable).
 
 ## Técnicos, priorizados
 
