@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.17.0"
+VERSION = "0.18.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -52,6 +52,10 @@ ART_ID_RE = re.compile(r"^[\w.-]+$")
 AUTHOR_HUMAN = "cliente"
 AUTHOR_AUDIT = "portal"
 MAX_AUTHOR_LEN = 60
+# Perfil al que se le asignan los tickets creados desde el portal. Todos
+# nuestros agentes corren un solo perfil; si alguno tuviera varios, se cambia
+# por env sin tocar el codigo.
+ASSIGNEE = os.environ.get("PORTAL_ASSIGNEE", "default").strip() or "default"
 
 
 def ro(db):
@@ -420,7 +424,15 @@ def created_task_id(out):
 
 
 def create_ticket(title, body, tenant):
-    args = ["create", "--json", f"--created-by={AUTHOR_HUMAN}"]
+    """Crea el ticket YA ASIGNADO, o el agente nunca lo empieza.
+
+    TRAMPA VERIFICADA (2026-08-04): el dispatcher solo reclama tickets que
+    tienen assignee. Uno creado sin asignar se queda en `ready` para siempre —
+    verificado con t_31dd4c85, que estuvo 32 minutos quieto hasta que alguien
+    lo asignó a mano. Desde el portal eso es inaceptable: el cliente crea
+    trabajo, lo ve "listo", y no pasa nada nunca sin ningún aviso.
+    """
+    args = ["create", "--json", f"--created-by={AUTHOR_HUMAN}", f"--assignee={ASSIGNEE}"]
     if body:
         args.append(f"--body={body}")
     if tenant:

@@ -73,7 +73,7 @@ CFG
 
 # Borrador del SOUL: los bloques pegados, con los placeholders intactos.
 {
-  for bloque in 00-identidad 01-aprobaciones 02-entrega 03-canales; do
+  for bloque in 00-identidad 01-aprobaciones 02-entrega 03-canales 04-lenguaje; do
     cat "$KIT/soul/$bloque.md"; echo
   done
 } > data/SOUL.md

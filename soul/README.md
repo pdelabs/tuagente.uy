@@ -9,6 +9,7 @@ romper. Se arma pegando estos bloques en orden y reemplazando lo que está
 01-aprobaciones.md   ← la regla dura; se adapta el "qué" al cliente
 02-entrega.md        ← genérico, va tal cual
 03-canales.md        ← genérico, va tal cual
+04-lenguaje.md       ← genérico, va tal cual
 ```
 
 ## Tres reglas al escribirlo
