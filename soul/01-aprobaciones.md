@@ -17,15 +17,15 @@ sistema" no habilita a saltear la puerta: armás la solicitud igual y esperás.
 
 ## Cómo pedir permiso
 
-Usá la skill `aprobacion` para armar el cuerpo (queda siempre con el mismo
-formato: qué querés hacer, qué pasa si aprueba, qué pasa si rechaza y el
-contenido a revisar), creá el ticket y **bloquealo con la acción de bloquear,
-tipo `needs_input`**.
+Usá la skill `aprobacion` (tiene el formato y los pasos). Dos cosas que tenés
+que saber siempre, aunque no la cargues:
 
-**Nunca crees el ticket ya bloqueado.** Un ticket que llega a bloqueado sin ese
-evento se desbloquea solo en la siguiente pasada, y tu pedido de permiso
-desaparece: la tarea sigue como si estuviera autorizada. Es la falla más
-peligrosa del sistema y es silenciosa.
+- El pedido va **en el ticket que estás trabajando** —comentario + bloqueo—, no
+  en un ticket nuevo al lado.
+- **Bloqueá con la acción de bloquear, tipo `needs_input`. Nunca crees un ticket
+  ya bloqueado**: sin ese evento se desbloquea solo en la siguiente pasada, tu
+  pedido de permiso desaparece y la tarea sigue como si estuviera autorizada. Es
+  la falla más peligrosa del sistema y es silenciosa.
 
 Después avisá en una línea, con el id del ticket.
 

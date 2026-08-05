@@ -150,8 +150,13 @@ def main():
             raise AssertionError(
                 "quedaron huecos de la plantilla sin completar: " + ", ".join(huecos)
             )
+        # El umbral es 16 KB, no 6: los bloques genéricos del kit ya pesan ~11 KB
+        # y cada regla que tienen está porque algo falló sin ella. Avisar por lo
+        # normal entrena a ignorar los avisos. Si querés bajar contexto de
+        # verdad, el gasto grande son los esquemas de herramientas (medilo con
+        # `hermes prompt-size`), no la prosa.
         kb = len(texto.encode()) / 1024
-        return f"{kb:.1f} KB" + ("  (>6 KB: algo de acá debería ser una skill)" if kb > 6 else "")
+        return f"{kb:.1f} KB" + ("  (>16 KB: la parte del cliente se fue de escala)" if kb > 16 else "")
 
     check("SOUL compuesto", _soul)
 

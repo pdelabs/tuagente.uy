@@ -22,8 +22,24 @@ de negocio: qué requiere aprobación, qué no le corresponde, cómo hablar.
 que el modelo se acordara, falló. Todo lo que quedó en código, aguantó. El modelo
 pone las palabras; el código pone el formato.
 
-**Cortito.** Cada línea compite por atención con las demás. Si el SOUL pasa de
-6 KB, algo que está ahí debería ser una skill o no debería estar.
+**Cortito, pero sabiendo dónde está el gasto.** Cada línea compite por atención
+con las demás, así que lo que no cambia una decisión, sobra. Ahora bien, medido
+con `hermes prompt-size` sobre un agente recién creado (2026-08-05):
+
+```
+system prompt   39,6 KB   ← de eso, ~11 KB son estos bloques
+esquemas tools  67,6 KB   ← casi el DOBLE, y se paga en cada llamada
+```
+
+O sea: **la palanca grande son las herramientas, no la prosa.** Sacar `tts` y
+`delegation` ahorró 7,6 KB de una — más que todo lo que se gana reescribiendo
+párrafos. Antes de podar el SOUL, mirá `agent.disabled_toolsets` en el
+`config.yaml`.
+
+Regla práctica: los bloques genéricos rondan los 11 KB y cada regla que tienen
+está porque algo falló sin ella. Lo que sí conviene cuidar es **la parte del
+cliente** (`00-identidad` y el "qué" de la regla dura): si eso pasa de ~3 KB,
+algo de ahí debería ser una skill o un entregable de referencia, no prompt.
 
 ## Lo que el agente NO tiene que saber
 

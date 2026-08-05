@@ -59,6 +59,18 @@ api_server:
 toolsets:
   - kanban
 
+# Herramientas que un agente de cliente no usa nunca y cuyo esquema se paga en
+# CADA llamada al modelo. Medido con `hermes prompt-size` sobre un agente
+# recien creado: los esquemas pesan 67,6 KB (casi el doble del system prompt
+# entero), y sacando estas dos bajan a 60,0 KB sin perder nada.
+#   tts        1,8 KB  hablar en voz alta
+#   delegation 5,8 KB  crear sub-agentes
+# Si un cliente llega a necesitarlas, se sacan de esta lista y se reinicia.
+agent:
+  disabled_toolsets:
+    - tts
+    - delegation
+
 platform_toolsets:
   api_server:
     - hermes-api-server
