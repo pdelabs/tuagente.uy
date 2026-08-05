@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.19.0"
+VERSION = "0.20.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -129,6 +129,8 @@ def manifest():
             "usage": STATE_DB.exists(),
             "activity": CRON_EXEC_DB.exists() or CRON_JOBS.exists(),
             "crons": CRON_JOBS.exists(),
+            # La pestaña de conexiones solo si el kit dejo su catalogo.
+            "connections": CONNECTIONS_CATALOG.is_file(),
             # No es una pestaña: le avisa al chat que puede adjuntar archivos.
             "upload": WORKSPACE.is_dir(),
         },
@@ -243,6 +245,69 @@ def capabilities():
         pass
 
     return {"skills": skills, "plugins": plugins, "mcp": mcp}
+
+
+# ---------- conexiones (a que sistemas del cliente esta enchufado) ----------
+# El catalogo es CURADO y viene del kit: connections/catalogo.json. Lo que se
+# calcula aca es solo el ESTADO, y siempre por presencia — este endpoint no
+# devuelve el valor de una credencial ni por error de tipeo.
+
+CONNECTIONS_CATALOG = DATA / "connections" / "catalogo.json"
+
+
+def _config_texto():
+    try:
+        return CONFIG.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _falta_de(regla):
+    """Que le falta a una conexion para estar viva. Lista vacia = esta puesta."""
+    falta = []
+    for var in regla.get("env", []):
+        if not os.environ.get(var, "").strip():
+            falta.append({"tipo": "credencial", "nombre": var})
+    for archivo in regla.get("archivos", []):
+        # Confinado a data/: el catalogo es nuestro, pero no lo dejamos salir.
+        destino = (DATA / archivo).resolve()
+        if not str(destino).startswith(str(DATA.resolve())) or not destino.is_file():
+            falta.append({"tipo": "archivo", "nombre": archivo})
+    for plugin in regla.get("plugin", []):
+        if plugin not in _config_texto():
+            falta.append({"tipo": "plugin", "nombre": plugin})
+    return falta
+
+
+def connections():
+    try:
+        catalogo = json.loads(CONNECTIONS_CATALOG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        # Sin catalogo instalado no inventamos nada: la pestaña no se muestra.
+        return {"disponible": False, "conexiones": []}
+
+    salida = []
+    for c in catalogo.get("conexiones", []):
+        falta = _falta_de(c.get("detecta", {}))
+        # `requiere` es lo que tenemos que poner NOSOTROS antes de que el
+        # cliente pueda siquiera intentarlo (ej: la app OAuth de tuagente).
+        falta_previo = _falta_de(c.get("requiere", {}))
+        salida.append({
+            "id": c.get("id"),
+            "label": c.get("label"),
+            "grupo": c.get("grupo", "sistema"),
+            "para_que": c.get("para_que", ""),
+            "como": c.get("como", ""),
+            "esfuerzo": c.get("esfuerzo"),
+            "quien": c.get("quien"),
+            "advertencia": c.get("advertencia"),
+            "recomendado": c.get("recomendado", True),
+            "estado": "conectado" if not falta else ("bloqueado" if falta_previo else "sin_conectar"),
+            "falta": falta,
+            "falta_previo": falta_previo,
+        })
+    salida.sort(key=lambda c: (c["estado"] != "conectado", c["grupo"] != "canal", c["label"] or ""))
+    return {"disponible": True, "conexiones": salida}
 
 
 # ---------- tableros ----------
@@ -1069,6 +1134,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, manifest())
             if path == "/portal/capabilities":
                 return self._send(200, capabilities())
+            if path == "/portal/connections":
+                return self._send(200, connections())
             if path == "/portal/boards":
                 return self._send(200, {"boards": boards()})
             if path == "/portal/tickets":

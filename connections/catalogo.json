@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "_comentario": [
+    "Catalogo CURADO de conexiones. Es cerrado a proposito: instalar cosas",
+    "arbitrarias de internet dentro del agente de un cliente es riesgo de",
+    "cadena de suministro sobre datos ajenos. El cliente pide, nosotros",
+    "auditamos e instalamos.",
+    "",
+    "Cada entrada dice, en palabras del cliente, QUE le habilita al agente, y",
+    "como se detecta si ya esta conectada. La deteccion es de PRESENCIA, nunca",
+    "de valores: el adapter jamas devuelve una credencial.",
+    "",
+    "  detecta.archivos  -> archivos que tienen que existir en data/",
+    "  detecta.env       -> variables que tienen que estar y no vacias",
+    "  detecta.plugin    -> plugin habilitado en config.yaml",
+    "",
+    "esfuerzo: minutos | horas | dias  (lo que tarda el alta, no el trabajo)",
+    "quien: cliente_solo | asistido | nosotros"
+  ],
+  "conexiones": [
+    {
+      "id": "telegram",
+      "label": "Telegram",
+      "grupo": "canal",
+      "para_que": "Hablarle al agente desde el celular, como a cualquier contacto.",
+      "detecta": { "env": ["TELEGRAM_BOT_TOKEN"] },
+      "como": "Creamos un bot y te pasamos el link para empezar a chatear.",
+      "esfuerzo": "minutos",
+      "quien": "nosotros"
+    },
+    {
+      "id": "correo",
+      "label": "Correo de la empresa",
+      "grupo": "canal",
+      "para_que": "Que el agente reciba y conteste mails desde la casilla de la empresa.",
+      "detecta": { "env": ["EMAIL_ADDRESS", "EMAIL_PASSWORD", "EMAIL_SMTP_HOST"] },
+      "como": "Con el usuario y la contrasena de la casilla. Si es Gmail, alcanza una contrasena de aplicacion; no hace falta crear nada en Google.",
+      "esfuerzo": "minutos",
+      "quien": "asistido"
+    },
+    {
+      "id": "whatsapp",
+      "label": "WhatsApp",
+      "grupo": "canal",
+      "para_que": "Que tus clientes le escriban al numero de la empresa y el agente conteste.",
+      "detecta": { "env": ["WHATSAPP_ENABLED"] },
+      "como": "Es el mas lento de todos: la via oficial pide verificacion de empresa ante Meta y lleva dias. Lo tramitamos nosotros.",
+      "esfuerzo": "dias",
+      "quien": "nosotros",
+      "advertencia": "El atajo de vincular por codigo QR pone en riesgo la linea comercial: WhatsApp puede bloquearla. No lo usamos en numeros que la empresa necesita."
+    },
+    {
+      "id": "google-workspace",
+      "label": "Google: Planillas, Drive, Agenda y Documentos",
+      "grupo": "sistema",
+      "para_que": "Que el agente lea y actualice tus planillas, guarde archivos en Drive y mire la agenda.",
+      "detecta": { "archivos": ["google_token.json"] },
+      "requiere": { "archivos": ["google_client_secret.json"] },
+      "como": "Te pasamos un link, entras con tu cuenta de Google y le das permiso. No tenes que crear ni configurar nada.",
+      "esfuerzo": "minutos",
+      "quien": "asistido",
+      "nota_interna": "El permiso se pide con NUESTRA app OAuth (tipo Desktop, se puede reusar entre clientes). Sin eso, cada cliente tendria que crear un proyecto en Google Cloud, que es exactamente lo que un cliente no tecnico no puede hacer."
+    },
+    {
+      "id": "gmail-lectura",
+      "label": "Gmail (leer y responder con la cuenta de Google)",
+      "grupo": "sistema",
+      "para_que": "Igual que el correo, pero entrando con la cuenta de Google en vez de una contrasena.",
+      "detecta": { "archivos": ["google_token.json"] },
+      "como": "Preferimos NO usar esta via: Google la trata como permiso restringido y exige una auditoria de seguridad cara para publicar la app. Para correo alcanza la conexion de arriba.",
+      "esfuerzo": "dias",
+      "quien": "nosotros",
+      "recomendado": false
+    },
+    {
+      "id": "slack",
+      "label": "Slack",
+      "grupo": "canal",
+      "para_que": "Que el equipo le hable al agente desde los canales donde ya trabaja.",
+      "detecta": { "env": ["SLACK_BOT_TOKEN"] },
+      "como": "Un administrador del Slack instala la app y nos pasa el token.",
+      "esfuerzo": "minutos",
+      "quien": "asistido"
+    }
+  ]
+}

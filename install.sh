@@ -29,6 +29,7 @@ ARCHIVOS=(
   "skills/entregable/deliver.py:skills/entregable/deliver.py"
   "skills/aprobacion/SKILL.md:skills/aprobacion/SKILL.md"
   "skills/aprobacion/format_request.py:skills/aprobacion/format_request.py"
+  "connections/catalogo.json:connections/catalogo.json"
 )
 
 if [[ "$MODO" == "--diff" ]]; then
