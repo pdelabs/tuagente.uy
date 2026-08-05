@@ -26,6 +26,9 @@ results = []
 PLACEHOLDER = re.compile(r"<(?:CLIENTE|RESPONSABLE|NOMBRE|EMPRESA)>")
 
 # Lo que install.sh deja en el data/. Si falta, el kit no está instalado.
+# Las skills que instala el kit: si una de ESTAS se indexa muda, es culpa nuestra.
+DEL_KIT_SKILLS = {"artifact", "entregable", "aprobacion"}
+
 DEL_KIT = [
     "scripts/portal_adapter.py",
     "skills/artifact/SKILL.md",
@@ -130,10 +133,16 @@ def main():
             skills = json.load(fh).get("skills", [])
         mudas = [s.get("skill_name") for s in skills if not (s.get("description") or "").strip()]
         if mudas:
-            raise AssertionError(
-                f"indexadas con descripción vacía: {', '.join(mudas)} "
-                "(si ya arreglaste el frontmatter, esperá la reindexación, ~20 min)"
-            )
+            # Algunas mudas son del propio motor (apple-notes, imessage…): no las
+            # podemos arreglar y a un agente de cliente no le hacen falta. Las
+            # nuestras sí importan, y son las que están en skills/ del kit.
+            propias = [m for m in mudas if (DEL_KIT_SKILLS & {m})]
+            detalle = f"indexadas con descripción vacía: {', '.join(mudas)}"
+            if propias:
+                detalle += f" — de las nuestras: {', '.join(propias)}"
+            else:
+                detalle += " (todas del motor; el agente no las descubre, pero no son nuestras)"
+            raise AssertionError(detalle + " · si recién tocaste el frontmatter, esperá la reindexación (~20 min)")
         return f"{len(skills)} skills indexadas, ninguna muda"
 
     check("índice de skills", _indice, required=False)
