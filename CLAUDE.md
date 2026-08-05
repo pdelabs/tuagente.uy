@@ -56,6 +56,17 @@ ve ninguna y improvisa con Python sobre su propio tablero. La receta completa, l
 reproducción y por qué no era adivinable están en `notas/kanban-nativo.md`.
 Lo chequea `tools/agente-check.py`.
 
+## La version del motor va fija
+
+El compose apunta a un tag concreto (hoy `v2026.7.30`), nunca a `latest`: con
+`latest`, un push de Nous le cambia el motor a todos los clientes de un dia
+para el otro y nos enteramos por un ticket que falla. Al 5/8/2026 los agentes
+corrian v2026.7.30 mientras `latest` ya iba dos versiones adelante.
+
+Para subir: cambiar el tag, `docker compose pull && up -d`, correr
+`agente-check.py` y `portal-check.py`, y recien ahi darlo por bueno. Si algo se
+rompio, se vuelve al tag anterior.
+
 ## Verificar antes de entregar
 
 Dos chequeos, en este orden. El primero es offline y va **antes** de prender:

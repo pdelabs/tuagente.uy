@@ -1,8 +1,18 @@
 # Plantilla para el agente de un cliente. Un agente por cliente: su propio
 # volumen, su propia clave. Nunca compartir nada entre clientes.
+#
+# LA VERSION VA FIJA, no `latest`. Con `latest`, un push de Nous le cambia el
+# motor a TODOS los clientes de un dia para el otro, sin que nadie apriete
+# nada, y nos enteramos por un ticket que empieza a fallar. Verificado el
+# 5/8/2026: los agentes corrian v2026.7.30 mientras `latest` ya iba dos
+# versiones adelante.
+#
+# Para subir de version: cambiar el tag, `docker compose pull && up -d`, y
+# correr los dos chequeos (agente-check.py y portal-check.py) ANTES de darlo
+# por bueno. Si algo cambio, se vuelve al tag anterior y listo.
 services:
   hermes:
-    image: nousresearch/hermes-agent:latest
+    image: nousresearch/hermes-agent:v2026.7.30   # ver nota de arriba antes de subirla
     container_name: ${CLIENTE}-hermes
     restart: unless-stopped
     command: gateway run
@@ -27,7 +37,7 @@ services:
           cpus: "2.0"
 
   portal-adapter:
-    image: nousresearch/hermes-agent:latest
+    image: nousresearch/hermes-agent:v2026.7.30   # ver nota de arriba antes de subirla
     container_name: ${CLIENTE}-portal-adapter
     restart: unless-stopped
     entrypoint: ["python3", "/opt/data/scripts/portal_adapter.py"]
