@@ -1,4 +1,4 @@
-# COMPACT — estado del proyecto (2026-08-04, tarde)
+# COMPACT — estado del proyecto (2026-08-05, madrugada)
 
 Contexto destilado para humanos y subagentes. **Fuente de verdad de hechos
 VERIFICADOS.** Lo que no diga "verificado", tratarlo como hipótesis.
@@ -22,15 +22,15 @@ Portal estático (Next 14) → dos servicios **del agente del cliente**:
 - **`:8643`** `portal_adapter.py` (nuestro sidecar, vive en el kit): tickets,
   aprobaciones, artefactos, archivos, actividad, uso, capacidades, subidas, y el
   **proxy del stream de chat** (el gateway lo sirve sin CORS y el browser lo
-  descarta). Hoy **v0.17.0**.
+  descarta). Hoy **v0.20.0**.
 
 Auth: bearer con `API_SERVER_KEY` por magic link `#endpoint=&adapter=&key=`.
 `app/app/lib/agent.ts` es el ÚNICO punto de red del portal.
 
-## El portal (10 pestañas)
+## El portal (11 pestañas)
 
 Inicio · Chat · Pipeline · Aprobaciones · Artefactos · Tareas · Actividad ·
-Archivos · Uso · Capacidades. Cada una con su bienvenida propia
+Archivos · Uso · **Conexiones** · Capacidades. Cada una con su bienvenida propia
 (`app/app/lib/intros/`). Kit UI sin sombras, hairline, lucide, cero emojis.
 
 Se puede: chatear con markdown rico (código, KaTeX, mermaid, HTML sanitizado,
@@ -45,12 +45,13 @@ mismo ticket**. Todos los avisos usan una sola sesión, oculta del chat.
 
 ## El kit
 
-`nuevo-agente.sh` (crea el repo del cliente: compose, config.yaml, SOUL borrador,
-skills, plugin, adapter) · `install.sh` (instala/actualiza; `--diff` contra la
+`nuevo-agente.sh` (crea el repo del cliente: compose, config.yaml con la receta
+de kanban y los toolsets caros apagados, SOUL borrador, skills, adapter) · `install.sh` (instala/actualiza; `--diff` contra la
 deriva) · `adapter/` · `skills/` (artifact, entregable, aprobacion) ·
-`plugins/kanban_tools/` (**provisorio**, ver su `DECISION.md`) · `soul/` (bloques
-con placeholders) · `onboarding/brief-empresa.md` · `tools/portal-check.py`
-(**0 fallas o no se entrega**; hoy 13 ok / 0 fallas).
+`connections/` (catálogo curado + runbook de Google) · `soul/` (5 bloques con
+placeholders) · `onboarding/brief-empresa.md` · `tools/portal-check.py`
+(**0 fallas o no se entrega**) y `tools/agente-check.py` (offline, antes de
+prender: frontmatter, SOUL sin huecos, los olvidos de config).
 
 ## Hechos verificados sobre Hermes (MIT, Nous Research)
 
@@ -81,6 +82,28 @@ con placeholders) · `onboarding/brief-empresa.md` · `tools/portal-check.py`
 - **Tableros:** el default es `kanban.db`; los demás en
   `kanban/boards/<slug>/kanban.db` con un `board.json` que ya trae `project_id`.
   El adapter los lista y acepta `?board=`; las escrituras van al default.
+
+## Conexiones (nuevo, 5/8)
+
+El catálogo vive en el kit (`connections/catalogo.json`) y se instala en cada
+agente; el adapter calcula el estado **por presencia** de credenciales, archivos
+o plugins y nunca devuelve un valor. Tres estados: conectado / sin_conectar /
+**bloqueado** (= falta algo NUESTRO, típicamente la app OAuth de tuagente).
+
+Desde el portal no se conecta ni se pegan claves: se **pide**, y eso crea un
+ticket. Google Workspace (Sheets, Drive, Agenda, Docs) ya lo soporta el motor;
+falta crear una sola app OAuth tipo "Desktop app" nuestra y reusarla en todos
+los clientes — ver `hermes-kit/connections/google-workspace.md`.
+
+## Presupuesto de contexto, medido (5/8, agente nuevo)
+
+```
+system prompt   39,6 KB   (de eso ~11 KB son los bloques de SOUL del kit)
+esquemas tools  67,6 KB   → 60,0 KB apagando tts y delegation
+```
+
+Los esquemas pesan casi el doble que el system prompt entero: **la palanca es
+`agent.disabled_toolsets`, no reescribir prosa.** kanban solo son 19,8 KB.
 
 ## Endpoints verificados
 
