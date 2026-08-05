@@ -10,7 +10,7 @@
 // y el historial de corridas: GET {adapter}/portal/crons/{id}.
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Clock, Eye, Pause, Play, X, Zap } from "lucide-react";
+import { Clock, Eye, Pause, Play, TriangleAlert, X, Zap } from "lucide-react";
 import { loadConfig, getJobs, jobAction, type PortalConfig } from "../lib/agent";
 import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner,
@@ -287,8 +287,16 @@ const CANAL_LABEL: Record<string, string> = {
   whatsapp: "WhatsApp",
   email: "Email",
   local: "Queda en el agente",
-  origin: "Donde se pidió",
+  // OJO: `origin` significa "a la sesión desde donde se creó la tarea". Si esa
+  // sesión es del portal o de la API, NO puede recibir mensajes: la tarea corre
+  // bien y el resultado no le llega a nadie, sin ningún aviso. Verificado el
+  // 5/8: un vendedor pidió su hoja de ruta para los lunes a las 7 y la tarea
+  // quedó así — habría esperado un mensaje que nunca iba a existir.
+  origin: "A donde se pidió",
 };
+
+/** ¿Esta tarea corre y no le llega a nadie? */
+const CANAL_SIN_DESTINO = new Set(["origin", "local"]);
 
 // ── Página ──
 
@@ -386,6 +394,20 @@ function DetalleTarea({ job, detalle, error, onRetry, onClose }: {
               )}
               {canal && <Dato label="Te llega por">{CANAL_LABEL[canal] ?? canal}</Dato>}
             </div>
+
+            {/* Un cron sin canal de verdad corre perfecto y no avisa a nadie.
+                Es la falla más silenciosa que tiene el sistema: mejor decirlo
+                acá que dejar al cliente esperando un mensaje que no existe. */}
+            {canal && CANAL_SIN_DESTINO.has(canal) && (
+              <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-c-amber bg-c-amber/30 px-3 py-2 text-[12px] text-c-amber-ink">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Esta tarea corre, pero <strong>el resultado no te llega por ningún lado</strong>:
+                  queda guardado en tu agente. Si querés recibirla, pedinos que le pongamos un
+                  canal (Telegram, WhatsApp o correo).
+                </span>
+              </p>
+            )}
 
             {/* Lo más valioso del detalle: la consigna tal cual corre. */}
             <div className="mt-5">
