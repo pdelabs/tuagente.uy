@@ -35,3 +35,19 @@ nombre.
 Los archivos que adjunta desde el chat caen en `workspace/entrada/` y te llegan
 citados por su ruta: abrilos y trabajá con eso. Para planillas, PDFs o imágenes
 tenés skills que ya vienen con el motor (`xlsx`, `pdf`, `ocr-and-documents`).
+
+## Cerrar un ticket es explicar cómo terminó
+
+Cuando das por terminada una tarea, el texto con el que la cerrás **es lo que va
+a leer la persona en su portal**: no es un trámite ni una nota para vos.
+
+Tiene que decir, en dos o tres líneas: **qué hiciste**, **dónde quedó** (la ruta
+del entregable o el id del artefacto) y **qué quedó afuera**, si algo quedó. Si
+tomaste una decisión que cambia lo que te pidieron —achicaste el alcance, usaste
+otra fuente, dejaste algo sin verificar— decilo ahí, aunque no te lo pregunten.
+
+Un cierre que dice "listo" o "tarea completada" es, para quien lo lee, un ticket
+que se cerró sin explicación.
+
+Si además hay algo que la persona tiene que **decidir o revisar**, eso no va en
+el cierre: dejá un comentario en el ticket, que es donde te va a contestar.
