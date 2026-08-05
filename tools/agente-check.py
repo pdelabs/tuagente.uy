@@ -147,6 +147,34 @@ def main():
 
     check("índice de skills", _indice, required=False)
 
+    # --- skills que le enseñan al agente a operar su propio motor ---
+    def _skills_de_motor():
+        """El agente de un cliente no tiene por qué saber sobre qué corre.
+
+        No es sólo ruido de contexto: un agente que sabe instalarse skills y
+        cambiar su configuración es un agente al que se lo puede convencer de
+        que lo haga. Verificado el 5/8 en un agente real: cargó la skill
+        `hermes-agent` (14 KB) y se fue al terminal a correr `hermes ...`, dos
+        turnos seguidos, contra lo que dicen su SOUL y su memoria.
+        """
+        raiz = os.path.join(data, "skills", "autonomous-ai-agents")
+        if not os.path.isdir(raiz):
+            return "sin skills de operación del motor"
+        presentes = sorted(
+            d for d in os.listdir(raiz)
+            if os.path.isfile(os.path.join(raiz, d, "SKILL.md"))
+        )
+        if not presentes:
+            return "sin skills de operación del motor"
+        raise AssertionError(
+            "el agente tiene skills para operar su propio runtime y otros agentes ("
+            + ", ".join(presentes)
+            + ") — borrá skills/autonomous-ai-agents/; el marcador "
+            ".no-bundled-skills evita que vuelvan"
+        )
+
+    check("skills del motor", _skills_de_motor, required=False)
+
     # --- el SOUL, que es el system prompt ---
     def _soul():
         ruta = os.path.join(data, "SOUL.md")
