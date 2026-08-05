@@ -139,6 +139,18 @@ export const getFileText = async (c: PortalConfig, path: string) => {
   if (!res.ok) throw httpError(res.status, path);
   return res.text();
 };
+/** Los bytes crudos, sin pasarlos por texto.
+ *
+ *  Para descargar hay que usar SIEMPRE esto. `res.text()` decodifica como
+ *  UTF-8, y sobre un binario (.xlsx, .pdf, una imagen) cada byte inválido se
+ *  reemplaza por U+FFFD: el archivo que baja queda roto aunque el adapter lo
+ *  haya mandado intacto. Verificado con un .xlsx de 9316 bytes que viajaba
+ *  perfecto y se corrompía recién en el browser. */
+export const getFileBytes = async (c: PortalConfig, path: string) => {
+  const res = await fetch(`${c.adapter}/portal/files/${encodeURIComponent(path)}`, { headers: headers(c) });
+  if (!res.ok) throw httpError(res.status, path);
+  return res.arrayBuffer();
+};
 export const getUsage = (c: PortalConfig) => get<any>(c.adapter, "/portal/usage", c);
 
 /** Sube un archivo al buzón del agente (workspace/entrada) y devuelve su ruta. */

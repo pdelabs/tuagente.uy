@@ -16,7 +16,7 @@ import {
   Check, Code2, Download, File, FileCode, FileJson, FileText, Folder, FolderOpen,
   Search, X, type LucideIcon,
 } from "lucide-react";
-import { loadConfig, getFiles, getFileText, type PortalConfig } from "../lib/agent";
+import { loadConfig, getFiles, getFileText, getFileBytes, type PortalConfig } from "../lib/agent";
 import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
@@ -24,7 +24,8 @@ import { FileBody } from "../lib/EntityViewer";
 
 type FileEntry = { path: string; size?: number; mtime?: string | number };
 
-type Viewer = { path: string; text: string | null; err: string | null };
+// `binario`: no es texto, no se previsualiza — solo se descarga.
+type Viewer = { path: string; text: string | null; err: string | null; binario?: boolean };
 
 // Front-matter que escribe la skill `entregable` (titulo/tipo/fecha/tags).
 type FrontMatter = { titulo?: string; tipo?: string; fecha?: string; tags: string[] };
@@ -214,9 +215,22 @@ export default function ArchivosPage() {
     setShowInternal(next);
   };
 
+  // Lo que no es texto no se previsualiza: se descarga. Intentar dibujarlo
+  // muestra basura y, peor, la descarga salia del texto ya corrompido.
+  const NO_TEXTO = new Set([
+    "xlsx", "xls", "ods", "docx", "doc", "odt", "pptx", "ppt", "pdf",
+    "png", "jpg", "jpeg", "gif", "webp", "svgz", "ico", "bmp",
+    "zip", "gz", "tar", "7z", "rar", "mp3", "mp4", "mov", "wav", "ogg",
+  ]);
+  const esBinario = (p: string) => NO_TEXTO.has((p.split(".").pop() ?? "").toLowerCase());
+
   const openFile = (path: string) => {
     if (!cfg) return;
     setRaw(false);
+    if (esBinario(path)) {
+      setViewer({ path, text: null, err: null, binario: true });
+      return;
+    }
     setViewer({ path, text: null, err: null });
     getFileText(cfg, path)
       .then((t) => setViewer({ path, text: t, err: null }))
@@ -225,17 +239,28 @@ export default function ArchivosPage() {
 
   const viewerName = viewer ? viewer.path.split("/").pop() || viewer.path : "";
 
-  // El archivo baja tal cual está en el workspace (con front-matter incluido).
-  const downloadFile = () => {
-    if (!viewer || viewer.text === null) return;
-    const url = URL.createObjectURL(new Blob([viewer.text], { type: "text/plain;charset=utf-8" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = viewerName || "archivo";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
+  // El archivo baja tal cual está en el workspace, byte por byte: se piden los
+  // bytes de nuevo en vez de reusar el texto ya cargado, porque un binario que
+  // pasó por texto vuelve roto. También sirve para lo que ni se previsualiza.
+  const [bajando, setBajando] = useState(false);
+  const downloadFile = async () => {
+    if (!viewer || !cfg) return;
+    setBajando(true);
+    try {
+      const bytes = await getFileBytes(cfg, viewer.path);
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = viewerName || "archivo";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (e) {
+      setViewer((v) => (v ? { ...v, err: e instanceof Error ? e.message : String(e) } : v));
+    } finally {
+      setBajando(false);
+    }
   };
 
   const { fm, fmBody } = useMemo(() => {
@@ -436,11 +461,9 @@ export default function ArchivosPage() {
               )}
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
-              {viewer.text !== null && (
-                <IconBtn label="Descargar" onClick={downloadFile}>
-                  <Download className="h-4 w-4" />
-                </IconBtn>
-              )}
+              <IconBtn label="Descargar" disabled={bajando} onClick={downloadFile}>
+                <Download className="h-4 w-4" />
+              </IconBtn>
               {viewer.text !== null && viewer.text.trim() !== "" && (
                 <IconBtn
                   label={raw ? "Ver formateado" : "Ver original"}
@@ -455,7 +478,20 @@ export default function ArchivosPage() {
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-            {viewer.text === null && viewer.err === null && <Spinner />}
+            {viewer.binario ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                <File className="h-8 w-8 text-ink-soft" />
+                <p className="text-sm font-medium text-ink">Este archivo se abre con otro programa</p>
+                <p className="max-w-sm text-[13px] text-ink-soft">
+                  No se puede mostrar acá, pero lo podés descargar y abrirlo como siempre.
+                </p>
+                <Btn onClick={downloadFile} disabled={bajando}>
+                  <Download className="h-4 w-4" />
+                  {bajando ? "Bajando…" : "Descargar"}
+                </Btn>
+              </div>
+            ) : null}
+            {!viewer.binario && viewer.text === null && viewer.err === null && <Spinner />}
             {viewer.err && (
               <ErrorState
                 message={`No pude abrir el archivo (${viewer.err}).`}
