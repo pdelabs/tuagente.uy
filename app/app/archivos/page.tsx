@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Check, Code2, Download, File, FileCode, FileJson, FileText, Folder, FolderOpen,
+  Check, Code2, Download, Eye, File, FileCode, FileJson, FileText, Folder, FolderOpen,
   Search, X, type LucideIcon,
 } from "lucide-react";
 import { loadConfig, getFiles, getFileText, getFileBytes, type PortalConfig } from "../lib/agent";
@@ -243,21 +243,38 @@ export default function ArchivosPage() {
   // bytes de nuevo en vez de reusar el texto ya cargado, porque un binario que
   // pasó por texto vuelve roto. También sirve para lo que ni se previsualiza.
   const [bajando, setBajando] = useState(false);
-  const downloadFile = async () => {
-    if (!viewer || !cfg) return;
-    setBajando(true);
+  const [bajandoPath, setBajandoPath] = useState<string | null>(null);
+  const [errBajada, setErrBajada] = useState<string | null>(null);
+
+  /** Baja cualquier archivo por su ruta, sin necesidad de abrirlo antes.
+   *  Se usa desde la lista y desde el visor: descargar no deberia obligar a
+   *  entrar a ningun lado, y menos con los que ni siquiera se pueden mostrar. */
+  const descargarRuta = async (path: string) => {
+    if (!cfg) return;
+    setBajandoPath(path);
+    setErrBajada(null);
     try {
-      const bytes = await getFileBytes(cfg, viewer.path);
+      const bytes = await getFileBytes(cfg, path);
       const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
       const a = document.createElement("a");
       a.href = url;
-      a.download = viewerName || "archivo";
+      a.download = path.split("/").pop() || "archivo";
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (e) {
-      setViewer((v) => (v ? { ...v, err: e instanceof Error ? e.message : String(e) } : v));
+      setErrBajada(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBajandoPath(null);
+    }
+  };
+
+  const downloadFile = async () => {
+    if (!viewer) return;
+    setBajando(true);
+    try {
+      await descargarRuta(viewer.path);
     } finally {
       setBajando(false);
     }
@@ -384,25 +401,41 @@ export default function ArchivosPage() {
               const Icon = fileIcon(name);
               const meta = [fmtSize(f.size), relTime(toMs(f.mtime))].filter(Boolean).join(" · ");
               return (
-                <li key={`f-${f.path}`}>
-                  {texty ? (
+                <li key={`f-${f.path}`} className="group relative">
+                  <div className="flex w-full items-center gap-3 px-4 py-2.5 transition hover:bg-black/[0.02]">
+                    <Icon className="h-4 w-4 shrink-0 text-ink-soft" />
+                    {/* El nombre abre el que se puede ver; el que no, lo baja.
+                        Un archivo sin vista previa no es un archivo inservible. */}
                     <button
-                      onClick={() => openFile(f.path)}
-                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-black/[0.02]"
+                      onClick={() => (texty ? openFile(f.path) : descargarRuta(f.path))}
+                      className="min-w-0 flex-1 truncate text-left text-sm text-ink hover:underline"
+                      title={texty ? "Ver" : "Descargar"}
                     >
-                      <Icon className="h-4 w-4 shrink-0 text-ink-soft" />
-                      <span className="min-w-0 flex-1 truncate text-sm text-ink">{name}</span>
-                      <span className="shrink-0 text-[12px] tabular-nums text-ink-soft">{meta}</span>
+                      {name}
                     </button>
-                  ) : (
-                    <div className="flex w-full items-center gap-3 px-4 py-2.5 opacity-55">
-                      <Icon className="h-4 w-4 shrink-0 text-ink-soft" />
-                      <span className="min-w-0 flex-1 truncate text-sm text-ink">{name}</span>
-                      <span className="shrink-0 text-[12px] tabular-nums text-ink-soft">
-                        {meta ? `${meta} · ` : ""}sin vista previa
-                      </span>
-                    </div>
-                  )}
+                    <span className="shrink-0 text-[12px] tabular-nums text-ink-soft group-hover:hidden group-focus-within:hidden">
+                      {meta}
+                      {!texty && (meta ? " · sin vista previa" : "sin vista previa")}
+                    </span>
+                    {/* Acciones: aparecen al pasar por encima, como en Drive. */}
+                    <span className="hidden shrink-0 items-center gap-1 group-hover:flex group-focus-within:flex">
+                      {texty && (
+                        <Btn kind="ghost" size="sm" onClick={() => openFile(f.path)}>
+                          <Eye className="h-3.5 w-3.5" />
+                          Ver
+                        </Btn>
+                      )}
+                      <Btn
+                        kind="ghost"
+                        size="sm"
+                        disabled={bajandoPath === f.path}
+                        onClick={() => descargarRuta(f.path)}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {bajandoPath === f.path ? "Bajando…" : "Descargar"}
+                      </Btn>
+                    </span>
+                  </div>
                 </li>
               );
             })}
@@ -413,6 +446,14 @@ export default function ArchivosPage() {
             )}
           </ul>
         </Card>
+
+        {/* Una descarga que falla no puede ser silenciosa: el usuario aprieta,
+            no pasa nada, y no tiene forma de saber por que. */}
+        {errBajada && (
+          <p className="mt-3 inline-flex rounded-lg border border-c-coral bg-c-coral/40 px-3 py-1.5 text-[12px] font-medium text-c-coral-ink">
+            No pude descargar el archivo ({errBajada}).
+          </p>
+        )}
 
         {hiddenCount > 0 && (
           <div className="mt-2 flex justify-center">
