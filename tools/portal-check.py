@@ -136,13 +136,24 @@ def main():
         f"{len(jget(f'{E}/api/sessions', K)[0]['data'])} conversaciones"))
 
     # Convenciones del workspace que hacen usable la pestaña Archivos.
-    check("Convención de entregables", lambda: (
-        "entregables/ presente"
-        if any(f["path"].startswith("entregables/")
-               for f in jget(f"{A}/portal/files", K)[0]["files"])
-        else (_ for _ in ()).throw(AssertionError(
-            "no hay workspace/entregables/ — ¿el agente tiene la skill entregable?"))
-    ), required=False)
+    def _entregables():
+        """En un agente nuevo esto no es un sintoma: todavia no produjo nada.
+
+        El listado devuelve archivos, no carpetas, asi que una carpeta vacia no
+        aparece. Antes esto avisaba "¿el agente tiene la skill entregable?" en
+        cada alta, que es una falsa alarma y entrena a ignorar los avisos.
+        """
+        archivos = jget(f"{A}/portal/files", K)[0]["files"]
+        if any(f["path"].startswith("entregables/") for f in archivos):
+            return "entregables/ presente"
+        if not archivos:
+            return "agente nuevo: todavia no escribio nada (esperable)"
+        raise AssertionError(
+            "hay archivos pero ninguno en entregables/ — ¿el agente esta usando "
+            "la skill entregable o elige rutas por su cuenta?"
+        )
+
+    check("Convención de entregables", _entregables, required=False)
 
     print(f"\nAgente: {manifest.get('agent')} — {manifest.get('portal_plugin')}\n")
     for estado, nombre, detalle in results:

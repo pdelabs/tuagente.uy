@@ -29,10 +29,20 @@ MD
 El script imprime el markdown listo. **No escribas vos ese formato a mano**: si
 cada solicitud se ve distinta, la persona tiene que leer todo de nuevo cada vez.
 
-## Paso 2 — crear el ticket y bloquearlo
+## Paso 2 — pedirlo EN EL TICKET QUE YA ESTÁS TRABAJANDO
 
-Creá el ticket con tu herramienta de kanban, con ese texto como descripción, y
-después **bloquealo con motivo y tipo `needs_input`**.
+**Si estás trabajando una tarea del tablero, el pedido va ahí. No crees otro
+ticket.** Dejá el texto como comentario de ese mismo ticket y **bloquealo con
+motivo y tipo `needs_input`**.
+
+Un ticket aparte parece prolijo y no lo es: la persona termina con dos tarjetas
+para un solo pedido, sin saber en cuál contestar, y la que dice "Aprobación: …"
+queda suelta en el tablero para siempre. El pedido y el trabajo son la misma
+cosa: el trabajo está frenado justamente porque falta el permiso.
+
+Creá un ticket nuevo **solo** si el pedido no nació de una tarea del tablero
+—por ejemplo, algo que salió de una conversación— y en ese caso también:
+primero lo creás, y **después** lo bloqueás con la acción de bloquear.
 
 **Regla dura, y no es un detalle:** un ticket que llega a bloqueado sin el evento
 de bloqueo tipado (por ejemplo creándolo directamente con estado bloqueado) **se
@@ -46,6 +56,10 @@ bloquear, nunca creando el ticket ya bloqueado.
 Decilo en el chat en una línea, con el id del ticket (el portal lo convierte en
 un chip clicable) y qué estás esperando. Nada más: el detalle ya está en el
 ticket.
+
+Y decí **qué necesitás**, no cómo funciona el sistema por dentro: "necesito que
+me confirmes el mail a Julio Cabrera antes de mandarlo" se entiende; "bloqueé la
+tarea con needs_input" no le sirve a nadie.
 
 ## Cuando te aprueban
 
