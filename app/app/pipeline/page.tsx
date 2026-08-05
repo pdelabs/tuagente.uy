@@ -225,29 +225,35 @@ function Resultado({ outcome, cfg }: { outcome: TicketOutcome; cfg: PortalConfig
   const tono = cerrado
     ? "border-c-green bg-c-green/30 text-c-green-ink"
     : "border-c-amber bg-c-amber/30 text-c-amber-ink";
+  // El payload del cierre trae `artifacts` sólo a veces (depende de cómo el
+  // agente haya completado). Por eso la fuente principal es el propio resumen:
+  // <Markdown> ya convierte las rutas del workspace en chips que abren el
+  // archivo, y acá abajo agregamos únicamente lo que el texto no nombró.
+  const enElTexto = (f: string) => (outcome.summary ?? "").includes(f.split("/").pop() ?? f);
+  const extra = (outcome.files ?? []).filter((f) => !enElTexto(f));
   return (
-    <section className={`mt-6 rounded-xl border px-4 py-3 ${tono}`}>
-      <h3 className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide">
-        <Icono className="h-3.5 w-3.5" />
-        {cerrado ? "Resultado" : "Por qué se frenó"}
-      </h3>
-      {outcome.summary ? (
-        <div className="text-sm text-ink">
-          <Markdown>{outcome.summary}</Markdown>
-        </div>
-      ) : (
-        <p className="text-sm text-ink-soft">Sin detalle.</p>
-      )}
-      {outcome.files && outcome.files.length > 0 && (
-        <EntityProvider cfg={cfg}>
+    <EntityProvider cfg={cfg}>
+      <section className={`mt-6 rounded-xl border px-4 py-3 ${tono}`}>
+        <h3 className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide">
+          <Icono className="h-3.5 w-3.5" />
+          {cerrado ? "Resultado" : "Por qué se frenó"}
+        </h3>
+        {outcome.summary ? (
+          <div className="text-sm text-ink">
+            <Markdown>{outcome.summary}</Markdown>
+          </div>
+        ) : (
+          <p className="text-sm text-ink-soft">Sin detalle.</p>
+        )}
+        {extra.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {outcome.files.map((f) => (
+            {extra.map((f) => (
               <EntityChip key={f} entity={{ kind: "file", path: f }} label={f.split("/").pop() ?? f} />
             ))}
           </div>
-        </EntityProvider>
-      )}
-    </section>
+        )}
+      </section>
+    </EntityProvider>
   );
 }
 
