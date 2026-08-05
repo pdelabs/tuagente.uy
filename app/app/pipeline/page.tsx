@@ -12,6 +12,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   Archive,
   Check,
+  CircleCheck,
+  CirclePause,
   Inbox,
   Loader2,
   Plus,
@@ -31,6 +33,7 @@ import {
   type Ticket,
   type TicketComment,
   type TicketDetail,
+  type TicketOutcome,
 } from "../lib/agent";
 import {
   Btn,
@@ -44,6 +47,8 @@ import {
   inputCls,
 } from "../lib/ui";
 import Markdown from "../lib/Markdown";
+import { EntityProvider } from "../lib/EntityViewer";
+import { EntityChip } from "../lib/entities";
 
 const REFRESH_MS = 30_000;
 const SIN_TENANT = "__sin_tenant__"; // sentinel para tickets con tenant null
@@ -206,6 +211,44 @@ function fmtRelativa(v: string | number): string {
 // Búsqueda insensible a mayúsculas y tildes.
 function normalizar(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/** Cómo terminó (o por qué se frenó) el ticket, con lo que dejó escrito.
+ *
+ *  Hermes guarda el resumen y los entregables en el evento de cierre; el
+ *  adapter los expone como `outcome`. Mostrarlo acá arriba es lo que evita el
+ *  caso feo: un ticket que pasa de "creado" a "listo" sin que el cliente
+ *  pueda saber qué se hizo ni dónde quedó. */
+function Resultado({ outcome, cfg }: { outcome: TicketOutcome; cfg: PortalConfig }) {
+  const cerrado = outcome.kind === "completed";
+  const Icono = cerrado ? CircleCheck : CirclePause;
+  const tono = cerrado
+    ? "border-c-green bg-c-green/30 text-c-green-ink"
+    : "border-c-amber bg-c-amber/30 text-c-amber-ink";
+  return (
+    <section className={`mt-6 rounded-xl border px-4 py-3 ${tono}`}>
+      <h3 className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide">
+        <Icono className="h-3.5 w-3.5" />
+        {cerrado ? "Resultado" : "Por qué se frenó"}
+      </h3>
+      {outcome.summary ? (
+        <div className="text-sm text-ink">
+          <Markdown>{outcome.summary}</Markdown>
+        </div>
+      ) : (
+        <p className="text-sm text-ink-soft">Sin detalle.</p>
+      )}
+      {outcome.files && outcome.files.length > 0 && (
+        <EntityProvider cfg={cfg}>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {outcome.files.map((f) => (
+              <EntityChip key={f} entity={{ kind: "file", path: f }} label={f.split("/").pop() ?? f} />
+            ))}
+          </div>
+        </EntityProvider>
+      )}
+    </section>
+  );
 }
 
 function FiltroTenant({ activo, onClick, children }: {
@@ -747,6 +790,13 @@ export default function PipelinePage() {
             ) : abierto ? (
               <p className="text-sm text-ink-soft">Este ticket no tiene descripción.</p>
             ) : null}
+
+            {/* Por qué el ticket quedó así. Sale del evento de cierre, no de
+                que el agente se haya acordado de comentar: un ticket cerrado
+                sin explicación es un ticket que el cliente no puede auditar. */}
+            {detalle?.outcome && (
+              <Resultado outcome={detalle.outcome} cfg={cfg} />
+            )}
 
             <h3 className="mb-2 mt-6 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
               Comentarios

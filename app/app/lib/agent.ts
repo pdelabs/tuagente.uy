@@ -97,8 +97,27 @@ async function del<T>(base: string, path: string, cfg: PortalConfig): Promise<T>
 }
 
 export type TicketComment = { author: string; body: string; created_at: number };
-export type TicketEvent = { kind: string; created_at: number };
-export type TicketDetail = { ticket: Ticket; comments: TicketComment[]; events: TicketEvent[] };
+export type TicketEvent = {
+  kind: string;
+  created_at: number;
+  summary?: string;
+  files?: string[];
+  blocked_kind?: string;
+};
+/** Por qué el ticket quedó como quedó. Lo arma el adapter desde el evento de
+ *  cierre (o de bloqueo), no depende de que el agente se acuerde de comentar. */
+export type TicketOutcome = {
+  kind: string;
+  summary?: string;
+  files?: string[];
+  created_at: number;
+};
+export type TicketDetail = {
+  ticket: Ticket;
+  outcome?: TicketOutcome | null;
+  comments: TicketComment[];
+  events: TicketEvent[];
+};
 
 // ── Adapter (:8643) ──
 export const getManifest = (c: PortalConfig) => get<Manifest>(c.adapter, "/portal/manifest", c);
