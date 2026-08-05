@@ -21,11 +21,17 @@ import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
 import { FileBody } from "../lib/EntityViewer";
+import Spreadsheet, { CsvPreview } from "../lib/Spreadsheet";
 
 type FileEntry = { path: string; size?: number; mtime?: string | number };
 
 // `binario`: no es texto, no se previsualiza — solo se descarga.
-type Viewer = { path: string; text: string | null; err: string | null; binario?: boolean };
+type Viewer = {
+  path: string; text: string | null; err: string | null;
+  binario?: boolean;
+  /** Bytes de una planilla, para dibujarla. Solo se piden para .xlsx/.xls. */
+  hoja?: ArrayBuffer | null;
+};
 
 // Front-matter que escribe la skill `entregable` (titulo/tipo/fecha/tags).
 type FrontMatter = { titulo?: string; tipo?: string; fecha?: string; tags: string[] };
@@ -224,9 +230,20 @@ export default function ArchivosPage() {
   ]);
   const esBinario = (p: string) => NO_TEXTO.has((p.split(".").pop() ?? "").toLowerCase());
 
+  const esPlanilla = (p: string) => ["xlsx", "xls"].includes((p.split(".").pop() ?? "").toLowerCase());
+
   const openFile = (path: string) => {
     if (!cfg) return;
     setRaw(false);
+    // Las planillas SÍ se muestran: el agente entrega pedidos y controles en
+    // xlsx, y bajarlos para ver tres números no es una vista previa.
+    if (esPlanilla(path)) {
+      setViewer({ path, text: null, err: null, binario: true, hoja: null });
+      getFileBytes(cfg, path)
+        .then((b) => setViewer({ path, text: null, err: null, binario: true, hoja: b }))
+        .catch((e: Error) => setViewer({ path, text: null, err: e.message || "error", binario: true }));
+      return;
+    }
     if (esBinario(path)) {
       setViewer({ path, text: null, err: null, binario: true });
       return;
@@ -519,7 +536,15 @@ export default function ArchivosPage() {
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-            {viewer.binario ? (
+            {viewer.binario && esPlanilla(viewer.path) ? (
+              viewer.err ? (
+                <ErrorState message={viewer.err} onRetry={() => openFile(viewer.path)} />
+              ) : viewer.hoja ? (
+                <Spreadsheet bytes={viewer.hoja} />
+              ) : (
+                <Spinner />
+              )
+            ) : viewer.binario ? (
               <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
                 <File className="h-8 w-8 text-ink-soft" />
                 <p className="text-sm font-medium text-ink">Este archivo se abre con otro programa</p>
@@ -547,6 +572,11 @@ export default function ArchivosPage() {
                 <pre className="whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-ink">
                   {viewer.text}
                 </pre>
+              ) : viewer.path.toLowerCase().endsWith(".csv") ? (
+                // Los CSV son lo que el cliente exporta de su sistema: leerlos
+                // como texto crudo es leer comas. Se dibujan como tabla, y el
+                // botón "Original" sigue mostrando el archivo tal cual.
+                <CsvPreview text={viewer.text} />
               ) : (
                 <FileBody path={viewer.path} text={fm ? fmBody : viewer.text} />
               )
