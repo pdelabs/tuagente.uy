@@ -67,6 +67,14 @@ toolsets:
 #   delegation 5,8 KB  crear sub-agentes
 # Si un cliente llega a necesitarlas, se sacan de esta lista y se reinicia.
 agent:
+  # Effort al maximo. Probado el 5/8 sobre el mismo agente, mismos datos y
+  # mismas consignas: con el default del proveedor dejaba 3 de 18 clientes
+  # afuera de una hoja de ruta diciendo que eran 18, mezclaba meses en un
+  # ranking y erraba una bonificacion en cascada. Con `max` las tres salieron
+  # bien de primera. Costo: ruido (USD 0,18 por 13 sesiones completas).
+  # OJO: no arregla la complacencia — con max igual se auto-acuso de inventar
+  # a alguien que estaba en su propio SOUL.
+  reasoning_effort: max
   disabled_toolsets:
     - tts
     - delegation
