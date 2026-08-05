@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.18.0"
+VERSION = "0.19.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -333,6 +333,49 @@ def task_status(task_id):
     return row["status"] if row else None
 
 
+def _ws_relative(path):
+    """/opt/data/workspace/entregables/x.md -> entregables/x.md (como los sirve
+    el modulo de archivos). Lo de afuera del workspace se descarta."""
+    try:
+        return str(Path(str(path)).resolve().relative_to(WORKSPACE.resolve()))
+    except (ValueError, OSError, TypeError):
+        return None
+
+
+def event_detail(kind, payload):
+    """Lo que un humano necesita de un evento; el resto del payload es interno.
+
+    El motivo de cierre de un ticket vive ACA, no en un comentario: cuando el
+    agente termina, Hermes guarda `summary` + `artifacts` en el evento
+    `completed`. Si no lo devolvemos, el cliente ve un ticket que pasó de
+    creado a cerrado sin ninguna explicación, aunque la explicación exista.
+    """
+    if not payload:
+        return {}
+    try:
+        data = json.loads(payload)
+    except (ValueError, TypeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out = {}
+    texto = data.get("summary") or data.get("reason") or data.get("error")
+    if isinstance(texto, str) and texto.strip():
+        out["summary"] = texto.strip()[:2000]
+    archivos = [
+        rel
+        for rel in (_ws_relative(a) for a in (data.get("artifacts") or []) if a)
+        if rel
+    ]
+    if archivos:
+        out["files"] = archivos[:20]
+    # Por qué quedó bloqueado (needs_input, gave_up, ...) — el cliente lo lee
+    # para saber si la pelota está de su lado.
+    if kind in ("blocked", "unblocked") and isinstance(data.get("kind"), str):
+        out["blocked_kind"] = data["kind"][:60]
+    return out
+
+
 def ticket_detail(task_id, db=None):
     conn = ro(db or KANBAN_DB)
     t = conn.execute(
@@ -348,15 +391,30 @@ def ticket_detail(task_id, db=None):
         (task_id,),
     ).fetchall()
     events = conn.execute(
-        "SELECT kind, created_at FROM task_events "
+        "SELECT kind, payload, created_at FROM task_events "
         "WHERE task_id = ? ORDER BY created_at DESC LIMIT 50",
         (task_id,),
     ).fetchall()
     conn.close()
+
+    salida, desenlace = [], None
+    for e in events:
+        item = {"kind": e["kind"], "created_at": e["created_at"]}
+        item.update(event_detail(e["kind"], e["payload"]))
+        salida.append(item)
+        # `events` viene del mas nuevo al mas viejo: el primero que cierre o
+        # bloquee es el desenlace vigente del ticket.
+        if desenlace is None and e["kind"] in ("completed", "blocked", "gave_up", "failed"):
+            if item.get("summary") or item.get("files"):
+                desenlace = {k: item[k] for k in ("kind", "summary", "files", "created_at") if k in item}
+
     return {
         "ticket": dict(t),
+        # Por qué está como está, listo para mostrar arriba de todo. Sale del
+        # evento, no de que el agente se haya acordado de comentar.
+        "outcome": desenlace,
         "comments": [dict(c) for c in comments],
-        "events": [dict(e) for e in events],
+        "events": salida,
     }
 
 
