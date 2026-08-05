@@ -24,9 +24,17 @@ Encontré 20 empresas que encajan...
 MD
 ```
 
-Devuelve un JSON con `referencia`. **Decile esa referencia al cliente en tu
-respuesta** (ej. "lo dejé en `workspace/entregables/2026-08-04-prospeccion-uruguay.md`"):
-el portal la convierte en un chip clicable que abre el archivo.
+Devuelve un JSON con **dos rutas, y no son intercambiables**:
+
+- `referencia_para_citar` → la que le decís al cliente (ej. "lo dejé en
+  `workspace/entregables/2026-08-04-prospeccion-uruguay.md`"). El portal la
+  convierte en un chip clicable.
+- `ruta_para_releer` → la absoluta, la que usás vos si después tenés que **abrir
+  el archivo de nuevo**.
+
+**No uses la referencia para releer.** Si estás trabajando una tarea del tablero,
+tu directorio de trabajo es el de esa tarea, no el workspace: una ruta relativa
+te va a dar "File not found" aunque el archivo exista.
 
 `--kind`: `informe`, `lista`, `borrador`, `nota`, `analisis`.
 `--tags`: opcional, separados por coma.

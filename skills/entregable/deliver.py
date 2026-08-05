@@ -76,12 +76,20 @@ def main():
     path.write_text("\n".join(front) + f"\n\n# {args.title}\n\n{body}\n", "utf-8")
     rel = path.relative_to(Path("/opt/data/workspace"))
 
+    # DOS rutas, y los nombres importan: el agente elegia `referencia` para
+    # releer el archivo y fallaba. Cuando corre como worker de un ticket, su
+    # directorio de trabajo es el scratch del ticket
+    # (/opt/data/kanban/workspaces/t_xxx), asi que una ruta relativa apunta a
+    # otro lado. Verificado el 5/8 con "File not found:
+    # /opt/data/kanban/workspaces/t_f218256d/workspace/entregables/...".
     print(json.dumps({
         "ok": True,
-        "path": str(path),
-        "referencia": f"workspace/{rel.as_posix()}",
+        "ruta_para_releer": str(path),          # absoluta: funciona desde cualquier lado
+        "referencia_para_citar": f"workspace/{rel.as_posix()}",  # la que entiende el portal
         "titulo": args.title,
         "tipo": args.kind,
+        "nota": "Para volver a abrir el archivo usa ruta_para_releer. "
+                "Para nombrarselo al cliente usa referencia_para_citar.",
     }, ensure_ascii=False))
     return 0
 
