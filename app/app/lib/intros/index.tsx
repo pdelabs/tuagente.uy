@@ -15,6 +15,7 @@ import CronsIntro from "./crons";
 import ActivityIntro from "./activity";
 import FilesIntro from "./files";
 import UsageIntro from "./usage";
+import ConnectionsIntro from "./connections";
 
 const KEY = "tuagente_intro_v2";
 
@@ -28,6 +29,7 @@ export const INTROS: Record<string, ComponentType<IntroProps>> = {
   activity: ActivityIntro,
   files: FilesIntro,
   usage: UsageIntro,
+  connections: ConnectionsIntro,
 };
 
 export function useIntroGate() {

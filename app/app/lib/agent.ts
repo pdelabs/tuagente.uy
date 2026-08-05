@@ -165,6 +165,25 @@ export type Capabilities = {
 export const getCapabilities = (c: PortalConfig) =>
   get<Capabilities>(c.adapter, "/portal/capabilities", c);
 
+/** A qué sistemas del cliente está enchufado el agente.
+ *  El adapter reporta PRESENCIA, nunca valores: acá no viaja ninguna credencial. */
+export type Connection = {
+  id: string;
+  label: string;
+  grupo: "canal" | "sistema" | string;
+  para_que: string;
+  como: string;
+  esfuerzo?: "minutos" | "horas" | "dias" | string;
+  quien?: "cliente_solo" | "asistido" | "nosotros" | string;
+  advertencia?: string | null;
+  recomendado?: boolean;
+  estado: "conectado" | "sin_conectar" | "bloqueado" | string;
+  falta: { tipo: string; nombre: string }[];
+  falta_previo: { tipo: string; nombre: string }[];
+};
+export const getConnections = (c: PortalConfig) =>
+  get<{ disponible: boolean; conexiones: Connection[] }>(c.adapter, "/portal/connections", c);
+
 export type ArtifactMeta = {
   id: string; title: string; kind: string; summary: string;
   created_at: number; bytes: number;

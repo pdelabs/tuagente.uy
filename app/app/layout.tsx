@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, Clock, Columns3, Folder, Hand, Home, LayoutDashboard,
-  LogOut, MessageSquare, Puzzle, Unplug, type LucideIcon,
+  LogOut, MessageSquare, Plug, Puzzle, Unplug, type LucideIcon,
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest, getApprovals,
@@ -29,6 +29,7 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   { key: "activity", path: "/app/actividad", label: "Actividad", icon: Activity },
   { key: "files", path: "/app/archivos", label: "Archivos", icon: Folder },
   { key: "usage", path: "/app/uso", label: "Uso", icon: BarChart3 },
+  { key: "connections", path: "/app/conexiones", label: "Conexiones", icon: Plug },
   { key: "capabilities", path: "/app/capacidades", label: "Capacidades", icon: Puzzle },
 ];
 
