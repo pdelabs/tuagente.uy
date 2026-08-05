@@ -72,10 +72,9 @@ prender: frontmatter, SOUL sin huecos, los olvidos de config).
   Verificado el 4/8 con control en un agente descartable; receta y reproducción
   en `hermes-kit/notas/kanban-nativo.md`. **Nuestro plugin se borró**: lo único
   que hacía era declarar `kanban` en `provides_tools` y destrabarlo de rebote.
-- **Contexto:** ~30 KB de system prompt + ~50 KB de esquemas (27-30 tools). De
-  los 30 KB, ~16 son Hermes hablando de sí mismo (le dice que es "Hermes Agent by
-  Nous Research" y que dar soporte del runtime es parte de su trabajo).
-  `hermes tools disable <toolset>` es la palanca grande, sin usar todavía.
+- **Contexto:** ver la medición de abajo. Parte del system prompt es Hermes
+  hablando de sí mismo (le dice que es "Hermes Agent by Nous Research" y que dar
+  soporte del runtime es parte de su trabajo); eso no lo controlamos.
 - **Crons:** se crean por CLI, no por yaml. Una tarea creada desde una sesión del
   portal entrega a esa sesión, **que no puede recibir mensajes**: corre bien y no
   llega nada, sin aviso.
