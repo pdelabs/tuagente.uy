@@ -415,44 +415,52 @@ export default function ArchivosPage() {
             {inDir.map((f) => {
               const name = f.path.split("/").pop() || f.path;
               const texty = TEXT_EXT.test(name);
+              // Se puede ver ADENTRO del portal: texto plano o planilla.
+              const verEnPortal = texty || esPlanilla(name);
               const Icon = fileIcon(name);
               const meta = [fmtSize(f.size), relTime(toMs(f.mtime))].filter(Boolean).join(" · ");
               return (
                 <li key={`f-${f.path}`} className="group relative">
                   <div className="flex w-full items-center gap-3 px-4 py-2.5 transition hover:bg-black/[0.02]">
                     <Icon className="h-4 w-4 shrink-0 text-ink-soft" />
-                    {/* El nombre abre el que se puede ver; el que no, lo baja.
-                        Un archivo sin vista previa no es un archivo inservible. */}
+                    {/* El nombre abre lo que se puede ver —incluidas las
+                        planillas— y baja lo que no. */}
                     <button
-                      onClick={() => (texty ? openFile(f.path) : descargarRuta(f.path))}
+                      onClick={() => (verEnPortal ? openFile(f.path) : descargarRuta(f.path))}
                       className="min-w-0 flex-1 truncate text-left text-sm text-ink hover:underline"
-                      title={texty ? "Ver" : "Descargar"}
+                      title={verEnPortal ? "Ver" : "Descargar"}
                     >
                       {name}
                     </button>
-                    <span className="shrink-0 text-[12px] tabular-nums text-ink-soft group-hover:hidden group-focus-within:hidden">
+                    <span className="shrink-0 text-[12px] tabular-nums text-ink-soft group-hover:opacity-0 group-focus-within:opacity-0">
                       {meta}
-                      {!texty && (meta ? " · sin vista previa" : "sin vista previa")}
+                      {!verEnPortal && (meta ? " · sin vista previa" : "sin vista previa")}
                     </span>
-                    {/* Acciones: aparecen al pasar por encima, como en Drive. */}
-                    <span className="hidden shrink-0 items-center gap-1 group-hover:flex group-focus-within:flex">
-                      {texty && (
-                        <Btn kind="ghost" size="sm" onClick={() => openFile(f.path)}>
+                  </div>
+                  {/* Las acciones van ABSOLUTAS a propósito: si ocupan lugar en
+                      el flujo, la fila crece al pasar el mouse y la lista salta.
+                      Así aparecen encima del tamaño, sin mover nada. */}
+                  <span className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 items-center gap-1 group-hover:flex group-focus-within:flex">
+                    <span className="pointer-events-auto flex items-center gap-1">
+                      {verEnPortal && (
+                        <button
+                          onClick={() => openFile(f.path)}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-semibold text-ink-soft transition hover:bg-black/[0.06] hover:text-ink"
+                        >
                           <Eye className="h-3.5 w-3.5" />
                           Ver
-                        </Btn>
+                        </button>
                       )}
-                      <Btn
-                        kind="ghost"
-                        size="sm"
+                      <button
                         disabled={bajandoPath === f.path}
                         onClick={() => descargarRuta(f.path)}
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-semibold text-ink-soft transition hover:bg-black/[0.06] hover:text-ink disabled:opacity-50"
                       >
                         <Download className="h-3.5 w-3.5" />
                         {bajandoPath === f.path ? "Bajando…" : "Descargar"}
-                      </Btn>
+                      </button>
                     </span>
-                  </div>
+                  </span>
                 </li>
               );
             })}
