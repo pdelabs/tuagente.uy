@@ -9,10 +9,19 @@
 // técnico del manifest. Escribirlo en el agente (SOUL) sigue siendo el
 // pendiente de personalización: desde acá no hay cómo, todavía.
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import dynamic from "next/dynamic";
 import { ArrowRight, Columns3, Hand, MessageSquare } from "lucide-react";
 import { Btn } from "./ui";
 import type { Manifest } from "./agent";
+import { AgentitoSvg } from "./agentito";
+
+// El runtime de Rive (~330 KB gz) se trae solo cuando el onboarding se muestra;
+// el resto del portal no lo paga. Mientras tanto, la cara estática.
+const AgentitoRive = dynamic(() => import("./AgentitoRive"), {
+  ssr: false,
+  loading: () => <AgentitoSvg className="h-full w-full" />,
+});
 
 const NAME_KEY = "tuagente_agent_name";
 
@@ -29,45 +38,6 @@ export function loadAgentName(): string | null {
 /** Cómo llamamos al agente en el portal: el nombre del cliente, o el del manifest. */
 export function agentDisplayName(manifest: Manifest | null): string {
   return loadAgentName() || manifest?.agent || "tu agente";
-}
-
-/** La cara del agentito, grande. Los ojos siguen el cursor (solo pointer fino). */
-function Agentito() {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const pupilsRef = useRef<SVGGElement>(null);
-
-  useEffect(() => {
-    if (window.matchMedia("(pointer: coarse)").matches) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const onMove = (e: MouseEvent) => {
-      const svg = svgRef.current, pupils = pupilsRef.current;
-      if (!svg || !pupils) return;
-      const r = svg.getBoundingClientRect();
-      const dx = e.clientX - (r.left + r.width / 2);
-      const dy = e.clientY - (r.top + r.height / 2);
-      const d = Math.hypot(dx, dy) || 1;
-      pupils.setAttribute("transform", `translate(${(dx / d) * 3.4} ${(dy / d) * 3.4})`);
-    };
-    window.addEventListener("mousemove", onMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onMove);
-  }, []);
-
-  return (
-    <svg ref={svgRef} viewBox="0 0 120 120" className="h-full w-full" aria-hidden>
-      <line x1="60" y1="22" x2="60" y2="11" stroke="#5B4BE8" strokeWidth="4" strokeLinecap="round" />
-      <circle cx="60" cy="9" r="4.5" fill="#5B4BE8" />
-      <ellipse cx="60" cy="68" rx="46" ry="44" fill="#5B4BE8" />
-      <g className="onb-eyes">
-        <circle cx="46" cy="58" r="10.5" fill="#fff" />
-        <circle cx="74" cy="58" r="10.5" fill="#fff" />
-        <g ref={pupilsRef}>
-          <circle cx="46" cy="58" r="4.6" fill="#14131F" />
-          <circle cx="74" cy="58" r="4.6" fill="#14131F" />
-        </g>
-      </g>
-      <path d="M48 80 Q60 89 72 80" stroke="#fff" strokeWidth="4.5" strokeLinecap="round" fill="none" />
-    </svg>
-  );
 }
 
 // Qué contamos en el paso 2: solo lo que el manifest habilita.
@@ -101,6 +71,8 @@ export default function Onboarding({ manifest, onDone }: {
 }) {
   const [nombre, setNombre] = useState(() => loadAgentName() ?? "");
   const [paso, setPaso] = useState<"bautismo" | "presentacion">("bautismo");
+  // Contador de festejos: cada bautismo dispara el trigger del personaje.
+  const [festejos, setFestejos] = useState(0);
   const listo = nombre.trim().length > 0;
 
   const bautizar = () => {
@@ -112,6 +84,7 @@ export default function Onboarding({ manifest, onDone }: {
       /* modo privado: al menos vale para esta sesión */
     }
     setNombre(n);
+    setFestejos((f) => f + 1);
     setPaso("presentacion");
   };
 
@@ -120,8 +93,8 @@ export default function Onboarding({ manifest, onDone }: {
   return (
     <main className="app-shell flex min-h-screen items-center justify-center bg-surface px-6 py-12">
       <div className="flex w-full max-w-2xl flex-col items-center text-center">
-        <div className={`onb-bob transition-all duration-500 ${paso === "bautismo" ? "h-36 w-36" : "h-24 w-24"}`}>
-          <Agentito />
+        <div className={`transition-all duration-500 ${paso === "bautismo" ? "h-40 w-40" : "h-28 w-28"}`}>
+          <AgentitoRive festejos={festejos} className="h-full w-full" />
         </div>
 
         <h1 className="mt-6 text-[32px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
