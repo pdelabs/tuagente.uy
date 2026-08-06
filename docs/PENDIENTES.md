@@ -35,6 +35,9 @@ Lo que quedó abierto, con quién lo destraba. Cerrar acá cuando se resuelva.
   Falta decidir la forma: probablemente una pestaña de "Instrucciones" que
   escriba un bloque acotado del SOUL, versionado y reversible, sin dejar que el
   cliente pise las reglas duras (la puerta de aprobación no es negociable).
+  Primer paso hecho (6/8): el onboarding del portal deja bautizar al agente,
+  pero el nombre queda en localStorage del browser — no llega al agente ni
+  sobrevive un cambio de máquina. Escribirlo en el SOUL sigue acá.
 
 ## Técnicos, priorizados
 

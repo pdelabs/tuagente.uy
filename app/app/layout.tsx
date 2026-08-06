@@ -16,6 +16,7 @@ import {
 } from "./lib/agent";
 import { Btn, Spinner, inputCls } from "./lib/ui";
 import { INTROS, useIntroGate } from "./lib/intros";
+import Onboarding, { loadAgentName } from "./lib/onboarding";
 
 // Orden y rótulos de módulos; se muestran solo los que el manifest habilita
 // (salvo "home", que es nuestro y no depende de lo que exponga el agente).
@@ -73,6 +74,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<"loading" | "login" | "error" | "ok">("loading");
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
+  // Nombre que el cliente le puso a su agente en el onboarding; pisa al del manifest.
+  const [nombre, setNombre] = useState<string | null>(null);
+  useEffect(() => setNombre(loadAgentName()), []);
   const { seen, dismiss } = useIntroGate();
 
   const boot = () => {
@@ -120,6 +124,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Onboarding: antes que cualquier módulo, el cliente bautiza a su agente y
+  // el agente se presenta. Completa la bienvenida general, así que también
+  // marca la intro de "home" (si no, hay dos pantallas de bienvenida seguidas).
+  if (seen && !seen.onboarding) {
+    return (
+      <Onboarding
+        manifest={manifest}
+        onDone={(n) => { setNombre(n); dismiss("onboarding"); dismiss("home"); }}
+      />
+    );
+  }
+
   const enabled = MODULES.filter(
     (m) => m.key === "home" || m.key === "capabilities" || manifest.modules[m.key]);
   // Bienvenida por módulo: se ve una sola vez, hasta que el cliente da "Ok".
@@ -136,7 +152,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Hand className="h-4 w-4 text-white" />
           </div>
           <div className="hidden min-w-0 md:block">
-            <p className="truncate text-sm font-bold tracking-tight text-ink">{manifest.agent}</p>
+            <p className="truncate text-sm font-bold tracking-tight text-ink">{nombre || manifest.agent}</p>
             <p className="flex items-center gap-1 text-[11px] text-ink-soft">
               <span className={`h-1.5 w-1.5 rounded-full ${online ? "bg-c-green-ink" : "bg-c-coral-ink"}`} />
               {online ? "conectado" : "sin conexión"}

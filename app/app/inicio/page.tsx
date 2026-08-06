@@ -30,6 +30,7 @@ import {
   type ArtifactMeta, type HttpError, type Manifest, type PortalConfig, type Ticket,
 } from "../lib/agent";
 import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
+import { agentDisplayName } from "../lib/onboarding";
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
@@ -472,7 +473,7 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
   const nada = slots.every((s) => s.t === "off" || s.t === "falla");
 
   // Línea de estado: dice lo que sabemos y nada más.
-  const linea = [`${manifest.agent}, tu agente`];
+  const linea = [`${agentDisplayName(manifest)}, tu agente`];
   if (ultimaSenal) linea.push(`última actividad ${ultimaSenal}`);
   else if (esperando) linea.push("buscando novedades…");
 
