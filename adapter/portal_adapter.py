@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.20.0"
+VERSION = "0.26.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -33,6 +33,13 @@ CRON_EXEC_DB = DATA / "cron" / "executions.db"
 WORKSPACE = DATA / "workspace"
 ARTIFACTS = WORKSPACE / "artifacts"
 CONFIG = DATA / "config.yaml"
+# Nombre y pinta que el cliente le puso a su agente desde el portal. Vive en el
+# volumen del agente, no en el browser: si entra desde otra maquina, su agente
+# sigue siendo el suyo.
+IDENTIDAD = DATA / "portal_identidad.json"
+MAX_NOMBRE_LEN = 40
+MAX_LOOK_EJES = 16
+EJE_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{0,19}$")
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -81,7 +88,48 @@ def ro(db):
 
 # ---------- manifest ----------
 
+def _look_limpio(look):
+    """Deja pasar solo ejes con nombre sano y valor entero chico.
+
+    El adapter NO sabe que significa cada eje (eso es del portal): valida la
+    forma, no el contenido, asi el portal puede sumar rasgos sin tocar esto.
+    """
+    if not isinstance(look, dict) or len(look) > MAX_LOOK_EJES:
+        return None
+    limpio = {}
+    for eje, valor in look.items():
+        if not isinstance(eje, str) or not EJE_RE.match(eje):
+            return None
+        # bool es subclase de int en Python: si no lo excluis, True pasa como 1.
+        if isinstance(valor, bool) or not isinstance(valor, int) or not 0 <= valor < 100:
+            return None
+        limpio[eje] = valor
+    return limpio
+
+
+def identidad():
+    """Como se llama y que pinta tiene el agente, segun lo eligio el cliente."""
+    try:
+        data = json.loads(IDENTIDAD.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out = {}
+    nombre = str(data.get("nombre") or "").strip()
+    if nombre:
+        out["nombre"] = nombre[:MAX_NOMBRE_LEN]
+    look = _look_limpio(data.get("look"))
+    if look:
+        out["look"] = look
+    return out
+
+
 def agent_name():
+    # Si el cliente lo bautizo desde el portal, ese nombre manda sobre todo.
+    propio = identidad().get("nombre")
+    if propio:
+        return propio
     name = os.environ.get("AGENT_NAME", "").strip()
     if name:
         return name
@@ -117,6 +165,12 @@ def manifest():
     has_kanban = KANBAN_DB.exists()
     return {
         "agent": agent_name(),
+        # La pinta que le eligio el cliente, para que el portal lo dibuje igual
+        # desde cualquier maquina. None si nunca la eligio.
+        "look": identidad().get("look"),
+        # Ya lo bautizo el cliente: el portal no vuelve a pedirle el nombre
+        # cuando entra desde otra maquina.
+        "bautizado": bool(identidad().get("nombre")),
         "portal_plugin": f"adapter-{VERSION}",
         "modules": {
             "chat": True,  # el gateway (:8642) es parte del deploy Hermes
@@ -134,6 +188,9 @@ def manifest():
             # No es una pestaña: le avisa al chat que puede adjuntar archivos.
             "upload": WORKSPACE.is_dir(),
         },
+        # Conexiones que el flujo del cliente necesita y faltan: alimenta el
+        # aviso del inicio y el puntito en el sidebar.
+        "conexiones_pendientes": conexiones_pendientes(),
     }
 
 
@@ -146,32 +203,38 @@ SKILLS_DIR = DATA / "skills"
 SKILLS_SNAPSHOT = DATA / ".skills_prompt_snapshot.json"
 
 
-def _skill_summary(skill_md):
-    """Que hace esta skill, en una linea.
+def _skill_meta(skill_md):
+    """(resumen, titulo) de una skill, para mostrarle AL CLIENTE.
 
-    Las bundled traen frontmatter YAML con `description`; las nuestras arrancan
-    con prosa. Sin saltear el frontmatter, la descripcion terminaba siendo
-    "name: claude-code", que no le dice nada a nadie.
+    Una skill tiene dos audiencias y el mismo archivo: `description` esta
+    escrito para el AGENTE (cuando usarla, en imperativo, con jerga) y mostrado
+    crudo en el portal es fuga de maquinaria. Por eso el frontmatter acepta dos
+    campos nuestros opcionales, `para_cliente` (que hace, dicho al cliente) y
+    `titulo` (nombre con tildes — el slug no puede inventarlas). Fallback:
+    description, y si no hay frontmatter, la primera linea de prosa.
     """
     try:
         lines = skill_md.read_text(encoding="utf-8").splitlines()
     except OSError:
-        return ""
-    i = 0
+        return "", ""
+    campos, i = {}, 0
     if lines and lines[0].strip() == "---":
         for j, line in enumerate(lines[1:], start=1):
             if line.strip() == "---":
                 i = j + 1
                 break
-            m = re.match(r'\s*description:\s*["\']?(.+?)["\']?\s*$', line)
+            m = re.match(r'\s*(description|para_cliente|titulo):\s*["\']?(.+?)["\']?\s*$', line)
             if m:
-                return m.group(1)[:200]
-    for line in lines[i:]:
-        line = line.strip()
-        if not line or line.startswith(("#", "---", "```", "|", ">")):
-            continue
-        return re.sub(r"[*`_]", "", line)[:200]
-    return ""
+                campos[m.group(1)] = m.group(2)[:200]
+    resumen = campos.get("para_cliente") or campos.get("description") or ""
+    if not resumen:
+        for line in lines[i:]:
+            line = line.strip()
+            if not line or line.startswith(("#", "---", "```", "|", ">")):
+                continue
+            resumen = re.sub(r"[*`_]", "", line)[:200]
+            break
+    return resumen, campos.get("titulo", "")
 
 
 def _bundled_names():
@@ -186,26 +249,85 @@ def _bundled_names():
         return set()
 
 
+def _kit_names():
+    """Skills del PRODUCTO tuagente (el manifiesto lo deja install.sh).
+
+    Son comunes a todos los clientes y sostienen pantallas del portal
+    (entregable→Archivos, aprobacion→Aprobaciones, artifact→visualizaciones):
+    no se presentan como "hechas para vos" ni se editan desde el portal.
+    """
+    try:
+        return {
+            l.strip() for l in
+            (SKILLS_DIR / ".kit_manifest").read_text(encoding="utf-8").splitlines()
+            if l.strip()
+        }
+    except OSError:
+        return set()
+
+
+SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+
+def _skill_editable(nombre):
+    """Ruta del SKILL.md si la habilidad es NUESTRA (vive directo en data/skills).
+
+    Las del motor no se editan desde el portal: viven en la imagen del
+    contenedor y cualquier cambio volveria atras en el proximo arranque. El
+    nombre se valida y la ruta se confina, como todo path que viene de afuera.
+    """
+    if not nombre or not SKILL_NAME_RE.match(nombre):
+        return None
+    if nombre in _bundled_names() or nombre in _kit_names():
+        return None
+    md = (SKILLS_DIR / nombre / "SKILL.md").resolve()
+    try:
+        md.relative_to(SKILLS_DIR.resolve())
+    except ValueError:
+        return None
+    return md if md.is_file() else None
+
+
 def capabilities():
     skills, vistos = [], set()
     bundled = _bundled_names()
+    kit = _kit_names()
     if SKILLS_DIR.is_dir():
         for folder in sorted(SKILLS_DIR.iterdir()):
             if folder.name.startswith(".") or not folder.is_dir():
                 continue
             md = folder / "SKILL.md"
             if md.exists():
-                skills.append({"name": folder.name, "summary": _skill_summary(md),
-                               "origen": "de fábrica" if folder.name in bundled else "propia"})
+                if folder.name in bundled:
+                    origen = "de fábrica"
+                elif folder.name in kit:
+                    origen = "tuagente"
+                else:
+                    origen = "propia"
+                resumen, titulo = _skill_meta(md)
+                entrada = {"name": folder.name, "summary": resumen,
+                           "origen": origen,
+                           # Solo las de ESTE cliente se editan desde el
+                           # portal: las del kit sostienen pantallas (romper
+                           # `entregable` rompe Archivos) y las del motor
+                           # viven en la imagen.
+                           "editable": origen == "propia"}
+                if titulo:
+                    entrada["label"] = titulo
+                skills.append(entrada)
                 vistos.add(folder.name)
                 continue
             # Categorias: carpetas que agrupan skills (ej. productivity/xlsx).
             for sub in sorted(folder.iterdir()):
                 sub_md = sub / "SKILL.md"
                 if sub.is_dir() and sub_md.exists() and sub.name not in vistos:
-                    skills.append({"name": sub.name, "summary": _skill_summary(sub_md),
-                                   "origen": "de fábrica" if sub.name in bundled else "propia",
-                                   "categoria": folder.name})
+                    resumen, titulo = _skill_meta(sub_md)
+                    entrada = {"name": sub.name, "summary": resumen,
+                               "origen": "de fábrica" if sub.name in bundled else "propia",
+                               "categoria": folder.name}
+                    if titulo:
+                        entrada["label"] = titulo
+                    skills.append(entrada)
                     vistos.add(sub.name)
     try:
         snap = json.loads(SKILLS_SNAPSHOT.read_text(encoding="utf-8"))
@@ -253,6 +375,93 @@ def capabilities():
 # devuelve el valor de una credencial ni por error de tipeo.
 
 CONNECTIONS_CATALOG = DATA / "connections" / "catalogo.json"
+REQUERIDAS = DATA / "connections" / "requeridas.json"
+
+# ---------- conexion Google self-service (flujo "google-oauth") ----------
+# El cliente toca "Conectar" en el portal, entra a Google, acepta y pega la
+# direccion final. El adapter genera la URL (PKCE) y canjea el codigo: el
+# client secret y el token NUNCA pasan por el browser. Mismo flujo que
+# tools/conectar-google.py del kit, portado aca para que no haga falta nadie
+# de tuagente en el medio.
+GOOGLE_CLIENT_SECRET = DATA / "google_client_secret.json"
+GOOGLE_TOKEN = DATA / "google_token.json"
+GOOGLE_OAUTH_PENDIENTE = DATA / "google_oauth_portal.json"
+# Solo lectura de Drive por ahora: es lo que usan los flujos de entrada, y es
+# el permiso menos invasivo que Google muestra en el consentimiento.
+GOOGLE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/auth"
+GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
+GOOGLE_REDIRECT = "http://localhost:1"
+
+
+def google_auth_url():
+    import base64
+    import hashlib
+    import secrets as _secrets
+    from urllib.parse import urlencode
+    cs = json.loads(GOOGLE_CLIENT_SECRET.read_text())["installed"]
+    verifier = _secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    GOOGLE_OAUTH_PENDIENTE.write_text(json.dumps({"verifier": verifier}))
+    q = {
+        "response_type": "code",
+        "client_id": cs["client_id"],
+        "redirect_uri": GOOGLE_REDIRECT,
+        "scope": " ".join(GOOGLE_SCOPES),
+        "state": _secrets.token_urlsafe(16),
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "access_type": "offline",
+        "prompt": "consent",
+    }
+    return f"{GOOGLE_AUTH}?{urlencode(q)}"
+
+
+def google_auth_code(pegado):
+    """Canjea lo que el cliente pego (URL de localhost:1 o el code pelado)."""
+    from urllib.parse import parse_qs, urlencode, urlparse
+    if not GOOGLE_OAUTH_PENDIENTE.is_file():
+        return {"ok": False, "error": "no hay un pedido pendiente: toca Conectar de nuevo"}
+    cs = json.loads(GOOGLE_CLIENT_SECRET.read_text())["installed"]
+    pend = json.loads(GOOGLE_OAUTH_PENDIENTE.read_text())
+    code = pegado.strip()
+    if code.startswith("http"):
+        code = parse_qs(urlparse(code).query).get("code", [""])[0]
+    if not code:
+        return {"ok": False, "error": "no encontre el codigo en lo que pegaste; copia la direccion entera"}
+    cuerpo = urlencode({
+        "code": code,
+        "client_id": cs["client_id"],
+        "client_secret": cs["client_secret"],
+        "redirect_uri": GOOGLE_REDIRECT,
+        "grant_type": "authorization_code",
+        "code_verifier": pend["verifier"],
+    }).encode()
+    try:
+        with urllib.request.urlopen(
+                urllib.request.Request(GOOGLE_TOKEN_URI, data=cuerpo), timeout=30) as r:
+            tk = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        return {"ok": False, "error": f"Google respondio {e.code}; proba tocar Conectar de nuevo"}
+    if "refresh_token" not in tk:
+        return {"ok": False, "error": "el codigo ya se uso o vencio; toca Conectar de nuevo"}
+    exp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + tk.get("expires_in", 3600)))
+    # Formato authorized_user: el motor lo refresca solo.
+    GOOGLE_TOKEN.write_text(json.dumps({
+        "type": "authorized_user",
+        "token": tk["access_token"],
+        "refresh_token": tk["refresh_token"],
+        "token_uri": GOOGLE_TOKEN_URI,
+        "client_id": cs["client_id"],
+        "client_secret": cs["client_secret"],
+        "scopes": tk.get("scope", " ".join(GOOGLE_SCOPES)).split(),
+        "universe_domain": "googleapis.com",
+        "account": "",
+        "expiry": exp,
+    }, indent=2))
+    GOOGLE_OAUTH_PENDIENTE.unlink(missing_ok=True)
+    return {"ok": True}
 
 
 def _config_texto():
@@ -279,6 +488,21 @@ def _falta_de(regla):
     return falta
 
 
+def _requeridas():
+    """Conexiones que el flujo de ESTE cliente necesita (las deja el alta).
+
+    Con esto el portal puede decir "a tu agente le falta Google Drive para
+    arrancar" en vez de esperar a que el cliente descubra la pestaña. Es
+    conocimiento por-cliente, pero vive en su data como una lista de ids — el
+    codigo sigue siendo generico.
+    """
+    try:
+        ids = json.loads(REQUERIDAS.read_text(encoding="utf-8"))
+        return {str(i) for i in ids} if isinstance(ids, list) else set()
+    except (OSError, ValueError):
+        return set()
+
+
 def connections():
     try:
         catalogo = json.loads(CONNECTIONS_CATALOG.read_text(encoding="utf-8"))
@@ -286,6 +510,7 @@ def connections():
         # Sin catalogo instalado no inventamos nada: la pestaña no se muestra.
         return {"disponible": False, "conexiones": []}
 
+    requeridas = _requeridas()
     salida = []
     for c in catalogo.get("conexiones", []):
         falta = _falta_de(c.get("detecta", {}))
@@ -305,9 +530,30 @@ def connections():
             "estado": "conectado" if not falta else ("bloqueado" if falta_previo else "sin_conectar"),
             "falta": falta,
             "falta_previo": falta_previo,
+            "requerida": c.get("id") in requeridas,
+            # "google-oauth" = el portal la conecta solo, con su dialogo de
+            # pasos; sin flujo, el boton cae a "Pedir que la conecten".
+            "flujo": c.get("flujo"),
         })
-    salida.sort(key=lambda c: (c["estado"] != "conectado", c["grupo"] != "canal", c["label"] or ""))
+    # Las que el flujo del cliente necesita y no estan, adelante de todo.
+    salida.sort(key=lambda c: (not (c["requerida"] and c["estado"] != "conectado"),
+                               c["estado"] != "conectado", c["grupo"] != "canal", c["label"] or ""))
     return {"disponible": True, "conexiones": salida}
+
+
+def conexiones_pendientes():
+    """Cuantas conexiones requeridas por el flujo del cliente faltan conectar."""
+    requeridas = _requeridas()
+    if not requeridas:
+        return 0
+    try:
+        catalogo = json.loads(CONNECTIONS_CATALOG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    return sum(
+        1 for c in catalogo.get("conexiones", [])
+        if c.get("id") in requeridas and _falta_de(c.get("detecta", {}))
+    )
 
 
 # ---------- tableros ----------
@@ -1134,6 +1380,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, manifest())
             if path == "/portal/capabilities":
                 return self._send(200, capabilities())
+            m = re.match(r"^/portal/skills/([^/]+)$", path)
+            if m:
+                ruta = _skill_editable(m.group(1))
+                if ruta is None:
+                    return self._send(404, {"error": "esa habilidad no existe o no es editable"})
+                return self._send(200, {"name": m.group(1),
+                                        "content": ruta.read_text(encoding="utf-8")})
             if path == "/portal/connections":
                 return self._send(200, connections())
             if path == "/portal/boards":
@@ -1238,6 +1491,62 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             upstream.close()
 
+    def _guardar_skill(self, nombre, body):
+        """Escribe el SKILL.md de una habilidad NUESTRA desde el portal.
+
+        Cambiar la skill es cambiar como trabaja el agente: la edicion es del
+        cliente (o nuestra), asi que se acepta tal cual — con dos redes: tope
+        de tamano, y frontmatter obligatorio, porque sin el la skill se indexa
+        con descripcion vacia y el agente deja de usarla (regla verificada del
+        kit, y una falla silenciosa que el cliente no puede diagnosticar).
+        """
+        ruta = _skill_editable(nombre)
+        if ruta is None:
+            return self._send(404, {"error": "esa habilidad no existe o no es editable"})
+        contenido = body.get("content")
+        if not isinstance(contenido, str) or not contenido.strip():
+            return self._send(400, {"error": "content is required"})
+        if len(contenido.encode("utf-8")) > 64 * 1024:
+            return self._send(400, {"error": "la habilidad supera 64KB"})
+        arranque = contenido.lstrip()
+        partes = arranque.split("---")
+        bien_formada = (arranque.startswith("---") and len(partes) >= 3
+                        and "name" in partes[1] and "description" in partes[1])
+        if not bien_formada:
+            return self._send(400, {"error":
+                "el archivo tiene que empezar con el encabezado --- name/description --- "
+                "(sin eso el agente deja de usar la habilidad)"})
+        ruta.write_text(contenido, encoding="utf-8")
+        return self._send(200, {"ok": True})
+
+    def _guardar_identidad(self, body):
+        """Bautizo y pinta del agente, elegidos por el cliente en el portal.
+
+        Se hace merge contra lo guardado: el portal puede mandar solo el nombre
+        o solo el look sin borrar el otro.
+        """
+        nuevo = dict(identidad())
+        if "nombre" in body:
+            nombre = str(body.get("nombre") or "").strip()
+            if not nombre:
+                return self._send(400, {"error": "nombre is required"})
+            if len(nombre) > MAX_NOMBRE_LEN:
+                return self._send(400, {
+                    "error": f"el nombre no puede pasar de {MAX_NOMBRE_LEN} caracteres"})
+            nuevo["nombre"] = nombre
+        if "look" in body:
+            look = _look_limpio(body.get("look"))
+            if look is None:
+                return self._send(400, {"error": "look invalido"})
+            nuevo["look"] = look
+        if not nuevo:
+            return self._send(400, {"error": "nombre or look is required"})
+        try:
+            IDENTIDAD.write_text(json.dumps(nuevo, ensure_ascii=False), encoding="utf-8")
+        except OSError as exc:
+            return self._send(500, {"error": f"no pude guardar la identidad: {exc}"})
+        return self._send(200, {"ok": True, **nuevo})
+
     def _upload(self, body):
         """Guarda un archivo que el cliente manda desde el portal.
 
@@ -1285,6 +1594,32 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return self._send(400, {"error": "invalid JSON body"})
             return self._upload(body)
+        if path == "/portal/identity":
+            body = self._read_json_body()
+            if body is None:
+                return self._send(400, {"error": "invalid JSON body"})
+            return self._guardar_identidad(body)
+        m = re.match(r"^/portal/skills/([^/]+)$", path)
+        if m:
+            body = self._read_json_body()
+            if body is None:
+                return self._send(400, {"error": "invalid JSON body"})
+            return self._guardar_skill(m.group(1), body)
+
+        # --- conexion Google self-service ---
+        if path == "/portal/connections/google/auth-url":
+            if not GOOGLE_CLIENT_SECRET.is_file():
+                return self._send(409, {"error": "falta un paso nuestro para habilitar Google"})
+            try:
+                return self._send(200, {"auth_url": google_auth_url()})
+            except (OSError, ValueError, KeyError):
+                return self._send(500, {"error": "no pude armar el pedido a Google"})
+        if path == "/portal/connections/google/auth-code":
+            body = self._read_json_body()
+            if body is None or not str(body.get("code") or "").strip():
+                return self._send(400, {"error": "code is required"})
+            res = google_auth_code(str(body["code"]))
+            return self._send(200 if res.get("ok") else 400, res)
         m = re.match(r"^/portal/sessions/([^/]+)/chat/stream$", path)
         if m:
             body = self._read_json_body()
