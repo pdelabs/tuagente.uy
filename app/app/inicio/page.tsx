@@ -32,14 +32,14 @@ import {
 } from "../lib/agent";
 import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
 import { agentDisplayName } from "../lib/onboarding";
-import { AgentitoAvatar, LOOK_DEFAULT, loadAgentLook } from "../lib/agentito";
+import { AgentitoCargando, loadAgentLook } from "../lib/agentito";
 import type { EstadoAgentito } from "../lib/AgentitoRive";
 
 // El personaje animado se trae solo acá y en el onboarding; el resto del portal
 // no paga el runtime. Mientras carga se ve la misma cara, quieta.
 const AgentitoRive = dynamic(() => import("../lib/AgentitoRive"), {
   ssr: false,
-  loading: () => <AgentitoAvatar vivo className="h-full w-full" />,
+  loading: () => <AgentitoCargando />,
 });
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
@@ -468,8 +468,9 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
   const ultimaSenal = ultimos && ultimos.length > 0 ? hace(ultimos[0].ts) : null;
 
   // ── El agentito como indicador de estado ──
-  const [look, setLook] = useState(LOOK_DEFAULT);
-  useEffect(() => { setLook(loadAgentLook()); }, []);
+  // Lazy y no en un efecto: si no, el primer frame lo pinta con el look por
+  // defecto y se ve un parpadeo violeta antes del look del cliente.
+  const [look] = useState(loadAgentLook);
 
   const pendientes = aprob.t === "listo" ? aprob.data.length : null;
   // "tranquilo" solo si sabemos que no hay nada; si el dato no llegó, ni ahí.
@@ -523,13 +524,17 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
     <div className={WRAP}>
       {/* El agentito acá no decora: dice cómo viene la mano. Si algo espera tu
           ok mira hacia el badge; si no hay nada, se ceba unos mates. */}
-      <div className="flex items-start gap-3 sm:gap-4">
-        <AgentitoRive
-          festejos={festejos}
-          look={look}
-          estado={estadoAgente}
-          className="-mt-1 h-16 w-16 shrink-0 sm:h-20 sm:w-20"
-        />
+      <div className="mb-6 flex items-start gap-3 sm:gap-4">
+        {/* El tamaño va acá afuera, no en el componente: el placeholder de
+            next/dynamic no recibe className y quedaría a pantalla completa. */}
+        <div className="-mt-1 h-16 w-16 shrink-0 sm:h-[72px] sm:w-[72px]">
+          <AgentitoRive
+            festejos={festejos}
+            look={look}
+            estado={estadoAgente}
+            className="h-full w-full"
+          />
+        </div>
         <div className="min-w-0 flex-1">
           <PageHeader
             title={saludo()}

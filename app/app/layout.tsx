@@ -17,7 +17,7 @@ import {
 import { Btn, Spinner, inputCls } from "./lib/ui";
 import { INTROS, useIntroGate } from "./lib/intros";
 import Onboarding, { loadAgentName } from "./lib/onboarding";
-import { AgentitoAvatar, LOOK_DEFAULT, loadAgentLook } from "./lib/agentito";
+import { AgentitoAvatar, loadAgentLook } from "./lib/agentito";
 
 // Orden y rótulos de módulos; se muestran solo los que el manifest habilita
 // (salvo "home", que es nuestro y no depende de lo que exponga el agente).
@@ -74,12 +74,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
   // Nombre y look que el cliente le dio a su agente en el onboarding.
+  // El look se lee lazy y no en un efecto: si no, el primer frame pinta el
+  // agentito violeta por defecto y se ve el parpadeo.
   const [nombre, setNombre] = useState<string | null>(null);
-  const [lookAgente, setLookAgente] = useState(LOOK_DEFAULT);
-  useEffect(() => {
-    setNombre(loadAgentName());
-    setLookAgente(loadAgentLook());
-  }, []);
+  const [lookAgente, setLookAgente] = useState(loadAgentLook);
+  useEffect(() => { setNombre(loadAgentName()); }, []);
   const { seen, dismiss } = useIntroGate();
 
   const boot = () => {

@@ -15,7 +15,7 @@ import { ArrowRight, Columns3, Dices, Hand, MessageSquare } from "lucide-react";
 import { Btn } from "./ui";
 import type { Manifest } from "./agent";
 import {
-  AgentitoAvatar, LOOK_DEFAULT, LOOK_EJES, loadAgentLook, saveAgentLook,
+  AgentitoCargando, LOOK_EJES, loadAgentLook, saveAgentLook,
   type AgentitoLook,
 } from "./agentito";
 
@@ -23,7 +23,7 @@ import {
 // el resto del portal no lo paga. Mientras tanto, la cara estática.
 const AgentitoRive = dynamic(() => import("./AgentitoRive"), {
   ssr: false,
-  loading: () => <AgentitoAvatar vivo className="h-full w-full" />,
+  loading: () => <AgentitoCargando />,
 });
 
 const NAME_KEY = "tuagente_agent_name";

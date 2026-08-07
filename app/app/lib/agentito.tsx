@@ -60,6 +60,18 @@ const INK = "#14131F";
 const TAPA_Y = [67, 64.5, 69.5, 65];
 
 /**
+ * Placeholder mientras `next/dynamic` trae el runtime de Rive.
+ *
+ * OJO: el `loading` de next/dynamic reemplaza al componente entero, así que no
+ * recibe NADA de lo que le pasan a AgentitoRive — ni el tamaño ni el look. Por
+ * eso: se llena a su contenedor (el tamaño va en un div de afuera) y lee el
+ * look del localStorage. Sin esto parpadea un agentito violeta gigante.
+ */
+export function AgentitoCargando() {
+  return <AgentitoAvatar look={loadAgentLook()} vivo className="h-full w-full" />;
+}
+
+/**
  * El agentito quieto, en SVG puro. `vivo` le da flote + parpadeo por CSS
  * (solo para el fallback del onboarding); el logo del sidebar va estático.
  */
