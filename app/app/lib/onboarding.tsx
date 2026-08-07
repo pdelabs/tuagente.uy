@@ -11,10 +11,11 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { ArrowRight, Columns3, Hand, MessageSquare } from "lucide-react";
+import { ArrowRight, Columns3, Dices, Hand, MessageSquare } from "lucide-react";
 import { Btn } from "./ui";
 import type { Manifest } from "./agent";
 import { AgentitoSvg } from "./agentito";
+import { LOOK_EJES, type AgentitoLook } from "./AgentitoRive";
 
 // El runtime de Rive (~330 KB gz) se trae solo cuando el onboarding se muestra;
 // el resto del portal no lo paga. Mientras tanto, la cara estática.
@@ -24,6 +25,39 @@ const AgentitoRive = dynamic(() => import("./AgentitoRive"), {
 });
 
 const NAME_KEY = "tuagente_agent_name";
+const LOOK_KEY = "tuagente_agent_look";
+
+const LOOK_DEFAULT: AgentitoLook = { tono: 0, antena: 0, accesorio: 0, pupila: 0, boca: 0 };
+
+/** El look que el cliente le eligió a su agente (o el default violeta). */
+export function loadAgentLook(): AgentitoLook {
+  if (typeof window === "undefined") return LOOK_DEFAULT;
+  try {
+    const raw = JSON.parse(localStorage.getItem(LOOK_KEY) || "null");
+    if (!raw) return LOOK_DEFAULT;
+    const look = { ...LOOK_DEFAULT };
+    for (const eje of Object.keys(LOOK_EJES) as (keyof AgentitoLook)[]) {
+      const v = Number(raw[eje]);
+      if (Number.isInteger(v) && v >= 0 && v < LOOK_EJES[eje]) look[eje] = v;
+    }
+    return look;
+  } catch {
+    return LOOK_DEFAULT;
+  }
+}
+
+/** Un look al azar, garantizado distinto del actual. */
+function sortearLook(actual: AgentitoLook): AgentitoLook {
+  for (;;) {
+    const look = { ...actual };
+    for (const eje of Object.keys(LOOK_EJES) as (keyof AgentitoLook)[]) {
+      look[eje] = Math.floor(Math.random() * LOOK_EJES[eje]);
+    }
+    if (Object.keys(LOOK_EJES).some((e) => look[e as keyof AgentitoLook] !== actual[e as keyof AgentitoLook])) {
+      return look;
+    }
+  }
+}
 
 /** Nombre que el cliente le puso a su agente, o null si nunca lo bautizó. */
 export function loadAgentName(): string | null {
@@ -73,7 +107,18 @@ export default function Onboarding({ manifest, onDone }: {
   const [paso, setPaso] = useState<"bautismo" | "presentacion">("bautismo");
   // Contador de festejos: cada bautismo dispara el trigger del personaje.
   const [festejos, setFestejos] = useState(0);
+  const [look, setLook] = useState<AgentitoLook>(() => loadAgentLook());
   const listo = nombre.trim().length > 0;
+
+  const otroLook = () => {
+    const nuevo = sortearLook(look);
+    try {
+      localStorage.setItem(LOOK_KEY, JSON.stringify(nuevo));
+    } catch {
+      /* modo privado */
+    }
+    setLook(nuevo);
+  };
 
   const bautizar = () => {
     if (!listo) return;
@@ -94,7 +139,7 @@ export default function Onboarding({ manifest, onDone }: {
     <main className="app-shell flex min-h-screen items-center justify-center bg-surface px-6 py-12">
       <div className="flex w-full max-w-2xl flex-col items-center text-center">
         <div className={`transition-all duration-500 ${paso === "bautismo" ? "h-40 w-40" : "h-28 w-28"}`}>
-          <AgentitoRive festejos={festejos} className="h-full w-full" />
+          <AgentitoRive festejos={festejos} look={look} className="h-full w-full" />
         </div>
 
         <h1 className="mt-6 text-[32px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
@@ -120,9 +165,12 @@ export default function Onboarding({ manifest, onDone }: {
             <p className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-soft">
               Todavía no tengo nombre. Elegilo vos: así me vas a ver en todo el portal.
             </p>
-            <div className="mt-8">
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
               <Btn disabled={!listo} onClick={bautizar}>
                 Continuar <ArrowRight className="h-4 w-4" />
+              </Btn>
+              <Btn kind="secondary" onClick={otroLook}>
+                <Dices className="h-4 w-4" /> Otro look
               </Btn>
             </div>
           </>
