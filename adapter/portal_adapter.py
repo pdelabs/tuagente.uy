@@ -40,6 +40,13 @@ IDENTIDAD = DATA / "portal_identidad.json"
 MAX_NOMBRE_LEN = 40
 MAX_LOOK_EJES = 16
 EJE_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{0,19}$")
+# El system prompt. Hermes lo relee al construir el prompt, asi que lo que
+# escribamos agarra en la proxima sesion sin reiniciar el contenedor.
+SOUL = DATA / "SOUL.md"
+# El bautizo entra en un bloque acotado y reescribible: la prosa que armamos a
+# mano en el alta no se toca NUNCA.
+SOUL_INICIO = "<!-- portal:identidad -->"
+SOUL_FIN = "<!-- /portal:identidad -->"
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -123,6 +130,78 @@ def identidad():
     if look:
         out["look"] = look
     return out
+
+
+def _bloque_soul(nombre):
+    # El bloque se delimita con comentarios HTML, asi que el nombre NO puede
+    # traer `<` ni `>`: con ellos podria cerrarlo antes de tiempo y la proxima
+    # reescritura se comeria un pedazo del SOUL. Se sanea aca —donde vive el
+    # invariante— y no solo en la puerta de entrada.
+    nombre = re.sub(r"\s+", " ", nombre).replace("<", "").replace(">", "").strip()
+    return (
+        f"{SOUL_INICIO}\n"
+        "## Tu nombre\n"
+        "\n"
+        f"Tu cliente te bautizo **{nombre}** desde el portal. Ese es tu nombre:\n"
+        "presentate asi cuando saludes, cuando te pregunten quien sos y en\n"
+        "todos los canales. Si el resto de este documento te llama de otra\n"
+        "forma, vale este.\n"
+        f"{SOUL_FIN}"
+    )
+
+
+def escribir_nombre_en_soul(nombre):
+    """Deja el nombre en el system prompt, para que el agente SE PRESENTE asi.
+
+    Reemplaza solo lo que hay entre los marcadores (o agrega el bloque al final
+    la primera vez): la prosa del alta —reglas de negocio, alcance, tono— queda
+    intacta. Best-effort: si algo falla, el bautizo igual quedo guardado.
+    """
+    if not SOUL.is_file():
+        return "sin SOUL.md"
+    try:
+        texto = SOUL.read_text(encoding="utf-8")
+    except OSError as exc:
+        return f"no pude leerlo: {exc}"
+    bloque = _bloque_soul(nombre)
+    ini, fin = texto.find(SOUL_INICIO), texto.find(SOUL_FIN)
+    if ini != -1 and fin > ini:
+        nuevo = texto[:ini] + bloque + texto[fin + len(SOUL_FIN):]
+    else:
+        nuevo = texto.rstrip() + "\n\n" + bloque + "\n"
+    if nuevo == texto:
+        return "sin cambios"
+    try:
+        SOUL.write_text(nuevo, encoding="utf-8")
+    except OSError as exc:
+        return f"no pude escribirlo: {exc}"
+    return "ok"
+
+
+def nombre_en_telegram(nombre):
+    """Le pone el nombre elegido al bot de Telegram.
+
+    La FOTO del bot NO se puede cambiar por la Bot API (no existe metodo): esa
+    sigue siendo a mano por @BotFather en el alta. El nombre si, con setMyName.
+    """
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    if not token:
+        return "sin bot"
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/setMyName",
+        data=json.dumps({"name": nombre[:64]}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        return f"no pude: {exc}"
+    if data.get("ok"):
+        return "ok"
+    # Telegram limita los cambios de nombre seguidos: no es un error nuestro.
+    return f"telegram dijo que no: {str(data.get('description', ''))[:120]}"
 
 
 def agent_name():
@@ -1525,9 +1604,12 @@ class Handler(BaseHTTPRequestHandler):
         Se hace merge contra lo guardado: el portal puede mandar solo el nombre
         o solo el look sin borrar el otro.
         """
-        nuevo = dict(identidad())
+        previo = identidad()
+        nuevo = dict(previo)
         if "nombre" in body:
-            nombre = str(body.get("nombre") or "").strip()
+            # Una sola linea: el nombre entra en el SOUL, y un salto ahi
+            # rompería el bloque acotado.
+            nombre = re.sub(r"\s+", " ", str(body.get("nombre") or "")).strip()
             if not nombre:
                 return self._send(400, {"error": "nombre is required"})
             if len(nombre) > MAX_NOMBRE_LEN:
@@ -1545,7 +1627,14 @@ class Handler(BaseHTTPRequestHandler):
             IDENTIDAD.write_text(json.dumps(nuevo, ensure_ascii=False), encoding="utf-8")
         except OSError as exc:
             return self._send(500, {"error": f"no pude guardar la identidad: {exc}"})
-        return self._send(200, {"ok": True, **nuevo})
+        # Con el nombre nuevo, se lo contamos a los lados que podemos tocar. Es
+        # best-effort a proposito: el bautizo ya quedo guardado, y que Telegram
+        # nos limite o falte el SOUL no puede tumbar la respuesta.
+        aplicado = {}
+        if nuevo.get("nombre") and nuevo.get("nombre") != previo.get("nombre"):
+            aplicado["soul"] = escribir_nombre_en_soul(nuevo["nombre"])
+            aplicado["telegram"] = nombre_en_telegram(nuevo["nombre"])
+        return self._send(200, {"ok": True, **nuevo, "aplicado": aplicado})
 
     def _upload(self, body):
         """Guarda un archivo que el cliente manda desde el portal.
