@@ -11,22 +11,9 @@
 
 import { useEffect, useState } from "react";
 import { useRive, useStateMachineInput, RuntimeLoader } from "@rive-app/react-canvas-lite";
-import { AgentitoSvg } from "./agentito";
+import { AgentitoAvatar, type AgentitoLook } from "./agentito";
 
 RuntimeLoader.setWasmUrl("/rive.wasm");
-
-/** Rasgos del personaje; cada eje es un input numérico del state machine. */
-export type AgentitoLook = {
-  tono: number;      // 0-5: color del cuerpo
-  antena: number;    // 0-2: clásica / doble / sin antena
-  accesorio: number; // 0-2: nada / anteojos / cachetes
-  pupila: number;    // 0-2: normal / grande / chica
-  boca: number;      // 0-2: sonrisa / sonrisota / media sonrisa
-};
-
-export const LOOK_EJES: Record<keyof AgentitoLook, number> = {
-  tono: 6, antena: 3, accesorio: 3, pupila: 3, boca: 3,
-};
 
 export default function AgentitoRive({ festejos, look, className }: {
   /** Contador: cada incremento dispara el trigger de festejo. */
@@ -52,6 +39,9 @@ export default function AgentitoRive({ festejos, look, className }: {
   const inAccesorio = useStateMachineInput(rive, "Agentito", "accesorio");
   const inPupila = useStateMachineInput(rive, "Agentito", "pupila");
   const inBoca = useStateMachineInput(rive, "Agentito", "boca");
+  const inPiel = useStateMachineInput(rive, "Agentito", "piel");
+  const inTraje = useStateMachineInput(rive, "Agentito", "traje");
+  const inCejas = useStateMachineInput(rive, "Agentito", "cejas");
 
   useEffect(() => {
     if (inTono) inTono.value = look.tono;
@@ -59,7 +49,10 @@ export default function AgentitoRive({ festejos, look, className }: {
     if (inAccesorio) inAccesorio.value = look.accesorio;
     if (inPupila) inPupila.value = look.pupila;
     if (inBoca) inBoca.value = look.boca;
-  }, [look, inTono, inAntena, inAccesorio, inPupila, inBoca]);
+    if (inPiel) inPiel.value = look.piel;
+    if (inTraje) inTraje.value = look.traje;
+    if (inCejas) inCejas.value = look.cejas;
+  }, [look, inTono, inAntena, inAccesorio, inPupila, inBoca, inPiel, inTraje, inCejas]);
 
   // Con reduced-motion el personaje queda en su primer frame, sin loops.
   useEffect(() => {
@@ -97,7 +90,7 @@ export default function AgentitoRive({ festejos, look, className }: {
 
   return (
     <div className={`relative ${className ?? ""}`}>
-      {!rive && <AgentitoSvg className="absolute inset-0 h-full w-full" />}
+      {!rive && <AgentitoAvatar look={look} vivo className="absolute inset-0 h-full w-full" />}
       <RiveComponent className={`h-full w-full ${rive ? "" : "opacity-0"}`} />
     </div>
   );

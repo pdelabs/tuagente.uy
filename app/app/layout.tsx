@@ -17,6 +17,7 @@ import {
 import { Btn, Spinner, inputCls } from "./lib/ui";
 import { INTROS, useIntroGate } from "./lib/intros";
 import Onboarding, { loadAgentName } from "./lib/onboarding";
+import { AgentitoAvatar, LOOK_DEFAULT, loadAgentLook } from "./lib/agentito";
 
 // Orden y rótulos de módulos; se muestran solo los que el manifest habilita
 // (salvo "home", que es nuestro y no depende de lo que exponga el agente).
@@ -46,9 +47,7 @@ function Login({ onReady }: { onReady: () => void }) {
   return (
     <main className="app-shell flex min-h-screen items-center justify-center bg-surface p-6">
       <div className="w-full max-w-md rounded-xl border border-black/[0.07] bg-white p-8">
-        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-          <Hand className="h-5 w-5 text-white" />
-        </div>
+        <AgentitoAvatar className="mb-3 h-14 w-14" />
         <h1 className="text-xl font-bold tracking-tight text-ink">tuagente</h1>
         <p className="mb-6 mt-1 text-sm text-ink-soft">
           Pegá el magic link que te dimos para entrar al portal de tu agente.
@@ -74,9 +73,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<"loading" | "login" | "error" | "ok">("loading");
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
-  // Nombre que el cliente le puso a su agente en el onboarding; pisa al del manifest.
+  // Nombre y look que el cliente le dio a su agente en el onboarding.
   const [nombre, setNombre] = useState<string | null>(null);
-  useEffect(() => setNombre(loadAgentName()), []);
+  const [lookAgente, setLookAgente] = useState(LOOK_DEFAULT);
+  useEffect(() => {
+    setNombre(loadAgentName());
+    setLookAgente(loadAgentLook());
+  }, []);
   const { seen, dismiss } = useIntroGate();
 
   const boot = () => {
@@ -131,7 +134,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
       <Onboarding
         manifest={manifest}
-        onDone={(n) => { setNombre(n); dismiss("onboarding"); dismiss("home"); }}
+        onDone={(n) => {
+          setNombre(n);
+          setLookAgente(loadAgentLook());
+          dismiss("onboarding");
+          dismiss("home");
+        }}
       />
     );
   }
@@ -148,9 +156,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           fijos dejaban sin aire al contenido. */}
       <aside className="sticky top-0 flex h-screen w-14 shrink-0 flex-col border-r border-black/[0.07] px-2 py-4 md:w-56 md:px-3">
         <div className="mb-4 flex items-center gap-2.5 px-1 md:px-2">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-            <Hand className="h-4 w-4 text-white" />
-          </div>
+          {/* El agente con su look, no un logo genérico: este portal es SU casa. */}
+          <AgentitoAvatar look={lookAgente} className="h-9 w-9 shrink-0" />
           <div className="hidden min-w-0 md:block">
             <p className="truncate text-sm font-bold tracking-tight text-ink">{nombre || manifest.agent}</p>
             <p className="flex items-center gap-1 text-[11px] text-ink-soft">

@@ -14,37 +14,19 @@ import dynamic from "next/dynamic";
 import { ArrowRight, Columns3, Dices, Hand, MessageSquare } from "lucide-react";
 import { Btn } from "./ui";
 import type { Manifest } from "./agent";
-import { AgentitoSvg } from "./agentito";
-import { LOOK_EJES, type AgentitoLook } from "./AgentitoRive";
+import {
+  AgentitoAvatar, LOOK_DEFAULT, LOOK_EJES, loadAgentLook, saveAgentLook,
+  type AgentitoLook,
+} from "./agentito";
 
 // El runtime de Rive (~330 KB gz) se trae solo cuando el onboarding se muestra;
 // el resto del portal no lo paga. Mientras tanto, la cara estática.
 const AgentitoRive = dynamic(() => import("./AgentitoRive"), {
   ssr: false,
-  loading: () => <AgentitoSvg className="h-full w-full" />,
+  loading: () => <AgentitoAvatar vivo className="h-full w-full" />,
 });
 
 const NAME_KEY = "tuagente_agent_name";
-const LOOK_KEY = "tuagente_agent_look";
-
-const LOOK_DEFAULT: AgentitoLook = { tono: 0, antena: 0, accesorio: 0, pupila: 0, boca: 0 };
-
-/** El look que el cliente le eligió a su agente (o el default violeta). */
-export function loadAgentLook(): AgentitoLook {
-  if (typeof window === "undefined") return LOOK_DEFAULT;
-  try {
-    const raw = JSON.parse(localStorage.getItem(LOOK_KEY) || "null");
-    if (!raw) return LOOK_DEFAULT;
-    const look = { ...LOOK_DEFAULT };
-    for (const eje of Object.keys(LOOK_EJES) as (keyof AgentitoLook)[]) {
-      const v = Number(raw[eje]);
-      if (Number.isInteger(v) && v >= 0 && v < LOOK_EJES[eje]) look[eje] = v;
-    }
-    return look;
-  } catch {
-    return LOOK_DEFAULT;
-  }
-}
 
 /** Un look al azar, garantizado distinto del actual. */
 function sortearLook(actual: AgentitoLook): AgentitoLook {
@@ -112,11 +94,7 @@ export default function Onboarding({ manifest, onDone }: {
 
   const otroLook = () => {
     const nuevo = sortearLook(look);
-    try {
-      localStorage.setItem(LOOK_KEY, JSON.stringify(nuevo));
-    } catch {
-      /* modo privado */
-    }
+    saveAgentLook(nuevo);
     setLook(nuevo);
   };
 

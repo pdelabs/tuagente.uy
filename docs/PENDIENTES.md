@@ -38,6 +38,11 @@ Lo que quedó abierto, con quién lo destraba. Cerrar acá cuando se resuelva.
   Primer paso hecho (6/8): el onboarding del portal deja bautizar al agente,
   pero el nombre queda en localStorage del browser — no llega al agente ni
   sobrevive un cambio de máquina. Escribirlo en el SOUL sigue acá.
+  Ídem el look del agentito (7/8: el personaje Rive con 8 ejes de rasgos y su
+  avatar SVG en el sidebar): vive en `tuagente_agent_look`. Falta que nombre y
+  look viajen al agente, y usar el mismo avatar en los canales (foto del bot de
+  Telegram/WhatsApp) — eso se setea del lado del agente en el alta, no desde el
+  portal; el SVG de `lib/agentito.tsx` ya sirve para generar el PNG.
 
 ## Técnicos, priorizados
 
