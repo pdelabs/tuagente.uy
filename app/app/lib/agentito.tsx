@@ -54,6 +54,33 @@ export function saveAgentLook(look: AgentitoLook) {
   }
 }
 
+/** ¿Este browser ya sabe qué pinta tiene el agente, o lo tiene que preguntar? */
+export function hayLookGuardado(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(LOOK_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** El look tal como lo reporta el agente en el manifiesto. Se valida igual que
+ *  el del browser: el adapter chequea la forma, no qué significa cada eje. */
+export function lookDesdeAgente(raw: unknown): AgentitoLook | null {
+  if (!raw || typeof raw !== "object") return null;
+  const crudo = raw as Record<string, unknown>;
+  const look = { ...LOOK_DEFAULT };
+  let alguno = false;
+  for (const eje of Object.keys(LOOK_EJES) as (keyof AgentitoLook)[]) {
+    const v = Number(crudo[eje]);
+    if (Number.isInteger(v) && v >= 0 && v < LOOK_EJES[eje]) {
+      look[eje] = v;
+      alguno = true;
+    }
+  }
+  return alguno ? look : null;
+}
+
 const TONOS = ["#5B4BE8", "#00A67E", "#FF7A59", "#F0B429", "#3D8BE8", "#E86BB3"];
 const INK = "#14131F";
 // Dónde queda la tapa que recorta la sonrisa, por variante de boca.

@@ -14,6 +14,11 @@ export type Manifest = {
   agent: string;
   portal_plugin: string;
   modules: Record<string, boolean>;
+  /** Pinta que el cliente le eligió, guardada en el agente (adapter 0.26+).
+   *  Ausente con adapters viejos: el portal cae a lo que tenga el browser. */
+  look?: Record<string, number> | null;
+  /** true si el cliente ya lo bautizó desde el portal alguna vez. */
+  bautizado?: boolean;
 };
 
 export type Ticket = {
@@ -132,6 +137,12 @@ export const approve = (c: PortalConfig, id: string, correction?: string) =>
     correction ? { correction } : undefined);
 export const reject = (c: PortalConfig, id: string, reason: string) =>
   post<{ ok: boolean }>(c.adapter, `/portal/approvals/${id}/reject`, c, { reason });
+/** Bautizo y pinta, guardados EN EL AGENTE para que lo sigan a cualquier
+ *  máquina. Con un adapter viejo tira 404 y el portal sigue con el browser. */
+export const guardarIdentidad = (
+  c: PortalConfig,
+  identidad: { nombre?: string; look?: Record<string, number> },
+) => post<{ ok: boolean }>(c.adapter, "/portal/identity", c, identidad);
 export const getActivity = (c: PortalConfig) => get<{ events: any[] }>(c.adapter, "/portal/activity", c);
 export const getFiles = (c: PortalConfig) => get<{ files: any[] }>(c.adapter, "/portal/files", c);
 export const getFileText = async (c: PortalConfig, path: string) => {

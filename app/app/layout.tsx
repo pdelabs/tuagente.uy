@@ -17,7 +17,9 @@ import {
 import { Btn, Spinner, inputCls } from "./lib/ui";
 import { INTROS, useIntroGate } from "./lib/intros";
 import Onboarding, { loadAgentName } from "./lib/onboarding";
-import { AgentitoAvatar, loadAgentLook } from "./lib/agentito";
+import {
+  AgentitoAvatar, hayLookGuardado, loadAgentLook, lookDesdeAgente, saveAgentLook,
+} from "./lib/agentito";
 
 // Orden y rótulos de módulos; se muestran solo los que el manifest habilita
 // (salvo "home", que es nuestro y no depende de lo que exponga el agente).
@@ -81,12 +83,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => { setNombre(loadAgentName()); }, []);
   const { seen, dismiss } = useIntroGate();
 
+  // Si este browser no conoce al agente pero el agente sí se conoce a sí mismo
+  // (el cliente lo bautizó desde otra máquina), el portal se lo copia.
+  const aprenderDelAgente = (m: Manifest) => {
+    if (hayLookGuardado()) return;
+    const suyo = lookDesdeAgente(m.look);
+    if (suyo) { saveAgentLook(suyo); setLookAgente(suyo); }
+  };
+
   const boot = () => {
     const c = loadConfig();
     if (!c) { setState("login"); return; }
     setCfg(c);
     getManifest(c)
-      .then((m) => { setManifest(m); setOnline(true); setState("ok"); })
+      .then((m) => { setManifest(m); aprenderDelAgente(m); setOnline(true); setState("ok"); })
       .catch(() => setState("error"));
   };
   useEffect(boot, []);
@@ -132,6 +142,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
       <Onboarding
         manifest={manifest}
+        cfg={cfg}
         onDone={(n) => {
           setNombre(n);
           setLookAgente(loadAgentLook());

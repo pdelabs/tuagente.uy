@@ -46,9 +46,18 @@ export default function AgentitoRive(props: Props) {
   return <AgentitoAnimado {...props} />;
 }
 
+// A partir de esta distancia del personaje, la mirada ya está al tope. Más
+// corto y satura enseguida (deja de decir hacia dónde); más largo y casi no
+// mueve los ojos.
+const ALCANCE_MIRADA = 300;
+
 function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props) {
   // Mientras mira el badge, el cursor no manda: si no, se pisan.
   const mirandoBadge = useRef(false);
+  // Dónde está el personaje en la pantalla: la mirada se calcula desde ACÁ, no
+  // desde el centro de la ventana. Si no, mira torcido en cuanto no está
+  // centrado (por ejemplo arriba a la izquierda, en Inicio).
+  const caja = useRef<HTMLDivElement>(null);
 
   const { rive, RiveComponent } = useRive({
     src: "/agentito.riv",
@@ -107,8 +116,10 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
     const ciclo = () => {
       ida = setTimeout(() => {
         mirandoBadge.current = true;
+        // Abajo a la izquierda: el badge de aprobaciones queda en la barra
+        // lateral, más abajo que el saludo donde vive el personaje.
         miradaX.value = 5;
-        miradaY.value = 28;
+        miradaY.value = 68;
         vuelta = setTimeout(() => {
           mirandoBadge.current = false;
           miradaX.value = 50;
@@ -130,8 +141,18 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
     if (window.matchMedia("(pointer: coarse)").matches) return;
     const onMove = (e: MouseEvent) => {
       if (mirandoBadge.current) return;
-      miradaX.value = Math.max(0, Math.min(100, (e.clientX / window.innerWidth) * 100));
-      miradaY.value = Math.max(0, Math.min(100, (e.clientY / window.innerHeight) * 100));
+      const r = caja.current?.getBoundingClientRect();
+      if (!r || r.width === 0) return;
+      // Vector desde la cara del personaje hasta el cursor: la dirección la da
+      // el ángulo y la intensidad la distancia (con el cursor encima, mira al
+      // frente; lejos, al tope).
+      const dx = e.clientX - (r.left + r.width / 2);
+      const dy = e.clientY - (r.top + r.height / 2);
+      const d = Math.hypot(dx, dy);
+      if (d < 1) { miradaX.value = 50; miradaY.value = 50; return; }
+      const fuerza = Math.min(1, d / ALCANCE_MIRADA);
+      miradaX.value = 50 + (dx / d) * fuerza * 50;
+      miradaY.value = 50 + (dy / d) * fuerza * 50;
     };
     window.addEventListener("mousemove", onMove, { passive: true });
     return () => window.removeEventListener("mousemove", onMove);
@@ -154,7 +175,7 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
   }, [miradaX, miradaY]);
 
   return (
-    <div className={`relative ${className ?? ""}`}>
+    <div ref={caja} className={`relative ${className ?? ""}`}>
       {!rive && <AgentitoAvatar look={look} vivo className="absolute inset-0 h-full w-full" />}
       <RiveComponent className={`h-full w-full ${rive ? "" : "opacity-0"}`} />
     </div>

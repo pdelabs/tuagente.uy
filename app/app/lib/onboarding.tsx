@@ -5,18 +5,19 @@
 // decisión que toma sobre él. Paso 2: el agente, ya con nombre, cuenta en
 // tres líneas qué va a pasar acá adentro.
 //
-// El nombre queda en localStorage y el portal lo muestra en lugar del nombre
-// técnico del manifest. Escribirlo en el agente (SOUL) sigue siendo el
-// pendiente de personalización: desde acá no hay cómo, todavía.
+// Nombre y look se guardan EN EL AGENTE (POST /portal/identity, adapter 0.26+)
+// y quedan cacheados en localStorage. Así el agente sigue siendo el suyo desde
+// cualquier máquina; el browser es solo la copia rápida. Que el agente además
+// se PRESENTE con ese nombre (escribirlo en el SOUL) sigue pendiente.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { ArrowRight, Columns3, Dices, Hand, MessageSquare } from "lucide-react";
 import { Btn } from "./ui";
-import type { Manifest } from "./agent";
+import { guardarIdentidad, type Manifest, type PortalConfig } from "./agent";
 import {
-  AgentitoCargando, LOOK_EJES, loadAgentLook, saveAgentLook,
-  type AgentitoLook,
+  AgentitoCargando, LOOK_DEFAULT, LOOK_EJES, hayLookGuardado, loadAgentLook,
+  lookDesdeAgente, saveAgentLook, type AgentitoLook,
 } from "./agentito";
 
 // El runtime de Rive (~330 KB gz) se trae solo cuando el onboarding se muestra;
@@ -81,21 +82,34 @@ const PUNTOS = [
   },
 ];
 
-export default function Onboarding({ manifest, onDone }: {
+export default function Onboarding({ manifest, cfg, onDone }: {
   manifest: Manifest;
+  cfg: PortalConfig;
   onDone: (name: string) => void;
 }) {
-  const [nombre, setNombre] = useState(() => loadAgentName() ?? "");
-  const [paso, setPaso] = useState<"bautismo" | "presentacion">("bautismo");
+  // Si el agente YA fue bautizado (otra máquina, otra persona de la empresa),
+  // no se le vuelve a pedir el nombre: se salta directo a la presentación.
+  const yaBautizado = Boolean(manifest.bautizado);
+  const [nombre, setNombre] = useState(
+    () => loadAgentName() ?? (yaBautizado ? manifest.agent : ""));
+  const [paso, setPaso] = useState<"bautismo" | "presentacion">(
+    yaBautizado ? "presentacion" : "bautismo");
   // Contador de festejos: cada bautismo dispara el trigger del personaje.
   const [festejos, setFestejos] = useState(0);
-  const [look, setLook] = useState<AgentitoLook>(() => loadAgentLook());
+  const [look, setLook] = useState<AgentitoLook>(
+    () => (hayLookGuardado()
+      ? loadAgentLook()
+      : lookDesdeAgente(manifest.look) ?? LOOK_DEFAULT));
+  // Solo escribimos en el agente si el cliente eligió algo ACÁ; si no, entrar
+  // desde otra máquina le pisaría la pinta con el default.
+  const eligioAlgo = useRef(false);
   const listo = nombre.trim().length > 0;
 
   const otroLook = () => {
     const nuevo = sortearLook(look);
     saveAgentLook(nuevo);
     setLook(nuevo);
+    eligioAlgo.current = true;
   };
 
   const bautizar = () => {
@@ -109,6 +123,19 @@ export default function Onboarding({ manifest, onDone }: {
     setNombre(n);
     setFestejos((f) => f + 1);
     setPaso("presentacion");
+    eligioAlgo.current = true;
+  };
+
+  /** El bautizo viaja al agente; si el adapter es viejo o está caído, el
+   *  portal sigue andando con la copia del browser. */
+  const terminar = () => {
+    const n = nombre.trim();
+    if (eligioAlgo.current) {
+      guardarIdentidad(cfg, { nombre: n, look }).catch(() => {
+        /* adapter viejo (404) o caído: queda en el browser */
+      });
+    }
+    onDone(n);
   };
 
   const puntos = PUNTOS.filter((p) => manifest.modules[p.key]);
@@ -178,7 +205,7 @@ export default function Onboarding({ manifest, onDone }: {
             )}
 
             <div className="mt-8 flex flex-col items-center gap-2">
-              <Btn onClick={() => onDone(nombre.trim())}>Entrar al portal</Btn>
+              <Btn onClick={terminar}>Entrar al portal</Btn>
               <span className="text-[12px] text-ink-soft">
                 Cada sección se explica sola la primera vez que entrás.
               </span>
