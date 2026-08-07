@@ -19,6 +19,7 @@ import {
   type Dispatch, type ReactNode, type SetStateAction,
 } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   Activity, ArrowRight, BarChart3, CheckCircle2, ChevronRight, Columns3,
   FolderOpen, Hand, LayoutDashboard, MessageSquare, Plus, RefreshCw,
@@ -31,6 +32,15 @@ import {
 } from "../lib/agent";
 import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
 import { agentDisplayName } from "../lib/onboarding";
+import { AgentitoAvatar, LOOK_DEFAULT, loadAgentLook } from "../lib/agentito";
+import type { EstadoAgentito } from "../lib/AgentitoRive";
+
+// El personaje animado se trae solo acá y en el onboarding; el resto del portal
+// no paga el runtime. Mientras carga se ve la misma cara, quieta.
+const AgentitoRive = dynamic(() => import("../lib/AgentitoRive"), {
+  ssr: false,
+  loading: () => <AgentitoAvatar vivo className="h-full w-full" />,
+});
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
@@ -457,6 +467,33 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
 
   const ultimaSenal = ultimos && ultimos.length > 0 ? hace(ultimos[0].ts) : null;
 
+  // ── El agentito como indicador de estado ──
+  const [look, setLook] = useState(LOOK_DEFAULT);
+  useEffect(() => { setLook(loadAgentLook()); }, []);
+
+  const pendientes = aprob.t === "listo" ? aprob.data.length : null;
+  // "tranquilo" solo si sabemos que no hay nada; si el dato no llegó, ni ahí.
+  const estadoAgente: EstadoAgentito =
+    pendientes === null ? "normal" : pendientes > 0 ? "esperando" : "tranquilo";
+
+  // Festeja cuando aparece algo nuevo que produjo (artefacto o entregable).
+  // La primera carga no cuenta: ahí todavía no hizo nada, solo nos enteramos.
+  const producido = useMemo(() => {
+    if (artefactos.t !== "listo" || archivos.t !== "listo") return null;
+    const entregas = archivos.data.filter(
+      (f) => (f.path || "").replace(/^\/+/, "").startsWith(ENTREGABLES)).length;
+    return artefactos.data.length + entregas;
+  }, [artefactos, archivos]);
+  const [festejos, setFestejos] = useState(0);
+  const producidoPrevio = useRef<number | null>(null);
+  useEffect(() => {
+    if (producido === null) return;
+    if (producidoPrevio.current !== null && producido > producidoPrevio.current) {
+      setFestejos((f) => f + 1);
+    }
+    producidoPrevio.current = producido;
+  }, [producido]);
+
   if (fatal) {
     return (
       <div className={WRAP}>
@@ -484,22 +521,34 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
 
   return (
     <div className={WRAP}>
-      <PageHeader
-        title={saludo()}
-        subtitle={linea.join(" · ")}
-        actions={
-          <>
-            {ultima && (
-              <span className="hidden text-xs tabular-nums text-ink-soft sm:inline">
-                Actualizado {hora(ultima)}
-              </span>
-            )}
-            <IconBtn label="Actualizar" disabled={cargando} onClick={() => cargar(true)}>
-              <RefreshCw className={`h-4 w-4 ${cargando ? "animate-spin" : ""}`} />
-            </IconBtn>
-          </>
-        }
-      />
+      {/* El agentito acá no decora: dice cómo viene la mano. Si algo espera tu
+          ok mira hacia el badge; si no hay nada, se ceba unos mates. */}
+      <div className="flex items-start gap-3 sm:gap-4">
+        <AgentitoRive
+          festejos={festejos}
+          look={look}
+          estado={estadoAgente}
+          className="-mt-1 h-16 w-16 shrink-0 sm:h-20 sm:w-20"
+        />
+        <div className="min-w-0 flex-1">
+          <PageHeader
+            title={saludo()}
+            subtitle={linea.join(" · ")}
+            actions={
+              <>
+                {ultima && (
+                  <span className="hidden text-xs tabular-nums text-ink-soft sm:inline">
+                    Actualizado {hora(ultima)}
+                  </span>
+                )}
+                <IconBtn label="Actualizar" disabled={cargando} onClick={() => cargar(true)}>
+                  <RefreshCw className={`h-4 w-4 ${cargando ? "animate-spin" : ""}`} />
+                </IconBtn>
+              </>
+            }
+          />
+        </div>
+      </div>
 
       {nada ? (
         <EmptyState

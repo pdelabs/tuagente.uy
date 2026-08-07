@@ -9,19 +9,28 @@
 // Mientras carga (o si algo falla) se ve la cara estática, que es el mismo
 // dibujo: el reemplazo no salta.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRive, useStateMachineInput, RuntimeLoader } from "@rive-app/react-canvas-lite";
 import { AgentitoAvatar, type AgentitoLook } from "./agentito";
 
 RuntimeLoader.setWasmUrl("/rive.wasm");
 
-export default function AgentitoRive({ festejos, look, className }: {
+/** Qué está haciendo el agente. Lo decide quien lo muestra, no el personaje. */
+export type EstadoAgentito =
+  | "normal"     // sigue el cursor y nada más
+  | "tranquilo"  // no hay nada esperándote: se ceba unos mates
+  | "esperando"; // hay algo para tu ok: cada tanto mira hacia la barra lateral
+
+export default function AgentitoRive({ festejos, look, estado = "normal", className }: {
   /** Contador: cada incremento dispara el trigger de festejo. */
   festejos: number;
   look: AgentitoLook;
+  estado?: EstadoAgentito;
   className?: string;
 }) {
   const [quieto, setQuieto] = useState(false);
+  // Mientras mira el badge, el cursor no manda: si no, se pisan.
+  const mirandoBadge = useRef(false);
   useEffect(() => {
     setQuieto(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }, []);
@@ -64,10 +73,10 @@ export default function AgentitoRive({ festejos, look, className }: {
     if (festejos > 0) festejar?.fire();
   }, [festejos, festejar]);
 
-  // Cada tanto, sin aviso, se ceba unos mates. El primero a los ~20s de
-  // estar en pantalla; después cuando pinta (45s-2min).
+  // Cuando no hay nada esperando tu ok, se ceba unos mates. El primero a los
+  // ~20s de estar en pantalla; después cuando pinta (45s-2min).
   useEffect(() => {
-    if (!matear || quieto) return;
+    if (!matear || quieto || estado !== "tranquilo") return;
     let t: ReturnType<typeof setTimeout>;
     const programar = (ms: number) => {
       t = setTimeout(() => {
@@ -77,12 +86,40 @@ export default function AgentitoRive({ festejos, look, className }: {
     };
     programar(20_000 + Math.random() * 15_000);
     return () => clearTimeout(t);
-  }, [matear, quieto]);
+  }, [matear, quieto, estado]);
+
+  // Si algo espera tu visto bueno, cada tanto pega una mirada a la barra
+  // lateral —donde está el badge de aprobaciones— y vuelve.
+  useEffect(() => {
+    if (!miradaX || !miradaY || quieto || estado !== "esperando") return;
+    let ida: ReturnType<typeof setTimeout>;
+    let vuelta: ReturnType<typeof setTimeout>;
+    const ciclo = () => {
+      ida = setTimeout(() => {
+        mirandoBadge.current = true;
+        miradaX.value = 5;
+        miradaY.value = 28;
+        vuelta = setTimeout(() => {
+          mirandoBadge.current = false;
+          miradaX.value = 50;
+          miradaY.value = 50;
+          ciclo();
+        }, 1300);
+      }, 6000 + Math.random() * 5000);
+    };
+    ciclo();
+    return () => {
+      clearTimeout(ida);
+      clearTimeout(vuelta);
+      mirandoBadge.current = false;
+    };
+  }, [miradaX, miradaY, quieto, estado]);
 
   useEffect(() => {
     if (!miradaX || !miradaY || quieto) return;
     if (window.matchMedia("(pointer: coarse)").matches) return;
     const onMove = (e: MouseEvent) => {
+      if (mirandoBadge.current) return;
       miradaX.value = Math.max(0, Math.min(100, (e.clientX / window.innerWidth) * 100));
       miradaY.value = Math.max(0, Math.min(100, (e.clientY / window.innerHeight) * 100));
     };
@@ -96,8 +133,10 @@ export default function AgentitoRive({ festejos, look, className }: {
     if (!window.matchMedia("(pointer: coarse)").matches) return;
     let raf = 0;
     const tick = (t: number) => {
-      miradaX.value = 50 + 26 * Math.sin(t / 1700);
-      miradaY.value = 50 + 16 * Math.sin(t / 2600);
+      if (!mirandoBadge.current) {
+        miradaX.value = 50 + 26 * Math.sin(t / 1700);
+        miradaY.value = 50 + 16 * Math.sin(t / 2600);
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);

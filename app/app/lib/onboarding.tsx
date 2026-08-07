@@ -117,7 +117,8 @@ export default function Onboarding({ manifest, onDone }: {
     <main className="app-shell flex min-h-screen items-center justify-center bg-surface px-6 py-12">
       <div className="flex w-full max-w-2xl flex-col items-center text-center">
         <div className={`transition-all duration-500 ${paso === "bautismo" ? "h-40 w-40" : "h-28 w-28"}`}>
-          <AgentitoRive festejos={festejos} look={look} className="h-full w-full" />
+          {/* En el onboarding siempre está tranquilo: todavía no le pediste nada. */}
+          <AgentitoRive festejos={festejos} look={look} estado="tranquilo" className="h-full w-full" />
         </div>
 
         <h1 className="mt-6 text-[32px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">

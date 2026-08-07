@@ -141,3 +141,37 @@ text/plain) · `crons/{id}` · `capabilities` · `boards` · `POST upload` ·
 ## Estética
 M3 expressive del `tailwind.config.ts`: primary #5B4BE8, surface #FBFAFF,
 ink #14131F, tonales c-violet/c-green/c-coral/c-amber, Jakarta. Sin sombras.
+
+## El agentito (7/8)
+Personaje Rive en `public/agentito.riv` (15 KB), autorado 100% por MCP
+(`rivemcp`). El state machine "Agentito" expone 12 inputs: `miradaX`/`miradaY`
+(pupilas), los triggers `festejar` y `matear`, y 8 ejes de rasgos —tono, antena,
+accesorio, pupila, boca, piel, traje, cejas— que dan 31 mil combinaciones. El
+cliente lo bautiza y le sortea la pinta en el onboarding; nombre y look quedan
+en localStorage (`tuagente_agent_name`, `tuagente_agent_look`).
+
+**Dónde aparece, y en ningún lado más**: onboarding (grande, animado), logo del
+sidebar (chico, SVG), login (SVG), Inicio (chico, animado: se ceba mates si no
+hay pendientes, festeja cuando aparece un entregable, mira al badge si algo
+espera tu ok) y la pantalla de sin conexión (SVG dormido). NO va flotando, ni
+en cada empty state, ni en las intros de módulo.
+
+`lib/agentito.tsx` es la casa del look: tipos, ejes, localStorage y
+`AgentitoAvatar`, el mismo dibujo en SVG estático sin runtime. El runtime Rive
+(`@rive-app/react-canvas-lite`, wasm ~330 KB servido desde `/public`) entra solo
+con `next/dynamic` en el onboarding y en Inicio.
+
+### Trampas verificadas
+1. **Z-order al revés**: los hijos de un grupo se listan de ADELANTE hacia
+   atrás. Un `add_*` con `group=` entra al FONDO (detrás de la panza,
+   invisible). Hay que sacarlo a la raíz y volver a meterlo con `place:"front"`.
+2. **El linter miente con los blend states**: `validate_riv_structural` marca
+   "transition-target-range" en los dos layers de mirada desde el día uno. Es
+   falso positivo: en el runtime real la mirada anda. Confiar en `export_riv
+   --dryRun` + el navegador, no en el linter.
+3. **No calcular posiciones a ojo**: para calibrar la bombilla en la boca se
+   midió leyendo píxeles del canvas (`scratchpad/rive-test/probe.js`). Reveló
+   que la matemática estaba bien y el problema era el z-order.
+4. **rivemcp tiene cupo de exports** (3, parece que se renuevan por día).
+   Iterar sobre `save_session` —que escribe un .riv que anda— y gastar el
+   export solo para el archivo que se commitea.

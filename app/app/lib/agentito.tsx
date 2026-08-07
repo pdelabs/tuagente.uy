@@ -63,10 +63,12 @@ const TAPA_Y = [67, 64.5, 69.5, 65];
  * El agentito quieto, en SVG puro. `vivo` le da flote + parpadeo por CSS
  * (solo para el fallback del onboarding); el logo del sidebar va estático.
  */
-export function AgentitoAvatar({ look = LOOK_DEFAULT, vivo = false, conSombra = false, className }: {
+export function AgentitoAvatar({ look = LOOK_DEFAULT, vivo = false, conSombra = false, apagado = false, className }: {
   look?: AgentitoLook;
   vivo?: boolean;
   conSombra?: boolean;
+  /** Dormido: ojos cerrados y boca quieta. Para cuando el agente no responde. */
+  apagado?: boolean;
   className?: string;
 }) {
   const tono = TONOS[look.tono] ?? TONOS[0];
@@ -127,9 +129,15 @@ export function AgentitoAvatar({ look = LOOK_DEFAULT, vivo = false, conSombra = 
         )}
 
         {/* Boca: sonrisa blanca + tapa color cuerpo (+ lengüita) */}
-        <ellipse cx="60" cy="73.5" rx="13" ry="9.5" fill="#fff" />
-        <ellipse cx="60" cy={tapaY} rx="15.5" ry="9.75" fill={tono} />
-        {look.boca === 3 && <ellipse cx="60" cy="81.5" rx="3.75" ry="2.5" fill="#FF8FA3" />}
+        {apagado ? (
+          <path d="M53 76 h14" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" opacity="0.85" />
+        ) : (
+          <>
+            <ellipse cx="60" cy="73.5" rx="13" ry="9.5" fill="#fff" />
+            <ellipse cx="60" cy={tapaY} rx="15.5" ry="9.75" fill={tono} />
+            {look.boca === 3 && <ellipse cx="60" cy="81.5" rx="3.75" ry="2.5" fill="#FF8FA3" />}
+          </>
+        )}
 
         {/* Accesorios sobre el cuerpo */}
         {look.accesorio === 2 && (
@@ -166,24 +174,31 @@ export function AgentitoAvatar({ look = LOOK_DEFAULT, vivo = false, conSombra = 
         )}
 
         {/* Ojos */}
-        <g className={vivo ? "onb-eyes" : undefined}>
-          <ellipse cx="46.5" cy="59" rx="10.25" ry="11" fill="#fff" />
-          <ellipse cx="73.5" cy="59" rx="10.25" ry="11" fill="#fff" />
-          <circle cx="46.5" cy="59.5" r={pupilaR} fill={INK} />
-          <circle cx="73.5" cy="59.5" r={pupilaR} fill={INK} />
-          <circle cx="48.25" cy="57.75" r="1.5" fill="#fff" opacity="0.9" />
-          <circle cx="75.25" cy="57.75" r="1.5" fill="#fff" opacity="0.9" />
-        </g>
+        {apagado ? (
+          <g stroke="#fff" strokeWidth="3.5" strokeLinecap="round" fill="none" opacity="0.85">
+            <path d="M38.5 58 q8 7 16 0" />
+            <path d="M65.5 58 q8 7 16 0" />
+          </g>
+        ) : (
+          <g className={vivo ? "onb-eyes" : undefined}>
+            <ellipse cx="46.5" cy="59" rx="10.25" ry="11" fill="#fff" />
+            <ellipse cx="73.5" cy="59" rx="10.25" ry="11" fill="#fff" />
+            <circle cx="46.5" cy="59.5" r={pupilaR} fill={INK} />
+            <circle cx="73.5" cy="59.5" r={pupilaR} fill={INK} />
+            <circle cx="48.25" cy="57.75" r="1.5" fill="#fff" opacity="0.9" />
+            <circle cx="75.25" cy="57.75" r="1.5" fill="#fff" opacity="0.9" />
+          </g>
+        )}
 
         {/* Anteojos y cejas, por encima de los ojos */}
-        {look.accesorio === 1 && (
+        {look.accesorio === 1 && !apagado && (
           <g fill="none" stroke={INK} strokeWidth="1.75">
             <circle cx="46.5" cy="59" r="12.4" />
             <circle cx="73.5" cy="59" r="12.4" />
             <rect x="57.75" y="56" width="4.5" height="2" rx="1" fill={INK} stroke="none" />
           </g>
         )}
-        {look.cejas > 0 && (
+        {look.cejas > 0 && !apagado && (
           <g fill={INK}>
             <rect
               x="41" y="42.25" width="11" height="2.5" rx="1.25"

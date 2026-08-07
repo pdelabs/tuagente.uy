@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, Clock, Columns3, Folder, Hand, Home, LayoutDashboard,
-  LogOut, MessageSquare, Plug, Puzzle, Unplug, type LucideIcon,
+  LogOut, MessageSquare, Plug, Puzzle, type LucideIcon,
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest, getApprovals,
@@ -114,9 +114,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (state === "error" || !manifest || !cfg) {
     return (
       <main className="app-shell flex min-h-screen flex-col items-center justify-center bg-surface p-6 text-center">
-        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-black/[0.04]">
-          <Unplug className="h-5 w-5 text-ink-soft" />
-        </div>
+        {/* Apagado: el mismo agentito, dormido y sin color. */}
+        <AgentitoAvatar look={lookAgente} apagado className="mb-2 h-20 w-20 opacity-45 grayscale" />
         <p className="text-sm font-semibold text-ink">No pude conectar con tu agente</p>
         <p className="mb-4 mt-1 text-sm text-ink-soft">Puede estar apagado, o el link venció.</p>
         <div className="flex gap-2">
