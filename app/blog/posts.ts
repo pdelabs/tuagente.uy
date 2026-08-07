@@ -9,6 +9,15 @@ export type Post = {
 
 export const POSTS: Post[] = [
   {
+    slug: "por-que-nadie-usa-agentes-de-ia",
+    title: "WIRED tiene razón: la gente normal no usa agentes de IA. Nosotros tampoco esperamos que lo hagas",
+    description:
+      "Un artículo de WIRED confirma lo que venimos diciendo: los agentes de IA son una tecnología, no un producto. La gente normal no va a usarlos — los va a contratar. Qué significa eso si tenés una empresa.",
+    date: "2026-08-07",
+    dateHuman: "7 de agosto de 2026",
+    readingMin: 6,
+  },
+  {
     slug: "que-es-un-agente-de-ia",
     title: "¿Qué es un agente de IA? Explicado para dueños de empresas, sin humo",
     description:
