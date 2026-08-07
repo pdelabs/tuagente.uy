@@ -147,8 +147,17 @@ Personaje Rive en `public/agentito.riv` (15 KB), autorado 100% por MCP
 (`rivemcp`). El state machine "Agentito" expone 12 inputs: `miradaX`/`miradaY`
 (pupilas), los triggers `festejar` y `matear`, y 8 ejes de rasgos —tono, antena,
 accesorio, pupila, boca, piel, traje, cejas— que dan 31 mil combinaciones. El
-cliente lo bautiza y le sortea la pinta en el onboarding; nombre y look quedan
-en localStorage (`tuagente_agent_name`, `tuagente_agent_look`).
+cliente lo bautiza y le sortea la pinta en el onboarding.
+
+**El bautizo vive en el agente, no en el browser** (`POST /portal/identity`,
+adapter 0.26). El adapter lo guarda en `/opt/data/portal_identidad.json`, lo
+reporta en el manifiesto (`agent`, `look`, `bautizado`), escribe el nombre en un
+bloque acotado del `SOUL.md` —entre marcadores `<!-- portal:identidad -->`, sin
+tocar la prosa del alta— para que el agente SE PRESENTE así, y le pega un
+`setMyName` al bot de Telegram. Todo lo de afuera es best-effort: si Telegram
+limita o falta el SOUL, el bautizo igual quedó. localStorage queda como caché:
+desde otra máquina el portal aprende del agente y no vuelve a pedir el nombre.
+La **foto** del bot no se puede por API — `@BotFather` `/setuserpic`, a mano.
 
 **Dónde aparece, y en ningún lado más**: onboarding (grande, animado), logo del
 sidebar (chico, SVG), login (SVG), Inicio (chico, animado: se ceba mates si no

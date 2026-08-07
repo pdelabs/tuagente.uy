@@ -29,6 +29,11 @@ Lo que se cobra es la operación, no los tokens.
 2. El cliente le escribe a `@userinfobot` para sacar su **user id**.
 3. `TELEGRAM_BOT_TOKEN` y `TELEGRAM_ALLOWED_USERS` (allowlist: sin esto le
    escribe cualquiera), y el home channel para los avisos proactivos.
+4. **La foto del bot va a mano**: `@BotFather` → `/setuserpic`. No hay método
+   en la Bot API para cambiarla, así que es el único paso que no se automatiza.
+   El **nombre** sí: cuando el cliente bautiza a su agente en el portal, el
+   adapter le pega un `setMyName` al bot (adapter 0.26+). O sea que después del
+   bautizo el bot ya se llama como el agente; solo falta subirle la carita.
 
 Es el canal para arrancar, para pilotos y para el equipo interno. Verificado.
 
