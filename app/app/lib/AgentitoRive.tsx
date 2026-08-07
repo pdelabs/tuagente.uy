@@ -42,6 +42,7 @@ export default function AgentitoRive({ festejos, look, className }: {
   const inPiel = useStateMachineInput(rive, "Agentito", "piel");
   const inTraje = useStateMachineInput(rive, "Agentito", "traje");
   const inCejas = useStateMachineInput(rive, "Agentito", "cejas");
+  const matear = useStateMachineInput(rive, "Agentito", "matear");
 
   useEffect(() => {
     if (inTono) inTono.value = look.tono;
@@ -62,6 +63,21 @@ export default function AgentitoRive({ festejos, look, className }: {
   useEffect(() => {
     if (festejos > 0) festejar?.fire();
   }, [festejos, festejar]);
+
+  // Cada tanto, sin aviso, se ceba unos mates. El primero a los ~20s de
+  // estar en pantalla; después cuando pinta (45s-2min).
+  useEffect(() => {
+    if (!matear || quieto) return;
+    let t: ReturnType<typeof setTimeout>;
+    const programar = (ms: number) => {
+      t = setTimeout(() => {
+        matear.fire();
+        programar(45_000 + Math.random() * 75_000);
+      }, ms);
+    };
+    programar(20_000 + Math.random() * 15_000);
+    return () => clearTimeout(t);
+  }, [matear, quieto]);
 
   useEffect(() => {
     if (!miradaX || !miradaY || quieto) return;
