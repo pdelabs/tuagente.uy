@@ -1,9 +1,10 @@
 "use client";
 
 // El agentito de verdad: personaje Rive (public/agentito.riv, hecho con
-// rivemcp — sesión "Onboarding" del 6/8). El state machine "Agentito" expone:
+// rivemcp — sesión "Onboarding" del 6-7/8). El state machine "Agentito" expone:
 //   miradaX / miradaY (number 0-100): hacia dónde miran las pupilas
-//   festejar (trigger): rebote de festejo cuando el cliente lo bautiza
+//   festejar / matear (trigger): el rebote de festejo y la cebada de mate
+//   tono, antena, accesorio, pupila, boca, piel, traje, cejas: los ejes del look
 // Encima trae flote y parpadeo como loops propios. El runtime es el "lite"
 // (solo vectores) y el wasm se sirve desde /public — nada sale a un CDN.
 // Mientras carga (o si algo falla) se ve la cara estática, que es el mismo
@@ -21,19 +22,33 @@ export type EstadoAgentito =
   | "tranquilo"  // no hay nada esperándote: se ceba unos mates
   | "esperando"; // hay algo para tu ok: cada tanto mira hacia la barra lateral
 
-export default function AgentitoRive({ festejos, look, estado = "normal", className }: {
+type Props = {
   /** Contador: cada incremento dispara el trigger de festejo. */
   festejos: number;
   look: AgentitoLook;
   estado?: EstadoAgentito;
   className?: string;
-}) {
-  const [quieto, setQuieto] = useState(false);
+};
+
+export default function AgentitoRive(props: Props) {
+  // Se puede leer en el render: este módulo entra solo por next/dynamic con
+  // ssr:false, así que siempre corre en el browser.
+  const [quieto] = useState(
+    () => typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+
+  // Con reduced-motion NO montamos Rive: va el dibujo estático, que respeta el
+  // look y encima se ahorra el wasm. Pausar el runtime no servía — quedaba
+  // pausado antes de que el state machine aplicara los ejes, y salía el
+  // agentito violeta por defecto en vez del que eligió el cliente.
+  if (quieto) return <AgentitoAvatar look={props.look} className={props.className} />;
+  return <AgentitoAnimado {...props} />;
+}
+
+function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props) {
   // Mientras mira el badge, el cursor no manda: si no, se pisan.
   const mirandoBadge = useRef(false);
-  useEffect(() => {
-    setQuieto(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  }, []);
 
   const { rive, RiveComponent } = useRive({
     src: "/agentito.riv",
@@ -64,11 +79,6 @@ export default function AgentitoRive({ festejos, look, estado = "normal", classN
     if (inCejas) inCejas.value = look.cejas;
   }, [look, inTono, inAntena, inAccesorio, inPupila, inBoca, inPiel, inTraje, inCejas]);
 
-  // Con reduced-motion el personaje queda en su primer frame, sin loops.
-  useEffect(() => {
-    if (quieto && rive) rive.pause();
-  }, [quieto, rive]);
-
   useEffect(() => {
     if (festejos > 0) festejar?.fire();
   }, [festejos, festejar]);
@@ -76,7 +86,7 @@ export default function AgentitoRive({ festejos, look, estado = "normal", classN
   // Cuando no hay nada esperando tu ok, se ceba unos mates. El primero a los
   // ~20s de estar en pantalla; después cuando pinta (45s-2min).
   useEffect(() => {
-    if (!matear || quieto || estado !== "tranquilo") return;
+    if (!matear || estado !== "tranquilo") return;
     let t: ReturnType<typeof setTimeout>;
     const programar = (ms: number) => {
       t = setTimeout(() => {
@@ -86,12 +96,12 @@ export default function AgentitoRive({ festejos, look, estado = "normal", classN
     };
     programar(20_000 + Math.random() * 15_000);
     return () => clearTimeout(t);
-  }, [matear, quieto, estado]);
+  }, [matear, estado]);
 
   // Si algo espera tu visto bueno, cada tanto pega una mirada a la barra
   // lateral —donde está el badge de aprobaciones— y vuelve.
   useEffect(() => {
-    if (!miradaX || !miradaY || quieto || estado !== "esperando") return;
+    if (!miradaX || !miradaY || estado !== "esperando") return;
     let ida: ReturnType<typeof setTimeout>;
     let vuelta: ReturnType<typeof setTimeout>;
     const ciclo = () => {
@@ -113,10 +123,10 @@ export default function AgentitoRive({ festejos, look, estado = "normal", classN
       clearTimeout(vuelta);
       mirandoBadge.current = false;
     };
-  }, [miradaX, miradaY, quieto, estado]);
+  }, [miradaX, miradaY, estado]);
 
   useEffect(() => {
-    if (!miradaX || !miradaY || quieto) return;
+    if (!miradaX || !miradaY) return;
     if (window.matchMedia("(pointer: coarse)").matches) return;
     const onMove = (e: MouseEvent) => {
       if (mirandoBadge.current) return;
@@ -125,11 +135,11 @@ export default function AgentitoRive({ festejos, look, estado = "normal", classN
     };
     window.addEventListener("mousemove", onMove, { passive: true });
     return () => window.removeEventListener("mousemove", onMove);
-  }, [miradaX, miradaY, quieto]);
+  }, [miradaX, miradaY]);
 
   // Sin cursor (táctil) la mirada quedaría clavada al frente: paseo lento.
   useEffect(() => {
-    if (!miradaX || !miradaY || quieto) return;
+    if (!miradaX || !miradaY) return;
     if (!window.matchMedia("(pointer: coarse)").matches) return;
     let raf = 0;
     const tick = (t: number) => {
@@ -141,7 +151,7 @@ export default function AgentitoRive({ festejos, look, estado = "normal", classN
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [miradaX, miradaY, quieto]);
+  }, [miradaX, miradaY]);
 
   return (
     <div className={`relative ${className ?? ""}`}>
