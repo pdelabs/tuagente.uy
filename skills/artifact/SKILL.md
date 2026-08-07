@@ -1,4 +1,6 @@
 ---
+titulo: Visualizaciones
+para_cliente: "Arma los gráficos, paneles y comparaciones interactivas que ves en Artefactos."
 name: artifact
 description: "Crea una visualizacion HTML autocontenida (grafico, tabla rica, informe, panel) que el cliente ve renderizada en el portal y se puede citar en el chat. Usala cuando los datos se entienden mucho mejor mirandolos que leyendolos: comparaciones, evolucion en el tiempo, KPIs o un informe para compartir."
 version: 1.0.0

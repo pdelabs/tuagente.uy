@@ -1,4 +1,6 @@
 ---
+titulo: Pedir aprobación
+para_cliente: "Antes de una acción sensible, arma el pedido que ves en tu pestaña de Aprobaciones: qué quiere hacer y qué pasa si decís que sí."
 name: aprobacion
 description: "Arma una solicitud de aprobacion con formato estable: que queres hacer, que pasa si aprueba, que pasa si rechaza y el contenido a revisar. Usala antes de cualquier accion sensible (mandar un mail, gastar plata, publicar, borrar, contactar a alguien) y despues bloquea el ticket con la accion de bloquear."
 version: 1.0.0

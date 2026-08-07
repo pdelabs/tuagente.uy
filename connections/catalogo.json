@@ -56,9 +56,10 @@
       "para_que": "Que el agente lea y actualice tus planillas, guarde archivos en Drive y mire la agenda.",
       "detecta": { "archivos": ["google_token.json"] },
       "requiere": { "archivos": ["google_client_secret.json"] },
-      "como": "Te pasamos un link, entras con tu cuenta de Google y le das permiso. No tenes que crear ni configurar nada.",
+      "como": "Tocas Conectar, entras con tu cuenta de Google, aceptas, y pegas la direccion que te devuelve. Dos minutos, sin configurar nada.",
       "esfuerzo": "minutos",
-      "quien": "asistido",
+      "quien": "cliente_solo",
+      "flujo": "google-oauth",
       "nota_interna": "El permiso se pide con NUESTRA app OAuth (tipo Desktop, se puede reusar entre clientes). Sin eso, cada cliente tendria que crear un proyecto en Google Cloud, que es exactamente lo que un cliente no tecnico no puede hacer."
     },
     {
@@ -71,6 +72,17 @@
       "esfuerzo": "dias",
       "quien": "nosotros",
       "recomendado": false
+    },
+    {
+      "id": "modelos-auxiliares",
+      "label": "Modelos de IA auxiliares (transcripción, imágenes)",
+      "grupo": "sistema",
+      "para_que": "Que el agente pueda transcribir audios y videos, y generar o analizar imágenes, usando el modelo que mejor sirva para cada tarea.",
+      "detecta": { "env": ["OPENROUTER_API_KEY"] },
+      "como": "Viene incluida con tu agente: le creamos una cuota propia de modelos con limite de gasto. No tenes que crear ninguna cuenta.",
+      "esfuerzo": "minutos",
+      "quien": "nosotros",
+      "nota_interna": "Una key por cliente bajo la org tuagente de OpenRouter, creada via Management API con limite en USD (ver notas/modelos-auxiliares.md). El gasto por cliente se ve por key en Activity. La skill del kit decide proveedor y modelo; el agente solo la invoca."
     },
     {
       "id": "slack",

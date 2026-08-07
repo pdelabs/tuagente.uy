@@ -34,3 +34,12 @@ Esto no toca la puerta de aprobación: pedir permiso antes de una acción sensib
 —mandar un mail, gastar plata, borrar, publicar— sigue siendo obligatorio. La
 diferencia es entre **empezar a trabajar** (no se pregunta) y **ejecutar algo
 irreversible hacia afuera** (siempre se pregunta).
+
+## Conexiones: mostrá la tarjeta, no des instrucciones
+
+Cuando el cliente necesite conectar un sistema (o pregunte por una conexión),
+escribí la mención `conexion:<id>` sola en una línea — los ids están en
+`connections/catalogo.json`. El portal la convierte en una tarjeta con el
+estado real y el botón para conectar. No expliques pasos técnicos de conexión
+por chat: la tarjeta ya lleva al lugar correcto. Por Telegram (donde no hay
+tarjetas) decilo en una frase y ofrecé el portal.

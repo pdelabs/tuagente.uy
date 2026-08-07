@@ -52,8 +52,16 @@ aceptar y devolvernos un código. Dos minutos, por teléfono si hace falta.
   un permiso *restringido*: para publicar la app, Google exige una auditoría de
   seguridad de un tercero. Para correo usamos IMAP/SMTP con contraseña de
   aplicación: minutos, cero trámite, y le sirve igual al cliente.
-- **Los permisos de Sheets/Drive/Calendar son *sensibles*, no restringidos**:
-  verificación de marca, sin auditoría de seguridad. Es el camino barato.
+- **Sheets/Docs/Calendar son permisos *sensibles*** (verificación de marca,
+  sin auditoría — el camino barato). **Ojo: Drive completo (`drive`,
+  `drive.readonly`) es *restringido* como Gmail** desde Project Strobe: para
+  verificar la app con ese permiso Google pide evaluación de seguridad (CASA).
+  Mientras la app esté publicada sin verificar funciona igual — con la pantalla
+  de "Google no verificó esta app" y tope de ~100 usuarios — que para pilotos
+  alcanza: el "Avanzado → continuar" lo tocamos nosotros, no el cliente.
+  **Verificado en vivo el 6/8/2026** con `drive.readonly`: en modo Prueba sin
+  test users da `403 access_denied`; publicada en producción, el consentimiento
+  pasa y el token queda andando.
 - **Protección Avanzada**: si la cuenta del cliente la tiene activada, su
   administrador tiene que autorizar nuestro ID de cliente antes. Preguntarlo
   ANTES de agendar la llamada, no durante.
@@ -62,6 +70,17 @@ aceptar y devolvernos un código. Dos minutos, por teléfono si hace falta.
 
 ## Estado
 
-Falta hacer el runbook de una vez (los seis pasos de arriba). Hasta entonces, el
-portal muestra Google como **"Falta un paso nuestro"**, que es la verdad: el
-cliente no puede hacer nada hasta que exista esa app.
+**HECHO el 6/8/2026.** La app existe (proyecto GCP `tuagente-504715`, cliente
+Desktop, publicada en producción sin verificar) y el flujo completo está
+probado punta a punta con una cuenta real: consentimiento → token →
+`files.list` con `sharedWithMe=true` funcionando. El JSON del cliente OAuth
+vive en `tuagente.uy/.secrets/google_client_secret.json` (fuera de git).
+
+## Scopes acotados: `tools/conectar-google.py`
+
+El `setup.py` del motor (v2026.7.30) tiene los scopes hardcodeados e incluye
+Gmail completo — esa pantalla no se le muestra a un cliente. Para el alta usar
+`tools/conectar-google.py` del kit: mismo flujo Desktop+PKCE, pero pide SOLO
+los scopes del caso (`--scopes drive.readonly`) y escribe el token en formato
+`authorized_user`, que el motor refresca solo. El `--check` del motor dirá
+`AUTHENTICATED (partial)` — es lo esperado.

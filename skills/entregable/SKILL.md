@@ -1,4 +1,6 @@
 ---
+titulo: Entregables
+para_cliente: "Guarda informes, listas y análisis con nombre y fecha en tus Archivos, siempre en el mismo lugar."
 name: entregable
 description: "Guarda un entregable (informe, lista, analisis, borrador largo) en el lugar correcto del workspace, con nombre, fecha y metadatos, y devuelve la referencia para citarla. Usala siempre que produzcas algo que el cliente va a querer leer, guardar o compartir, en vez de elegir vos la ruta o tirarlo al chat."
 version: 1.0.0

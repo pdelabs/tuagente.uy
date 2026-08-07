@@ -21,16 +21,18 @@ if [[ ! -d "$DATA" ]]; then
   exit 2
 fi
 
+# La lista de archivos se ARMA desde el repo: cada skill del kit entra entera.
+# Antes era una lista a mano y el costo fue real: se agregaron dos skills al
+# kit (transcribir, entrada-drive) y el primer agente nuevo salió sin ellas —
+# con el SOUL prometiendo transcripciones que el agente no podía hacer.
 ARCHIVOS=(
   "adapter/portal_adapter.py:scripts/portal_adapter.py"
-  "skills/artifact/SKILL.md:skills/artifact/SKILL.md"
-  "skills/artifact/create_artifact.py:skills/artifact/create_artifact.py"
-  "skills/entregable/SKILL.md:skills/entregable/SKILL.md"
-  "skills/entregable/deliver.py:skills/entregable/deliver.py"
-  "skills/aprobacion/SKILL.md:skills/aprobacion/SKILL.md"
-  "skills/aprobacion/format_request.py:skills/aprobacion/format_request.py"
   "connections/catalogo.json:connections/catalogo.json"
 )
+while IFS= read -r f; do
+  rel="${f#"$KIT"/}"
+  ARCHIVOS+=("$rel:$rel")
+done < <(find "$KIT/skills" -type f \( -name "*.md" -o -name "*.py" \) | sort)
 
 if [[ "$MODO" == "--diff" ]]; then
   distintos=0
@@ -65,6 +67,14 @@ done
 for carpeta in workspace/entregables workspace/artifacts workspace/entrada workspace/interno; do
   mkdir -p "$DATA/$carpeta"
 done
+
+# Manifiesto de QUÉ skills son del kit. El adapter lo usa para distinguir las
+# "del producto tuagente" (comunes a todos, sostienen pantallas del portal, no
+# se editan desde ahí) de las hechas para ESTE cliente (editables). Sin esto,
+# todas parecen del cliente y el portal ofrece editar la que sostiene la
+# pestaña de entregas.
+ls -1 "$KIT/skills" > "$DATA/skills/.kit_manifest"
+echo "instalado skills/.kit_manifest"
 
 cat <<'FIN'
 
