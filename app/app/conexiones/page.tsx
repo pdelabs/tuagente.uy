@@ -10,25 +10,29 @@
 //
 // DOS DECISIONES DE PRODUCTO, y conviene no deshacerlas sin pensarlo:
 //
-// 1. Acá NO se pegan credenciales. El estado se calcula por presencia y el
-//    adapter nunca devuelve un valor. Pedirle a un cliente no técnico que
-//    pegue un token en una pantalla es enseñarle a repartir secretos.
-// 2. El botón no conecta: PIDE. Crea un ticket, que es el mismo camino que
-//    usa el cliente para cualquier otra cosa. Nosotros conectamos y auditamos.
+// 1. Acá NO se pegan credenciales (contraseñas, tokens, keys). El estado se
+//    calcula por presencia y el adapter nunca devuelve un valor. OAuth SÍ:
+//    el código de un solo uso que devuelve Google no es un secreto que el
+//    cliente conozca — es el flujo estándar, y el canje pasa por el adapter.
+// 2. Conectar conecta cuando hay flujo self-service (hoy: Google, con su
+//    diálogo de pasos). "Pedir que la conecten" es el fallback para lo que
+//    de verdad requiere trámite nuestro (WhatsApp, Slack) — y la salida de
+//    emergencia si el cliente prefiere que lo hagamos juntos.
 //
 // El vocabulario es del cliente: no aparecen las variables de entorno que
 // faltan (eso es plomería), sino qué implica y cuánto lleva.
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  Check, Clock, Link2, Plug, RefreshCw, TriangleAlert,
+  ArrowRight, Check, Clock, ExternalLink, Link2, Plug, RefreshCw, TriangleAlert,
 } from "lucide-react";
 import {
   getConnections, loadConfig,
   type Connection, type PortalConfig,
 } from "../lib/agent";
+import { ConexionLogo } from "../lib/ConexionLogo";
 import {
-  Btn, Card, Chip, EmptyState, ErrorState, PageHeader, Spinner,
+  Btn, Card, Chip, EmptyState, ErrorState, Modal, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
@@ -45,6 +49,123 @@ const QUIEN: Record<string, string> = {
   asistido: "Lo hacemos juntos, en una llamada corta",
   nosotros: "Lo tramitamos nosotros",
 };
+
+
+/** Diálogo de conexión Google: pasos explícitos, sin nadie de tuagente en el
+ *  medio. El adapter genera la URL y canjea el código; acá solo se guía. */
+function DialogoGoogle({ cfg, conexion, onCerrar, onConectada }: {
+  cfg: PortalConfig; conexion: Connection; onCerrar: () => void; onConectada: () => void;
+}) {
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
+  const [pegado, setPegado] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [canjeando, setCanjeando] = useState(false);
+  const [listo, setListo] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    fetch(cfg.adapter + "/portal/connections/google/auth-url", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${cfg.key}` },
+    })
+      .then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d?.error || `Error ${r.status}`);
+        if (vivo) setAuthUrl(d.auth_url);
+      })
+      .catch((e) => { if (vivo) setErr(e instanceof Error ? e.message : String(e)); });
+    return () => { vivo = false; };
+  }, [cfg]);
+
+  const canjear = async () => {
+    setCanjeando(true);
+    setErr(null);
+    try {
+      const r = await fetch(cfg.adapter + "/portal/connections/google/auth-code", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ code: pegado }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d?.error || `Error ${r.status}`);
+      setListo(true);
+      onConectada();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCanjeando(false);
+    }
+  };
+
+  return (
+    <Modal onClose={onCerrar}>
+      <div className="p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <ConexionLogo id={conexion.id} />
+          <div>
+            <p className="text-sm font-bold text-ink">Conectar {conexion.label}</p>
+            <p className="text-[12px] text-ink-soft">Dos minutos, dos pasos.</p>
+          </div>
+        </div>
+
+        {listo ? (
+          <div className="flex flex-col items-start gap-3">
+            <p className="flex items-center gap-2 text-sm font-semibold text-c-green-ink">
+              <Check className="h-4 w-4" /> ¡Conectado! Tu agente ya puede ver tus carpetas.
+            </p>
+            <Btn size="sm" onClick={onCerrar}>Listo</Btn>
+          </div>
+        ) : (
+          <ol className="flex flex-col gap-4">
+            <li className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-c-violet/60 text-[12px] font-bold text-primary">1</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-ink">
+                  Entrá con tu cuenta de Google y aceptá el permiso de lectura.
+                </p>
+                <p className="mt-0.5 text-[12px] leading-snug text-ink-soft">
+                  Si aparece &ldquo;Google no verificó esta app&rdquo;, tocá
+                  &ldquo;Avanzado&rdquo; y después &ldquo;Ir a tuagente&rdquo;: somos nosotros.
+                </p>
+                <a
+                  href={authUrl ?? "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-disabled={!authUrl}
+                  className={`mt-2 inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-sm font-semibold text-white transition ${authUrl ? "bg-primary hover:bg-primary-dark" : "pointer-events-none bg-black/20"}`}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Abrir Google
+                </a>
+              </div>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-c-violet/60 text-[12px] font-bold text-primary">2</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-ink">
+                  Al final vas a caer en una página que <strong>no carga</strong> — es lo
+                  esperado. Copiá la dirección entera de la barra y pegala acá:
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={pegado}
+                    onChange={(e) => setPegado(e.target.value)}
+                    placeholder="http://localhost:1/?state=…"
+                    className={`${inputCls} flex-1 font-mono text-[12px]`}
+                  />
+                  <Btn size="sm" onClick={canjear} disabled={!pegado.trim() || canjeando}>
+                    {canjeando ? "Conectando…" : "Conectar"}
+                  </Btn>
+                </div>
+              </div>
+            </li>
+            {err && <p className="text-[13px] font-medium text-c-coral-ink">{err}</p>}
+          </ol>
+        )}
+      </div>
+    </Modal>
+  );
+}
 
 function Estado({ estado }: { estado: string }) {
   if (estado === "conectado")
@@ -68,6 +189,7 @@ export default function ConexionesPage() {
   const [error, setError] = useState<string | null>(null);
   const [pidiendo, setPidiendo] = useState<string | null>(null);
   const [pedidas, setPedidas] = useState<Record<string, string>>({});
+  const [dialogo, setDialogo] = useState<Connection | null>(null);
 
   useEffect(() => setCfg(loadConfig()), []);
 
@@ -126,10 +248,23 @@ export default function ConexionesPage() {
   const sistemas = conexiones.filter((c) => c.grupo !== "canal");
 
   const tarjeta = (c: Connection) => (
-    <Card key={c.id} className="flex flex-col gap-2 p-4">
+    <Card
+      key={c.id}
+      className={`flex flex-col gap-2 p-4 ${
+        c.requerida && c.estado !== "conectado" ? "!border !border-c-amber" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-[15px] font-semibold text-ink">{c.label}</h3>
-        <Estado estado={c.estado} />
+        <div className="flex min-w-0 items-center gap-2.5">
+          <ConexionLogo id={c.id} />
+          <h3 className="text-[15px] font-semibold text-ink">{c.label}</h3>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Estado estado={c.estado} />
+          {c.requerida && c.estado !== "conectado" && (
+            <Chip tone="amber">Tu flujo la necesita</Chip>
+          )}
+        </div>
       </div>
       <p className="text-sm text-ink-soft">{c.para_que}</p>
       <p className="text-[13px] text-ink-soft">{c.como}</p>
@@ -152,8 +287,32 @@ export default function ConexionesPage() {
       </div>
 
       {c.estado !== "conectado" && (
-        <div className="mt-1">
-          {pedidas[c.id] ? (
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          {/* Con flujo self-service, Conectar CONECTA (diálogo de pasos);
+              "pedir que la conecten" queda como salida de emergencia. Sin
+              flujo, pedir es el único camino — WhatsApp o Slack los
+              tramitamos nosotros sí o sí. */}
+          {c.flujo === "google-oauth" && c.estado === "sin_conectar" ? (
+            <>
+              <Btn onClick={() => setDialogo(c)}>
+                Conectar
+                <ArrowRight className="h-4 w-4" />
+              </Btn>
+              {pedidas[c.id] ? (
+                <p className="text-[13px] font-medium text-c-green-ink">
+                  Pedido. Te escribimos.
+                </p>
+              ) : (
+                <button
+                  onClick={() => pedir(c)}
+                  disabled={pidiendo === c.id}
+                  className="text-[12px] font-semibold text-ink-soft underline-offset-2 transition hover:text-ink hover:underline"
+                >
+                  {pidiendo === c.id ? "Pidiendo…" : "¿Preferís que lo hagamos juntos? Pedilo"}
+                </button>
+              )}
+            </>
+          ) : pedidas[c.id] ? (
             <p className="text-[13px] font-medium text-c-green-ink">
               Pedido. Lo dejamos anotado y te escribimos.
             </p>
@@ -185,6 +344,15 @@ export default function ConexionesPage() {
         <p className="mb-4 inline-flex rounded-lg border border-c-coral bg-c-coral/40 px-3 py-1.5 text-[12px] font-medium text-c-coral-ink">
           No pude actualizar recién ({error}).
         </p>
+      )}
+
+      {dialogo && cfg && (
+        <DialogoGoogle
+          cfg={cfg}
+          conexion={dialogo}
+          onCerrar={() => setDialogo(null)}
+          onConectada={cargar}
+        />
       )}
 
       {conexiones.length === 0 ? (

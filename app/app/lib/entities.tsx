@@ -7,14 +7,19 @@
 
 import { createContext, useContext } from "react";
 import { FileText, LayoutDashboard, Ticket as TicketIcon } from "lucide-react";
+import { ConexionCardInline } from "./ConexionChip";
 
 export type Entity =
   | { kind: "ticket"; id: string }
   | { kind: "file"; path: string }
-  | { kind: "artifact"; id: string };
+  | { kind: "artifact"; id: string }
+  | { kind: "conexion"; id: string };
 
 const TICKET_RE = /^t_[0-9a-f]{6,16}$/i;
 const ARTIFACT_RE = /^art_\d{10}_[\w-]+$/i;
+// El agente menciona una conexión del catálogo como `conexion:google-workspace`
+// (se lo enseña su SOUL): el chat la dibuja como tarjeta con estado y botón.
+const CONEXION_RE = /^conexi[oó]n:([a-z0-9][a-z0-9-]*)$/i;
 // Rutas del workspace: el agente las escribe con o sin prefijo.
 const FILE_RE =
   /^(?:\/opt\/data\/workspace\/|workspace\/|\.\/)?([\w./-]+\.(?:md|txt|csv|json|ya?ml|log|py|ts|tsx|js|sh|sql|html))$/i;
@@ -25,6 +30,8 @@ export function detectEntity(raw: string): Entity | null {
   if (!text || /\s/.test(text)) return null;
   if (TICKET_RE.test(text)) return { kind: "ticket", id: text };
   if (ARTIFACT_RE.test(text)) return { kind: "artifact", id: text };
+  const cx = CONEXION_RE.exec(text);
+  if (cx) return { kind: "conexion", id: cx[1].toLowerCase() };
   const m = FILE_RE.exec(text);
   if (m && m[1].includes(".")) return { kind: "file", path: m[1] };
   return null;
@@ -43,6 +50,8 @@ const ENTITY_HINT = {
 
 export function EntityChip({ entity, label }: { entity: Entity; label: string }) {
   const open = useOpenEntity();
+  // Una conexión no abre un modal: ES la tarjeta, con estado y botón.
+  if (entity.kind === "conexion") return <ConexionCardInline id={entity.id} />;
   const Icon = ENTITY_ICON[entity.kind];
   // Sin proveedor (fuera del chat) no hay a dónde abrir: queda como código.
   if (!open) {

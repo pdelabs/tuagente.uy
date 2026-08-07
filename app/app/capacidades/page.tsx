@@ -1,63 +1,50 @@
 "use client";
 
-// Capacidades: qué sabe hacer el agente y a qué está conectado. Es la primera
-// pregunta del cliente cuando quiere pedirle algo nuevo, y hasta ahora no
-// tenía dónde contestarla.
+// Habilidades: qué sabe hacer el agente, con las hechas para el cliente al
+// frente — y editables. Reescrita el 6/8 a pedido de Luis: sin buscador, sin
+// filtros, sin ícono decorativo, y SIN la sección de plugins/MCP — eso contaba
+// la misma historia que la pestaña Conexiones con vocabulario de motor, y
+// tener dos versiones de "a qué está conectado" confundía más de lo que sumaba.
 //
-// Contrato (adapter v0.11): GET {adapter}/portal/capabilities →
-//   { skills:  [{ name, summary, origen: "propia" | "de fábrica", categoria? }],
-//     plugins: [{ name, summary }],
-//     mcp:     [{ name, detalle }] }
-// Verificado contra un agente real: 23 skills (9 propias), 2 plugins, 0 MCP.
+// Contrato (adapter ≥0.21): GET {adapter}/portal/capabilities →
+//   { skills: [{ name, summary, origen, categoria?, editable? }] }
+//   GET  /portal/skills/{name} → { name, content }   (solo las nuestras)
+//   POST /portal/skills/{name} { content }           (idem)
 //
-// DECISIÓN DE PRODUCTO: desde el portal no se instala ni se conecta nada. Esta
-// pantalla es un inventario, no una tienda: cada capacidad nueva la instalamos
-// y la auditamos nosotros. Por eso acá no hay un solo botón de acción.
-//
-// El vocabulario del cliente no es el del motor: "propia" se dice "hecha para
-// vos" y "de fábrica" se dice "viene con el motor". Los valores crudos no se
-// muestran nunca (salvo un origen desconocido, que se muestra tal cual antes
-// que esconderlo).
+// DECISIÓN DE PRODUCTO: editar una habilidad propia es editar cómo trabaja el
+// agente — el archivo es la especificación viva que el agente relee solo. Por
+// eso acá SÍ hay edición (a diferencia de conexiones, que se instalan y
+// auditan del lado nuestro): el texto es del cliente, la mecánica es nuestra.
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, Pencil, Puzzle, RefreshCw } from "lucide-react";
 import {
-  Network, Plug, Puzzle, RefreshCw, Search, Sparkles, X, type LucideIcon,
-} from "lucide-react";
-import {
-  getCapabilities, loadConfig,
+  getCapabilities, getSkillContent, loadConfig, saveSkill,
   type Capabilities, type Capability, type HttpError, type PortalConfig,
 } from "../lib/agent";
 import {
-  Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner, inputCls,
+  Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner,
 } from "../lib/ui";
 
 type Falla = { status?: number; message: string };
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
-const SUBTITULO = "Lo que tu agente sabe hacer y los sistemas a los que está conectado";
+const GENERAL = "General";
 
-/** Comparación insensible a tildes, mayúsculas y espacios de más. */
 const norm = (s: string) =>
-  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
-// El adapter contesta 404 con {"error":"not found"}: el número solo está en
-// e.status, así que el mensaje no alcanza para reconocerlo.
 const es404 = (f: Falla) => f.status === 404 || /^404\b/.test(f.message);
 
 // Siglas y extensiones que en minúscula se leen como un error de tipeo.
-// Nada de esto es específico de un cliente: son formatos y protocolos.
 const SIGLAS = new Set([
   "pdf", "xlsx", "docx", "pptx", "csv", "tsv", "ocr", "api", "url", "sql", "html",
   "css", "json", "yaml", "xml", "cli", "sdk", "ui", "ux", "ai", "ia", "crm", "erp",
   "imap", "smtp", "sms", "mcp", "id", "qr", "http", "https", "rss", "vpn", "gpt",
 ]);
 
-/**
- * `armado-de-reportes` → "Armado de reportes".
- * Un nombre que ya viene escrito para humanos (con mayúsculas o espacios) no se
- * toca: el dato manda.
- */
+/** `armado-de-reportes` → "Armado de reportes". Lo ya legible no se toca. */
 function legible(raw: string): string {
   const name = (raw || "").trim();
   if (!name || /[A-Z\s]/.test(name)) return name;
@@ -68,12 +55,7 @@ function legible(raw: string): string {
   return palabras.join(" ");
 }
 
-/**
- * Los summaries vienen del front-matter de cada skill: algunos llegan rotos
- * (restos de YAML como "|") y otros cortados a mitad de frase por el motor.
- * Sin texto útil no mostramos nada, y el corte se marca con puntos suspensivos
- * en vez de fingir que la frase termina ahí.
- */
+/** Summaries rotos o cortados por el motor: sin texto útil no se muestra nada. */
 function resumir(raw?: string): string | null {
   const s = (raw || "").replace(/\s+/g, " ").trim();
   if (!s || !/[a-z0-9]/.test(norm(s))) return null;
@@ -81,119 +63,85 @@ function resumir(raw?: string): string | null {
   return cortado ? `${s}…` : s;
 }
 
-/**
- * Primera frase de un texto largo (los summaries de los plugins son párrafos
- * enteros). `hayMas` dice si vale la pena ofrecer "ver más".
- */
-function primeraFrase(raw: string, max = 190): { texto: string; hayMas: boolean } {
-  const s = (raw || "").replace(/\s+/g, " ").trim();
-  if (s.length <= max) return { texto: s, hayMas: false };
-  const punto = s.search(/[.!?](\s|$)/);
-  if (punto > 0 && punto + 1 <= max) return { texto: s.slice(0, punto + 1), hayMas: true };
-  const espacio = s.lastIndexOf(" ", max);
-  return { texto: `${s.slice(0, espacio > 60 ? espacio : max).trimEnd()}…`, hayMas: true };
-}
-
-// Origen crudo (normalizado) → cómo lo dice el cliente. Un origen que no esté
-// acá se muestra tal como vino.
-const ORIGEN: Record<string, { filtro: string; plural: string }> = {
-  "propia": { filtro: "Hechas para vos", plural: "hechas para vos" },
-  "de fabrica": { filtro: "Vienen con el motor", plural: "vienen con el motor" },
-};
-
 type Skill = {
-  key: string;
-  nombre: string;       // legible, para mostrar
+  name: string;       // crudo: es la clave del endpoint de edición
+  nombre: string;     // legible
   resumen: string | null;
-  origen: string;       // normalizado, para comparar
-  origenCrudo: string;
-  propia: boolean;
-  cat: string;          // "" = sin categoría → "General"
-  busca: string;        // todo junto y sin tildes, para el buscador
+  editable: boolean;
+  /** "tuagente" = del producto (sostienen pantallas del portal, comunes a
+   *  todos los clientes); van al grupo del sistema, sin edición. */
+  origen: string;
+  cat: string;
 };
 
-type Conexion = { key: string; nombre: string; detalle: string };
-
-const GENERAL = "General";
-
-function Caption({ children }: { children: ReactNode }) {
-  return (
-    <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-soft/70">
-      {children}
-    </span>
-  );
+/** El archivo tiene dos partes: el encabezado YAML (ficha técnica — la
+ *  mantenemos nosotros) y el cuerpo (la especificación — del cliente). El
+ *  editor muestra SOLO el cuerpo: el encabezado se guarda aparte y se vuelve a
+ *  pegar al guardar, así el cliente nunca ve maquinaria ni puede romperla. */
+function separar(content: string): { encabezado: string; cuerpo: string } {
+  const m = content.match(/^(---\n[\s\S]*?\n---\n?)([\s\S]*)$/);
+  return m ? { encabezado: m[1], cuerpo: m[2] } : { encabezado: "", cuerpo: content };
 }
 
-function FiltroChip({ activo, onClick, count, children }: {
-  activo: boolean;
-  onClick: () => void;
-  count?: number;
-  children: ReactNode;
+/** Editor inline de una habilidad propia. El contenido se carga al abrir. */
+function EditorSkill({ cfg, name, onCerrar, onGuardada }: {
+  cfg: PortalConfig; name: string; onCerrar: () => void; onGuardada: () => void;
 }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={activo}
-      className={`inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold transition ${
-        activo
-          ? "bg-ink text-white"
-          : "bg-black/[0.05] text-ink-soft hover:bg-black/[0.08] hover:text-ink"
-      }`}
-    >
-      <span className="min-w-0 truncate">{children}</span>
-      {count !== undefined && (
-        <span className={`shrink-0 tabular-nums ${activo ? "text-white/60" : "text-ink-soft/60"}`}>
-          {count}
-        </span>
-      )}
-    </button>
-  );
-}
+  const [encabezado, setEncabezado] = useState("");
+  const [contenido, setContenido] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [listo, setListo] = useState(false);
 
-function SectionTitle({ icon: Icon, title, hint }: {
-  icon: LucideIcon; title: string; hint?: string;
-}) {
+  useEffect(() => {
+    let vivo = true;
+    getSkillContent(cfg, name)
+      .then((r) => {
+        if (!vivo) return;
+        const { encabezado: enc, cuerpo } = separar(r.content);
+        setEncabezado(enc);
+        setContenido(cuerpo);
+      })
+      .catch((e: HttpError) => { if (vivo) setErr(e.message || "No pude abrir la habilidad."); });
+    return () => { vivo = false; };
+  }, [cfg, name]);
+
+  const guardar = () => {
+    if (contenido === null) return;
+    setGuardando(true);
+    setErr(null);
+    saveSkill(cfg, name, encabezado + contenido)
+      .then(() => { setListo(true); onGuardada(); })
+      .catch((e: HttpError) => setErr(e.message || "No se pudo guardar."))
+      .finally(() => setGuardando(false));
+  };
+
+  if (err && contenido === null) {
+    return <p className="mt-2 text-[13px] text-c-coral-ink">{err}</p>;
+  }
+  if (contenido === null) return <div className="mt-3"><Spinner /></div>;
+
   return (
-    <div className="mb-3 flex items-start gap-2.5">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-black/[0.04]">
-        <Icon className="h-3.5 w-3.5 text-ink-soft" />
-      </div>
-      <div className="min-w-0">
-        <h2 className="text-sm font-bold tracking-tight text-ink">{title}</h2>
-        {hint && <p className="mt-0.5 text-[13px] leading-snug text-ink-soft">{hint}</p>}
+    <div className="mt-3">
+      <textarea
+        value={contenido}
+        onChange={(e) => { setContenido(e.target.value); setListo(false); }}
+        spellCheck={false}
+        className="h-80 w-full resize-y rounded-lg border border-black/[0.1] bg-white p-3 font-mono text-[12px] leading-relaxed text-ink outline-none transition focus:border-primary/50"
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Btn size="sm" onClick={guardar} disabled={guardando || !contenido.trim()}>
+          {guardando ? "Guardando…" : "Guardar"}
+        </Btn>
+        <Btn kind="ghost" size="sm" onClick={onCerrar}>Cerrar</Btn>
+        {listo && (
+          <span className="text-[12px] font-medium text-c-green-ink">
+            Guardado — tu agente lo toma solo en unos minutos.
+          </span>
+        )}
+        {err && <span className="text-[12px] text-c-coral-ink">{err}</span>}
       </div>
     </div>
-  );
-}
-
-/** Tarjeta de conexión: extensión del motor o servidor MCP. */
-function ConexionCard({ c, icon: Icon }: { c: Conexion; icon: LucideIcon }) {
-  const [abierto, setAbierto] = useState(false);
-  const { texto, hayMas } = useMemo(() => primeraFrase(c.detalle), [c.detalle]);
-  return (
-    <Card>
-      <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-c-violet">
-          <Icon className="h-3.5 w-3.5 text-c-violet-ink" />
-        </div>
-        <div className="min-w-0">
-          <p className="break-words text-sm font-semibold text-ink">{c.nombre}</p>
-          {texto && (
-            <p className="mt-0.5 break-words text-[13px] leading-snug text-ink-soft">
-              {abierto ? c.detalle : texto}
-            </p>
-          )}
-          {hayMas && (
-            <button
-              onClick={() => setAbierto((v) => !v)}
-              className="mt-1 text-[12px] font-semibold text-primary transition hover:text-primary-dark"
-            >
-              {abierto ? "Ver menos" : "Ver más"}
-            </button>
-          )}
-        </div>
-      </div>
-    </Card>
   );
 }
 
@@ -203,15 +151,11 @@ export default function CapacidadesPage() {
   const [err, setErr] = useState<Falla | null>(null);
   const [cargando, setCargando] = useState(false);
   const [ultima, setUltima] = useState<Date | null>(null);
-
-  const [q, setQ] = useState("");
-  const [origen, setOrigen] = useState<string | null>(null); // origen normalizado
-  const [cat, setCat] = useState<string | null>(null);       // null = todas, "" = General
+  const [editando, setEditando] = useState<string | null>(null);
+  const [verSistema, setVerSistema] = useState(false);
 
   useEffect(() => { setCfg(loadConfig()); }, []);
 
-  // silent: el refresh automático no vacía la pantalla ni tapa con un error
-  // datos que todavía sirven; a lo sumo avisa arriba.
   const load = useCallback((silent = false) => {
     if (!cfg) return;
     if (!silent) { setData(null); setErr(null); }
@@ -227,7 +171,6 @@ export default function CapacidadesPage() {
   }, [cfg]);
 
   useEffect(() => { load(); }, [load]);
-
   useEffect(() => {
     if (!cfg) return;
     const t = setInterval(() => load(true), REFRESH_MS);
@@ -238,148 +181,61 @@ export default function CapacidadesPage() {
     const crudas = Array.isArray(data?.skills) ? data!.skills : [];
     return crudas
       .filter((s): s is Capability => Boolean(s) && typeof s?.name === "string" && s.name.trim() !== "")
-      .map((s, i) => {
-        const o = norm(String(s.origen ?? ""));
-        const nombre = legible(s.name);
-        const cat = typeof s.categoria === "string" ? s.categoria.trim() : "";
-        return {
-          key: `${s.name}-${i}`,
-          nombre,
-          resumen: resumir(s.summary),
-          origen: o,
-          origenCrudo: String(s.origen ?? "").trim(),
-          propia: o === "propia",
-          cat,
-          busca: norm([s.name, nombre, s.summary ?? "", cat, legible(cat)].join(" ")),
-        };
-      })
+      .map((s) => ({
+        name: s.name,
+        nombre: (s.label || "").trim() || legible(s.name),
+        resumen: resumir(s.summary),
+        // Adapter viejo (<0.21) no manda `editable`: caemos a "origen propia",
+        // y el editor avisará si el endpoint no está.
+        editable: s.editable ?? norm(String(s.origen ?? "")) === "propia",
+        origen: norm(String(s.origen ?? "")),
+        cat: typeof s.categoria === "string" ? s.categoria.trim() : "",
+      }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   }, [data]);
 
-  // Orígenes que realmente vinieron, con las propias adelante.
-  const origenes = useMemo(() => {
-    const vistos = new Map<string, { key: string; filtro: string; plural: string }>();
-    for (const s of skills) {
-      if (vistos.has(s.origen)) continue;
-      const meta = ORIGEN[s.origen];
-      const crudo = s.origenCrudo || "sin clasificar";
-      vistos.set(s.origen, {
-        key: s.origen,
-        filtro: meta?.filtro ?? legible(crudo),
-        plural: meta?.plural ?? crudo,
+  const propias = useMemo(() => skills.filter((s) => s.editable), [skills]);
+  const sistema = useMemo(() => skills.filter((s) => !s.editable), [skills]);
+
+  // Las del sistema agrupadas: primero las del producto tuagente (sostienen
+  // pantallas del portal), después las del motor por categoría.
+  const gruposSistema = useMemo(() => {
+    const grupos: { key: string; label: string; hint?: string; items: Skill[] }[] = [];
+    const kit = sistema.filter((s) => s.origen === "tuagente");
+    if (kit.length > 0) {
+      grupos.push({
+        key: "__tuagente",
+        label: "De tuagente",
+        hint: "Sostienen las pantallas de tu portal (entregas, aprobaciones, visualizaciones). Las mantenemos nosotros.",
+        items: kit,
       });
     }
-    return Array.from(vistos.values()).sort((a, b) =>
-      a.key === "propia" ? -1 : b.key === "propia" ? 1 : a.filtro.localeCompare(b.filtro, "es"));
-  }, [skills]);
-
-  // Categorías presentes; la bolsa sin categoría ("General") va al final.
-  const categorias = useMemo(() => {
-    const vistas = new Set(skills.map((s) => s.cat));
-    return Array.from(vistas).sort((a, b) => {
-      if (!a) return 1;
-      if (!b) return -1;
-      return legible(a).localeCompare(legible(b), "es");
-    });
-  }, [skills]);
-
-  // Búsqueda primero: sobre esa base se cuentan los chips.
-  const base = useMemo(() => {
-    const needle = norm(q);
-    return needle ? skills.filter((s) => s.busca.includes(needle)) : skills;
-  }, [skills, q]);
-
-  const porCat = useMemo(
-    () => (cat === null ? base : base.filter((s) => s.cat === cat)),
-    [base, cat],
-  );
-  const porOrigen = useMemo(
-    () => (origen === null ? base : base.filter((s) => s.origen === origen)),
-    [base, origen],
-  );
-  const visibles = useMemo(
-    () => base.filter((s) =>
-      (origen === null || s.origen === origen) && (cat === null || s.cat === cat)),
-    [base, origen, cat],
-  );
-
-  // Las hechas para vos adelante; el resto agrupado por categoría.
-  const grupos = useMemo(() => {
-    const out: { key: string; label: string; hint?: string; items: Skill[] }[] = [];
-    const propias = visibles.filter((s) => s.propia);
-    if (propias.length > 0) {
-      out.push({
-        key: "__propias",
-        label: "Hechas para vos",
-        hint: "Las armamos para tu operación",
-        items: propias,
-      });
-    }
-    const resto = new Map<string, Skill[]>();
-    for (const s of visibles) {
-      if (s.propia) continue;
-      const arr = resto.get(s.cat);
+    const porCat = new Map<string, Skill[]>();
+    for (const s of sistema) {
+      if (s.origen === "tuagente") continue;
+      const arr = porCat.get(s.cat);
       if (arr) arr.push(s);
-      else resto.set(s.cat, [s]);
+      else porCat.set(s.cat, [s]);
     }
-    const claves = Array.from(resto.keys()).sort((a, b) => {
+    for (const c of Array.from(porCat.keys()).sort((a, b) => {
       if (!a) return 1;
       if (!b) return -1;
       return legible(a).localeCompare(legible(b), "es");
-    });
-    for (const c of claves) {
-      out.push({ key: c || "__general", label: c ? legible(c) : GENERAL, items: resto.get(c)! });
+    })) {
+      grupos.push({ key: c || "__general", label: c ? legible(c) : GENERAL, items: porCat.get(c)! });
     }
-    return out;
-  }, [visibles]);
-
-  const plugins = useMemo<Conexion[]>(() => {
-    const crudos = Array.isArray(data?.plugins) ? data!.plugins : [];
-    return crudos
-      .filter((p) => Boolean(p) && typeof p?.name === "string" && p.name.trim() !== "")
-      .map((p, i) => ({
-        key: `${p.name}-${i}`,
-        nombre: legible(p.name),
-        detalle: resumir(p.summary) ?? "",
-      }));
-  }, [data]);
-
-  const mcp = useMemo<Conexion[]>(() => {
-    const crudos = Array.isArray(data?.mcp) ? data!.mcp : [];
-    return crudos
-      .filter((m) => Boolean(m) && typeof m?.name === "string" && m.name.trim() !== "")
-      .map((m, i) => ({
-        key: `${m.name}-${i}`,
-        nombre: legible(m.name),
-        detalle: resumir(m.detalle) ?? "",
-      }));
-  }, [data]);
-
-  const filtrando = q.trim() !== "" || origen !== null || cat !== null;
-  const limpiar = () => { setQ(""); setOrigen(null); setCat(null); };
-
-  // "23 habilidades · 9 hechas para vos · 14 vienen con el motor"
-  const resumenSkills = useMemo(() => {
-    if (skills.length === 0) return null;
-    const partes = [`${skills.length} ${skills.length === 1 ? "habilidad" : "habilidades"}`];
-    for (const o of origenes) {
-      const n = skills.filter((s) => s.origen === o.key).length;
-      if (n > 0) partes.push(`${n} ${o.plural}`);
-    }
-    return partes.join(" · ");
-  }, [skills, origenes]);
+    return grupos;
+  }, [sistema]);
 
   const cuerpo = () => {
     if (err && data === null) {
-      // Agente con adapter viejo: el portal está bien, la pantalla todavía no
-      // tiene de dónde leer.
       if (es404(err)) {
         return (
           <>
             <EmptyState
               icon={Puzzle}
-              title="Este agente todavía no expone sus capacidades"
-              hint="Corre una versión del conector anterior a esta pantalla. Cuando lo actualicemos, vas a ver acá todo lo que sabe hacer y a qué está conectado."
+              title="Este agente todavía no expone sus habilidades"
+              hint="Corre una versión del conector anterior a esta pantalla. Cuando lo actualicemos, vas a ver acá todo lo que sabe hacer."
             />
             <div className="flex justify-center">
               <Btn kind="ghost" size="sm" onClick={() => load()}>Reintentar</Btn>
@@ -390,204 +246,130 @@ export default function CapacidadesPage() {
       return <ErrorState message={err.message} onRetry={() => load()} />;
     }
     if (!data) return <Spinner />;
+    if (skills.length === 0) {
+      return (
+        <EmptyState
+          icon={Puzzle}
+          title="Tu agente todavía no declara habilidades"
+          hint="Cuando le sumemos la primera, la vas a ver listada acá."
+        />
+      );
+    }
 
     return (
       <>
         <section>
-          <SectionTitle
-            icon={Sparkles}
-            title="Qué sabe hacer"
-            hint={resumenSkills ?? undefined}
-          />
+          <div className="mb-3">
+            <h2 className="text-sm font-bold tracking-tight text-ink">Hechas para vos</h2>
+            <p className="mt-0.5 text-[13px] leading-snug text-ink-soft">
+              Las armamos para tu operación, y son tuyas: si querés que algo se haga
+              distinto, decíselo a tu agente por el chat — o editá el texto directo
+              acá. Los cambios los toma solo, en unos minutos.
+            </p>
+          </div>
 
-          {skills.length === 0 ? (
-            <EmptyState
-              icon={Sparkles}
-              title="Tu agente todavía no declara habilidades"
-              hint="Cuando le sumemos la primera, la vas a ver listada acá."
-            />
-          ) : (
-            <>
-              <div className="mb-4 flex flex-col gap-2.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative w-full sm:w-72">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft/60" />
-                    <input
-                      value={q}
-                      onChange={(e) => setQ(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Escape") setQ(""); }}
-                      placeholder="Buscar una habilidad…"
-                      className={`${inputCls} pl-8 pr-8`}
-                    />
-                    {q && (
-                      <button
-                        aria-label="Limpiar búsqueda"
-                        onClick={() => setQ("")}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-ink-soft transition hover:text-ink"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  {filtrando && (
-                    <Btn kind="ghost" size="sm" onClick={limpiar}>Limpiar filtros</Btn>
-                  )}
-                </div>
-
-                {origenes.length > 1 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Caption>Origen</Caption>
-                    <FiltroChip activo={origen === null} onClick={() => setOrigen(null)} count={porCat.length}>
-                      Todas
-                    </FiltroChip>
-                    {origenes.map((o) => (
-                      <FiltroChip
-                        key={o.key}
-                        activo={origen === o.key}
-                        onClick={() => setOrigen(origen === o.key ? null : o.key)}
-                        count={porCat.filter((s) => s.origen === o.key).length}
-                      >
-                        {o.filtro}
-                      </FiltroChip>
-                    ))}
-                  </div>
-                )}
-
-                {categorias.length > 1 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Caption>Categoría</Caption>
-                    <FiltroChip activo={cat === null} onClick={() => setCat(null)} count={porOrigen.length}>
-                      Todas
-                    </FiltroChip>
-                    {categorias.map((c) => (
-                      <FiltroChip
-                        key={c || "__general"}
-                        activo={cat === c}
-                        onClick={() => setCat(cat === c ? null : c)}
-                        count={porOrigen.filter((s) => s.cat === c).length}
-                      >
-                        {c ? legible(c) : GENERAL}
-                      </FiltroChip>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {visibles.length === 0 ? (
-                <>
-                  <EmptyState
-                    icon={Search}
-                    title="Ninguna habilidad coincide"
-                    hint="Probá con otra palabra o sacá los filtros."
-                  />
-                  <div className="flex justify-center">
-                    <Btn kind="ghost" size="sm" onClick={limpiar}>Limpiar filtros</Btn>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col gap-5">
-                  {grupos.map((g) => (
-                    <div key={g.key}>
-                      <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-1">
-                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-                          {g.label}
-                        </h3>
-                        <span className="text-[11px] tabular-nums text-ink-soft/70">
-                          {g.items.length}
-                        </span>
-                        {g.hint && (
-                          <span className="text-[11px] text-ink-soft/70">· {g.hint}</span>
-                        )}
-                      </div>
-                      <Card className="overflow-hidden !p-0">
-                        <ul className="divide-y divide-black/[0.06]">
-                          {g.items.map((s) => (
-                            <li key={s.key} className="px-4 py-3">
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <p className="break-words text-sm font-semibold text-ink">
-                                  {s.nombre}
-                                </p>
-                                {/* En el grupo de las propias el rótulo útil es la
-                                    categoría; en los de categoría, un origen que no
-                                    sea "de fábrica" (nunca se repite lo obvio). */}
-                                {s.propia
-                                  ? s.cat && <Chip tone="violet">{legible(s.cat)}</Chip>
-                                  : s.origen !== "de fabrica" && s.origenCrudo !== "" && (
-                                    <Chip>{legible(s.origenCrudo)}</Chip>
-                                  )}
-                              </div>
-                              {s.resumen && (
-                                <p className="mt-0.5 break-words text-[13px] leading-snug text-ink-soft">
-                                  {s.resumen}
-                                </p>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </Card>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </section>
-
-        <section className="mt-8">
-          <SectionTitle
-            icon={Network}
-            title="Conexiones"
-            hint="Las extensiones y los sistemas externos que tu agente tiene habilitados. Desde el portal no se instala ni se conecta nada: cada conexión la configuramos y la auditamos nosotros."
-          />
-
-          {/* Sin nada conectado no dibujamos cajas vacías: una línea honesta
-              dice más que dos secciones en blanco. */}
-          {plugins.length === 0 && mcp.length === 0 ? (
+          {propias.length === 0 ? (
             <p className="px-1 text-[13px] leading-snug text-ink-soft">
-              Todavía no hay extensiones ni sistemas externos conectados: hoy tu agente trabaja
-              con lo suyo. Cuando necesites que entre a una herramienta tuya, la conexión la
-              configuramos nosotros.
+              Todavía no armamos habilidades a medida para tu operación. La primera que
+              instalemos va a aparecer acá.
             </p>
           ) : (
-            <>
-              {plugins.length > 0 && (
-                <div className="mb-5">
-                  <div className="mb-2 flex flex-wrap items-baseline gap-x-2 px-1">
-                    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-                      Extensiones del motor
-                    </h3>
-                    <span className="text-[11px] tabular-nums text-ink-soft/70">{plugins.length}</span>
+            <div className="flex flex-col gap-2">
+              {propias.map((s) => (
+                <Card key={s.name}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className="break-words text-sm font-semibold text-ink">{s.nombre}</p>
+                        {s.cat && <Chip tone="violet">{legible(s.cat)}</Chip>}
+                      </div>
+                      {s.resumen && (
+                        <p className="mt-0.5 break-words text-[13px] leading-snug text-ink-soft">
+                          {s.resumen}
+                        </p>
+                      )}
+                    </div>
+                    {cfg && editando !== s.name && (
+                      <Btn kind="ghost" size="sm" onClick={() => setEditando(s.name)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                        Editar
+                      </Btn>
+                    )}
                   </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {plugins.map((p) => <ConexionCard key={p.key} c={p} icon={Plug} />)}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <div className="mb-2 flex flex-wrap items-baseline gap-x-2 px-1">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-                    Sistemas externos
-                  </h3>
-                  {mcp.length > 0 && (
-                    <span className="text-[11px] tabular-nums text-ink-soft/70">{mcp.length}</span>
+                  {cfg && editando === s.name && (
+                    <EditorSkill
+                      cfg={cfg}
+                      name={s.name}
+                      onCerrar={() => setEditando(null)}
+                      onGuardada={() => load(true)}
+                    />
                   )}
-                </div>
-                {mcp.length > 0 ? (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {mcp.map((m) => <ConexionCard key={m.key} c={m} icon={Network} />)}
-                  </div>
-                ) : (
-                  <p className="px-1 text-[13px] leading-snug text-ink-soft">
-                    Todavía no hay sistemas externos conectados: hoy tu agente trabaja con lo suyo.
-                    Cuando necesites que entre a una herramienta tuya, la conexión la configuramos
-                    nosotros.
-                  </p>
-                )}
-              </div>
-            </>
+                </Card>
+              ))}
+            </div>
           )}
         </section>
+
+        {sistema.length > 0 && (
+          <section className="mt-8">
+            {/* Las del motor existen pero no compiten por atención: un renglón
+                colapsado, no una pared de tarjetas. */}
+            <button
+              onClick={() => setVerSistema((v) => !v)}
+              aria-expanded={verSistema}
+              className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left transition hover:bg-black/[0.03]"
+            >
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 text-ink-soft transition-transform ${verSistema ? "" : "-rotate-90"}`}
+              />
+              <span className="text-sm font-bold tracking-tight text-ink">
+                Comunes del sistema
+              </span>
+              <span className="text-[12px] tabular-nums text-ink-soft">
+                {sistema.length} habilidades
+              </span>
+              {!verSistema && (
+                <span className="min-w-0 truncate text-[12px] text-ink-soft/80">
+                  · entregas, aprobaciones, planillas, PDFs y más
+                </span>
+              )}
+            </button>
+
+            {verSistema && (
+              <div className="mt-2 flex flex-col gap-5">
+                {gruposSistema.map((g) => (
+                  <div key={g.key}>
+                    <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-1">
+                      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+                        {g.label}
+                      </h3>
+                      <span className="text-[11px] tabular-nums text-ink-soft/70">
+                        {g.items.length}
+                      </span>
+                      {g.hint && (
+                        <span className="text-[11px] text-ink-soft/70">· {g.hint}</span>
+                      )}
+                    </div>
+                    <Card className="overflow-hidden !p-0">
+                      <ul className="divide-y divide-black/[0.06]">
+                        {g.items.map((s) => (
+                          <li key={s.name} className="px-4 py-3">
+                            <p className="break-words text-sm font-semibold text-ink">{s.nombre}</p>
+                            {s.resumen && (
+                              <p className="mt-0.5 break-words text-[13px] leading-snug text-ink-soft">
+                                {s.resumen}
+                              </p>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </>
     );
   };
@@ -595,8 +377,8 @@ export default function CapacidadesPage() {
   return (
     <div className={WRAP}>
       <PageHeader
-        title="Capacidades"
-        subtitle={SUBTITULO}
+        title="Habilidades"
+        subtitle="Lo que tu agente sabe hacer — y cómo lo hace"
         actions={
           <>
             {ultima && (

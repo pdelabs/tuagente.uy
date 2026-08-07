@@ -14,6 +14,9 @@ export type Manifest = {
   agent: string;
   portal_plugin: string;
   modules: Record<string, boolean>;
+  /** Conexiones que el flujo del cliente necesita y faltan (adapter ≥0.24).
+   *  Alimenta el aviso del inicio y el puntito del sidebar. */
+  conexiones_pendientes?: number;
 };
 
 export type Ticket = {
@@ -168,6 +171,11 @@ export async function uploadFile(c: PortalConfig, file: File) {
 
 export type Capability = {
   name: string; summary: string; origen: string; categoria?: string;
+  /** true solo en las nuestras (adapter ≥0.21): las del motor no se editan. */
+  editable?: boolean;
+  /** Nombre para humanos con tildes (frontmatter `titulo`, adapter ≥0.23);
+   *  sin él, el portal humaniza el slug — que no puede inventar tildes. */
+  label?: string;
 };
 export type Capabilities = {
   skills: Capability[];
@@ -176,6 +184,14 @@ export type Capabilities = {
 };
 export const getCapabilities = (c: PortalConfig) =>
   get<Capabilities>(c.adapter, "/portal/capabilities", c);
+
+/** El SKILL.md completo de una habilidad nuestra (adapter ≥0.21). */
+export const getSkillContent = (c: PortalConfig, name: string) =>
+  get<{ name: string; content: string }>(c.adapter, `/portal/skills/${encodeURIComponent(name)}`, c);
+/** Editar la habilidad ES editar cómo trabaja el agente: el motor la reindexa
+ *  solo en unos minutos, no hay que reiniciar nada. */
+export const saveSkill = (c: PortalConfig, name: string, content: string) =>
+  post<{ ok: boolean }>(c.adapter, `/portal/skills/${encodeURIComponent(name)}`, c, { content });
 
 /** A qué sistemas del cliente está enchufado el agente.
  *  El adapter reporta PRESENCIA, nunca valores: acá no viaja ninguna credencial. */
@@ -192,6 +208,11 @@ export type Connection = {
   estado: "conectado" | "sin_conectar" | "bloqueado" | string;
   falta: { tipo: string; nombre: string }[];
   falta_previo: { tipo: string; nombre: string }[];
+  /** true si el flujo de ESTE cliente la necesita (adapter ≥0.24). */
+  requerida?: boolean;
+  /** "google-oauth" = el portal la conecta solo con su diálogo (adapter ≥0.25);
+   *  sin flujo, el botón cae a "Pedir que la conecten". */
+  flujo?: string | null;
 };
 export const getConnections = (c: PortalConfig) =>
   get<{ disponible: boolean; conexiones: Connection[] }>(c.adapter, "/portal/connections", c);

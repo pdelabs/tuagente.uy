@@ -30,7 +30,7 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   { key: "files", path: "/app/archivos", label: "Archivos", icon: Folder },
   { key: "usage", path: "/app/uso", label: "Uso", icon: BarChart3 },
   { key: "connections", path: "/app/conexiones", label: "Conexiones", icon: Plug },
-  { key: "capabilities", path: "/app/capacidades", label: "Capacidades", icon: Puzzle },
+  { key: "capabilities", path: "/app/capacidades", label: "Habilidades", icon: Puzzle },
 ];
 
 function Login({ onReady }: { onReady: () => void }) {
@@ -167,6 +167,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   }`}>
                     {pending}
                   </span>
+                )}
+                {/* Conexiones que el flujo necesita y faltan: puntito ámbar. */}
+                {m.key === "connections" && (manifest.conexiones_pendientes ?? 0) > 0 && (
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-c-amber-ink max-md:absolute max-md:right-1 max-md:top-1" />
                 )}
               </Link>
             );

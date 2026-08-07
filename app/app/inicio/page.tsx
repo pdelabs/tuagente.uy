@@ -21,13 +21,14 @@ import {
 import Link from "next/link";
 import {
   Activity, ArrowRight, BarChart3, CheckCircle2, ChevronRight, Columns3,
-  FolderOpen, Hand, LayoutDashboard, MessageSquare, Plus, RefreshCw,
+  FolderOpen, Hand, LayoutDashboard, MessageSquare, Plug, Plus, RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 import {
-  getActivity, getApprovals, getArtifacts, getFiles, getManifest, getTickets,
-  getUsage, loadConfig,
-  type ArtifactMeta, type HttpError, type Manifest, type PortalConfig, type Ticket,
+  getActivity, getApprovals, getArtifacts, getConnections, getFiles, getManifest,
+  getTickets, getUsage, loadConfig,
+  type ArtifactMeta, type Connection, type HttpError, type Manifest,
+  type PortalConfig, type Ticket,
 } from "../lib/agent";
 import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
 
@@ -266,6 +267,41 @@ function Metrica({ valor, label, tone }: {
   );
 }
 
+/** Conexiones que el flujo del cliente necesita y faltan: el agente está
+ *  instalado pero su flujo no puede arrancar — eso se dice ANTES que nada,
+ *  con el botón que lo resuelve. Sin pendientes, el bloque no existe. */
+function ParaArrancar({ agente, pendientes }: { agente: string; pendientes: Connection[] }) {
+  if (pendientes.length === 0) return null;
+  const n = pendientes.length;
+  return (
+    <Card tone="amber">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white">
+            <Plug className="h-4 w-4 text-c-amber-ink" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-ink">
+              {n === 1
+                ? `A ${agente} le falta 1 conexión para arrancar tu flujo`
+                : `A ${agente} le faltan ${n} conexiones para arrancar tu flujo`}
+            </p>
+            <p className="mt-0.5 text-[13px] text-ink-soft">
+              {enumerar(pendientes.map((c) => c.label))}
+              {" — "}
+              {n === 1 ? pendientes[0].para_que : "sin eso, esa parte del trabajo queda esperando."}
+            </p>
+          </div>
+        </div>
+        <LinkBtn href="/app/conexiones">
+          {n === 1 ? "Conectarla" : "Conectarlas"}
+          <ArrowRight className="h-4 w-4" />
+        </LinkBtn>
+      </div>
+    </Card>
+  );
+}
+
 /** Lo que necesita tu atención. Con pendientes, destacada; sin nada, tranquila. */
 function Atencion({ pendientes }: { pendientes: Approval[] }) {
   const vieja = useMemo(
@@ -342,6 +378,7 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
   const [ultima, setUltima] = useState<Date | null>(null);
   const tuvoManifest = useRef(false);
 
+  const [conexiones, setConexiones] = useState<Slot<Connection[]>>({ t: "cargando" });
   const [aprob, setAprob] = useState<Slot<Approval[]>>({ t: "cargando" });
   const [tareas, setTareas] = useState<Slot<Ticket[]>>({ t: "cargando" });
   const [eventos, setEventos] = useState<Slot<Evento[]>>({ t: "cargando" });
@@ -352,6 +389,7 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
   const cargar = useCallback((silencioso = false) => {
     if (!silencioso) {
       setFatal(null);
+      setConexiones({ t: "cargando" });
       setAprob({ t: "cargando" });
       setTareas({ t: "cargando" });
       setEventos({ t: "cargando" });
@@ -389,6 +427,9 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
         setFatal(null);
         const on = (k: string) => Boolean(m?.modules?.[k]);
         return Promise.allSettled([
+          // Solo hace falta pedirlas si el adapter dice que hay pendientes.
+          pedir(on("connections") && (m?.conexiones_pendientes ?? 0) > 0, "las conexiones",
+            () => getConnections(cfg).then((r) => arr<Connection>(r?.conexiones)), setConexiones),
           pedir(on("approvals"), "las aprobaciones",
             () => getApprovals(cfg).then((r) => arr<Approval>(r?.approvals)), setAprob),
           pedir(on("kanban"), "el tablero",
@@ -508,6 +549,14 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
         />
       ) : (
         <div className="flex flex-col gap-3">
+          {/* 0 · Si el flujo no puede arrancar, eso va antes que todo */}
+          {conexiones.t === "listo" && (
+            <ParaArrancar
+              agente={manifest.agent}
+              pendientes={conexiones.data.filter((c) => c.requerida && c.estado !== "conectado")}
+            />
+          )}
+
           {/* 1 · Lo que necesita tu atención, arriba de todo */}
           {aprob.t === "cargando" && <Esqueleto filas={2} />}
           {aprob.t === "listo" && <Atencion pendientes={aprob.data} />}
