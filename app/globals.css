@@ -95,6 +95,25 @@ body {
   }
 }
 
+/* ── Onboarding del portal: el agentito grande que se presenta ────────── */
+
+.onb-bob {
+  animation: onbBob 3.4s ease-in-out infinite;
+}
+@keyframes onbBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+/* Reusa el parpadeo del agentito de la landing; el origen es el centro de
+   los ojos en el viewBox 120 de la cara del onboarding. */
+.onb-eyes {
+  animation: agentBlink 4.6s infinite;
+  transform-origin: 60px 58px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onb-bob, .onb-eyes { animation: none !important; }
+}
+
 /* ── El agentito (embodied companion, metaball edition) ───────────────── */
 
 .agent-goo {

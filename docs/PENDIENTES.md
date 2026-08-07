@@ -35,6 +35,19 @@ Lo que quedó abierto, con quién lo destraba. Cerrar acá cuando se resuelva.
   Falta decidir la forma: probablemente una pestaña de "Instrucciones" que
   escriba un bloque acotado del SOUL, versionado y reversible, sin dejar que el
   cliente pise las reglas duras (la puerta de aprobación no es negociable).
+  **El bautizo ya está resuelto de punta a punta (7/8)** y sirve de molde para
+  lo que falta: el cliente le pone nombre y pinta en el onboarding, el portal
+  hace `POST /portal/identity`, el adapter (0.26) lo guarda en el volumen, lo
+  reporta en el manifiesto, **lo escribe en el SOUL dentro de un bloque acotado
+  entre marcadores** (sin tocar la prosa del alta) y le pega un `setMyName` al
+  bot de Telegram. Ese bloque delimitado y reescribible es exactamente la forma
+  que buscábamos para la pestaña de "Instrucciones": copiarla.
+  Lo que sigue faltando de este tema:
+  - La **foto del bot** en los canales: no hay método en la Bot API, va a mano
+    por `@BotFather` (`/setuserpic`). El SVG de `lib/agentito.tsx` sirve para
+    generar el PNG, pero falta el paso que lo exporta.
+  - El cliente **no puede cambiar el look después** del onboarding: no hay
+    dónde. Cuando exista la pestaña de personalización, va ahí.
 
 ## Técnicos, priorizados
 
