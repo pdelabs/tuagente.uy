@@ -272,7 +272,16 @@ function makeComponents(streaming: boolean): Components {
 const STATIC_COMPONENTS = makeComponents(false);
 const STREAMING_COMPONENTS = makeComponents(true);
 
-const remarkPlugins: Options["remarkPlugins"] = [remarkGfm, remarkMath];
+// `singleDollarTextMath: false` NO es un detalle: acá se habla de plata en
+// pesos y en dólares, y con el default de remark-math un "$ 5.100 … $ 31.500"
+// se lee como una fórmula — KaTeX se come el texto del medio, junta las
+// palabras y lo deja en itálica de matemática. Una lista de clientes con
+// montos quedaba ilegible en el chat aunque el archivo estuviera perfecto.
+// La matemática de verdad sigue andando con `$$…$$`.
+const remarkPlugins: Options["remarkPlugins"] = [
+  remarkGfm,
+  [remarkMath, { singleDollarTextMath: false }],
+];
 
 // El agente a veces escribe HTML dentro del markdown (una tabla, un <details>).
 // Sin rehype-raw se ve escapado como texto; con raw a secas sería XSS. Va raw +

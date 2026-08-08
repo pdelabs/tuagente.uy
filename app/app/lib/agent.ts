@@ -104,6 +104,15 @@ async function del<T>(base: string, path: string, cfg: PortalConfig): Promise<T>
   return res.json();
 }
 
+// Marca que el portal le pone al ticket que crea el propio cliente al pedir
+// una conexión. Sin ella, ese pedido vuelve por Aprobaciones y el portal lo
+// manda a aprobar su propia solicitud — un cliente de prueba lo describió como
+// "pedir un presupuesto y que te manden a vos mismo a firmarlo". Va como
+// comentario HTML: el sanitizador del markdown no lo muestra.
+export const MARCA_PEDIDO = "<!-- portal:pedido -->";
+/** Los pedidos anteriores a la marca se reconocen por cómo arranca el cuerpo. */
+export const PREFIJO_PEDIDO = "Pedido desde el portal.";
+
 export type TicketComment = { author: string; body: string; created_at: number };
 export type TicketEvent = {
   kind: string;
@@ -381,6 +390,9 @@ export async function sessionChatStream(
     const lines = buf.split("\n");
     buf = lines.pop() ?? "";
     for (const line of lines) {
+      // Igual que en chatStream: la línea en blanco cierra el evento. Acá el
+      // gateway nombra todos, pero dejarlo colgado es la misma trampa.
+      if (line.trim() === "") { event = ""; continue; }
       if (line.startsWith("event: ")) {
         event = line.slice(7).trim();
         continue;
@@ -447,6 +459,14 @@ export async function chatStream(
     const lines = buf.split("\n");
     buf = lines.pop() ?? "";
     for (const line of lines) {
+      // La línea en blanco CIERRA el evento SSE y vuelve el tipo al default.
+      // Sin esto, el `event: hermes.tool.progress` de la primera herramienta
+      // quedaba pegado para siempre y TODOS los chunks de texto que venían
+      // después (que son eventos sin nombre) se descartaban en el `continue`
+      // de abajo: en una conversación NUEVA, apenas el agente usaba una
+      // herramienta, la respuesta entera desaparecía y el cliente veía
+      // silencio. Verificado el 8/8 contra el stream crudo del gateway.
+      if (line.trim() === "") { evento = ""; continue; }
       if (line.startsWith("event: ")) { evento = line.slice(7).trim(); continue; }
       if (!line.startsWith("data: ") || line.includes("[DONE]")) continue;
       let payload: any;
