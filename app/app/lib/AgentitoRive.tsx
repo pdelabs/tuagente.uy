@@ -183,8 +183,6 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
     if (!miradaX || !miradaY || !trabajando(estado)) return;
     let raf = 0;
     let t0 = 0;
-    let destino = { x: 50, y: 50 };
-    let proximoSalto = 0;
     const tick = (t: number) => {
       if (!t0) t0 = t;
       const s = (t - t0) / 1000;
@@ -212,15 +210,30 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
           x = 50 + Math.sin(s * 2.4) * 14;
           y = 80 + Math.sin(s * 1.2) * 4;
           break;
-        case "buscando":
-          // Saltos secos a puntos salteados: buscar no es barrer.
-          if (t > proximoSalto) {
-            destino = { x: 12 + Math.random() * 76, y: 18 + Math.random() * 60 };
-            proximoSalto = t + 380 + Math.random() * 320;
-          }
-          x = destino.x;
-          y = destino.y;
+        case "buscando": {
+          // Acá la lupa la mueve el .riv, no el código: barre de la derecha al
+          // centro y vuelve, en 2,8 s. Los ojos la ACOMPAÑAN —al 70%, no
+          // clavados— porque si miran para otro lado mientras se la pasan por
+          // la cara queda rarísimo. Los tiempos son los keyframes de
+          // `gestoBuscando` pasados a segundos (a 60fps: quieta hasta f12,
+          // barre hasta f74, espera hasta f94, vuelve en f156, quieta hasta
+          // f168). Arrancan juntos porque los dos salen del mismo cambio de
+          // estado, y los dos corren contra el reloj real: no se desfasan.
+          const p = s % 2.8;
+          const suave = (u: number) => u * u * (3 - 2 * u); // ≈ el easeInOut del .riv
+          let lupaX: number;
+          if (p < 0.2) lupaX = 95;
+          else if (p < 1.233) lupaX = 95 - 129 * suave((p - 0.2) / 1.033);
+          else if (p < 1.567) lupaX = -34;
+          else if (p < 2.6) lupaX = -34 + 129 * suave((p - 1.567) / 1.033);
+          else lupaX = 95;
+          const lupaY = 25 + 19 * Math.sin((p / 2.8) * Math.PI);
+          // 184 y 176 son los semiejes del cuerpo: pasan la posición del
+          // objeto a la escala 0-100 de la mirada.
+          x = 50 + (lupaX / 184) * 35 + Math.sin(s * 6) * 3; // + un temblorcito
+          y = 50 + (lupaY / 176) * 35;
           break;
+        }
         case "haciendo":
           // Abajo a la derecha, mirándose la llave: tics cortos y RÁPIDOS. Se
           // distingue de "leyendo" por la velocidad, no por el tamaño: quieto
