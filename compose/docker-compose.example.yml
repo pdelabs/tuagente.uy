@@ -27,7 +27,7 @@ services:
       - TZ=America/Montevideo
       - HERMES_DASHBOARD=1
       # Sin esto el browser descarta todas las respuestas del gateway.
-      - API_SERVER_CORS_ORIGINS=https://app.tuagente.uy
+      - API_SERVER_CORS_ORIGINS=https://app.tuagente.uy,http://localhost:8090
     env_file:
       - ./data/.env
     deploy:
@@ -47,7 +47,7 @@ services:
       - ./data:/opt/data
     environment:
       - TZ=America/Montevideo
-      - PORTAL_CORS_ORIGINS=https://app.tuagente.uy
+      - PORTAL_CORS_ORIGINS=https://app.tuagente.uy,http://localhost:8090
       # El nombre que el cliente ve en su portal. Si falta, dice "Agente".
       - AGENT_NAME=${AGENT_NAME}
     env_file:
