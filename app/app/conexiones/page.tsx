@@ -27,8 +27,8 @@ import {
   ArrowRight, Check, Clock, ExternalLink, Link2, Plug, RefreshCw, TriangleAlert,
 } from "lucide-react";
 import {
-  getConnections, loadConfig,
-  type Connection, type PortalConfig,
+  getConnections, getTickets, loadConfig, MARCA_PEDIDO, PREFIJO_PEDIDO,
+  type Connection, type PortalConfig, type Ticket,
 } from "../lib/agent";
 import { ConexionLogo } from "../lib/ConexionLogo";
 import {
@@ -265,6 +265,10 @@ export default function ConexionesPage() {
   const [error, setError] = useState<string | null>(null);
   const [pidiendo, setPidiendo] = useState<string | null>(null);
   const [pedidas, setPedidas] = useState<Record<string, string>>({});
+  // Los pedidos ya hechos, leídos del tablero. Antes vivían SOLO en este
+  // estado de React: al recargar la página el cliente volvía a ver "Sin
+  // conectar" y no tenía forma de saber si ya lo había pedido o no.
+  const [pedidosAbiertos, setPedidosAbiertos] = useState<Set<string>>(new Set());
   const [dialogo, setDialogo] = useState<Connection | null>(null);
 
   useEffect(() => setCfg(loadConfig()), []);
@@ -278,6 +282,21 @@ export default function ConexionesPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
+    // Los pedidos abiertos son un extra: si el tablero no contesta, la
+    // pantalla de conexiones tiene que seguir funcionando igual.
+    try {
+      const t = await getTickets(cfg);
+      const abiertos = new Set(
+        (t.tickets ?? [])
+          .filter((x: Ticket) => {
+            const b = x.body ?? "";
+            const esPedido = b.includes(MARCA_PEDIDO) || b.trimStart().startsWith(PREFIJO_PEDIDO);
+            return esPedido && x.status !== "done" && x.status !== "archived";
+          })
+          .map((x: Ticket) => (x.title ?? "").replace(/^Conectar\s+/i, "").trim().toLowerCase()),
+      );
+      setPedidosAbiertos(abiertos);
+    } catch { /* sin tablero seguimos con lo que haya en memoria */ }
   }, [cfg]);
 
   useEffect(() => {
@@ -298,7 +317,7 @@ export default function ConexionesPage() {
         body: JSON.stringify({
           title: `Conectar ${c.label}`,
           body:
-            `Pedido desde el portal.\n\n` +
+            `${PREFIJO_PEDIDO} ${MARCA_PEDIDO}\n\n` +
             `Para qué sirve: ${c.para_que}\n` +
             `Cómo se conecta: ${c.como}\n\n` +
             `No hagas nada por tu cuenta con esto: avisale al equipo de tuagente ` +
@@ -308,6 +327,7 @@ export default function ConexionesPage() {
       if (!res.ok) throw new Error(`Error ${res.status}`);
       const data = await res.json();
       setPedidas((p) => ({ ...p, [c.id]: data.id ?? "ok" }));
+      cargar(); // que el estado "Pedido" pase a salir del tablero, no de acá
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -331,6 +351,11 @@ export default function ConexionesPage() {
   const canales = resto.filter((c) => c.grupo === "canal");
   const sistemas = resto.filter((c) => c.grupo !== "canal");
 
+  /** ¿Ya la pediste? Sale del tablero (sobrevive a recargar) o de lo que
+   *  acabás de hacer en esta pantalla. */
+  const yaPedida = (c: Connection) =>
+    Boolean(pedidas[c.id]) || pedidosAbiertos.has((c.label ?? "").trim().toLowerCase());
+
   const tarjeta = (c: Connection) => (
     <Card
       key={c.id}
@@ -344,7 +369,12 @@ export default function ConexionesPage() {
           <h3 className="text-[15px] font-semibold text-ink">{c.label}</h3>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <Estado estado={c.estado} />
+          {/* "Pedida" gana sobre "sin conectar": es la pregunta que el cliente
+              se hace al volver ("¿ya lo pedí o no?"), y el estado crudo se la
+              contestaba mal. */}
+          {c.estado !== "conectado" && yaPedida(c)
+            ? <Chip tone="amber"><Clock className="h-3 w-3" /> Pedida</Chip>
+            : <Estado estado={c.estado} />}
           {c.requerida && c.estado !== "conectado" && (
             <Chip tone="amber">Tu flujo la necesita</Chip>
           )}
@@ -389,9 +419,9 @@ export default function ConexionesPage() {
                 Conectar
                 <ArrowRight className="h-4 w-4" />
               </Btn>
-              {pedidas[c.id] ? (
+              {yaPedida(c) ? (
                 <p className="text-[13px] font-medium text-c-green-ink">
-                  Pedido. Te escribimos.
+                  Ya nos lo pediste. Te escribimos.
                 </p>
               ) : (
                 <button
@@ -403,10 +433,20 @@ export default function ConexionesPage() {
                 </button>
               )}
             </>
-          ) : pedidas[c.id] ? (
-            <p className="text-[13px] font-medium text-c-green-ink">
-              Pedido. Lo dejamos anotado y te escribimos.
-            </p>
+          ) : yaPedida(c) ? (
+            /* Confirmación completa y estable: qué pasó, qué sigue y que no
+               hay nada más que hacer. Antes era una línea que aparecía donde
+               estaba el botón y se perdía de vista; el cliente volvía a
+               apretar por las dudas. */
+            <div className="rounded-lg border border-c-green bg-c-green/30 px-3 py-2">
+              <p className="text-[13px] font-semibold text-c-green-ink">
+                Listo, quedó pedido.
+              </p>
+              <p className="mt-0.5 text-[12px] text-c-green-ink/85">
+                Lo anotamos y lo vas a ver en Aprobaciones, en “Lo que pediste”. Te
+                escribimos cuando esté conectada; no tenés que hacer nada más.
+              </p>
+            </div>
           ) : (
             <Btn onClick={() => pedir(c)} disabled={pidiendo === c.id}>
               <Link2 className="h-4 w-4" />
