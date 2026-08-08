@@ -11,9 +11,23 @@ import {
   type ArtifactMeta, type PortalConfig, type TicketDetail,
 } from "./agent";
 import { EntityContext, type Entity } from "./entities";
+import { loadAgentName } from "./onboarding";
 import { Chip, IconBtn, Modal, Spinner } from "./ui";
 import Markdown from "./Markdown";
 import CodeBlock from "./CodeBlock";
+
+// Las firmas internas del motor ("default", "worker") son todas la misma
+// persona para el cliente: su agente, con el nombre que le puso. "cliente" es
+// él; "portal" es la auditoría automática.
+function rotuloAutorViewer(author: string): string {
+  const a = (author || "").trim().toLowerCase();
+  if (a === "cliente") return "Vos";
+  if (a === "portal") return "Portal";
+  if (["", "default", "worker", "agent", "hermes"].includes(a)) {
+    return loadAgentName() || "Tu agente";
+  }
+  return author;
+}
 import Artifact from "./Artifact";
 
 export function EntityProvider({ cfg, children }: { cfg: PortalConfig; children: ReactNode }) {
@@ -167,7 +181,7 @@ function EntityViewer({ cfg, entity, onClose }: {
                   {ticket.comments.map((c, i) => (
                     <div key={i}>
                       <p className="mb-0.5 text-[13px] font-semibold text-ink">
-                        {c.author}{" "}
+                        {rotuloAutorViewer(c.author)}{" "}
                         <span className="font-normal text-ink-soft">{fmtDate(c.created_at)}</span>
                       </p>
                       <Markdown>{c.body}</Markdown>

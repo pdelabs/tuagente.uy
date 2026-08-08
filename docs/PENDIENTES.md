@@ -107,3 +107,11 @@ Lo que quedó abierto, con quién lo destraba. Cerrar acá cuando se resuelva.
 - **Orquestación de workers** (asignar, reclamar, despachar, swarm): las tools
   nativas de Hermes no la exponen fuera de un worker del dispatcher, y no la
   necesitamos.
+
+## Fusión Artefactos → "Entregas" (decidido 7/8, pendiente)
+
+Una sola pestaña principal con TODO lo que el agente produce — entregables
+(md/xlsx/archivos) + artefactos (HTML) — agrupado por flujo. Hoy Artefactos
+(solo HTML) quedó promovida a principal como interim; la skill `artifact`
+tiene que ganar `--flujo` como ya lo tiene `entregable`. Al fusionar, Archivos
+queda en "Más" como vista cruda del workspace.

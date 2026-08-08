@@ -7,8 +7,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity, BarChart3, Clock, Columns3, Folder, Hand, Home, LayoutDashboard,
-  LogOut, MessageSquare, Plug, Puzzle, type LucideIcon,
+  Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home,
+  LayoutDashboard, LogOut, MessageSquare, Plug, Puzzle, Workflow,
+  type LucideIcon,
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest, getApprovals,
@@ -23,18 +24,24 @@ import {
 
 // Orden y rótulos de módulos; se muestran solo los que el manifest habilita
 // (salvo "home", que es nuestro y no depende de lo que exponga el agente).
-export const MODULES: { key: string; path: string; label: string; icon: LucideIcon }[] = [
+// `sec` = vive bajo "Más": son las vistas de taller (archivos, uso, skills…).
+// El nav principal es lo que el cliente usa a diario: sus flujos, su chat,
+// sus trabajos en curso. "Tareas" (crons) se fue del nav: era la vista de
+// máquina que Flujos reemplaza (la ruta sigue viva para nosotros).
+export const MODULES: { key: string; path: string; label: string; icon: LucideIcon; sec?: boolean }[] = [
   { key: "home", path: "/app/inicio", label: "Inicio", icon: Home },
   { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
+  { key: "flujos", path: "/app/flujos", label: "Flujos", icon: Workflow },
   { key: "kanban", path: "/app/pipeline", label: "Pipeline", icon: Columns3 },
   { key: "approvals", path: "/app/aprobaciones", label: "Aprobaciones", icon: Hand },
-  { key: "artifacts", path: "/app/artefactos", label: "Artefactos", icon: LayoutDashboard },
-  { key: "crons", path: "/app/tareas", label: "Tareas", icon: Clock },
-  { key: "activity", path: "/app/actividad", label: "Actividad", icon: Activity },
-  { key: "files", path: "/app/archivos", label: "Archivos", icon: Folder },
-  { key: "usage", path: "/app/uso", label: "Uso", icon: BarChart3 },
-  { key: "connections", path: "/app/conexiones", label: "Conexiones", icon: Plug },
-  { key: "capabilities", path: "/app/capacidades", label: "Habilidades", icon: Puzzle },
+  // Principal por decisión de Luis (7/8): la vitrina de lo producido —
+  // entregables de los flujos + visualizaciones, en una sola pestaña.
+  { key: "artifacts", path: "/app/artefactos", label: "Entregas", icon: LayoutDashboard },
+  { key: "activity", path: "/app/actividad", label: "Actividad", icon: Activity, sec: true },
+  { key: "files", path: "/app/archivos", label: "Archivos", icon: Folder, sec: true },
+  { key: "usage", path: "/app/uso", label: "Uso", icon: BarChart3, sec: true },
+  { key: "connections", path: "/app/conexiones", label: "Conexiones", icon: Plug, sec: true },
+  { key: "capabilities", path: "/app/capacidades", label: "Habilidades", icon: Puzzle, sec: true },
 ];
 
 function Login({ onReady }: { onReady: () => void }) {
@@ -44,7 +51,10 @@ function Login({ onReady }: { onReady: () => void }) {
     const hash = link.includes("#") ? link.slice(link.indexOf("#")) : `#key=${link.trim()}`;
     if (!/key=[^&]+/.test(hash)) { setErr("Ese link no tiene una clave. Pedile a tu agente el magic link."); return; }
     window.location.hash = hash;
-    onReady();
+    // Recarga COMPLETA a propósito: cambiar solo el hash deja vivo el JS del
+    // build anterior, y tras un redeploy ese runtime pide chunks que ya no
+    // existen (404) y la app queda colgada en el spinner. Verificado el 7/8.
+    window.location.reload();
   };
   return (
     <main className="app-shell flex min-h-screen items-center justify-center bg-surface p-6">
@@ -70,6 +80,11 @@ function Login({ onReady }: { onReady: () => void }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // /app/avatar es la página utilitaria que fotografía Chrome headless para el
+  // PNG del bot: va SIN shell (ni sidebar ni puerta de onboarding — un browser
+  // headless siempre tiene localStorage virgen y caería en la bienvenida:
+  // exactamente la foto equivocada que subimos el 7/8).
+  if (pathname.startsWith("/app/avatar")) return <>{children}</>;
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [state, setState] = useState<"loading" | "login" | "error" | "ok">("loading");
@@ -80,6 +95,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // agentito violeta por defecto y se ve el parpadeo.
   const [nombre, setNombre] = useState<string | null>(null);
   const [lookAgente, setLookAgente] = useState(loadAgentLook);
+  // "Más" arranca cerrado: las vistas de taller no compiten con los flujos.
+  const [verMas, setVerMas] = useState(false);
   useEffect(() => { setNombre(loadAgentName()); }, []);
   const { seen, dismiss } = useIntroGate();
 
@@ -159,6 +176,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const current = MODULES.find((m) => pathname.startsWith(m.path));
   const Intro = current ? INTROS[current.key] : undefined;
   const showIntro = Boolean(current && Intro && seen && !seen[current.key]);
+
+  const item = (m: (typeof MODULES)[number]) => {
+    const active = pathname.startsWith(m.path);
+    const Icon = m.icon;
+    return (
+      <Link
+        key={m.key}
+        href={m.path}
+        // relative: el badge se posiciona sobre el ícono en el riel.
+        title={m.label}
+        className={`relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition max-md:justify-center max-md:px-0 ${
+          active
+            ? "bg-c-violet/60 font-semibold text-primary"
+            : "text-ink-soft hover:bg-black/[0.04] hover:text-ink"
+        }`}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className="hidden flex-1 md:inline">{m.label}</span>
+        {m.key === "approvals" && pending > 0 && (
+          <span className={`rounded-full text-[10px] font-bold max-md:absolute max-md:right-1 max-md:top-1 max-md:h-4 max-md:w-4 max-md:leading-4 md:px-1.5 md:py-0.5 ${
+            active ? "bg-white/25 text-white" : "bg-c-coral text-c-coral-ink"
+          }`}>
+            {pending}
+          </span>
+        )}
+        {/* Conexiones que el flujo necesita y faltan: puntito ámbar. */}
+        {m.key === "connections" && (manifest.conexiones_pendientes ?? 0) > 0 && (
+          <span className="h-2 w-2 shrink-0 rounded-full bg-c-amber-ink max-md:absolute max-md:right-1 max-md:top-1" />
+        )}
+      </Link>
+    );
+  };
   return (
     <div className="app-shell flex min-h-screen bg-surface">
       {/* En pantallas chicas la barra se reduce a un riel de íconos: 224px
@@ -176,37 +225,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="flex flex-col gap-0.5">
-          {enabled.map((m) => {
-            const active = pathname.startsWith(m.path);
-            const Icon = m.icon;
-            return (
-              <Link
-                key={m.key}
-                href={m.path}
-                // relative: el badge se posiciona sobre el ícono en el riel.
-                title={m.label}
-                className={`relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition max-md:justify-center max-md:px-0 ${
-                  active
-                    ? "bg-c-violet/60 font-semibold text-primary"
-                    : "text-ink-soft hover:bg-black/[0.04] hover:text-ink"
-                }`}
+          {enabled.filter((m) => !m.sec).map(item)}
+
+          {/* "Más": las vistas de taller. Si algo ahí adentro le pide algo al
+              cliente (conexión pendiente), el puntito sube al propio "Más"
+              para que colapsado no esconda nada importante. */}
+          {enabled.some((m) => m.sec) && (
+            <>
+              <button
+                onClick={() => setVerMas((v) => !v)}
+                aria-expanded={verMas}
+                title="Más"
+                className="relative mt-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink-soft transition hover:bg-black/[0.04] hover:text-ink max-md:justify-center max-md:px-0"
               >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="hidden flex-1 md:inline">{m.label}</span>
-                {m.key === "approvals" && pending > 0 && (
-                  <span className={`rounded-full text-[10px] font-bold max-md:absolute max-md:right-1 max-md:top-1 max-md:h-4 max-md:w-4 max-md:leading-4 md:px-1.5 md:py-0.5 ${
-                    active ? "bg-white/25 text-white" : "bg-c-coral text-c-coral-ink"
-                  }`}>
-                    {pending}
-                  </span>
-                )}
-                {/* Conexiones que el flujo necesita y faltan: puntito ámbar. */}
-                {m.key === "connections" && (manifest.conexiones_pendientes ?? 0) > 0 && (
+                <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${verMas ? "" : "-rotate-90"}`} />
+                <span className="hidden flex-1 text-left md:inline">Más</span>
+                {!verMas && (manifest.conexiones_pendientes ?? 0) > 0 && (
                   <span className="h-2 w-2 shrink-0 rounded-full bg-c-amber-ink max-md:absolute max-md:right-1 max-md:top-1" />
                 )}
-              </Link>
-            );
-          })}
+              </button>
+              {verMas && enabled.filter((m) => m.sec).map(item)}
+            </>
+          )}
         </nav>
         <div className="mt-auto px-1">
           <button

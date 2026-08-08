@@ -16,6 +16,7 @@ import ActivityIntro from "./activity";
 import FilesIntro from "./files";
 import UsageIntro from "./usage";
 import ConnectionsIntro from "./connections";
+import FlujosIntro from "./flujos";
 
 const KEY = "tuagente_intro_v2";
 
@@ -30,6 +31,7 @@ export const INTROS: Record<string, ComponentType<IntroProps>> = {
   files: FilesIntro,
   usage: UsageIntro,
   connections: ConnectionsIntro,
+  flujos: FlujosIntro,
 };
 
 export function useIntroGate() {

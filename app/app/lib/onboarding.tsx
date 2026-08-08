@@ -131,24 +131,64 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   const terminar = () => {
     const n = nombre.trim();
     if (eligioAlgo.current) {
-      guardarIdentidad(cfg, { nombre: n, look }).catch(() => {
+      // La cara que eligió, capturada del canvas de Rive: termina siendo la
+      // foto del bot de Telegram (la sube un tool nuestro por MTProto). Si el
+      // canvas no coopera, el bautizo sigue igual sin foto.
+      let avatar_png: string | undefined;
+      try {
+        const canvas = document.querySelector("canvas");
+        const data = canvas?.toDataURL("image/png") ?? "";
+        if (data.startsWith("data:image/png") && data.length > 2000) {
+          avatar_png = data.split(",", 2)[1];
+        }
+      } catch { /* canvas contaminado o sin buffer: seguimos sin foto */ }
+      guardarIdentidad(cfg, { nombre: n, look, avatar_png }).catch(() => {
         /* adapter viejo (404) o caído: queda en el browser */
       });
     }
     onDone(n);
   };
 
-  const puntos = PUNTOS.filter((p) => manifest.modules[p.key]);
+  // La pestaña Aprobaciones es condicional (existe cuando hay algo esperando),
+  // pero acá se presenta la CAPACIDAD, no la pestaña: si hay tablero, hay
+  // compuerta de aprobación — y es la promesa que más confianza construye.
+  const puntos = PUNTOS.filter((p) =>
+    p.key === "approvals" ? manifest.modules.kanban : manifest.modules[p.key]);
 
   return (
     <main className="app-shell flex min-h-screen items-center justify-center bg-surface px-6 py-12">
       <div className="flex w-full max-w-2xl flex-col items-center text-center">
-        <div className={`transition-all duration-500 ${paso === "bautismo" ? "h-40 w-40" : "h-28 w-28"}`}>
+        {/* Lo primero que un cliente ve de tuagente: el título es la tesis del
+            producto, y convierte el bautismo en lo que es — darle nombre a
+            alguien que se suma al equipo. */}
+        {paso === "bautismo" && (
+          <div className="mb-10 animate-fadeup">
+            <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
+              Tu empresa tiene un empleado nuevo
+            </h1>
+            <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-soft">
+              Va a trabajar para vos todos los días, y todo lo que haga queda a la
+              vista en este portal. Empecemos por lo más importante: ponerle nombre.
+            </p>
+          </div>
+        )}
+        <div className={`relative transition-all duration-500 ${paso === "bautismo" ? "h-40 w-40" : "h-28 w-28"}`}>
           {/* En el onboarding siempre está tranquilo: todavía no le pediste nada. */}
           <AgentitoRive festejos={festejos} look={look} estado="tranquilo" className="h-full w-full" />
+          {/* El dado vive pegado al personaje: cambia SU pinta, no la página. */}
+          {paso === "bautismo" && (
+            <button
+              onClick={otroLook}
+              title="Otro look"
+              aria-label="Otro look"
+              className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white shadow-soft transition hover:scale-105 hover:bg-black/[0.03] active:scale-95"
+            >
+              <Dices className="h-[18px] w-[18px] text-ink" />
+            </button>
+          )}
         </div>
 
-        <h1 className="mt-6 text-[32px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
+        <h2 className="mt-6 text-[32px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
           ¡Hola! Soy{" "}
           {paso === "bautismo" ? (
             <input
@@ -157,29 +197,21 @@ export default function Onboarding({ manifest, cfg, onDone }: {
               maxLength={24}
               onChange={(e) => setNombre(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && bautizar()}
-              placeholder="…"
+              placeholder=""
               aria-label="Nombre para tu agente"
               className="inline-block w-[6.5em] max-w-[70vw] border-b-[3px] border-black/15 bg-transparent text-center text-[32px] font-extrabold tracking-tight text-primary outline-none transition placeholder:text-ink-soft/30 focus:border-primary sm:text-[38px]"
             />
           ) : (
             <span className="text-primary">{nombre}</span>
           )}
-        </h1>
+        </h2>
 
         {paso === "bautismo" ? (
-          <>
-            <p className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-soft">
-              Todavía no tengo nombre. Elegilo vos: así me vas a ver en todo el portal.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-              <Btn disabled={!listo} onClick={bautizar}>
-                Continuar <ArrowRight className="h-4 w-4" />
-              </Btn>
-              <Btn kind="secondary" onClick={otroLook}>
-                <Dices className="h-4 w-4" /> Otro look
-              </Btn>
-            </div>
-          </>
+          <div className="mt-8">
+            <Btn disabled={!listo} onClick={bautizar}>
+              Continuar <ArrowRight className="h-4 w-4" />
+            </Btn>
+          </div>
         ) : (
           <div className="animate-fadeup">
             <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-ink-soft">

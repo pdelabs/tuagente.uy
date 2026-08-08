@@ -26,11 +26,23 @@ Lo que se cobra es la operación, no los tokens.
 
 ### Telegram — 5 minutos, gratis, funciona hoy
 1. `@BotFather` → `/newbot` → nombre y usuario → devuelve el **token**.
-2. El cliente le escribe a `@userinfobot` para sacar su **user id**.
-3. `TELEGRAM_BOT_TOKEN` y `TELEGRAM_ALLOWED_USERS` (allowlist: sin esto le
-   escribe cualquiera), y el home channel para los avisos proactivos.
-4. **La foto del bot va a mano**: `@BotFather` → `/setuserpic`. No hay método
-   en la Bot API para cambiarla, así que es el único paso que no se automatiza.
+   **Username SIEMPRE `tuagente_<slug>_bot`** (ej. `tuagente_east_bot`): son
+   nuestra marca en el teléfono del cliente y así se reconocen entre sí.
+   OJO: BotFather no deja cambiar el username después — elegirlo bien a la
+   primera (el de East quedó `east_eco_bot`, anterior a esta regla).
+2. El cliente NO necesita pasar su user id: le manda un hola al bot, recibe
+   el código de pairing y lo pega en el portal (pestaña Conexiones, estado
+   "Lista para vos") — la activación corre sola por el adapter. El
+   `TELEGRAM_ALLOWED_USERS` inicial lleva solo nuestro id de soporte.
+3. `TELEGRAM_BOT_TOKEN` y `TELEGRAM_ALLOWED_USERS` en el `.env`, y el home
+   channel para los avisos proactivos.
+4. **La foto del bot**: cuando el cliente bautiza a su agente, el portal
+   captura el agentito elegido y lo deja en `data/bot_avatar.png`. Se sube con
+   `hermes-kit/tools/avatar-bot.py` (Telethon vía MTProto — la Bot API no deja
+   que un bot cambie su propia foto). Requiere una vez: api_id/api_hash de
+   my.telegram.org en `.secrets/telegram_api.json`, y
+   `python3 -m venv ~/.tuagente-tools && ~/.tuagente-tools/bin/pip install telethon`.
+   Fallback manual: `@BotFather` → `/setuserpic`.
    El **nombre** sí: cuando el cliente bautiza a su agente en el portal, el
    adapter le pega un `setMyName` al bot (adapter 0.26+). O sea que después del
    bautizo el bot ya se llama como el agente; solo falta subirle la carita.

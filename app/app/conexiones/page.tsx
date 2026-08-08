@@ -167,11 +167,87 @@ function DialogoGoogle({ cfg, conexion, onCerrar, onConectada }: {
   );
 }
 
+/** Telegram "lista": abrir el chat + pegar el código de activación acá mismo. */
+function TelegramLista({ c, cfg, onActivada }: {
+  c: Connection; cfg: PortalConfig | null; onActivada: () => void;
+}) {
+  const [codigo, setCodigo] = useState("");
+  const [activando, setActivando] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [listo, setListo] = useState(false);
+
+  const activar = async () => {
+    if (!cfg || !codigo.trim()) return;
+    setActivando(true);
+    setErr(null);
+    try {
+      const r = await fetch(cfg.adapter + "/portal/connections/telegram/pairing", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ code: codigo }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(d?.error || `Error ${r.status}`);
+      setListo(true);
+      onActivada();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActivando(false);
+    }
+  };
+
+  if (listo) {
+    return (
+      <p className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-c-green-ink">
+        <Check className="h-4 w-4" /> ¡Activado! Mandale otro mensaje y ya te contesta.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex flex-col gap-2">
+      <a
+        href={c.link!}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
+      >
+        <ExternalLink className="h-4 w-4" />
+        Abrir el chat
+      </a>
+      <p className="text-[12px] leading-snug text-ink-soft">
+        Mandale un hola. ¿Te contestó con un código? Pegalo acá:
+      </p>
+      <div className="flex gap-2">
+        <input
+          value={codigo}
+          onChange={(e) => { setCodigo(e.target.value); setErr(null); }}
+          onKeyDown={(e) => e.key === "Enter" && activar()}
+          placeholder="Código"
+          maxLength={16}
+          className={`${inputCls} w-36 font-mono uppercase`}
+        />
+        <Btn size="sm" onClick={activar} disabled={!codigo.trim() || activando}>
+          {activando ? "Activando…" : "Activar"}
+        </Btn>
+      </div>
+      {err && <p className="text-[12px] font-medium text-c-coral-ink">{err}</p>}
+    </div>
+  );
+}
+
 function Estado({ estado }: { estado: string }) {
   if (estado === "conectado")
     return (
       <Chip tone="green">
         <Check className="h-3 w-3" /> Conectado
+      </Chip>
+    );
+  if (estado === "lista")
+    return (
+      <Chip tone="violet">
+        Lista para vos
       </Chip>
     );
   if (estado === "bloqueado")
@@ -244,8 +320,16 @@ export default function ConexionesPage() {
     return <div className={WRAP}><ErrorState message={error} onRetry={cargar} /></div>;
   if (conexiones === null) return <div className={WRAP}><Spinner /></div>;
 
-  const canales = conexiones.filter((c) => c.grupo === "canal");
-  const sistemas = conexiones.filter((c) => c.grupo !== "canal");
+  // Lo que puede resolver EL CLIENTE ahora mismo va arriba y separado: una
+  // conexión con flujo self-service sin conectar, un bot esperando su primer
+  // mensaje, o algo que su flujo necesita. El resto se agrupa como siempre.
+  const dependeDelCliente = (c: Connection) =>
+    c.estado !== "conectado" && c.estado !== "bloqueado" &&
+    (Boolean(c.flujo) || c.estado === "lista" || Boolean(c.requerida));
+  const paraVos = conexiones.filter(dependeDelCliente);
+  const resto = conexiones.filter((c) => !dependeDelCliente(c));
+  const canales = resto.filter((c) => c.grupo === "canal");
+  const sistemas = resto.filter((c) => c.grupo !== "canal");
 
   const tarjeta = (c: Connection) => (
     <Card
@@ -286,7 +370,14 @@ export default function ConexionesPage() {
         )}
       </div>
 
-      {c.estado !== "conectado" && (
+      {/* "Lista": el bot existe, falta SU primer mensaje — un click y ya.
+          Si el bot le contesta con un código (pairing), lo pega acá mismo:
+          estar autenticado en el portal + tener el DM es la doble prueba. */}
+      {c.estado === "lista" && c.link && (
+        <TelegramLista c={c} cfg={cfg} onActivada={cargar} />
+      )}
+
+      {c.estado !== "conectado" && c.estado !== "lista" && (
         <div className="mt-1 flex flex-wrap items-center gap-3">
           {/* Con flujo self-service, Conectar CONECTA (diálogo de pasos);
               "pedir que la conecten" queda como salida de emergencia. Sin
@@ -363,6 +454,14 @@ export default function ConexionesPage() {
         />
       ) : (
         <div className="flex flex-col gap-6">
+          {paraVos.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-c-amber-ink">
+                Dependen de vos
+              </h2>
+              <div className="grid gap-3 md:grid-cols-2">{paraVos.map(tarjeta)}</div>
+            </section>
+          )}
           {canales.length > 0 && (
             <section>
               <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">

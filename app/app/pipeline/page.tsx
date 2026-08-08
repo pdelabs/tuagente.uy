@@ -35,6 +35,7 @@ import {
   type TicketDetail,
   type TicketOutcome,
 } from "../lib/agent";
+import { loadAgentName } from "../lib/onboarding";
 import {
   Btn,
   Chip,
@@ -64,12 +65,35 @@ function esPropio(author: string): boolean {
   return AUTORES_PROPIOS.has((author || "").trim().toLowerCase());
 }
 
-// Hermes firma los comentarios del agente con el autor del CLI (`default`).
-// Mostrar eso crudo no le dice nada al cliente; cualquier otro nombre sí.
+// Hermes firma los comentarios del agente con el autor del CLI: "default",
+// "worker" o el nombre del profile según el camino que los escribió. Todos son
+// LA MISMA persona para el cliente: su agente, con el nombre que le puso.
+const FIRMAS_DEL_AGENTE = new Set(["", "default", "worker", "agent", "hermes"]);
 function rotuloAutor(author: string): string {
   if (esPropio(author)) return "Vos";
   const a = (author || "").trim();
-  return !a || a.toLowerCase() === "default" ? "Tu agente" : a;
+  return FIRMAS_DEL_AGENTE.has(a.toLowerCase()) ? (loadAgentName() || "Tu agente") : a;
+}
+
+// Eventos del motor → lo que el cliente entiende. `heartbeat` (el latido de
+// "sigo vivo" del trabajo) y `spawned` (arrancó la sesión interna) no se
+// muestran: son sistema puro, y con `claimed` la historia ya está contada.
+// Un kind desconocido se muestra crudo antes que esconderlo.
+const EVENTOS_OCULTOS = new Set(["heartbeat", "spawned"]);
+function rotuloEvento(kind: string): string {
+  const k = (kind || "").toLowerCase();
+  const MAPA: Record<string, string> = {
+    created: "Creado",
+    claimed: `${loadAgentName() || "Tu agente"} lo tomó`,
+    blocked: "Frenado — espera una respuesta",
+    unblocked: "Destrabado",
+    completed: "Terminado",
+    done: "Terminado",
+    failed: "Falló",
+    comment: "Comentario",
+    status_changed: "Cambió de estado",
+  };
+  return MAPA[k] ?? kind;
 }
 
 /* ── Escrituras del portal ───────────────────────────────────────────────────
@@ -891,18 +915,20 @@ export default function PipelinePage() {
               </div>
             </div>
 
-            {eventos.length > 0 && (
+            {eventos.filter((e) => !EVENTOS_OCULTOS.has((e.kind || "").toLowerCase())).length > 0 && (
               <>
                 <h3 className="mb-2 mt-6 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
                   Historial
                 </h3>
                 <ul className="flex flex-col gap-1">
-                  {eventos.map((e, i) => (
-                    <li key={i} className="flex items-baseline gap-2 text-[12px] text-ink-soft">
-                      <span className="font-medium">{e.kind}</span>
-                      <span>{fmtRelativa(e.created_at)}</span>
-                    </li>
-                  ))}
+                  {eventos
+                    .filter((e) => !EVENTOS_OCULTOS.has((e.kind || "").toLowerCase()))
+                    .map((e, i) => (
+                      <li key={i} className="flex items-baseline gap-2 text-[12px] text-ink-soft">
+                        <span className="font-medium">{rotuloEvento(e.kind)}</span>
+                        <span>{fmtRelativa(e.created_at)}</span>
+                      </li>
+                    ))}
                 </ul>
               </>
             )}

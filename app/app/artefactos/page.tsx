@@ -17,6 +17,7 @@ import {
   Download, ImageOff, LayoutDashboard, RefreshCw, Search, SearchX, Trash2, X,
 } from "lucide-react";
 import { loadConfig, type PortalConfig } from "../lib/agent";
+import EntregablesPorFlujo from "../lib/EntregablesPorFlujo";
 import ArtifactView from "../lib/Artifact";
 import {
   Btn, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner, inputCls,
@@ -379,8 +380,8 @@ export default function ArtefactosPage() {
   return (
     <div className={wrap}>
       <PageHeader
-        title="Artefactos"
-        subtitle="Lo que tu agente dibujó para que veas los datos"
+        title="Entregas"
+        subtitle="Todo lo que tu agente produjo: los entregables de tus flujos y sus visualizaciones"
         actions={
           <>
             {ultima && (
@@ -411,6 +412,13 @@ export default function ArtefactosPage() {
         </p>
       )}
 
+      {/* Los entregables de cada flujo primero: son el trabajo pedido. Las
+          visualizaciones (abajo) son la mitad dibujada de la misma historia. */}
+      {cfg && <EntregablesPorFlujo cfg={cfg} />}
+
+      <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
+        Visualizaciones
+      </h2>
       {cuerpo()}
 
       {abierto && (
