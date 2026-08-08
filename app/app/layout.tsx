@@ -8,14 +8,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home,
-  LayoutDashboard, LogOut, MessageSquare, Plug, Puzzle, Workflow,
+  LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Plug, Puzzle, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest, getApprovals,
   type PortalConfig, type Manifest,
 } from "./lib/agent";
-import { Btn, Spinner, inputCls } from "./lib/ui";
+import { Btn, SOPORTE, Soporte, Spinner, inputCls } from "./lib/ui";
 import { INTROS, useIntroGate } from "./lib/intros";
 import Onboarding, { loadAgentName } from "./lib/onboarding";
 import {
@@ -32,24 +32,32 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   { key: "home", path: "/app/inicio", label: "Inicio", icon: Home },
   { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
   { key: "flujos", path: "/app/flujos", label: "Flujos", icon: Workflow },
-  { key: "kanban", path: "/app/pipeline", label: "Pipeline", icon: Columns3 },
+  { key: "kanban", path: "/app/pipeline", label: "Tablero", icon: Columns3 },
   { key: "approvals", path: "/app/aprobaciones", label: "Aprobaciones", icon: Hand },
   // Principal por decisión de Luis (7/8): la vitrina de lo producido —
   // entregables de los flujos + visualizaciones, en una sola pestaña.
   { key: "artifacts", path: "/app/artefactos", label: "Entregas", icon: LayoutDashboard },
+  // Conexiones sale de "Más" (8/8): es lo PRIMERO que necesita un cliente
+  // nuevo — sin su correo y sus planillas el agente no puede hacer nada — y
+  // estaba escondido abajo de todo. Un cliente de prueba lo buscó por cinco
+  // pestañas y su frase fue "es como poner la llave de la luz adentro del
+  // ropero". Media docena de pantallas le prometen "los sistemas que le
+  // conectaste": el lugar donde se conectan no puede estar plegado.
+  { key: "connections", path: "/app/conexiones", label: "Conexiones", icon: Plug },
   { key: "activity", path: "/app/actividad", label: "Actividad", icon: Activity, sec: true },
   { key: "files", path: "/app/archivos", label: "Archivos", icon: Folder, sec: true },
   { key: "usage", path: "/app/uso", label: "Uso", icon: BarChart3, sec: true },
-  { key: "connections", path: "/app/conexiones", label: "Conexiones", icon: Plug, sec: true },
-  { key: "capabilities", path: "/app/capacidades", label: "Habilidades", icon: Puzzle, sec: true },
+  { key: "capabilities", path: "/app/habilidades", label: "Habilidades", icon: Puzzle, sec: true },
 ];
 
 function Login({ onReady }: { onReady: () => void }) {
   const [link, setLink] = useState("");
   const [err, setErr] = useState("");
+  // "magic link" era jerga: un cliente de prueba leyó "link mágico" y no supo
+  // qué pegar, porque el único link que tenía era con el que ya había entrado.
   const enter = () => {
     const hash = link.includes("#") ? link.slice(link.indexOf("#")) : `#key=${link.trim()}`;
-    if (!/key=[^&]+/.test(hash)) { setErr("Ese link no tiene una clave. Pedile a tu agente el magic link."); return; }
+    if (!/key=[^&]+/.test(hash)) { setErr("A ese link le falta el código del final. Copialo entero, desde https hasta el último carácter."); return; }
     window.location.hash = hash;
     // Recarga COMPLETA a propósito: cambiar solo el hash deja vivo el JS del
     // build anterior, y tras un redeploy ese runtime pide chunks que ya no
@@ -62,7 +70,8 @@ function Login({ onReady }: { onReady: () => void }) {
         <AgentitoAvatar className="mb-3 h-14 w-14" />
         <h1 className="text-xl font-bold tracking-tight text-ink">tuagente</h1>
         <p className="mb-6 mt-1 text-sm text-ink-soft">
-          Pegá el magic link que te dimos para entrar al portal de tu agente.
+          Pegá acá el link que te dimos para entrar. Es el que te mandamos cuando dimos
+          de alta a tu agente — largo y con un código al final.
         </p>
         <input
           value={link}
@@ -73,6 +82,7 @@ function Login({ onReady }: { onReady: () => void }) {
         />
         {err && <p className="mt-2 text-sm text-c-coral-ink">{err}</p>}
         <div className="mt-4"><Btn onClick={enter}>Entrar</Btn></div>
+        <div className="mt-5 border-t border-black/[0.07] pt-3"><Soporte /></div>
       </div>
     </main>
   );
@@ -118,6 +128,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
   useEffect(boot, []);
 
+  // Reintento a mano: sin esto el botón no da NINGUNA señal de que hizo algo
+  // (mismo pantallazo, mismo texto) y el cliente concluye que no funciona el
+  // botón. El mínimo de 600 ms es para que el cambio se llegue a ver.
+  const [reintentando, setReintentando] = useState(false);
+  const reintentar = () => {
+    setReintentando(true);
+    const desde = Date.now();
+    const listo = () => setTimeout(() => setReintentando(false), Math.max(0, 600 - (Date.now() - desde)));
+    const c = loadConfig();
+    if (!c) { setState("login"); listo(); return; }
+    setCfg(c);
+    getManifest(c)
+      .then((m) => { setManifest(m); aprenderDelAgente(m); setOnline(true); setState("ok"); })
+      .catch(() => setState("error"))
+      .finally(listo);
+  };
+
   // El indicador tiene que decir la verdad: si el agente se apaga mientras el
   // portal está abierto, el punto verde mintiendo es peor que no tenerlo.
   // De paso traemos los pendientes, que es lo que el cliente quiere ver al entrar.
@@ -143,11 +170,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Apagado: el mismo agentito, dormido y sin color. */}
         <AgentitoAvatar look={lookAgente} apagado className="mb-2 h-20 w-20 opacity-45 grayscale" />
         <p className="text-sm font-semibold text-ink">No pude conectar con tu agente</p>
-        <p className="mb-4 mt-1 text-sm text-ink-soft">Puede estar apagado, o el link venció.</p>
+        <p className="mb-4 mt-1 max-w-sm text-sm text-ink-soft">
+          Puede estar apagado un rato, o puede ser tu conexión a internet. No perdiste nada:
+          el trabajo de tu agente sigue guardado.
+        </p>
         <div className="flex gap-2">
-          <Btn size="sm" onClick={boot}>Reintentar</Btn>
+          <Btn size="sm" disabled={reintentando} onClick={reintentar}>
+            {reintentando ? "Probando…" : "Probar de nuevo"}
+          </Btn>
           <Btn kind="secondary" size="sm" onClick={() => { clearConfig(); setState("login"); }}>Cambiar link</Btn>
         </div>
+        <Soporte className="mt-5" />
       </main>
     );
   }
@@ -248,7 +281,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </>
           )}
         </nav>
-        <div className="mt-auto px-1">
+        {/* Auxilio siempre a la vista: cuando algo se rompe, el cliente no
+            tiene que salir a buscar un teléfono en un mail viejo. */}
+        <div className="mt-auto flex flex-col gap-0.5 px-1">
+          <a
+            href={SOPORTE.whatsapp}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Escribinos"
+            className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-[13px] text-ink-soft transition hover:text-primary max-md:justify-center"
+          >
+            <LifeBuoy className="h-3.5 w-3.5 shrink-0" />
+            <span className="hidden md:inline">Escribinos</span>
+          </a>
           <button
             onClick={() => { clearConfig(); setState("login"); }}
             title="Salir"
