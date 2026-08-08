@@ -8,15 +8,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown, ArrowUp, Brain, Check, ChevronRight, Copy, Download, Loader2, Menu,
-  MessageSquare, Paperclip, Pencil, RefreshCw, Square, Wrench,
+  Paperclip, Pencil, RefreshCw, Square, Wrench,
 } from "lucide-react";
 import {
   loadConfig, chatStream, sessionChatStream, getSessions, getSessionMessages,
   uploadFile, type PortalConfig, type ChatMessage,
 } from "../lib/agent";
-import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
+import { Btn, ErrorState, IconBtn, Spinner } from "../lib/ui";
 import { EntityProvider } from "../lib/EntityViewer";
 import Markdown from "../lib/Markdown";
+import dynamic from "next/dynamic";
+import { loadAgentName } from "../lib/onboarding";
+import { AgentitoAvatar, AgentitoCargando, loadAgentLook } from "../lib/agentito";
+import type { EstadoAgentito } from "../lib/AgentitoRive";
+
+// El personaje animado se trae solo cuando el chat se muestra; mientras, la
+// cara estática. Mismo patrón que el onboarding.
+const AgentitoRive = dynamic(() => import("../lib/AgentitoRive"), {
+  ssr: false,
+  loading: () => <AgentitoCargando />,
+});
 import Sessions, { sessionTitle, type SessionSummary } from "./Sessions";
 import {
   MentionList, mentionAt, useMentionItems,
@@ -41,6 +52,27 @@ const THINKING = "_thinking";
 function toolLabel(tool: string): string {
   if (tool === THINKING) return "Pensando";
   return tool.replace(/_/g, " ");
+}
+
+/** Qué cara pone el agentito según lo que está haciendo AHORA.
+ *
+ *  El gesto dice la verdad: sale del nombre de herramienta que reporta Hermes
+ *  por `tool.progress`, no de una rotación al azar. Lo que no cae en ninguna
+ *  familia va a "haciendo", que es el gesto genérico de estar trabajando
+ *  (terminal, execute_code, process, cronjob, send_message, delegate_task…). */
+function gestoDe(tool: string | undefined): EstadoAgentito {
+  if (!tool || tool === THINKING) return "pensando";
+  if (/^(clarify|todo|memory)$/.test(tool)) return "pensando";
+  if (/^(read_file|search_files|session_search|read_terminal|skill_view|skills_list|feishu_doc_read|kanban_(show|list)|project_list)$/.test(tool)) {
+    return "leyendo";
+  }
+  if (/^(write_file|patch|image_generate|video_generate|kanban_(create|comment|complete|block|unblock|link)|project_create)$/.test(tool)) {
+    return "escribiendo";
+  }
+  if (/^(web_search|web_extract|x_search|browser_|vision_analyze|video_analyze)/.test(tool)) {
+    return "buscando";
+  }
+  return "haciendo";
 }
 
 /** Bloque colapsable con lo que el agente hizo antes de responder. */
@@ -106,6 +138,11 @@ function CopyBtn({ text }: { text: string }) {
 
 export default function ChatPage() {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
+  // El agente tiene nombre y cara: el chat los usa en vez de "tu agente".
+  // El look va lazy (sin efecto) para no pintar el violeta default un frame.
+  const [lookAgente] = useState(loadAgentLook);
+  const [nombreAgente, setNombreAgente] = useState<string | null>(null);
+  useEffect(() => { setNombreAgente(loadAgentName()); }, []);
 
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [sessionsErr, setSessionsErr] = useState<string | null>(null);
@@ -272,7 +309,11 @@ export default function ChatPage() {
     setInput("");
     setSendErr(null);
     setFailedText(null);
-    setLiveTools([]);
+    // Arranca "Pensando…" de una, sin esperar al primer evento del agente. Va
+    // solo en liveTools (lo que se ve mientras corre) y NO en `tools`, que es
+    // lo que queda guardado: si no, cada mensaje terminaría con un rastro
+    // "Pensó un momento" aunque no haya usado nada.
+    setLiveTools([THINKING]);
     setEditingIdx(null);
     setMsgs([...base, { role: "user", content: text }, { role: "assistant", content: "" }]);
     setSending(true);
@@ -331,7 +372,13 @@ export default function ChatPage() {
           },
         }, ac.signal);
       } else {
-        await chatStream(cfg, history, paint, ac.signal);
+        // Conversación nueva: el gateway también reporta herramientas, pero
+        // por otro evento. Sin esto el rastro y el gesto se quedan en
+        // "Pensando" toda la respuesta.
+        await chatStream(cfg, history, paint, (tool) => {
+          if (tools[tools.length - 1] !== tool) tools.push(tool);
+          setLiveTools([...tools]);
+        }, ac.signal);
       }
       flush();
       setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
@@ -413,7 +460,6 @@ export default function ChatPage() {
   if (!cfg) return <Spinner />;
 
   const lastIdx = msgs.length - 1;
-  const showThinking = sending && !msgs[lastIdx]?.content.trim();
   const canSend = !sending && input.trim().length > 0;
 
   const sidebar = (
@@ -475,12 +521,19 @@ export default function ChatPage() {
             ) : threadErr ? (
               <ErrorState message={threadErr} onRetry={() => activeId && openSession(cfg, activeId)} />
             ) : msgs.length === 0 && !sending ? (
-              <div className="pt-24">
-                <EmptyState
-                  icon={MessageSquare}
-                  title="¿En qué te puede ayudar tu agente?"
-                  hint="Preguntale lo que necesites o encargale una tarea. Las conversaciones anteriores están a la izquierda."
-                />
+              <div className="flex flex-col items-center pt-24 text-center">
+                {/* El agentito recibe — el ANIMADO: mientras no le pedís nada,
+                    se ceba unos mates (estado tranquilo). */}
+                <div className="mb-5 h-36 w-36">
+                  <AgentitoRive festejos={0} look={lookAgente} estado="tranquilo" className="h-full w-full" />
+                </div>
+                <p className="text-base font-bold text-ink">
+                  {nombreAgente ? `¿En qué te puede ayudar ${nombreAgente}?` : "¿En qué te puedo ayudar?"}
+                </p>
+                <p className="mt-1 max-w-sm text-sm leading-relaxed text-ink-soft">
+                  Preguntale lo que necesites o encargale una tarea. Las conversaciones
+                  anteriores están a la izquierda.
+                </p>
               </div>
             ) : (
               <div className="flex flex-col gap-5">
@@ -527,7 +580,22 @@ export default function ChatPage() {
                       )}
                     </div>
                   ) : (
-                    <div key={i} className="group">
+                    <div key={i} className="group flex gap-2.5">
+                      {/* Un solo agentito por mensaje: el animado mientras
+                          está trabajando, el quieto cuando terminó. */}
+                      <div className="mt-0.5 h-7 w-7 shrink-0">
+                        {sending && i === lastIdx ? (
+                          <AgentitoRive
+                            festejos={0}
+                            look={lookAgente}
+                            estado={gestoDe(liveTools[liveTools.length - 1])}
+                            className="h-full w-full"
+                          />
+                        ) : (
+                          <AgentitoAvatar look={lookAgente} className="h-full w-full" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
                       {(m.tools?.length || (sending && i === lastIdx && liveTools.length > 0)) && (
                         <ToolTrace
                           tools={sending && i === lastIdx ? liveTools : m.tools ?? []}
@@ -545,14 +613,9 @@ export default function ChatPage() {
                           )}
                         </div>
                       )}
+                      </div>
                     </div>
                   ),
-                )}
-                {showThinking && liveTools.length === 0 && (
-                  <div className="flex items-center gap-2 text-[13px] text-ink-soft">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-                    Pensando…
-                  </div>
                 )}
               </div>
             )}
@@ -640,7 +703,7 @@ export default function ChatPage() {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
                 }}
                 rows={1}
-                placeholder="Escribile a tu agente…"
+                placeholder={nombreAgente ? `Escribile a ${nombreAgente}…` : "Escribile a tu agente…"}
                 disabled={sending}
                 className="max-h-52 flex-1 resize-none bg-transparent py-1.5 text-[15px] text-ink outline-none placeholder:text-ink-soft/60 disabled:opacity-60"
               />

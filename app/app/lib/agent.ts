@@ -144,7 +144,13 @@ export const reject = (c: PortalConfig, id: string, reason: string) =>
  *  máquina. Con un adapter viejo tira 404 y el portal sigue con el browser. */
 export const guardarIdentidad = (
   c: PortalConfig,
-  identidad: { nombre?: string; look?: Record<string, number> },
+  identidad: {
+    nombre?: string;
+    look?: Record<string, number>;
+    /** Captura PNG (base64 pelado) del agentito al bautizarlo: el agente la
+     *  guarda y un tool nuestro la sube como foto del bot de Telegram. */
+    avatar_png?: string;
+  },
 ) => post<{ ok: boolean }>(c.adapter, "/portal/identity", c, identidad);
 export const getActivity = (c: PortalConfig) => get<{ events: any[] }>(c.adapter, "/portal/activity", c);
 export const getFiles = (c: PortalConfig) => get<{ files: any[] }>(c.adapter, "/portal/files", c);
@@ -196,6 +202,28 @@ export type Capabilities = {
 export const getCapabilities = (c: PortalConfig) =>
   get<Capabilities>(c.adapter, "/portal/capabilities", c);
 
+/** Un flujo: el trabajo del cliente con nombre, gatillo y resultados
+ *  (adapter ≥0.29). El estado "incompleto" lo deriva el adapter de las
+ *  conexiones que faltan — nunca viene guardado. */
+export type Flujo = {
+  slug: string;
+  nombre: string;
+  para_cliente: string;
+  gatillo_tipo: "drive" | "horario" | "webhook" | "pedido" | string;
+  gatillo: string;
+  estado: "activo" | "pausado" | "incompleto" | string;
+  conexiones_faltan: string[];
+  ultima_corrida?: { cuando?: string | null; status?: string } | null;
+  resultados: { path: string; mtime: number }[];
+  resultados_total: number;
+};
+export const getFlujos = (c: PortalConfig) =>
+  get<{ disponible: boolean; flujos: Flujo[] }>(c.adapter, "/portal/flujos", c);
+/** Detalle: resultados completos + el "cómo trabajo" del FLUJO.md (≥0.30). */
+export type FlujoDetalle = Flujo & { como: string };
+export const getFlujoDetalle = (c: PortalConfig, slug: string) =>
+  get<FlujoDetalle>(c.adapter, `/portal/flujos/${encodeURIComponent(slug)}`, c);
+
 /** El SKILL.md completo de una habilidad nuestra (adapter ≥0.21). */
 export const getSkillContent = (c: PortalConfig, name: string) =>
   get<{ name: string; content: string }>(c.adapter, `/portal/skills/${encodeURIComponent(name)}`, c);
@@ -224,6 +252,9 @@ export type Connection = {
   /** "google-oauth" = el portal la conecta solo con su diálogo (adapter ≥0.25);
    *  sin flujo, el botón cae a "Pedir que la conecten". */
   flujo?: string | null;
+  /** Estado "lista" (adapter ≥0.27): nuestra mitad está (el bot existe) pero
+   *  el cliente nunca chateó. `link` es el t.me/… para su primer mensaje. */
+  link?: string | null;
 };
 export const getConnections = (c: PortalConfig) =>
   get<{ disponible: boolean; conexiones: Connection[] }>(c.adapter, "/portal/connections", c);
@@ -389,6 +420,14 @@ export async function chatStream(
   cfg: PortalConfig,
   messages: ChatMessage[],
   onDelta: (text: string) => void,
+  /** Herramienta que arranca. OJO: acá el evento NO se llama igual que en el
+   *  stream de sesión. El gateway manda `event: hermes.tool.progress` con
+   *  `{tool, label, status}` (verificado en gateway/platforms/api_server.py),
+   *  mientras que el de sesión manda `tool.progress` con `{tool_name}`. Sin
+   *  esto, una conversación NUEVA no reporta ninguna herramienta: el rastro
+   *  se queda en "Pensando" para siempre y el agentito nunca cambia de gesto.
+   *  Los `_internos` (como `_thinking`) el gateway ni los manda por acá. */
+  onTool?: (tool: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
   const res = await fetch(cfg.endpoint + "/v1/chat/completions", {
@@ -400,7 +439,7 @@ export async function chatStream(
   if (!res.ok || !res.body) throw new Error(`${res.status} en chat`);
   const reader = res.body.getReader();
   const dec = new TextDecoder();
-  let acc = "", buf = "";
+  let acc = "", buf = "", evento = "";
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -408,11 +447,21 @@ export async function chatStream(
     const lines = buf.split("\n");
     buf = lines.pop() ?? "";
     for (const line of lines) {
+      if (line.startsWith("event: ")) { evento = line.slice(7).trim(); continue; }
       if (!line.startsWith("data: ") || line.includes("[DONE]")) continue;
+      let payload: any;
       try {
-        const delta = JSON.parse(line.slice(6)).choices?.[0]?.delta?.content;
-        if (delta) { acc += delta; onDelta(acc); }
-      } catch { /* chunk parcial */ }
+        payload = JSON.parse(line.slice(6));
+      } catch { continue; /* chunk parcial */ }
+      if (evento === "hermes.tool.progress") {
+        // Solo el arranque: el `completed` que viene después duplicaría.
+        if (payload?.status !== "completed" && typeof payload?.tool === "string") {
+          onTool?.(payload.tool);
+        }
+        continue;
+      }
+      const delta = payload?.choices?.[0]?.delta?.content;
+      if (delta) { acc += delta; onDelta(acc); }
     }
   }
   return acc;

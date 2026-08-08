@@ -1,8 +1,11 @@
 "use client";
 
 // El agentito de verdad: personaje Rive (public/agentito.riv, hecho con
-// rivemcp — sesión "Onboarding" del 6-7/8). El state machine "Agentito" expone:
+// rivemcp — sesión "Onboarding" del 6-8/8). El state machine "Agentito" expone:
 //   miradaX / miradaY (number 0-100): hacia dónde miran las pupilas
+//   gesto (number 0-5): qué está haciendo — 0 nada, 1 pensar (cabeza ladeada y
+//     una ceja en arco), 2 libro, 3 libreta y lápiz, 4 lupa, 5 llave inglesa
+//     girando un tornillo
 //   festejar / matear (trigger): el rebote de festejo y la cebada de mate
 //   tono, antena, accesorio, pupila, boca, piel, traje, cejas: los ejes del look
 // Encima trae flote y parpadeo como loops propios. El runtime es el "lite"
@@ -16,11 +19,32 @@ import { AgentitoAvatar, type AgentitoLook } from "./agentito";
 
 RuntimeLoader.setWasmUrl("/rive.wasm");
 
-/** Qué está haciendo el agente. Lo decide quien lo muestra, no el personaje. */
+/** Qué está haciendo el agente. Lo decide quien lo muestra, no el personaje.
+ *
+ *  Los cinco últimos son los gestos de TRABAJO. Cada uno son DOS cosas a la vez:
+ *  la pose (animación del .riv, por el input `gesto`) y el recorrido de la
+ *  mirada (código, moviendo miradaX/miradaY). Van juntos a propósito: la pose
+ *  dice QUÉ está haciendo y la mirada apunta a donde está la acción. Mientras
+ *  hay un gesto puesto, la mirada no sigue al cursor. */
 export type EstadoAgentito =
-  | "normal"     // sigue el cursor y nada más
-  | "tranquilo"  // no hay nada esperándote: se ceba unos mates
-  | "esperando"; // hay algo para tu ok: cada tanto mira hacia la barra lateral
+  | "normal"      // sigue el cursor y nada más
+  | "tranquilo"   // no hay nada esperándote: se ceba unos mates
+  | "esperando"   // hay algo para tu ok: cada tanto mira hacia la barra lateral
+  | "pensando"    // ladea la cabeza, arquea una ceja y se le va la mirada arriba
+  | "leyendo"     // sostiene un libro y lo lee renglón a renglón; cada tanto pasa página
+  | "escribiendo" // libreta y lápiz: el lápiz garabatea y él mira la punta
+  | "buscando"    // lupa que barre la cara, con vistazos secos y salteados
+  | "haciendo";   // llave inglesa que gira un tornillo, con temblorcito de esfuerzo
+
+const GESTOS_DE_TRABAJO: EstadoAgentito[] = [
+  "pensando", "leyendo", "escribiendo", "buscando", "haciendo",
+];
+const trabajando = (e: EstadoAgentito) => GESTOS_DE_TRABAJO.includes(e);
+
+/** El input `gesto` del .riv. El orden es el del state machine, no alfabético. */
+const NUMERO_DE_GESTO: Record<string, number> = {
+  pensando: 1, leyendo: 2, escribiendo: 3, buscando: 4, haciendo: 5,
+};
 
 type Props = {
   /** Contador: cada incremento dispara el trigger de festejo. */
@@ -66,6 +90,7 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
   });
   const miradaX = useStateMachineInput(rive, "Agentito", "miradaX");
   const miradaY = useStateMachineInput(rive, "Agentito", "miradaY");
+  const inGesto = useStateMachineInput(rive, "Agentito", "gesto");
   const festejar = useStateMachineInput(rive, "Agentito", "festejar");
   const inTono = useStateMachineInput(rive, "Agentito", "tono");
   const inAntena = useStateMachineInput(rive, "Agentito", "antena");
@@ -136,8 +161,98 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
     };
   }, [miradaX, miradaY, estado]);
 
+  // ── Los gestos de trabajo, parte 1: el objeto ──
+  // El .riv se encarga de sacarlo y guardarlo (el state machine cruza suave
+  // entre gestos, 220ms). Acá solo se dice cuál. Se escribe en el cuerpo del
+  // efecto, NUNCA en el cleanup: al desmontar, el cleanup de `useRive` ya
+  // destruyó la instancia y escribir después revienta la pantalla entera.
   useEffect(() => {
-    if (!miradaX || !miradaY) return;
+    if (!inGesto) return;
+    try {
+      inGesto.value = NUMERO_DE_GESTO[estado] ?? 0;
+    } catch {
+      /* el runtime se fue; el personaje es adorno, no puede tumbar el chat */
+    }
+  }, [inGesto, estado]);
+
+  // ── Los gestos de trabajo, parte 2: la mirada ──
+  // La gracia es que DICEN LA VERDAD: el chat sabe qué herramienta está
+  // corriendo y elige el gesto, no rota al azar. Mientras hay uno puesto, el
+  // cursor no manda. Cada recorrido apunta a DONDE ESTÁ SU OBJETO.
+  useEffect(() => {
+    if (!miradaX || !miradaY || !trabajando(estado)) return;
+    let raf = 0;
+    let t0 = 0;
+    let destino = { x: 50, y: 50 };
+    let proximoSalto = 0;
+    const tick = (t: number) => {
+      if (!t0) t0 = t;
+      const s = (t - t0) / 1000;
+      let x = 50;
+      let y = 50;
+      // OJO con las amplitudes: el avatar del chat mide 28px, así que el rango
+      // ENTERO de la mirada son ~2px en pantalla. Medido: por debajo de ±8 el
+      // movimiento queda sub-píxel y no se ve. Por eso los gestos acá van
+      // exagerados y se distinguen por AMPLITUD y VELOCIDAD, no por matiz.
+      switch (estado) {
+        case "leyendo": {
+          // Un renglón: barre despacio y pega la vuelta rápido al margen.
+          const p = (s % 1.6) / 1.6;
+          x = p < 0.8 ? 18 + (p / 0.8) * 64 : 82 - ((p - 0.8) / 0.2) * 64;
+          y = 62 + Math.sin(s * 0.7) * 5; // y va bajando por la página
+          break;
+        }
+        case "pensando":
+          // Arriba y a la derecha, del lado de la ceja en arco, a la deriva.
+          x = 68 + Math.sin(s * 0.5) * 16;
+          y = 22 + Math.cos(s * 0.38) * 10;
+          break;
+        case "escribiendo":
+          // Bien abajo, en la punta del lápiz.
+          x = 50 + Math.sin(s * 2.4) * 14;
+          y = 80 + Math.sin(s * 1.2) * 4;
+          break;
+        case "buscando":
+          // Saltos secos a puntos salteados: buscar no es barrer.
+          if (t > proximoSalto) {
+            destino = { x: 12 + Math.random() * 76, y: 18 + Math.random() * 60 };
+            proximoSalto = t + 380 + Math.random() * 320;
+          }
+          x = destino.x;
+          y = destino.y;
+          break;
+        case "haciendo":
+          // Abajo a la derecha, mirándose la llave: tics cortos y RÁPIDOS. Se
+          // distingue de "leyendo" por la velocidad, no por el tamaño: quieto
+          // no servía — a 28px, quieto e "inactivo" se ven igual.
+          x = 62 + Math.sin(s * 9) * 10;
+          y = 62 + Math.sin(s * 7) * 5;
+          break;
+      }
+      // El runtime puede irse entre frames (Rive se reinicia, el componente se
+      // desmonta): escribir sobre un input muerto tira "Cannot set properties
+      // of null" y se lleva puesta la pantalla ENTERA del cliente. Si pasa,
+      // cortamos el loop en silencio — el personaje es adorno, no puede tumbar
+      // el chat.
+      try {
+        miradaX.value = x;
+        miradaY.value = y;
+      } catch {
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    // Solo cortar el loop. NO escribir en los inputs acá: `useRive` está
+    // declarado ANTES que este efecto, así que al desmontar su cleanup corre
+    // primero y destruye la instancia — escribir después revienta con
+    // "Cannot set properties of null". Y no hace falta: si arranca otro gesto
+    // escribe él, y si el que sigue es el cursor, escribe al primer movimiento.
+    return () => cancelAnimationFrame(raf);
+  }, [miradaX, miradaY, estado]);
+
+  useEffect(() => {
+    if (!miradaX || !miradaY || trabajando(estado)) return;
     if (window.matchMedia("(pointer: coarse)").matches) return;
     const onMove = (e: MouseEvent) => {
       if (mirandoBadge.current) return;
@@ -156,11 +271,11 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
     };
     window.addEventListener("mousemove", onMove, { passive: true });
     return () => window.removeEventListener("mousemove", onMove);
-  }, [miradaX, miradaY]);
+  }, [miradaX, miradaY, estado]);
 
   // Sin cursor (táctil) la mirada quedaría clavada al frente: paseo lento.
   useEffect(() => {
-    if (!miradaX || !miradaY) return;
+    if (!miradaX || !miradaY || trabajando(estado)) return;
     if (!window.matchMedia("(pointer: coarse)").matches) return;
     let raf = 0;
     const tick = (t: number) => {
@@ -172,7 +287,7 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [miradaX, miradaY]);
+  }, [miradaX, miradaY, estado]);
 
   return (
     <div ref={caja} className={`relative ${className ?? ""}`}>

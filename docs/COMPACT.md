@@ -142,12 +142,29 @@ text/plain) · `crons/{id}` · `capabilities` · `boards` · `POST upload` ·
 M3 expressive del `tailwind.config.ts`: primary #5B4BE8, surface #FBFAFF,
 ink #14131F, tonales c-violet/c-green/c-coral/c-amber, Jakarta. Sin sombras.
 
-## El agentito (7/8)
-Personaje Rive en `public/agentito.riv` (15 KB), autorado 100% por MCP
-(`rivemcp`). El state machine "Agentito" expone 12 inputs: `miradaX`/`miradaY`
-(pupilas), los triggers `festejar` y `matear`, y 8 ejes de rasgos —tono, antena,
-accesorio, pupila, boca, piel, traje, cejas— que dan 31 mil combinaciones. El
-cliente lo bautiza y le sortea la pinta en el onboarding.
+## El agentito (7-8/8)
+Personaje Rive en `public/agentito.riv` (21 KB), autorado 100% por MCP
+(`rivemcp`). El state machine "Agentito" expone 13 inputs: `miradaX`/`miradaY`
+(pupilas), `gesto` (qué objeto saca), los triggers `festejar` y `matear`, y 8
+ejes de rasgos —tono, antena, accesorio, pupila, boca, piel, traje, cejas— que
+dan 31 mil combinaciones. El cliente lo bautiza y le sortea la pinta en el
+onboarding.
+
+**Los gestos de trabajo son pose + mirada** (`gesto` 1-5): pensar es ladear la
+cabeza y arquear UNA ceja (dibujada aparte, `cejaArco`: tapa las cejas del look,
+así aparece también en los agentitos que no tienen); leer saca un libro y pasa
+la página; escribir, libreta y lápiz que garabatea; buscar, una lupa que barre
+la cara; hacer, una llave inglesa que gira un tornillo (la boca en C es un
+`boolean_shapes` de verdad, con agujero, así se ve la tuerca por adentro). Son
+animaciones en loop del `.riv`, en su propio layer (el 14), cada una apagando
+los objetos de los otros por opacidad; el state machine cruza suave en 220 ms.
+La mirada la sigue manejando el código y apunta a donde está la acción. Antes
+eran solo pupilas y a 28px eso no se leía — el usuario los vio y no distinguía
+ninguno. Solo "pensando" toca las cejas; en el resto la expresión la da el
+objeto. Descartado por feo: el globo con tres puntos (parecía el "está
+escribiendo…" de un chat), los engranajes, y **la mano** — se probaron tres
+versiones (nudillos, puño de barras, manopla) y ninguna cerró: el agentito no
+tiene brazos, así que cualquier mano queda flotando y a 28px es una manchita.
 
 **El bautizo vive en el agente, no en el browser** (`POST /portal/identity`,
 adapter 0.26). El adapter lo guarda en `/opt/data/portal_identidad.json`, lo
@@ -174,6 +191,9 @@ con `next/dynamic` en el onboarding y en Inicio.
 1. **Z-order al revés**: los hijos de un grupo se listan de ADELANTE hacia
    atrás. Un `add_*` con `group=` entra al FONDO (detrás de la panza,
    invisible). Hay que sacarlo a la raíz y volver a meterlo con `place:"front"`.
+   Dentro del grupo, en cambio, el orden es el de creación: lo que se agrega
+   PRIMERO queda adelante. Al dibujar un objeto, agregar de adelante hacia
+   atrás (los renglones antes que las hojas del libro).
 2. **El linter miente con los blend states**: `validate_riv_structural` marca
    "transition-target-range" en los dos layers de mirada desde el día uno. Es
    falso positivo: en el runtime real la mirada anda. Confiar en `export_riv
@@ -181,6 +201,35 @@ con `next/dynamic` en el onboarding y en Inicio.
 3. **No calcular posiciones a ojo**: para calibrar la bombilla en la boca se
    midió leyendo píxeles del canvas (`scratchpad/rive-test/probe.js`). Reveló
    que la matemática estaba bien y el problema era el z-order.
-4. **rivemcp tiene cupo de exports** (3, parece que se renuevan por día).
+4. **Nunca escribir en un input de Rive desde el cleanup de un efecto.**
+   `useRive` se declara ANTES que tus efectos, así que al desmontar su cleanup
+   corre primero y destruye la instancia: escribir después tira "Cannot set
+   properties of null" y se lleva puesta la pantalla entera (pantalla blanca de
+   Next). Pasó con los gestos del chat, al terminar cada respuesta. El cleanup
+   solo corta el rAF; las escrituras por frame van con try/catch.
+5. **rivemcp tiene cupo de exports** (3, parece que se renuevan por día).
    Iterar sobre `save_session` —que escribe un .riv que anda— y gastar el
-   export solo para el archivo que se commitea.
+   export solo para el archivo que se commitea. Si el cupo se agotó, el
+   checkpoint de `save_session` sirve igual: el `.riv` de los gestos se
+   verificó en el navegador y se copió a `public/` desde ahí.
+6. **Lo que un gesto mueve, alguien lo tiene que devolver.** Rive no resetea:
+   una propiedad que solo escribe tu animación queda clavada en el último valor
+   cuando el gesto termina. Pasó con la inclinación del cuerpo al pensar: el
+   agentito quedaba torcido para siempre. Lo que escribe un layer más abajo se
+   arregla solo (la opacidad de las cejas la pone el layer del look cada frame);
+   lo demás hay que devolverlo a mano. `cuerpo.rotation` se resetea en
+   `sinMate`, no en `sinGesto`: el layer del mate corre ANTES, así que desde
+   `sinGesto` le pisábamos la inclinación de la cebada. Lo prueba
+   `scratchpad/drive-reset.js`, que prende y apaga cada gesto y mide la punta
+   de la antena.
+7. **El trim path se rompe si tocás la geometría después.** Para la ceja curva
+   se probó elipse + stroke + `set_trim_path`: el primer arco sale bien, pero
+   cambiar `width`/`height`/`rotation` lo parte en pedacitos y volver a aplicar
+   el trim no lo arregla. Terminó siendo tres barras redondeadas que arman el
+   arco — feo de escribir, pero se ve igual y no se rompe.
+8. **`move_object` conserva la APARIENCIA, y eso incluye la opacidad.** Sacar
+   un hijo de un grupo invisible a la raíz le escribe opacidad 0 encima para
+   que siga sin verse; al devolverlo al grupo, esa opacidad 0 QUEDA y el objeto
+   nunca más aparece. Pasó con el lápiz: se movió mientras `libreta` estaba en
+   0 y desapareció, aunque el orden de dibujo estuviera bien. Después de mover
+   algo dentro de un grupo apagado, revisar su opacidad con `get_object_info`.
