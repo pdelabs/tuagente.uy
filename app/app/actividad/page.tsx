@@ -21,7 +21,7 @@ import {
 import { EntityProvider } from "../lib/EntityViewer";
 import { useOpenEntity } from "../lib/entities";
 import {
-  Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner, inputCls,
+  Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, SOPORTE, Spinner, inputCls,
 } from "../lib/ui";
 
 type ActivityEvent = { ts: string; kind: string; label: string; status: string };
@@ -36,8 +36,35 @@ const WRAP = "mx-auto max-w-4xl px-6 py-6 md:px-8";
 // Kind crudo del adapter → rótulo legible (los chips salen de los datos).
 const KIND_LABEL: Record<string, string> = {
   job_run: "Tarea programada",
-  ticket: "Ticket",
+  ticket: "Tarea",
 };
+
+// El estado viene crudo del motor y en inglés (`commented`, `failed`…). Lo
+// mostrábamos tal cual en medio de una pantalla en español: un cliente de
+// prueba lo miró y pasó de largo ("yo esto no lo leo"). Lo que no está en la
+// tabla se muestra igual, crudo: preferimos una palabra rara a esconder un
+// estado nuevo que todavía no conocemos.
+const ESTADO_LABEL: Record<string, string> = {
+  created: "creada",
+  claimed: "la agarró",
+  running: "trabajando",
+  in_progress: "trabajando",
+  commented: "comentó",
+  blocked: "esperándote",
+  unblocked: "destrabada",
+  completed: "lista",
+  done: "lista",
+  failed: "falló",
+  error: "falló",
+  cancelled: "cancelada",
+  canceled: "cancelada",
+  archived: "archivada",
+  skipped: "salteada",
+  timeout: "se pasó de tiempo",
+  delivered: "entregada",
+  sent: "enviada",
+};
+const estadoLabel = (s: string) => ESTADO_LABEL[(s || "").toLowerCase()] ?? s;
 
 const GRUPOS: { key: Grupo; label: string; dot: [string, string] }[] = [
   // dot: [inactivo, activo] — sobre el chip activo (fondo ink) va el tono claro.
@@ -167,7 +194,7 @@ function Fila({ ev, ticketId }: { ev: ActivityEvent; ticketId?: string }) {
       <p className="min-w-0 flex-1 truncate text-sm text-ink">{ev.label}</p>
       <span className="flex shrink-0 items-center gap-2">
         <Chip>{KIND_LABEL[ev.kind] ?? ev.kind}</Chip>
-        {ev.status && <span className="text-[11px] text-ink-soft">{ev.status}</span>}
+        {ev.status && <span className="text-[11px] text-ink-soft">{estadoLabel(ev.status)}</span>}
       </span>
     </>
   );
@@ -486,6 +513,25 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
             </>
           ) : (
             <>
+              {/* Ver "falló" tres veces sin ninguna explicación deja al cliente
+                  con la preocupación y sin nada que hacer con ella. No podemos
+                  inventar la causa (el motor no la expone acá), pero sí decir
+                  lo que SÍ sabemos: que no se pierde trabajo y quién lo mira. */}
+              {grupo === "error" && (
+                <p className="mb-4 rounded-lg border border-c-amber bg-c-amber/25 px-3 py-2 text-[13px] leading-relaxed text-c-amber-ink">
+                  Que algo falle acá no significa que se haya perdido trabajo: las tareas
+                  programadas se vuelven a intentar en la próxima corrida. Si una misma
+                  falla se repite, la miramos nosotros.{" "}
+                  <a
+                    href={SOPORTE.whatsapp}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold underline underline-offset-2"
+                  >
+                    Escribinos si querés que la revisemos ahora
+                  </a>.
+                </p>
+              )}
               <div className="flex flex-col gap-6">
                 {grupos.map((g) => (
                   <section key={g.key}>

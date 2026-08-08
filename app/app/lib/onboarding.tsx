@@ -70,8 +70,8 @@ const PUNTOS = [
     key: "kanban",
     icon: Columns3,
     tono: "bg-c-amber",
-    titulo: "Tickets",
-    texto: "Cada pedido queda como un ticket que seguís de punta a punta.",
+    titulo: "Tablero",
+    texto: "Cada cosa que me pedís queda como una tarea, y ves en qué anda.",
   },
   {
     key: "approvals",
@@ -215,8 +215,12 @@ export default function Onboarding({ manifest, cfg, onDone }: {
         ) : (
           <div className="animate-fadeup">
             <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-ink-soft">
-              Encantado. Trabajo para tu empresa: me pedís cosas, las resuelvo
-              con tus sistemas y todo lo que hago queda a la vista acá.
+              {/* Sin género: el cliente le pone el nombre que quiere y
+                  "Encantado" con un nombre femenino se lee mal. Y sacamos "con
+                  tus sistemas": todavía no le conectó ninguno, así que sonaba
+                  a que alguien le dio sus cosas sin avisarle. */}
+              Un gusto. Trabajo para tu empresa: me pedís cosas en tus palabras, las
+              resuelvo y todo lo que hago queda a la vista acá.
             </p>
 
             {puntos.length > 0 && (

@@ -36,6 +36,7 @@ import {
   type TicketOutcome,
 } from "../lib/agent";
 import { loadAgentName } from "../lib/onboarding";
+import { AgentitoAvatar, loadAgentLook } from "../lib/agentito";
 import {
   Btn,
   Chip,
@@ -173,23 +174,27 @@ function describirError(e: unknown): string {
 
 /* ── Tablero ─────────────────────────────────────────────────────────────── */
 
-type ColKey = "blocked" | "active" | "done";
+type ColKey = "todo" | "blocked" | "active" | "done";
 
 const COLUMNS: {
   key: ColKey;
   label: string;
   chip: string;
-  tone: "violet" | "amber" | "green";
+  tone: "violet" | "amber" | "green" | "neutral";
   dot: string;
 }[] = [
-  { key: "blocked", label: "Esperando aprobación", chip: "Esperando aprobación", tone: "violet", dot: "bg-primary" },
+  // "Por hacer" = ready: creado y todavía nadie lo agarró. Antes vivía
+  // escondido en "En curso", mezclando la cola con lo que se trabaja de verdad.
+  { key: "todo", label: "Por hacer", chip: "Por hacer", tone: "neutral", dot: "bg-ink-soft/50" },
   { key: "active", label: "En curso", chip: "En curso", tone: "amber", dot: "bg-c-amber-ink" },
+  { key: "blocked", label: "Esperando aprobación", chip: "Esperando aprobación", tone: "violet", dot: "bg-primary" },
   { key: "done", label: "Completados", chip: "Completado", tone: "green", dot: "bg-c-green-ink" },
 ];
 
 // blocked y done tienen columna propia; ready, running y cualquier estado
 // desconocido caen en "En curso" (no ocultamos tickets por un estado nuevo).
 function columnOf(status: string): ColKey {
+  if (status === "ready") return "todo";
   if (status === "blocked") return "blocked";
   if (status === "done") return "done";
   return "active";
@@ -201,7 +206,11 @@ type Transicion = { status: EstadoDestino; label: string; enCurso: string; icon:
 
 function transicionesDe(status: string): Transicion[] {
   if (status === "blocked")
-    return [{ status: "ready", label: "Desbloquear", enCurso: "Desbloqueando…", icon: Unlock }];
+    // "Aprobar", igual que en la pestaña de Aprobaciones. Antes esta misma
+    // acción se llamaba "Desbloquear" acá, "Aprobar" allá y "se destraba" en
+    // la explicación: tres palabras para lo mismo, y el cliente sin saber si
+    // eran tres cosas distintas.
+    return [{ status: "ready", label: "Aprobar", enCurso: "Aprobando…", icon: Unlock }];
   if (status === "done")
     return [{ status: "ready", label: "Reabrir", enCurso: "Reabriendo…", icon: RotateCcw }];
   return [{ status: "done", label: "Marcar completado", enCurso: "Completando…", icon: Check }];
@@ -321,6 +330,8 @@ function Etiqueta({ children, opcional }: { children: string; opcional?: boolean
 type ComentarioLocal = TicketComment & { local: number };
 
 export default function PipelinePage() {
+  // La pinta del agente para el sello de sus comentarios (lazy: sin flash).
+  const [lookAgente] = useState(loadAgentLook);
   const [cfg] = useState<PortalConfig | null>(() => loadConfig());
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -482,7 +493,7 @@ export default function PipelinePage() {
   }, [tickets, tenant, busqueda]);
 
   const porColumna = useMemo(() => {
-    const m: Record<ColKey, Ticket[]> = { blocked: [], active: [], done: [] };
+    const m: Record<ColKey, Ticket[]> = { todo: [], blocked: [], active: [], done: [] };
     for (const t of visibles) m[columnOf(t.status)].push(t);
     for (const k of Object.keys(m) as ColKey[]) {
       m[k].sort(
@@ -598,7 +609,7 @@ export default function PipelinePage() {
   return (
     <div className={wrap}>
       <PageHeader
-        title="Pipeline"
+        title="Tablero"
         subtitle="Lo que tu agente tiene entre manos."
         actions={
           <>
@@ -637,7 +648,7 @@ export default function PipelinePage() {
       {tickets.length === 0 ? (
         <EmptyState
           icon={Inbox}
-          title="Todavía no hay tickets"
+          title="Todavía no hay tareas"
           hint="Creá la primera con “Nueva tarea”, o esperá a que tu agente arranque una."
         />
       ) : (
@@ -662,11 +673,11 @@ export default function PipelinePage() {
           {visibles.length === 0 ? (
             <EmptyState
               icon={SearchX}
-              title="Ningún ticket coincide"
+              title="Ninguna tarea coincide"
               hint="Probá con otra búsqueda o sacá el filtro."
             />
           ) : (
-            <div className="grid items-start gap-4 md:grid-cols-3">
+            <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
               {COLUMNS.map((col) => (
                 <section key={col.key} className="rounded-xl bg-black/[0.02] p-2">
                   <div className="flex items-center gap-2 px-2 pb-2 pt-1.5">
@@ -675,7 +686,7 @@ export default function PipelinePage() {
                     <span className="text-[12px] text-ink-soft">{porColumna[col.key].length}</span>
                   </div>
                   {porColumna[col.key].length === 0 ? (
-                    <p className="px-2 py-3 text-center text-[12px] text-ink-soft">Sin tickets</p>
+                    <p className="px-2 py-3 text-center text-[12px] text-ink-soft">Sin tareas</p>
                   ) : (
                     <ul className="flex flex-col gap-1.5">
                       {porColumna[col.key].map((t) => (
@@ -766,7 +777,7 @@ export default function PipelinePage() {
               </span>
             </label>
 
-            {crearError && <Aviso>No pude crear el ticket: {crearError}</Aviso>}
+            {crearError && <Aviso>No pude crear la tarea: {crearError}</Aviso>}
           </div>
 
           <div className="flex shrink-0 items-center justify-end gap-2 border-t border-black/[0.07] px-5 py-3">
@@ -780,7 +791,7 @@ export default function PipelinePage() {
                   Creando…
                 </>
               ) : (
-                "Crear ticket"
+                "Crear tarea"
               )}
             </Btn>
           </div>
@@ -804,7 +815,7 @@ export default function PipelinePage() {
                   </div>
                 </>
               ) : (
-                <h2 className="text-base font-bold leading-snug text-ink-soft">Abriendo ticket…</h2>
+                <h2 className="text-base font-bold leading-snug text-ink-soft">Abriendo la tarea…</h2>
               )}
             </div>
             <IconBtn label="Cerrar" onClick={cerrar}>
@@ -818,7 +829,7 @@ export default function PipelinePage() {
             {abierto?.body?.trim() ? (
               <Markdown>{abierto.body}</Markdown>
             ) : abierto ? (
-              <p className="text-sm text-ink-soft">Este ticket no tiene descripción.</p>
+              <p className="text-sm text-ink-soft">Esta tarea no tiene descripción.</p>
             ) : null}
 
             {/* Por qué el ticket quedó así. Sale del evento de cierre, no de
@@ -843,8 +854,14 @@ export default function PipelinePage() {
                   return (
                     <li
                       key={c.local != null ? `l${c.local}` : `s${i}`}
-                      className={`flex min-w-0 ${propio ? "justify-end" : "justify-start"}`}
+                      className={`flex min-w-0 items-start gap-2 ${propio ? "justify-end" : "justify-start"}`}
                     >
+                      {/* La carita del agente junto a SUS comentarios: el
+                          mismo sello estático del chat (Rive por comentario
+                          sería costo real en hilos largos). */}
+                      {!propio && (
+                        <AgentitoAvatar look={lookAgente} className="mt-0.5 h-7 w-7 shrink-0" />
+                      )}
                       <div
                         className={`min-w-0 max-w-[85%] rounded-lg border px-3 py-2 ${
                           propio
@@ -889,7 +906,7 @@ export default function PipelinePage() {
                 onKeyDown={(e) => {
                   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") comentar();
                 }}
-                placeholder="Escribile algo a tu agente sobre este ticket…"
+                placeholder="Escribile algo a tu agente sobre esta tarea…"
                 className={`${inputCls} resize-y`}
               />
               {comentarError && <div className="mt-2"><Aviso>{comentarError}</Aviso></div>}
@@ -940,7 +957,7 @@ export default function PipelinePage() {
               {confirmarArchivo ? (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[13px] text-ink">
-                    ¿Archivar el ticket? Sale del tablero.
+                    ¿Archivar la tarea? Sale del tablero.
                   </p>
                   <div className="flex shrink-0 gap-2">
                     <Btn

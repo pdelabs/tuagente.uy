@@ -53,7 +53,7 @@ function ConversacionDemo() {
           <Hand className="h-3 w-3 text-white" />
         </span>
         <p className="min-w-0 text-[12.5px] leading-relaxed text-ink">
-          Quedó todo menos un paso. Lo anoté en <EntityChipDemo>t_9f2a1c</EntityChipDemo> y
+          Quedó todo menos un paso. Lo anoté en <EntityChipDemo>Pedido a proveedores</EntityChipDemo> y
           te lo paso a aprobar.
         </p>
       </div>
@@ -80,7 +80,7 @@ export default function ChatIntro({ onOk }: IntroProps) {
           <Title>Hablale como a cualquiera del equipo</Title>
           <Lead>
             Pedile lo que necesites saber o encargale una tarea, escrito como te salga.
-            Trabaja con los sistemas que le conectaste y te contesta acá.
+            Si le falta algo para hacerlo — un archivo, un dato — te lo pide.
           </Lead>
         </div>
         <ConversacionDemo />
@@ -88,7 +88,8 @@ export default function ChatIntro({ onOk }: IntroProps) {
 
       <div className="mt-7 grid gap-4 md:grid-cols-2">
         <Point icon={Plug} title="Usa lo que le conectaste">
-          Consulta tus sistemas mientras te responde, y vas viendo qué está haciendo.
+          Mira tus sistemas conectados mientras te responde, y vas viendo qué está
+          haciendo. Los conectás en Conexiones.
         </Point>
         <Point icon={History} title="Las conversaciones quedan">
           Se guardan y las retomás cuando quieras: están listadas al costado.
@@ -96,8 +97,9 @@ export default function ChatIntro({ onOk }: IntroProps) {
         <Point icon={Hand} title="Frena si necesita tu ok">
           Cuando un paso pide tu visto bueno te consulta antes, en vez de seguir de largo.
         </Point>
-        <Point icon={Ticket} title="Cita tickets y archivos">
-          Cuando menciona uno lo abrís ahí mismo, sin salir de la conversación.
+        <Point icon={Ticket} title="Cita tareas y archivos">
+          Cuando menciona una tarea o un archivo, lo abrís ahí mismo, sin salir de la
+          conversación.
         </Point>
       </div>
     </IntroPage>

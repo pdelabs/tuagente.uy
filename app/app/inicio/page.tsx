@@ -22,13 +22,13 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
   Activity, ArrowRight, BarChart3, CheckCircle2, ChevronRight, Columns3,
-  FolderOpen, Hand, LayoutDashboard, MessageSquare, Plug, Plus, RefreshCw,
+  FolderOpen, Hand, LayoutDashboard, MessageSquare, Plug, Plus, RefreshCw, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
-  getActivity, getApprovals, getArtifacts, getConnections, getFiles, getManifest,
+  getActivity, getApprovals, getArtifacts, getConnections, getFiles, getFlujos, getManifest,
   getTickets, getUsage, loadConfig,
-  type ArtifactMeta, type Connection, type HttpError, type Manifest,
+  type ArtifactMeta, type Connection, type Flujo, type HttpError, type Manifest,
   type PortalConfig, type Ticket,
 } from "../lib/agent";
 import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
@@ -181,8 +181,12 @@ function dotCls(kind: string, status: string): string {
 
 // blocked y done son propios; ready, running y cualquier estado nuevo caen en
 // "en curso" (no escondemos tareas por un estado que todavía no conocemos).
-function columna(status: string): "esperando" | "curso" | "hechas" {
+function columna(status: string): "porHacer" | "curso" | "esperando" | "hechas" {
   const s = (status || "").toLowerCase();
+  // Las mismas cuatro columnas que el Tablero, en el mismo orden. Antes acá
+  // eran tres y "ready" caía dentro de "En curso": el cliente veía "0 en
+  // curso" en el Tablero y otro número en Inicio para las mismas tareas.
+  if (s === "ready") return "porHacer";
   if (s === "blocked") return "esperando";
   if (s === "done") return "hechas";
   return "curso";
@@ -263,12 +267,13 @@ function Vacio({ children }: { children: ReactNode }) {
 function Metrica({ valor, label, tone }: {
   valor: number;
   label: string;
-  tone: "violet" | "amber" | "green";
+  tone: "violet" | "amber" | "green" | "neutral";
 }) {
   const tones = {
     violet: "bg-c-violet/50",
     amber: "bg-c-amber/50",
     green: "bg-c-green/50",
+    neutral: "bg-black/[0.04]",
   };
   return (
     <div className={`rounded-lg px-3 py-2.5 ${tones[tone]}`}>
@@ -370,6 +375,40 @@ function Atencion({ pendientes }: { pendientes: Approval[] }) {
   );
 }
 
+/** "¿Qué hace este señor por mí?" — la pregunta que el portal no contestaba en
+ *  ninguna pantalla. Se arma con los flujos del cliente y su propio texto. */
+function QueHace({ flujos }: { flujos: Flujo[] }) {
+  const activos = flujos.filter((f) => f.estado !== "pausado").slice(0, 4);
+  if (activos.length === 0) {
+    return (
+      <Card>
+        <p className="text-sm font-bold text-ink">Todavía no tenés trabajos armados</p>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+          Un trabajo es algo que tu agente hace siempre igual — un resumen los lunes, un
+          informe cada vez que le pasás algo. Contale por el chat qué tarea te come tiempo
+          y lo deja armado.
+        </p>
+        <div className="mt-3"><LinkBtn href="/app/chat" size="sm">Contarle qué necesito</LinkBtn></div>
+      </Card>
+    );
+  }
+  return (
+    <Seccion titulo="Qué hace por vos" icon={Workflow} href="/app/flujos" ver="Ver todos">
+      <ul className="flex flex-col gap-2">
+        {activos.map((f) => (
+          <li key={f.slug} className="flex gap-2">
+            <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
+            <p className="min-w-0 text-[13px] leading-relaxed text-ink-soft">
+              <span className="font-semibold text-ink">{f.nombre}</span>
+              {f.para_cliente ? ` — ${f.para_cliente}` : ""}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </Seccion>
+  );
+}
+
 // ── pantalla ──────────────────────────────────────────────────────────────
 
 export default function InicioPage() {
@@ -396,6 +435,7 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
   const [artefactos, setArtefactos] = useState<Slot<ArtifactMeta[]>>({ t: "cargando" });
   const [archivos, setArchivos] = useState<Slot<Archivo[]>>({ t: "cargando" });
   const [uso, setUso] = useState<Slot<Uso>>({ t: "cargando" });
+  const [flujos, setFlujos] = useState<Slot<Flujo[]>>({ t: "cargando" });
 
   const cargar = useCallback((silencioso = false) => {
     if (!silencioso) {
@@ -407,6 +447,7 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
       setArtefactos({ t: "cargando" });
       setArchivos({ t: "cargando" });
       setUso({ t: "cargando" });
+      setFlujos({ t: "cargando" });
     }
     setCargando(true);
 
@@ -453,6 +494,8 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
             () => getFiles(cfg).then((r) => arr<Archivo>(r?.files)), setArchivos),
           pedir(on("usage"), "el consumo",
             () => getUsage(cfg).then((r) => (r ?? {}) as Uso), setUso),
+          pedir(on("flujos"), "tus trabajos",
+            () => getFlujos(cfg).then((r) => arr<Flujo>(r?.flujos)), setFlujos),
         ]);
       })
       .then(() => { setCaidas(caidos); setUltima(new Date()); })
@@ -472,15 +515,27 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
   // ── derivados ──
   const tablero = useMemo(() => {
     if (tareas.t !== "listo") return null;
-    const c = { esperando: 0, curso: 0, hechas: 0 };
+    const c = { porHacer: 0, curso: 0, esperando: 0, hechas: 0 };
     for (const t of tareas.data) c[columna(t.status)]++;
     return { ...c, total: tareas.data.length };
   }, [tareas]);
 
   const ultimos = useMemo(() => {
     if (eventos.t !== "listo") return null;
+    // Una tarea deja varios eventos seguidos (creada, comentada, frenada) y
+    // acá se veían como cinco renglones idénticos: el cliente lee "cuatro
+    // veces la misma cosa" y deja de confiar en los números. En el resumen
+    // del día alcanza con lo último que le pasó a cada cosa; el detalle
+    // completo, con su estado, sigue en Actividad.
+    const vistos = new Set<string>();
     return [...eventos.data]
       .sort((a, b) => toMs(b.ts) - toMs(a.ts))
+      .filter((e) => {
+        const k = `${e.kind}|${(e.label || "").trim().toLowerCase()}`;
+        if (vistos.has(k)) return false;
+        vistos.add(k);
+        return true;
+      })
       .slice(0, 5);
   }, [eventos]);
 
@@ -547,7 +602,7 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
 
   if (!manifest) return <div className={WRAP}><Spinner /></div>;
 
-  const slots = [aprob, tareas, eventos, artefactos, archivos, uso];
+  const slots = [aprob, tareas, eventos, artefactos, archivos, uso, flujos];
   const esperando = slots.some((s) => s.t === "cargando");
   const nada = slots.every((s) => s.t === "off" || s.t === "falla");
 
@@ -616,6 +671,13 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
           {aprob.t === "cargando" && <Esqueleto filas={2} />}
           {aprob.t === "listo" && <Atencion pendientes={aprob.data} />}
 
+          {/* 1.5 · QUÉ HACE POR VOS. Faltaba y era lo primero que un cliente
+              nuevo busca: "en ninguna pantalla dice qué hace esto por MÍ".
+              No lo inventamos: son sus flujos, con el texto que ya está
+              escrito para él. Si todavía no tiene ninguno, lo decimos y le
+              mostramos por dónde se pide. */}
+          {flujos.t === "listo" && <QueHace flujos={flujos.data} />}
+
           {/* 2 · Cómo viene el tablero */}
           {tareas.t === "cargando" && <Esqueleto filas={1} />}
           {tablero && (
@@ -623,9 +685,10 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
               {tablero.total === 0 ? (
                 <Vacio>Todavía no hay tareas en el tablero.</Vacio>
               ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  <Metrica valor={tablero.esperando} label="Esperando aprobación" tone="violet" />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <Metrica valor={tablero.porHacer} label="Por hacer" tone="neutral" />
                   <Metrica valor={tablero.curso} label="En curso" tone="amber" />
+                  <Metrica valor={tablero.esperando} label="Esperando tu ok" tone="violet" />
                   <Metrica valor={tablero.hechas} label="Completadas" tone="green" />
                 </div>
               )}
@@ -659,7 +722,7 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
           {bloquesProducido.length > 0 && (
             <div className={`grid gap-3 ${bloquesProducido.length > 1 ? "md:grid-cols-2" : ""}`}>
               {recientes && recientes.length > 0 && (
-                <Seccion titulo="Lo último que produjo" icon={LayoutDashboard} href="/app/artefactos" ver="Ver artefactos">
+                <Seccion titulo="Lo último que produjo" icon={LayoutDashboard} href="/app/artefactos" ver="Ver entregas">
                   <ul className="-my-1">
                     {recientes.map((a) => (
                       <li key={a.id} className="flex items-center gap-2 py-1.5">
@@ -674,7 +737,7 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
               )}
 
               {entregables && entregables.length > 0 && (
-                <Seccion titulo="Entregables nuevos" icon={FolderOpen} href="/app/archivos" ver="Ver archivos">
+                <Seccion titulo="Archivos nuevos para vos" icon={FolderOpen} href="/app/archivos" ver="Ver archivos">
                   <ul className="-my-1">
                     {entregables.map((f) => (
                       <li key={f.path} className="flex items-center gap-2 py-1.5">

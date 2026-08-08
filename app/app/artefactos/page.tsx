@@ -141,7 +141,7 @@ function Miniatura({ cfg, id }: { cfg: PortalConfig; id: string }) {
           // Es una foto, no una app: nada de lo que traiga el artefacto corre acá.
           sandbox=""
           srcDoc={html}
-          title="Miniatura del artefacto"
+          title="Vista previa"
           aria-hidden
           tabIndex={-1}
           scrolling="no"
@@ -328,7 +328,7 @@ export default function ArtefactosPage() {
         <>
           <EmptyState
             icon={LayoutDashboard}
-            title="Este agente todavía no expone artefactos"
+            title="Este agente todavía no expone visualizaciones"
             hint="Su portal corre una versión anterior. Cuando se actualice, las visualizaciones que genere van a aparecer acá."
           />
           <div className="flex justify-center">
@@ -343,7 +343,7 @@ export default function ArtefactosPage() {
       return (
         <EmptyState
           icon={LayoutDashboard}
-          title="Tu agente todavía no creó ningún artefacto"
+          title="Tu agente todavía no armó ninguna visualización"
           hint="Los crea cuando conviene ver los datos en vez de leerlos: un gráfico, una tabla grande, un informe para abrir y mirar."
         />
       );
@@ -363,7 +363,7 @@ export default function ArtefactosPage() {
         {visibles.length === 0 ? (
           <EmptyState
             icon={SearchX}
-            title="Ningún artefacto coincide"
+            title="Ninguna visualización coincide"
             hint="Probá con otra búsqueda o sacá el filtro."
           />
         ) : (
@@ -395,7 +395,7 @@ export default function ArtefactosPage() {
               <input
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar artefacto…"
+                placeholder="Buscar…"
                 className={`${inputCls} pl-8`}
               />
             </div>
@@ -445,7 +445,7 @@ export default function ArtefactosPage() {
             {detalleErr ? (
               <div className="py-6">
                 <ErrorState
-                  message={`No pude abrir el artefacto (${detalleErr}).`}
+                  message={`No pude abrir la visualización (${detalleErr}).`}
                   onRetry={() => cargarDetalle(abierto)}
                 />
               </div>
@@ -479,10 +479,18 @@ export default function ArtefactosPage() {
                   </Btn>
                 </>
               ) : (
-                <Btn kind="danger" size="sm" onClick={() => setConfirmando(true)}>
+                /* Borrar en rojo, del mismo tamaño y al lado de Descargar,
+                   asustaba: "yo con el mouse soy torpe, ni lo toqué". La
+                   confirmación ya existía, pero el botón de arranque no tiene
+                   por qué gritar. Queda como texto discreto; el rojo aparece
+                   recién al confirmar, que es cuando importa. */
+                <button
+                  onClick={() => setConfirmando(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-medium text-ink-soft transition hover:bg-c-coral/40 hover:text-c-coral-ink"
+                >
                   <Trash2 className="h-3.5 w-3.5" />
                   Borrar
-                </Btn>
+                </button>
               )}
             </div>
           </div>

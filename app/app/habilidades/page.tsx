@@ -32,6 +32,22 @@ const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
 const GENERAL = "General";
 
+// Las categorías vienen del motor y están en inglés ("productivity",
+// "autonomous-ai-agents", "email"): en una pantalla que por lo demás habla en
+// uruguayo, quedaban como títulos gritados en otro idioma. Lo que no está acá
+// se muestra como viene: preferimos una palabra rara a esconder un grupo nuevo.
+const CATEGORIA_ES: Record<string, string> = {
+  productivity: "Documentos y planillas",
+  "autonomous-ai-agents": "Programación",
+  email: "Correo",
+  research: "Investigación",
+  "sales-ops": "Ventas",
+  data: "Datos",
+  media: "Audio, video e imágenes",
+  web: "Web",
+};
+const categoriaEs = (c: string) => CATEGORIA_ES[(c || "").toLowerCase()] ?? legible(c);
+
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -89,6 +105,8 @@ function EditorSkill({ cfg, name, onCerrar, onGuardada }: {
 }) {
   const [encabezado, setEncabezado] = useState("");
   const [contenido, setContenido] = useState<string | null>(null);
+  // El texto tal como estaba al abrir: sin esto, editar es un camino de ida.
+  const [original, setOriginal] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [listo, setListo] = useState(false);
@@ -101,6 +119,7 @@ function EditorSkill({ cfg, name, onCerrar, onGuardada }: {
         const { encabezado: enc, cuerpo } = separar(r.content);
         setEncabezado(enc);
         setContenido(cuerpo);
+        setOriginal(cuerpo);
       })
       .catch((e: HttpError) => { if (vivo) setErr(e.message || "No pude abrir la habilidad."); });
     return () => { vivo = false; };
@@ -121,8 +140,18 @@ function EditorSkill({ cfg, name, onCerrar, onGuardada }: {
   }
   if (contenido === null) return <div className="mt-3"><Spinner /></div>;
 
+  const sucio = original !== null && contenido !== original;
+
   return (
     <div className="mt-3">
+      {/* Esto cambia cómo trabaja el agente. Decirlo antes, no después: un
+          cliente de prueba vio el botón "Editar" y no lo tocó por miedo a
+          romper algo sin vuelta atrás. Ahora la vuelta atrás existe. */}
+      <p className="mb-2 rounded-lg border border-c-amber bg-c-amber/25 px-3 py-2 text-[12px] leading-relaxed text-c-amber-ink">
+        Esto es la instrucción que sigue tu agente para esta habilidad. Si lo cambiás,
+        cambia cómo trabaja. Podés volver a como estaba mientras no cierres, y si algo
+        queda raro, escribinos y lo dejamos como antes.
+      </p>
       <textarea
         value={contenido}
         onChange={(e) => { setContenido(e.target.value); setListo(false); }}
@@ -133,6 +162,11 @@ function EditorSkill({ cfg, name, onCerrar, onGuardada }: {
         <Btn size="sm" onClick={guardar} disabled={guardando || !contenido.trim()}>
           {guardando ? "Guardando…" : "Guardar"}
         </Btn>
+        {sucio && (
+          <Btn kind="ghost" size="sm" onClick={() => { setContenido(original); setListo(false); }}>
+            Volver a como estaba
+          </Btn>
+        )}
         <Btn kind="ghost" size="sm" onClick={onCerrar}>Cerrar</Btn>
         {listo && (
           <span className="text-[12px] font-medium text-c-green-ink">
@@ -222,7 +256,7 @@ export default function CapacidadesPage() {
       if (!b) return -1;
       return legible(a).localeCompare(legible(b), "es");
     })) {
-      grupos.push({ key: c || "__general", label: c ? legible(c) : GENERAL, items: porCat.get(c)! });
+      grupos.push({ key: c || "__general", label: c ? categoriaEs(c) : GENERAL, items: porCat.get(c)! });
     }
     return grupos;
   }, [sistema]);
@@ -281,7 +315,7 @@ export default function CapacidadesPage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <p className="break-words text-sm font-semibold text-ink">{s.nombre}</p>
-                        {s.cat && <Chip tone="violet">{legible(s.cat)}</Chip>}
+                        {s.cat && <Chip tone="violet">{categoriaEs(s.cat)}</Chip>}
                       </div>
                       {s.resumen && (
                         <p className="mt-0.5 break-words text-[13px] leading-snug text-ink-soft">

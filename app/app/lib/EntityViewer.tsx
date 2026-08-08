@@ -100,7 +100,7 @@ function EntityViewer({ cfg, entity, onClose }: {
       const faltante = {
         ticket: "Ese ticket ya no existe.",
         artifact: "Ese artefacto ya no está disponible.",
-        file: "No encontré ese archivo en el workspace.",
+        file: "No encontré ese archivo.",
         conexion: "",
       }[entity.kind];
       setErr(msg.startsWith("404") ? faltante : msg);
@@ -148,7 +148,7 @@ function EntityViewer({ cfg, entity, onClose }: {
                 )}
               </>
             ) : (
-              <Chip>archivo del workspace</Chip>
+              <Chip>archivo</Chip>
             )}
           </div>
         </div>

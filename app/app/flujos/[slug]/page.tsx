@@ -224,7 +224,7 @@ function PedirCambio({ cfg, flujo }: { cfg: PortalConfig; flujo: FlujoDetalle })
         </div>
         {listo && (
           <p className="text-[13px] font-medium text-c-green-ink">
-            Pedido. Lo ves avanzar en el Pipeline, y estas instrucciones se actualizan solas.
+            Pedido. Lo ves avanzar en el Tablero, y estas instrucciones se actualizan solas.
           </p>
         )}
         {err && <p className="text-[13px] font-medium text-c-coral-ink">{err}</p>}
