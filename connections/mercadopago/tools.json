@@ -1,0 +1,17 @@
+{
+  "conexion": "mercadopago",
+  "servidor": "mercadopago-mcp (nuestro)",
+  "fuente": "escrito por nosotros — ver mcp/",
+  "auditado": "2026-08-09",
+  "nota": "El MCP OFICIAL de Mercado Pago (mercadolibre/mercadopago-mcp-server) NO sirve para esto: sus herramientas son de desarrollo — buscar documentacion, crear aplicaciones, configurar webhooks, generar usuarios de prueba. Un dueño de PyME no quiere 'crear test users', quiere saber quien no le pago. Por eso escribimos el nuestro contra la API REST.",
+  "tools": {
+    "cobros_del_periodo":  { "clase": "lee",   "que_hace": "Cuanto entro entre dos fechas, con el desglose por medio de pago." },
+    "buscar_cobros":       { "clase": "lee",   "que_hace": "Busca pagos por estado, fecha o referencia." },
+    "ver_cobro":           { "clase": "lee",   "que_hace": "El detalle de un cobro: quien, cuanto, como y cuando." },
+    "cobros_pendientes":   { "clase": "lee",   "que_hace": "Lo que quedo pendiente o rechazado y todavia no entro." },
+    "crear_link_de_cobro": { "clase": "actua", "que_hace": "Genera un link para cobrarle a alguien.",
+                             "por_que_actua": "No mueve plata sola, pero crea algo que sale a nombre de la empresa y se le manda a un cliente. Si sale mal, sale mal con el nombre del negocio adelante." },
+    "devolver_cobro":      { "clase": "actua", "que_hace": "Devuelve un pago, total o parcialmente.",
+                             "por_que_actua": "SACA PLATA de la cuenta y no se puede deshacer. Aunque el cliente prenda 'puede escribir', esta ademas tiene que pasar por la puerta de aprobacion." }
+  }
+}

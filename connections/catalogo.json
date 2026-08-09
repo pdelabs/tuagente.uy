@@ -114,6 +114,22 @@
       "como": "Un administrador del Slack instala la app y nos pasa el token.",
       "esfuerzo": "minutos",
       "quien": "asistido"
+    },
+    {
+      "id": "mercadopago",
+      "label": "Mercado Pago",
+      "grupo": "sistema",
+      "para_que": "Que el agente vea tus cobros: cuánto entró, quién no pagó y qué quedó pendiente.",
+      "como": "Con una clave que sacás de tu panel de Mercado Pago. Te decimos dónde encontrarla y la cargamos nosotros, así no la pegás en ninguna pantalla.",
+      "detecta": {
+        "env": [
+          "MP_ACCESS_TOKEN"
+        ]
+      },
+      "esfuerzo": "minutos",
+      "quien": "asistido",
+      "recomendado": true,
+      "nota_interna": "Access Token de produccion. El MCP oficial de MP NO sirve para esto (es de desarrollo: docs, apps, webhooks, test users); el nuestro esta en connections/mercadopago/mcp/."
     }
   ]
 }
