@@ -156,11 +156,23 @@ export const guardarIdentidad = (
   identidad: {
     nombre?: string;
     look?: Record<string, number>;
+    /** Quién es el CLIENTE (adapter 0.32+). El nombre del negocio se usa para
+     *  hablarle de lo suyo por su nombre; la url dispara el brief (el agente
+     *  investiga su propia empresa y entrega un borrador). */
+    empresa?: string;
+    url?: string;
+    /** Por dónde le avisa el agente. El aviso lo manda ÉL, no nosotros. */
+    contacto?: { canal: "telegram" | "correo" | "ninguno"; valor?: string };
     /** Captura PNG (base64 pelado) del agentito al bautizarlo: el agente la
      *  guarda y un tool nuestro la sube como foto del bot de Telegram. */
     avatar_png?: string;
   },
 ) => post<{ ok: boolean }>(c.adapter, "/portal/identity", c, identidad);
+/** Cambiar qué puede hacer el agente con una conexión. Solo el cliente. */
+export const guardarPermisos = (
+  c: PortalConfig, id: string, permisos: { leer?: boolean; actuar?: boolean },
+) => post<{ ok: boolean; permisos: { leer: boolean; actuar: boolean } }>(
+  c.adapter, `/portal/connections/${encodeURIComponent(id)}/permisos`, c, permisos);
 export const getActivity = (c: PortalConfig) => get<{ events: any[] }>(c.adapter, "/portal/activity", c);
 export const getFiles = (c: PortalConfig) => get<{ files: any[] }>(c.adapter, "/portal/files", c);
 export const getFileText = async (c: PortalConfig, path: string) => {
@@ -258,6 +270,10 @@ export type Connection = {
   falta_previo: { tipo: string; nombre: string }[];
   /** true si el flujo de ESTE cliente la necesita (adapter ≥0.24). */
   requerida?: boolean;
+  /** Qué puede hacer el agente con esta conexión (adapter ≥0.33). Lo decide el
+   *  cliente y se aplica en el guardia, no en el prompt: el agente no puede
+   *  cambiarlo (el archivo está montado de solo lectura de su lado). */
+  permisos?: { leer: boolean; actuar: boolean };
   /** "google-oauth" = el portal la conecta solo con su diálogo (adapter ≥0.25);
    *  sin flujo, el botón cae a "Pedir que la conecten". */
   flujo?: string | null;
@@ -411,6 +427,15 @@ export async function sessionChatStream(
         case "assistant.delta":
           if (typeof data.delta === "string" && data.delta) h.onDelta?.(data.delta);
           break;
+        // OJO: en el stream de sesión `tool.progress` NO es el aviso de que
+        // arranca una herramienta — es el canal del pensamiento
+        // (`tool_name: "_thinking"`). El nombre real viene en `tool.started`.
+        // Escuchando solo progress, una conversación RETOMADA se quedaba en
+        // "Pensando" de punta a punta aunque el agente estuviera navegando y
+        // corriendo comandos: 38 herramientas y el cliente viendo un puntito.
+        // (En conversación nueva no pasaba: ese camino es el OpenAI, que sí
+        // manda `hermes.tool.progress` con el nombre.)
+        case "tool.started":
         case "tool.progress":
           if (typeof data.tool_name === "string") h.onToolProgress?.(data.tool_name);
           break;
@@ -485,4 +510,23 @@ export async function chatStream(
     }
   }
   return acc;
+}
+
+/** Rótulo de una conexión por su id, para nombrarla donde el cliente la
+ *  necesita. Los ids del catálogo (`correo`, `google-workspace`) son nuestros;
+ *  el cliente nunca los tiene que leer. Si el catálogo no está a mano, cae a
+ *  algo legible en vez de escupir el id. */
+export function etiquetaConexion(id: string, conexiones?: Connection[] | null): string {
+  const c = conexiones?.find((x) => x.id === id);
+  if (c?.label) return c.label;
+  const CONOCIDAS: Record<string, string> = {
+    correo: "el correo de la empresa",
+    telegram: "Telegram",
+    whatsapp: "WhatsApp",
+    slack: "Slack",
+    "google-workspace": "Google Planillas y Drive",
+    "gmail-lectura": "Gmail",
+    "modelos-auxiliares": "los modelos de IA auxiliares",
+  };
+  return CONOCIDAS[id] ?? id.replace(/-/g, " ");
 }

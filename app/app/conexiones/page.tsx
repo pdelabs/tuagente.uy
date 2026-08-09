@@ -27,16 +27,21 @@ import {
   ArrowRight, Check, Clock, ExternalLink, Link2, Plug, RefreshCw, TriangleAlert,
 } from "lucide-react";
 import {
-  getConnections, getTickets, loadConfig, MARCA_PEDIDO, PREFIJO_PEDIDO,
+  etiquetaConexion, getConnections, getTickets, loadConfig, MARCA_PEDIDO, PREFIJO_PEDIDO,
   type Connection, type PortalConfig, type Ticket,
 } from "../lib/agent";
 import { ConexionLogo } from "../lib/ConexionLogo";
+import Permisos from "../lib/Permisos";
 import {
   Btn, Card, Chip, EmptyState, ErrorState, Modal, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
+
+/** Búsqueda insensible a tildes y mayúsculas. */
+const norm = (t: string) =>
+  t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 const ESFUERZO: Record<string, string> = {
   minutos: "Se conecta en minutos",
@@ -270,6 +275,45 @@ export default function ConexionesPage() {
   // conectar" y no tenía forma de saber si ya lo había pedido o no.
   const [pedidosAbiertos, setPedidosAbiertos] = useState<Set<string>>(new Set());
   const [dialogo, setDialogo] = useState<Connection | null>(null);
+  // El catálogo entero vive detrás de una puerta: se abre solo si el cliente
+  // lo pide, o si viene a buscar una conexión que está ahí adentro.
+  const [verTodas, setVerTodas] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  // A qué conexión viene el cliente. Llega en el hash desde el flujo que la
+  // necesita: sin esto aterriza en una pantalla con seis tarjetas y ninguna
+  // le dice cuál era la suya. Va por hash y no por query para no romper el
+  // export estático ni pelearse con el magic link.
+  const [buscada, setBuscada] = useState<string | null>(null);
+  useEffect(() => {
+    const leer = () => {
+      const m = window.location.hash.match(/(?:^#|&)c=([^&]+)/);
+      setBuscada(m ? decodeURIComponent(m[1]) : null);
+    };
+    leer();
+    window.addEventListener("hashchange", leer);
+    return () => window.removeEventListener("hashchange", leer);
+  }, []);
+
+  // Traerla a la vista cuando ya está pintada. Card no toma ref (React 18),
+  // así que se busca por la clase marcadora.
+  // Si la que viene a conectar está en el catálogo de abajo, se abre sola:
+  // mandarlo a una pantalla donde su tarjeta está escondida seria peor que
+  // no mandarlo.
+  useEffect(() => {
+    if (buscada && conexiones?.some((c) => c.id === buscada
+      && c.estado !== "conectado" && !(c.requerida || c.estado === "lista"))) {
+      setVerTodas(true);
+    }
+  }, [buscada, conexiones]);
+
+  useEffect(() => {
+    if (!buscada) return;
+    const t = setTimeout(() => {
+      document.querySelector(".conexion-buscada")
+        ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 150);
+    return () => clearTimeout(t);
+  }, [buscada, conexiones]);
 
   useEffect(() => setCfg(loadConfig()), []);
 
@@ -343,13 +387,20 @@ export default function ConexionesPage() {
   // Lo que puede resolver EL CLIENTE ahora mismo va arriba y separado: una
   // conexión con flujo self-service sin conectar, un bot esperando su primer
   // mensaje, o algo que su flujo necesita. El resto se agrupa como siempre.
-  const dependeDelCliente = (c: Connection) =>
-    c.estado !== "conectado" && c.estado !== "bloqueado" &&
-    (Boolean(c.flujo) || c.estado === "lista" || Boolean(c.requerida));
-  const paraVos = conexiones.filter(dependeDelCliente);
-  const resto = conexiones.filter((c) => !dependeDelCliente(c));
-  const canales = resto.filter((c) => c.grupo === "canal");
-  const sistemas = resto.filter((c) => c.grupo !== "canal");
+  // TRES ZONAS, y el orden importa. Antes se agrupaba por "¿la podés conectar
+  // vos solo?" y por grupo (canal/sistema): salía Google arriba de todo sin
+  // que nadie se lo hubiera pedido, y el correo —que un flujo necesitaba— se
+  // perdía entre seis tarjetas iguales. Ahora manda una sola pregunta: ¿algo
+  // la necesita HOY? Eso lo contestan los flujos, y se actualiza solo.
+  const hacenFalta = conexiones.filter(
+    (c) => c.estado !== "conectado" && (c.requerida || c.estado === "lista"));
+  const andando = conexiones.filter((c) => c.estado === "conectado");
+  const otras = conexiones.filter(
+    (c) => !hacenFalta.includes(c) && !andando.includes(c));
+  const q = norm(busqueda.trim());
+  const otrasFiltradas = q
+    ? otras.filter((c) => norm(`${c.label} ${c.para_que}`).includes(q))
+    : otras;
 
   /** ¿Ya la pediste? Sale del tablero (sobrevive a recargar) o de lo que
    *  acabás de hacer en esta pantalla. */
@@ -360,7 +411,9 @@ export default function ConexionesPage() {
     <Card
       key={c.id}
       className={`flex flex-col gap-2 p-4 ${
-        c.requerida && c.estado !== "conectado" ? "!border !border-c-amber" : ""
+        c.id === buscada
+          ? "conexion-buscada !border-2 !border-primary ring-4 ring-primary/15"
+          : c.requerida && c.estado !== "conectado" ? "!border !border-c-amber" : ""
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -405,6 +458,12 @@ export default function ConexionesPage() {
           estar autenticado en el portal + tener el DM es la doble prueba. */}
       {c.estado === "lista" && c.link && (
         <TelegramLista c={c} cfg={cfg} onActivada={cargar} />
+      )}
+
+      {/* Los permisos solo tienen sentido cuando la conexión existe: antes de
+          conectarla no hay nada que limitar. */}
+      {c.estado === "conectado" && (
+        <div className="mt-1"><Permisos conexion={c} /></div>
       )}
 
       {c.estado !== "conectado" && c.estado !== "lista" && (
@@ -471,6 +530,20 @@ export default function ConexionesPage() {
         }
       />
 
+      {/* De dónde venís. Sin esto el cliente aterriza en seis tarjetas y
+          ninguna le dice cuál era la suya: "te perdés en todo lo que hay". */}
+      {buscada && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-c-amber bg-c-amber/25 px-3 py-2.5">
+          <TriangleAlert className="h-4 w-4 shrink-0 text-c-amber-ink" />
+          <p className="text-[13px] font-semibold text-c-amber-ink">
+            Venís a conectar {etiquetaConexion(buscada, conexiones)}.
+          </p>
+          <p className="text-[12.5px] text-c-amber-ink/85">
+            Es la que te falta para uno de tus flujos — te la marcamos abajo.
+          </p>
+        </div>
+      )}
+
       {error && (
         <p className="mb-4 inline-flex rounded-lg border border-c-coral bg-c-coral/40 px-3 py-1.5 text-[12px] font-medium text-c-coral-ink">
           No pude actualizar recién ({error}).
@@ -494,28 +567,85 @@ export default function ConexionesPage() {
         />
       ) : (
         <div className="flex flex-col gap-6">
-          {paraVos.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-c-amber-ink">
-                Dependen de vos
+          {/* 1 · Lo que hace falta ahora. Sale de los flujos: si el cliente
+              pide un trabajo que necesita el correo, el correo aparece acá
+              ese mismo día. */}
+          {hacenFalta.length > 0 && (
+            <section className="mb-6">
+              <h2 className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-c-amber-ink">
+                Le hacen falta a tu agente
               </h2>
-              <div className="grid gap-3 md:grid-cols-2">{paraVos.map(tarjeta)}</div>
+              <p className="mb-2.5 text-[13px] text-ink-soft">
+                Sin esto, alguno de tus trabajos queda a medias.
+              </p>
+              <div className="grid gap-3 md:grid-cols-2">{hacenFalta.map(tarjeta)}</div>
             </section>
           )}
-          {canales.length > 0 && (
-            <section>
+
+          {/* 2 · Lo que ya anda. Compacto: es una señal de tranquilidad, no
+              algo para leer todos los días. */}
+          {andando.length > 0 && (
+            <section className="mb-6">
               <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
-                Por dónde le hablás
+                Andando
               </h2>
-              <div className="grid gap-3 md:grid-cols-2">{canales.map(tarjeta)}</div>
+              <Card className="!p-2">
+                <div className="flex flex-col">
+                  {andando.map((c) => (
+                    <details key={c.id} className="group px-2 py-1.5">
+                      <summary className="flex cursor-pointer list-none items-center gap-2.5 [&::-webkit-details-marker]:hidden">
+                        <ConexionLogo id={c.id} />
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
+                          {c.label}
+                        </span>
+                        <span className="text-[12px] font-medium text-ink-soft transition group-open:text-ink">
+                          Permisos
+                        </span>
+                        <Chip tone="green"><Check className="h-3 w-3" /> Conectado</Chip>
+                      </summary>
+                      <div className="ml-11 mt-2 max-w-sm"><Permisos conexion={c} /></div>
+                    </details>
+                  ))}
+                </div>
+              </Card>
             </section>
           )}
-          {sistemas.length > 0 && (
+
+          {/* 3 · El catálogo entero, detrás de una puerta. Nadie necesita ver
+              WhatsApp y Slack todos los días; el que los busca, los busca. */}
+          {otras.length > 0 && (
             <section>
-              <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
-                Sistemas de tu empresa
-              </h2>
-              <div className="grid gap-3 md:grid-cols-2">{sistemas.map(tarjeta)}</div>
+              {!verTodas ? (
+                <Btn kind="secondary" onClick={() => setVerTodas(true)}>
+                  <Plug className="h-4 w-4" />
+                  Ver todo lo que se puede conectar ({otras.length})
+                </Btn>
+              ) : (
+                <>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
+                      Todo lo que se puede conectar
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <input
+                        autoFocus
+                        value={busqueda}
+                        onChange={(e) => setBusqueda(e.target.value)}
+                        placeholder="Buscar…"
+                        className={`${inputCls} w-44 py-1.5 text-[13px]`}
+                      />
+                      <Btn kind="ghost" size="sm" onClick={() => { setVerTodas(false); setBusqueda(""); }}>
+                        Ocultar
+                      </Btn>
+                    </div>
+                  </div>
+                  {otrasFiltradas.length === 0 ? (
+                    <p className="text-[13px] text-ink-soft">Nada coincide con esa búsqueda.</p>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2">{otrasFiltradas.map(tarjeta)}</div>
+                  )}
+                </>
+              )}
             </section>
           )}
         </div>
