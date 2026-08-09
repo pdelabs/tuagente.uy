@@ -48,3 +48,33 @@ escribe en disco y baja lo que le manden.
 
 La pantalla del QR en el portal. El bridge lo expone; el portal todavía no lo
 muestra. Sin eso, aparear es una tarea nuestra por consola.
+
+---
+
+## Lo que costó ponerlo a andar (9/8/2026)
+
+El repo **no funciona como viene**. Queda anotado porque es el costo real de
+esta vía, y se va a repetir cada vez que Meta mueva algo.
+
+1. **`Client outdated (405)`** — el repo pinnea whatsmeow de marzo 2025 y
+   WhatsApp ya no lo acepta. Hubo que subirlo a la versión de agosto 2026.
+2. **Cinco cambios de API** en whatsmeow al actualizar: `Download`,
+   `sqlstore.New`, `GetFirstDevice`, `GetGroupInfo` y `Contacts.GetContact`
+   ahora piden `context.Context`. Y Go 1.25 como mínimo.
+3. **El pareo arrancaba solo** al levantar el contenedor: pedía un QR que
+   nadie miraba, se vencía a los 3 minutos, reiniciaba y volvía a pedir otro
+   — quemando sesiones para siempre. Ahora es a demanda.
+
+Los parches están en `bridge/main.go.patch`. Al actualizar el upstream hay que
+reaplicarlos.
+
+## Nuestros parches al bridge
+
+- **Pareo a demanda**: `POST /pair/start`, `GET /pair/status`,
+  `GET /pair/qr.png`. El REST arranca siempre, con o sin sesión.
+- **QR como PNG** además del de terminal, para que el portal lo muestre.
+
+El adapter los proxea con auth (`/portal/connections/whatsapp/pair/*`) y el
+portal tiene su propio diálogo, `DialogoWhatsApp.tsx`. El QR se trae por fetch
+con bearer y se dibuja como blob: un `<img src>` no manda el header, y un
+código de pareo no puede quedar abierto.

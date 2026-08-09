@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.33.0"
+VERSION = "0.34.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -889,6 +889,19 @@ def _lista_flujo_conexiones(f):
         return _lista(_frontmatter_plano(md).get("conexiones"))
     except OSError:
         return []
+
+
+WHATSAPP_BRIDGE = os.environ.get("WHATSAPP_BRIDGE_URL", "http://whatsapp-bridge:8080")
+
+
+def _bridge(ruta, metodo="GET", crudo=False):
+    """Habla con el puente de WhatsApp. Vive en la red interna del compose: no
+    esta publicado al host y el agente no lo alcanza — solo el adapter, y solo
+    para la plomeria del pareo. Las herramientas del agente pasan por la
+    guardia, nunca por aca."""
+    req = urllib.request.Request(f"{WHATSAPP_BRIDGE}{ruta}", method=metodo)
+    with urllib.request.urlopen(req, timeout=8) as r:
+        return r.read() if crudo else json.loads(r.read().decode("utf-8"))
 
 
 def politica():
@@ -1884,6 +1897,24 @@ class Handler(BaseHTTPRequestHandler):
         if db is None:
             return self._send(404, {"error": "board not found"})
         try:
+            if path == "/portal/connections/whatsapp/pair":
+                try:
+                    return self._send(200, _bridge("/pair/status"))
+                except (urllib.error.URLError, OSError, ValueError) as e:
+                    return self._send(503, {"error": f"el puente de WhatsApp no responde: {e}"})
+            if path == "/portal/connections/whatsapp/pair/qr.png":
+                try:
+                    png = _bridge("/pair/qr.png", crudo=True)
+                except (urllib.error.URLError, OSError) as e:
+                    return self._send(404, {"error": f"todavia no hay QR ({e})"})
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Cache-Control", "no-store")
+                self._cors()
+                self.send_header("Content-Length", str(len(png)))
+                self.end_headers()
+                self.wfile.write(png)
+                return
             if path == "/portal/manifest":
                 return self._send(200, manifest())
             if path == "/portal/capabilities":
@@ -2165,6 +2196,11 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return self._send(400, {"error": "invalid JSON body"})
             return self._guardar_identidad(body)
+        if path == "/portal/connections/whatsapp/pair/start":
+            try:
+                return self._send(200, _bridge("/pair/start", metodo="POST"))
+            except (urllib.error.URLError, OSError, ValueError) as e:
+                return self._send(503, {"error": f"el puente de WhatsApp no responde: {e}"})
         m = re.match(r"^/portal/connections/([a-z0-9-]{1,40})/permisos$", path)
         if m:
             body = self._read_json_body()

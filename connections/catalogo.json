@@ -59,10 +59,11 @@
           "WHATSAPP_ENABLED"
         ]
       },
-      "como": "Es el más lento de todos: la vía oficial pide verificación de empresa ante Meta y lleva días. Lo tramitamos nosotros.",
+      "como": "Dos caminos. El oficial pide verificación de empresa ante Meta y lleva días: lo tramitamos nosotros y es el único apto para la línea comercial. El rápido se aparea escaneando un QR desde el portal, en minutos — pero WhatsApp puede bloquear ese número.",
       "esfuerzo": "dias",
       "quien": "nosotros",
-      "advertencia": "El atajo de vincular por código QR pone en riesgo la linea comercial: WhatsApp puede bloquearla. No lo usamos en números que la empresa necesita."
+      "advertencia": "El atajo de vincular por código QR pone en riesgo la linea comercial: WhatsApp puede bloquearla. No lo usamos en números que la empresa necesita.",
+      "flujo": "whatsapp-qr"
     },
     {
       "id": "google-workspace",
