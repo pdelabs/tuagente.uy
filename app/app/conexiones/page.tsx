@@ -32,6 +32,7 @@ import {
 } from "../lib/agent";
 import { ConexionLogo } from "../lib/ConexionLogo";
 import Permisos from "../lib/Permisos";
+import DialogoWhatsApp from "./DialogoWhatsApp";
 import {
   Btn, Card, Chip, EmptyState, ErrorState, Modal, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
@@ -472,7 +473,7 @@ export default function ConexionesPage() {
               "pedir que la conecten" queda como salida de emergencia. Sin
               flujo, pedir es el único camino — WhatsApp o Slack los
               tramitamos nosotros sí o sí. */}
-          {c.flujo === "google-oauth" && c.estado === "sin_conectar" ? (
+          {c.flujo && c.estado === "sin_conectar" ? (
             <>
               <Btn onClick={() => setDialogo(c)}>
                 Conectar
@@ -550,8 +551,18 @@ export default function ConexionesPage() {
         </p>
       )}
 
-      {dialogo && cfg && (
+      {/* Cada conexión tiene sus propios pasos: Google canjea un código OAuth,
+          WhatsApp escanea un QR. El `flujo` del catálogo decide cuál. */}
+      {dialogo && cfg && dialogo.flujo === "google-oauth" && (
         <DialogoGoogle
+          cfg={cfg}
+          conexion={dialogo}
+          onCerrar={() => setDialogo(null)}
+          onConectada={cargar}
+        />
+      )}
+      {dialogo && cfg && dialogo.flujo === "whatsapp-qr" && (
+        <DialogoWhatsApp
           cfg={cfg}
           conexion={dialogo}
           onCerrar={() => setDialogo(null)}
