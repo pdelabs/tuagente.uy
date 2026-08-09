@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -75,6 +76,11 @@ addEventListener("unhandledrejection",function(e){rescatar(e.reason)})})()`,
           }}
         />
         {children}
+        {/* Analítica de Vercel. Va en el layout raíz, así que cubre la landing,
+            el blog y el portal. No usa cookies ni identifica al visitante, que
+            es lo que nos deja tenerla sin banner de consentimiento. En local no
+            manda nada: el script solo se inyecta en los deploys de Vercel. */}
+        <Analytics />
       </body>
     </html>
   );
