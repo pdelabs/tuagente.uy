@@ -115,3 +115,27 @@ Una sola pestaña principal con TODO lo que el agente produce — entregables
 (solo HTML) quedó promovida a principal como interim; la skill `artifact`
 tiene que ganar `--flujo` como ya lo tiene `entregable`. Al fusionar, Archivos
 queda en "Más" como vista cruda del workspace.
+
+## Conexiones — abierto tras el 9/8
+
+- **Mercado Pago: escrito y auditado, SIN PROBAR contra una cuenta real.**
+  Ningún endpoint tocó Mercado Pago todavía. Hay que correrlo con credenciales
+  de **sandbox** (no producción) y verificar de punta a punta: los cuatro de
+  lectura, el link de cobro, la devolución (con su idempotencia y su chequeo
+  previo) y un webhook **firmado de verdad**. Hasta que eso pase, no se le
+  promete a ningún cliente. El código está en
+  `hermes-kit/connections/mercadopago/`, con tres bugs ya corregidos que
+  salieron de leer la integración de demoda — los dos MCP no oficiales más
+  populares todavía los tienen.
+
+- **La guardia no está registrada en Hermes.** Está construida y probada (con
+  un MCP falso y con Mercado Pago), pero falta el `hermes mcp add` que la
+  ponga en el camino del agente. Hasta entonces el agente NO ve ninguna de las
+  herramientas nuevas: ni las 12 de WhatsApp ni las 6 de Mercado Pago.
+
+- **WhatsApp: pareado pendiente.** El puente corre y el QR sale por el portal,
+  pero nadie lo escaneó. Cuando se haga, tiene que ser con un **número
+  descartable**: la vía por QR usa whatsmeow y Meta puede bloquear el número.
+
+- **El correo sigue sin conectar**, y es la única conexión que un flujo pide
+  hoy (prospección está en ámbar esperándola).
