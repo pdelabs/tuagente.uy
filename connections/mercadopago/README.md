@@ -94,3 +94,54 @@ Buscamos y **no hay nada de `preapproval` ni suscripciones** en su código. Así
 que para eso no tenemos referencia probada: habría que ir a la documentación,
 que es justo lo que acá falló. Si un cliente lo necesita, conviene tratarlo
 como trabajo de investigación y no como "agregar una herramienta más".
+
+---
+
+## Crosscheck: demoda (2023) contra la doc de hoy, y contra los MCP de terceros
+
+### demoda es de septiembre 2023
+
+Casi tres años. Sus **conceptos** siguen valiendo y son los que copiamos
+—webhook como disparador, chequear antes de devolver, tokens cifrados— pero su
+superficie de API hay que mirarla con lupa. Lo que cambió:
+
+- **Mercado Pago está empujando la API de Orders.** Checkout API ahora procesa
+  pagos por Orders, y la Payments API + Merchant Orders **están deprecadas para
+  los flujos de QR**, con guías de migración publicadas.
+- **Para lo nuestro no cambia nada todavía**: `/v1/payments/search` sigue en la
+  referencia vigente y es el camino para *leer* los cobros de un comercio. La
+  deprecación apunta a QR, no a la consulta.
+- **A vigilar**: si un cliente cobra por QR o por Point, ahí sí hay que ir por
+  Orders. Cuando aparezca, se revisa.
+
+### Los MCP no oficiales: los dos tienen el bug que arreglamos
+
+**`hdbookie/mercado-pago-mcp`** — 27+ herramientas.
+
+- **Sin `X-Idempotency-Key` en los refunds.** El mismo agujero: un reintento
+  devuelve dos veces.
+- **Sin validación de firma de webhooks.** Tiene `simulate_webhook` pero nada
+  que verifique los reales: cualquiera que sepa la URL te avisa que cobraste.
+- **No chequea el estado antes de devolver.**
+- Expone `cancel_payment`, `batch_create_payments`, `create_split_payment` y
+  `retry_failed_payment` **sin ningún guardrail**. Crear pagos en lote sin
+  protección, con la clave de producción de alguien, es un accidente esperando.
+- Y 27 esquemas es una pared para el modelo, además del contexto que cuesta.
+
+**`dan1d/mercadopago-tool` (CobroYa)** — 5 herramientas, más sobrio.
+
+- Tiene `MERCADO_PAGO_WEBHOOK_SECRET` para validación HMAC, pero **no
+  documenta la implementación**.
+- Tampoco menciona idempotencia en escrituras.
+- Expone refunds totales y parciales.
+
+### Conclusión
+
+Nuestras 6 herramientas con la guardia adelante quedan **materialmente más
+seguras** que las dos alternativas populares: idempotencia derivada, chequeo de
+estado previo, firma de webhook verificada y probada, y `devolver_cobro`
+cerrada por defecto — el agente ni la ve.
+
+Y confirma la postura del kit: no es que los MCP de terceros sean malos, es que
+**nadie audita lo que instala**. Bajar uno de estos y enchufarlo con la clave
+de producción de un cliente es el escenario que la guardia existe para evitar.
