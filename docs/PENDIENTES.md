@@ -139,3 +139,19 @@ queda en "Más" como vista cruda del workspace.
 
 - **El correo sigue sin conectar**, y es la única conexión que un flujo pide
   hoy (prospección está en ámbar esperándola).
+
+- **Instagram: falta una DECISIÓN, no código.** ¿"Tu agente maneja tu Instagram"
+  se vende como producto? De eso depende todo:
+  - **Si no**, no se construye nada. El flujo ya escribe el post y arma la
+    imagen, y el humano aprueba igual porque sale con su marca: la API ahorra
+    un copiar y pegar por semana.
+  - **Si sí**, hay que **arrancar el app review de Meta el mismo día**. Son dos
+    permisos (`instagram_business_basic` y `instagram_business_content_publish`),
+    **2 a 4 semanas cada uno**, con screencast del recorrido completo. Es espera,
+    no trabajo — y se revisa una vez y se reusa en todos los clientes, igual que
+    la app OAuth de Google. El conector después es chico.
+  - La alternativa sin review es publicar por un scheduler (Buffer tiene API en
+    el plan gratis, Metricool arranca en USD 22): días en vez de semanas, a
+    cambio de un tercero en el camino y costo por canal.
+
+  El razonamiento largo está en `hermes-kit/connections/instagram/README.md`.
