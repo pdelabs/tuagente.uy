@@ -21,9 +21,12 @@ Un Access Token de produccion, en MP_ACCESS_TOKEN. Nunca se loguea, nunca se
 devuelve, y no se pide por el portal — el cliente no tiene que aprender a
 repartir secretos. Va en el .env del agente, como el resto.
 """
+import hashlib
+import hmac
 import json
 import os
 import sys
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -46,11 +49,21 @@ def _get(ruta, params=None):
         return json.loads(r.read().decode("utf-8"))
 
 
-def _post(ruta, cuerpo=None):
+def _post(ruta, cuerpo=None, idempotencia=None):
+    """POST con X-Idempotency-Key.
+
+    NO es opcional: Mercado Pago lo hizo obligatorio en Pagos y Devoluciones
+    justamente porque se estaban duplicando. Sin el header, un reintento por
+    timeout puede devolver la plata DOS VECES — y una devolucion no se
+    deshace. La clave la damos nosotros para que el reintento de la misma
+    operacion sea el mismo pedido, no uno nuevo.
+    """
     datos = json.dumps(cuerpo or {}).encode("utf-8")
     req = urllib.request.Request(
         f"{API}{ruta}", data=datos, method="POST",
-        headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"})
+        headers={"Authorization": f"Bearer {TOKEN}",
+                 "Content-Type": "application/json",
+                 "X-Idempotency-Key": idempotencia or str(uuid.uuid4())})
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read().decode("utf-8"))
 
@@ -160,10 +173,83 @@ def crear_link_de_cobro(titulo, monto, moneda="UYU", referencia=None):
 
 
 def devolver_cobro(id, monto=None):
-    """Devuelve un pago, total o parcialmente."""
-    r = _post(f"/v1/payments/{id}/refunds", {"amount": float(monto)} if monto else {})
+    """Devuelve un pago, total o parcialmente.
+
+    Sin `monto` devuelve todo — asi lo define la API: el campo es opcional y
+    su ausencia significa devolucion total.
+
+    La clave de idempotencia se deriva del pago y del monto: si el agente
+    reintenta la MISMA devolucion, Mercado Pago la reconoce y no la duplica.
+    Si de verdad se quiere devolver dos veces un parcial, hay que cambiar el
+    monto — que es exactamente la friccion que queremos.
+    """
+    # Chequear ANTES de devolver, y no confiar solo en la idempotencia.
+    # Sacado de la integracion de demoda, que lleva anos en produccion: un
+    # pago ya devuelto se responde sin tocar nada. La idempotencia protege del
+    # reintento identico; esto protege de la orden repetida a mano.
+    actual = _get(f"/v1/payments/{id}")
+    if actual.get("status") == "refunded":
+        return {"ok": True, "ya_estaba_devuelto": True, "sobre_el_cobro": id,
+                "nota": "Ese cobro ya figuraba devuelto: no hice nada."}
+
+    clave = f"tuagente-refund-{id}-{monto or 'total'}"
+    r = _post(f"/v1/payments/{id}/refunds",
+              {"amount": float(monto)} if monto else {},
+              idempotencia=clave)
     return {"ok": True, "devolucion": r.get("id"), "monto": _plata(r.get("amount")),
             "sobre_el_cobro": id}
+
+
+# ── Webhooks ────────────────────────────────────────────────────────────────
+
+def verificar_firma(x_signature, x_request_id, data_id, secreto):
+    """Valida que la notificacion venga de Mercado Pago.
+
+    El header llega como `ts=1704908010,v1=<hmac>`. El manifiesto que se firma
+    es `id:<data.id>;request-id:<x-request-id>;ts:<ts>;` y el hash es
+    HMAC-SHA256 con la clave secreta de la aplicacion.
+
+    Sin esto, cualquiera que sepa la URL puede avisarte que te pagaron.
+    """
+    if not (x_signature and secreto):
+        return False
+    partes = dict(x.split("=", 1) for x in x_signature.split(",") if "=" in x)
+    ts, v1 = partes.get("ts"), partes.get("v1")
+    if not (ts and v1):
+        return False
+    manifiesto = f"id:{data_id};request-id:{x_request_id};ts:{ts};"
+    esperado = hmac.new(secreto.encode(), manifiesto.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(esperado, v1)
+
+
+def procesar_notificacion(cuerpo, x_signature=None, x_request_id=None):
+    """Lo que hay que hacer cuando llega un webhook.
+
+    DOS REGLAS QUE NO ESTAN EN LA DOC Y SI EN EL CODIGO DE DEMODA:
+
+    1. **La notificacion NO es el dato, es el disparador.** Trae un id y nada
+       mas confiable que eso: el estado se le pide a la API. Creerle el
+       `status` al webhook es creerle a algo que te mando un desconocido.
+    2. **Filtrar explicitamente** por accion y tipo. Lo que no reconocemos se
+       ignora y se dice, en vez de intentar interpretarlo.
+
+    Y la tercera, de la doc: hay que contestar 200 en menos de 22 segundos o
+    Mercado Pago reintenta cada 15 minutos. Por eso esto no hace trabajo
+    pesado: mira quien pago y devuelve.
+    """
+    secreto = os.environ.get("MP_WEBHOOK_SECRET", "")
+    data_id = str(((cuerpo or {}).get("data") or {}).get("id") or "")
+    if secreto and not verificar_firma(x_signature, x_request_id, data_id, secreto):
+        return {"ok": False, "error": "firma invalida: la notificacion no es de Mercado Pago"}
+    if not secreto:
+        log("MP_WEBHOOK_SECRET vacio: no puedo verificar la firma")
+
+    accion, tipo = (cuerpo or {}).get("action"), (cuerpo or {}).get("type")
+    if tipo != "payment" or accion not in ("payment.created", "payment.updated"):
+        return {"ok": True, "ignorada": True, "por_que": f"no la proceso: type={tipo} action={accion}"}
+    if not data_id:
+        return {"ok": False, "error": "la notificacion no trae data.id"}
+    return {"ok": True, "cobro": _resumir(_get(f"/v1/payments/{data_id}"))}
 
 
 TOOLS = {
