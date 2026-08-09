@@ -35,3 +35,19 @@ explicación.
 
 Lo que la persona tiene que **decidir o revisar** no va en el cierre: dejá un
 comentario en el ticket, que es donde te va a contestar.
+
+## Lo que se repite es un flujo, no un cron
+
+Si el pedido lleva "todas las semanas", "cada vez que llegue", "avisame
+cuando", "monitoreá" o "regularmente", eso es un **flujo**: usá la skill
+`flujo`. No es preferencia de estilo, son dos cosas que se rompen si lo hacés a
+mano:
+
+1. **El cliente no lo ve.** Un cron suelto no tiene carpeta, ni FLUJO.md, ni
+   aparece en su pestaña Flujos. Para él, lo que le prometiste no existe.
+2. **No le llega.** Un cron creado desde una sesión del portal sale con
+   `deliver=origin` y entrega a esa sesión, que no puede recibir mensajes.
+   Corre bien, no falla, y no llega nada. Nunca, y sin aviso.
+
+Por eso la herramienta `cronjob` está apagada. Tampoco lo hagas por terminal:
+`crear_flujo.py` existe para eso y lo deja bien de las dos formas.

@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.32.0"
+VERSION = "0.33.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -502,6 +502,13 @@ def capabilities():
 
 CONNECTIONS_CATALOG = DATA / "connections" / "catalogo.json"
 REQUERIDAS = DATA / "connections" / "requeridas.json"
+# La politica de permisos NO vive en DATA. En el contenedor del agente ese
+# directorio esta montado :ro; en el del adapter, rw. Un archivo que el
+# guardado puede editar no es un guardrail: es una nota. El agente razona
+# —lo vimos: cuando le falto el correo, se acomodo solo en vez de avisar—
+# asi que el invariante tiene que vivir donde no se pueda violar.
+POLITICA_DIR = Path(os.environ.get("PORTAL_POLITICA_DIR", "/opt/politica"))
+POLITICA = POLITICA_DIR / "politica.json"
 
 # ---------- conexion Google self-service (flujo "google-oauth") ----------
 # El cliente toca "Conectar" en el portal, entra a Google, acepta y pega la
@@ -648,8 +655,17 @@ def _frontmatter_plano(md_path):
     return campos
 
 
+# "ninguna" es la respuesta valida a `--conexiones` cuando el flujo no toca
+# ninguna. El script la filtra al escribir el frontmatter, pero la skill invita
+# a EDITAR el FLUJO.md a mano — y ahi el centinela entra tal cual al archivo.
+# Sin esto, el adapter lo lee como el id de una conexion que no existe y marca
+# el flujo "incompleto: le falta ninguna". Paso el 8/8 con dos flujos.
+_SIN_CONEXION = {"ninguna", "ninguno", "none", "n/a", "-", "—"}
+
+
 def _lista(valor):
-    return [x.strip() for x in (valor or "").split(",") if x.strip()]
+    return [x.strip() for x in (valor or "").split(",")
+            if x.strip() and x.strip().lower() not in _SIN_CONEXION]
 
 
 def _ultima_corrida(job_id):
@@ -837,18 +853,96 @@ def _canal_usado(source):
 
 
 def _requeridas():
-    """Conexiones que el flujo de ESTE cliente necesita (las deja el alta).
+    """Conexiones que este cliente necesita de verdad.
 
-    Con esto el portal puede decir "a tu agente le falta Google Drive para
-    arrancar" en vez de esperar a que el cliente descubra la pestaña. Es
-    conocimiento por-cliente, pero vive en su data como una lista de ids — el
-    codigo sigue siendo generico.
+    Dos fuentes, y la que manda es la primera:
+
+    1. **Los flujos.** Cada FLUJO.md declara sus `conexiones`, y eso es la
+       respuesta VIVA: si el cliente pide un trabajo nuevo que necesita el
+       correo, el correo pasa a hacer falta ese mismo dia, sin que nadie
+       edite nada.
+    2. `connections/requeridas.json`, la lista que dejaba el alta a mano.
+       Queda por compatibilidad con los agentes anteriores a los flujos.
+
+    Antes solo existia la 2, y en un agente sin ese archivo NINGUNA conexion
+    figuraba como necesaria: la pantalla terminaba ordenando por "cual podes
+    conectar vos solo" en vez de por "cual hace falta", y mostraba Google
+    arriba de todo sin que nadie se lo hubiera pedido.
     """
+    ids = set()
     try:
-        ids = json.loads(REQUERIDAS.read_text(encoding="utf-8"))
-        return {str(i) for i in ids} if isinstance(ids, list) else set()
+        crudo = json.loads(REQUERIDAS.read_text(encoding="utf-8"))
+        if isinstance(crudo, list):
+            ids |= {str(i) for i in crudo}
     except (OSError, ValueError):
-        return set()
+        pass
+    for f in flujos(limite_resultados=0)["flujos"]:
+        if f.get("estado") != "pausado":
+            ids |= set(_lista_flujo_conexiones(f))
+    return ids
+
+
+def _lista_flujo_conexiones(f):
+    """Los ids que declara un flujo, ya saneados por _lista()."""
+    md = FLUJOS_DIR / f["slug"] / "FLUJO.md"
+    try:
+        return _lista(_frontmatter_plano(md).get("conexiones"))
+    except OSError:
+        return []
+
+
+def politica():
+    """Que puede hacer el agente con cada conexion, segun el cliente."""
+    try:
+        d = json.loads(POLITICA.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def politica_de(conexion_id):
+    """Los permisos de UNA conexion, con los defaults del producto.
+
+    Default: leer si, actuar no. No es simetrico a proposito — si todo
+    arrancara cerrado, el cliente conecta y el agente no puede ni listarle un
+    chat hasta prender ocho interruptores que no sabe evaluar. Lo que puede
+    romper algo hacia afuera arranca cerrado; mirar, no.
+    """
+    c = politica().get(conexion_id) or {}
+    return {
+        "leer": bool(c.get("leer", True)),
+        "actuar": bool(c.get("actuar", _actuar_por_defecto(conexion_id))),
+    }
+
+
+def _actuar_por_defecto(conexion_id):
+    """Casi todo arranca sin poder mandar nada hacia afuera. La excepcion es
+    el canal que el propio cliente eligio para que le avisemos: ahi mandar ES
+    el punto, y dejarlo apagado romperia los avisos que el cliente pidio.
+
+    Ojo con la diferencia: Telegram elegido como canal propio es el agente
+    escribiendole A SU CLIENTE. WhatsApp es el agente escribiendole a los
+    CLIENTES DEL CLIENTE. La primera es la conversacion que el dueño pidio
+    tener; la segunda sale a nombre de su empresa. No se defaultean igual.
+    """
+    contacto = identidad().get("contacto") or {}
+    return conexion_id == contacto.get("canal")
+
+
+def guardar_politica(conexion_id, cambios):
+    """Escribe los permisos. Solo el adapter llega aca: el agente monta
+    POLITICA_DIR en solo lectura."""
+    actual = politica()
+    c = dict(actual.get(conexion_id) or {})
+    for k in ("leer", "actuar"):
+        if k in cambios:
+            c[k] = bool(cambios[k])
+    actual[conexion_id] = c
+    POLITICA_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = POLITICA.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(actual, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(POLITICA)   # atomico: nunca un archivo a medio escribir
+    return politica_de(conexion_id)
 
 
 def connections():
@@ -879,6 +973,7 @@ def connections():
             "falta": falta,
             "falta_previo": falta_previo,
             "requerida": c.get("id") in requeridas,
+            "permisos": politica_de(c.get("id")),
             # "google-oauth" = el portal la conecta solo, con su dialogo de
             # pasos; sin flujo, el boton cae a "Pedir que la conecten".
             "flujo": c.get("flujo"),
@@ -2070,6 +2165,17 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return self._send(400, {"error": "invalid JSON body"})
             return self._guardar_identidad(body)
+        m = re.match(r"^/portal/connections/([a-z0-9-]{1,40})/permisos$", path)
+        if m:
+            body = self._read_json_body()
+            if body is None:
+                return self._send(400, {"error": "invalid JSON body"})
+            if not isinstance(body, dict) or not ({"leer", "actuar"} & set(body)):
+                return self._send(400, {"error": "mandá leer y/o actuar (booleanos)"})
+            try:
+                return self._send(200, {"ok": True, "permisos": guardar_politica(m.group(1), body)})
+            except OSError as exc:
+                return self._send(500, {"error": f"no pude guardar los permisos: {exc}"})
         m = re.match(r"^/portal/skills/([^/]+)$", path)
         if m:
             body = self._read_json_body()

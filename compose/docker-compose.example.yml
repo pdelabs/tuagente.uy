@@ -23,6 +23,11 @@ services:
       - "127.0.0.1:9119:9119"   # dashboard (interno, no es para el cliente)
     volumes:
       - ./data:/opt/data
+      # SOLO LECTURA, y es el punto entero: acá vive qué puede hacer el agente
+      # con cada conexión. Si estuviera dentro de ./data podría editarlo con
+      # write_file o por terminal, y un guardrail que el guardado puede
+      # cambiar no es un guardrail.
+      - ./politica:/opt/politica:ro
     environment:
       - TZ=America/Montevideo
       - HERMES_DASHBOARD=1
@@ -45,6 +50,8 @@ services:
       - "127.0.0.1:8643:8643"
     volumes:
       - ./data:/opt/data
+      # El adapter SÍ escribe: es quien recibe el clic del cliente en el portal.
+      - ./politica:/opt/politica
     environment:
       - TZ=America/Montevideo
       - PORTAL_CORS_ORIGINS=https://app.tuagente.uy,http://localhost:8090

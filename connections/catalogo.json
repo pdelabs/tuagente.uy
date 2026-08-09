@@ -23,63 +23,79 @@
       "label": "Telegram",
       "grupo": "canal",
       "para_que": "Hablarle al agente desde el celular, como a cualquier contacto.",
-      "detecta": { "env": ["TELEGRAM_BOT_TOKEN"] },
-      "como": "Creamos un bot y te pasamos el link para empezar a chatear.",
+      "detecta": {
+        "env": [
+          "TELEGRAM_BOT_TOKEN"
+        ]
+      },
+      "como": "El bot ya está creado: tocás Abrir el chat y le mandás un hola. Si te contesta con un código, lo pegás acá y queda activado.",
       "esfuerzo": "minutos",
-      "quien": "nosotros"
+      "quien": "cliente_solo"
     },
     {
       "id": "correo",
       "label": "Correo de la empresa",
       "grupo": "canal",
       "para_que": "Que el agente reciba y conteste mails desde la casilla de la empresa.",
-      "detecta": { "env": ["EMAIL_ADDRESS", "EMAIL_PASSWORD", "EMAIL_SMTP_HOST"] },
-      "como": "Con el usuario y la contrasena de la casilla. Si es Gmail, alcanza una contrasena de aplicacion; no hace falta crear nada en Google.",
+      "detecta": {
+        "env": [
+          "EMAIL_ADDRESS",
+          "EMAIL_PASSWORD",
+          "EMAIL_SMTP_HOST"
+        ]
+      },
+      "como": "Con el usuario y la contraseña de la casilla. ¿Usás Gmail? Esta misma sirve: alcanza una contraseña de aplicación y no hace falta crear nada en Google.",
       "esfuerzo": "minutos",
-      "quien": "asistido"
+      "quien": "asistido",
+      "nota_interna": "Antes convivía con `gmail-lectura` (OAuth de Google) y el cliente no sabía cuál elegir: el primer ticket que tuvo el agente de pdelabs fue justamente pedir la de Gmail, la que NO queremos. Se sacó del catálogo el 9/8. La vía OAuth sigue siendo posible pero Google la trata como permiso restringido y exige una auditoría de seguridad cara para publicar la app; para correo alcanza IMAP/SMTP. Si algún cliente la necesita de verdad, es una conversación, no una tarjeta."
     },
     {
       "id": "whatsapp",
       "label": "WhatsApp",
       "grupo": "canal",
-      "para_que": "Que tus clientes le escriban al numero de la empresa y el agente conteste.",
-      "detecta": { "env": ["WHATSAPP_ENABLED"] },
-      "como": "Es el mas lento de todos: la via oficial pide verificacion de empresa ante Meta y lleva dias. Lo tramitamos nosotros.",
+      "para_que": "Que tus clientes le escriban al número de la empresa y el agente conteste.",
+      "detecta": {
+        "env": [
+          "WHATSAPP_ENABLED"
+        ]
+      },
+      "como": "Es el más lento de todos: la vía oficial pide verificación de empresa ante Meta y lleva días. Lo tramitamos nosotros.",
       "esfuerzo": "dias",
       "quien": "nosotros",
-      "advertencia": "El atajo de vincular por codigo QR pone en riesgo la linea comercial: WhatsApp puede bloquearla. No lo usamos en numeros que la empresa necesita."
+      "advertencia": "El atajo de vincular por código QR pone en riesgo la linea comercial: WhatsApp puede bloquearla. No lo usamos en números que la empresa necesita."
     },
     {
       "id": "google-workspace",
       "label": "Google: Planillas, Drive, Agenda y Documentos",
       "grupo": "sistema",
       "para_que": "Que el agente lea y actualice tus planillas, guarde archivos en Drive y mire la agenda.",
-      "detecta": { "archivos": ["google_token.json"] },
-      "requiere": { "archivos": ["google_client_secret.json"] },
-      "como": "Tocas Conectar, entras con tu cuenta de Google, aceptas, y pegas la direccion que te devuelve. Dos minutos, sin configurar nada.",
+      "detecta": {
+        "archivos": [
+          "google_token.json"
+        ]
+      },
+      "requiere": {
+        "archivos": [
+          "google_client_secret.json"
+        ]
+      },
+      "como": "Tocás Conectar, entrás con tu cuenta de Google, aceptás, y pegás la dirección que te devuelve. Dos minutos, sin configurar nada.",
       "esfuerzo": "minutos",
       "quien": "cliente_solo",
       "flujo": "google-oauth",
       "nota_interna": "El permiso se pide con NUESTRA app OAuth (tipo Desktop, se puede reusar entre clientes). Sin eso, cada cliente tendria que crear un proyecto en Google Cloud, que es exactamente lo que un cliente no tecnico no puede hacer."
     },
     {
-      "id": "gmail-lectura",
-      "label": "Gmail (leer y responder con la cuenta de Google)",
-      "grupo": "sistema",
-      "para_que": "Igual que el correo, pero entrando con la cuenta de Google en vez de una contrasena.",
-      "detecta": { "archivos": ["google_token.json"] },
-      "como": "Preferimos NO usar esta via: Google la trata como permiso restringido y exige una auditoria de seguridad cara para publicar la app. Para correo alcanza la conexion de arriba.",
-      "esfuerzo": "dias",
-      "quien": "nosotros",
-      "recomendado": false
-    },
-    {
       "id": "modelos-auxiliares",
       "label": "Modelos de IA auxiliares (transcripción, imágenes)",
       "grupo": "sistema",
       "para_que": "Que el agente pueda transcribir audios y videos, y generar o analizar imágenes, usando el modelo que mejor sirva para cada tarea.",
-      "detecta": { "env": ["OPENROUTER_API_KEY"] },
-      "como": "Viene incluida con tu agente: le creamos una cuota propia de modelos con limite de gasto. No tenes que crear ninguna cuenta.",
+      "detecta": {
+        "env": [
+          "OPENROUTER_API_KEY"
+        ]
+      },
+      "como": "Viene incluida con tu agente: le creamos una cuota propia de modelos con límite de gasto. No tenés que crear ninguna cuenta.",
       "esfuerzo": "minutos",
       "quien": "nosotros",
       "nota_interna": "Una key por cliente bajo la org tuagente de OpenRouter, creada via Management API con limite en USD (ver notas/modelos-auxiliares.md). El gasto por cliente se ve por key en Activity. La skill del kit decide proveedor y modelo; el agente solo la invoca."
@@ -89,7 +105,11 @@
       "label": "Slack",
       "grupo": "canal",
       "para_que": "Que el equipo le hable al agente desde los canales donde ya trabaja.",
-      "detecta": { "env": ["SLACK_BOT_TOKEN"] },
+      "detecta": {
+        "env": [
+          "SLACK_BOT_TOKEN"
+        ]
+      },
       "como": "Un administrador del Slack instala la app y nos pasa el token.",
       "esfuerzo": "minutos",
       "quien": "asistido"

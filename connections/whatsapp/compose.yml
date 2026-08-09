@@ -1,0 +1,19 @@
+# Servicio a agregar al docker-compose.yml del cliente cuando pide WhatsApp.
+# NO va en la imagen base: whatsmeow es ingenieria inversa del protocolo de
+# WhatsApp Web y viola los terminos de Meta. Nadie carga con eso salvo que lo
+# haya pedido y sepa el riesgo.
+#
+# El agente NO habla con este servicio: habla con el decorator, y el decorator
+# es el unico que llega hasta aca. Por eso el puerto no se publica al host.
+  whatsapp-mcp:
+    image: ghcr.io/tuagente/whatsapp-mcp:auditado    # nuestra copia auditada, tag fijo
+    container_name: ${CLIENTE}-whatsapp-mcp
+    restart: unless-stopped
+    volumes:
+      # El historial de mensajes del cliente. Dentro de SU volumen, siempre.
+      - ./data/connections/whatsapp:/app/store
+    environment:
+      - TZ=America/Montevideo
+    # Sin `ports`: solo alcanzable desde la red interna del compose.
+    expose:
+      - "8590"
