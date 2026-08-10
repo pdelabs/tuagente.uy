@@ -125,6 +125,7 @@ class Downstream:
         self.lock = threading.Lock()
 
     def pedir(self, mensaje):
+        """Manda y ESPERA respuesta. Solo para mensajes con id."""
         with self.lock:
             self.proc.stdin.write(json.dumps(mensaje) + "\n")
             self.proc.stdin.flush()
@@ -132,6 +133,18 @@ class Downstream:
         if not linea:
             raise RuntimeError("el servidor de abajo se murio")
         return json.loads(linea)
+
+    def avisar(self, mensaje):
+        """Manda y NO espera nada.
+
+        Las notificaciones de MCP (sin `id`) no se responden NUNCA. Si se las
+        manda por `pedir`, el readline se queda colgado para siempre y la
+        conexion entera muere en el handshake: todo cliente real manda
+        `notifications/initialized` apenas termina el `initialize`.
+        """
+        with self.lock:
+            self.proc.stdin.write(json.dumps(mensaje) + "\n")
+            self.proc.stdin.flush()
 
 
 def main():
@@ -154,6 +167,18 @@ def main():
         metodo = msg.get("method")
         pol = politica()   # se relee en cada mensaje: un cambio en el portal
                            # tiene efecto en la vuelta siguiente, sin reiniciar.
+
+        # NOTIFICACIONES (sin id): se pasan y no se espera nada. Va PRIMERO,
+        # antes que cualquier otra rama, porque esperar respuesta a algo que
+        # no la lleva cuelga la conexion entera. Es lo que impedia registrar
+        # la guardia: `hermes mcp add` moria en "Failed to connect" y el
+        # motivo estaba tres lineas mas abajo, en el `pedir` del final.
+        if msg.get("id") is None:
+            try:
+                abajo.avisar(msg)
+            except (OSError, ValueError) as e:
+                log(f"no pude pasar la notificacion {metodo}: {e}")
+            continue
 
         # tools/list: se devuelve SOLO lo permitido.
         if metodo == "tools/list":
