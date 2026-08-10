@@ -140,18 +140,22 @@ queda en "Más" como vista cruda del workspace.
 - **El correo sigue sin conectar**, y es la única conexión que un flujo pide
   hoy (prospección está en ámbar esperándola).
 
-- **Instagram: falta una DECISIÓN, no código.** ¿"Tu agente maneja tu Instagram"
-  se vende como producto? De eso depende todo:
-  - **Si no**, no se construye nada. El flujo ya escribe el post y arma la
-    imagen, y el humano aprueba igual porque sale con su marca: la API ahorra
-    un copiar y pegar por semana.
-  - **Si sí**, hay que **arrancar el app review de Meta el mismo día**. Son dos
-    permisos (`instagram_business_basic` y `instagram_business_content_publish`),
-    **2 a 4 semanas cada uno**, con screencast del recorrido completo. Es espera,
-    no trabajo — y se revisa una vez y se reusa en todos los clientes, igual que
-    la app OAuth de Google. El conector después es chico.
-  - La alternativa sin review es publicar por un scheduler (Buffer tiene API en
-    el plan gratis, Metricool arranca en USD 22): días en vez de semanas, a
-    cambio de un tercero en el camino y costo por canal.
+- **Instagram: curado, SIN CONECTAR.** 23 herramientas del MCP oficial
+  (`mcpware/instagram-mcp`, Graph API) clasificadas 15 leen / 8 actúan. Falta
+  conectar una cuenta real y correr las de lectura de punta a punta.
+  - **Leer es el motivo de la conexión**, no publicar: sin `get_media_posts` el
+    flujo semanal escribe a ciegas, repite temas y se pisa con lo que ya salió.
+  - **Para la cuenta propia NO hay app review** — Standard Access está
+    auto-aprobado y cubre leer *y* publicar. (Una nota anterior decía 2-4
+    semanas; estaba mal.) Las 2-4 semanas son Advanced Access, para operar
+    cuentas **ajenas**: eso es el día que se venda como producto, y ahí conviene
+    arrancar el trámite temprano porque es espera y no trabajo.
+  - **Los DM no van a andar**: `instagram_manage_messages` pide Advanced Access
+    aun en cuenta propia. Las 3 tools están declaradas pero muertas.
+  - **El token dura 60 días y se cae en silencio.** Falta refrescarlo antes de
+    que venza; sin eso la conexión se muere sola cada dos meses.
+  - Se descartaron los MCP basados en `instagrapi`: detección en horas y
+    escalada a **baja permanente**. Con WhatsApp el riesgo se acepta porque el
+    número es descartable; una cuenta de marca no lo es.
 
   El razonamiento largo está en `hermes-kit/connections/instagram/README.md`.
