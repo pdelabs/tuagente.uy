@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Prepara una VPS para el agente de un cliente y le sube el kit.
 #
-#   ./desplegar-remoto.sh east "Washi" root@1.2.3.4 agentes.tuagente.uy
-#                         ^slug ^nombre  ^servidor   ^dominio base
+#   ./desplegar-remoto.sh east root@1.2.3.4 agentes.tuagente.uy
+#                         ^slug ^servidor    ^dominio base
+#
+# EL AGENTE NO SE NOMBRA ACA. El nombre se lo pone el CLIENTE en el bautizo,
+# en el primer paso del onboarding del portal. Hasta entonces dice "Agente".
+# (El 10/8 le pase "Washi" —el agente de pdelabs— y quedo con el nombre de
+# otro cliente esperando a que Cata lo bautizara.)
 #
 # Deja el agente ARMADO PERO APAGADO: falta cargar data/.env con las claves y
 # que el DNS resuelva. Arrancar sin DNS quema intentos de Let's Encrypt, que
@@ -12,11 +17,12 @@
 set -euo pipefail
 
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SLUG="${1:-}"; NOMBRE="${2:-}"; SERVIDOR="${3:-}"; DOMINIO_BASE="${4:-}"
+SLUG="${1:-}"; SERVIDOR="${2:-}"; DOMINIO_BASE="${3:-}"
+NOMBRE="Agente"   # placeholder hasta el bautizo; ver la nota de arriba
 
-if [[ -z "$SLUG" || -z "$NOMBRE" || -z "$SERVIDOR" || -z "$DOMINIO_BASE" ]]; then
-  echo 'uso: ./desplegar-remoto.sh <slug> "<Nombre>" <usuario@ip> <dominio-base>' >&2
-  echo 'ej:  ./desplegar-remoto.sh east "Washi" root@1.2.3.4 agentes.tuagente.uy' >&2
+if [[ -z "$SLUG" || -z "$SERVIDOR" || -z "$DOMINIO_BASE" ]]; then
+  echo 'uso: ./desplegar-remoto.sh <slug> <usuario@ip> <dominio-base>' >&2
+  echo 'ej:  ./desplegar-remoto.sh east root@1.2.3.4 agentes.tuagente.uy' >&2
   exit 1
 fi
 
@@ -26,7 +32,7 @@ REMOTO="/opt/agentes/$SLUG"
 DOMINIO_API="$SLUG.$DOMINIO_BASE"
 DOMINIO_PORTAL="$SLUG-portal.$DOMINIO_BASE"
 
-echo "→ agente   $SLUG ($NOMBRE)"
+echo "→ agente   $SLUG (sin bautizar — lo nombra el cliente)"
 echo "→ servidor $SERVIDOR:$REMOTO"
 echo "→ api      https://$DOMINIO_API"
 echo "→ portal   https://$DOMINIO_PORTAL"
@@ -155,8 +161,8 @@ Listo, y apagado a propósito. Falta:
        python3 tools/portal-check.py --key <clave> \\
            --endpoint https://$DOMINIO_API \\
            --adapter  https://$DOMINIO_PORTAL \\
-           --origin   https://app.tuagente.uy
+           --origin   https://tuagente.uy
 
   5. El link, que ES la credencial:
-       https://app.tuagente.uy/app#endpoint=https://$DOMINIO_API&adapter=https://$DOMINIO_PORTAL&key=<clave>
+       https://tuagente.uy/app#endpoint=https://$DOMINIO_API&adapter=https://$DOMINIO_PORTAL&key=<clave>
 EOF

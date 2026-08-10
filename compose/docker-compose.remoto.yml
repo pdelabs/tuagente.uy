@@ -77,10 +77,13 @@ services:
       # Nunca fue para el cliente: si hace falta mirarlo, se prende y se
       # entra por un tunel SSH, no publicandolo.
       - HERMES_DASHBOARD=0
-      # Sin esto el browser descarta todas las respuestas del gateway.
-      # OJO: va el dominio PÚBLICO. Sin localhost — en remoto no aplica y es
-      # una fuente de falsa confianza al leerlo.
-      - API_SERVER_CORS_ORIGINS=https://app.tuagente.uy
+      # EL PORTAL VIVE EN tuagente.uy/app, no en app.tuagente.uy — ese host
+      # devuelve 404 y no lo usa nadie. Si acá va el origen equivocado, el
+      # browser descarta TODAS las respuestas y el cliente ve "No pude conectar
+      # con tu agente", que se lee como que el agente está caído. Verificado el
+      # 10/8/2026 con East: los dos servicios respondían 200 por curl y el
+      # portal no arrancaba. Se deja el viejo por si queda algún link.
+      - API_SERVER_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy
     env_file:
       - ./data/.env
     deploy:
@@ -102,7 +105,7 @@ services:
       - ./politica:/opt/politica
     environment:
       - TZ=America/Montevideo
-      - PORTAL_CORS_ORIGINS=https://app.tuagente.uy
+      - PORTAL_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy
       # El nombre que el cliente ve en su portal. Si falta, dice "Agente".
       - AGENT_NAME=${AGENT_NAME}
       # El adapter habla con el gateway por la red interna, no por localhost:
