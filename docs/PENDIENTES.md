@@ -130,8 +130,24 @@ queda en "Más" como vista cruda del workspace.
 
 - **La guardia no está registrada en Hermes.** Está construida y probada (con
   un MCP falso y con Mercado Pago), pero falta el `hermes mcp add` que la
-  ponga en el camino del agente. Hasta entonces el agente NO ve ninguna de las
-  herramientas nuevas: ni las 12 de WhatsApp ni las 6 de Mercado Pago.
+  ponga en el camino del agente. Confirmado el 9/8 con `hermes mcp list`:
+  *No MCP servers configured*. Hasta entonces el agente NO ve ninguna de las
+  **41** herramientas curadas (12 WhatsApp + 6 Mercado Pago + 23 Instagram).
+  - **Dónde vive `guardia.py` importa**: tiene que ir en `/opt/politica/`
+    (montado `:ro`), no en `/opt/data/`. Si el agente puede editar la guardia,
+    no hay guardia.
+
+- **Queda un tercer camino para saltear la política, sin cerrar.** El adapter
+  **ejecuta** `/opt/data/scripts/portal_adapter.py` —que está en el volumen del
+  agente— y el adapter tiene `./politica` en modo escritura. Si el agente pisa
+  ese archivo y el adapter reinicia, corre código del agente con permiso para
+  reescribir la política.
+  - En la Mac el agente lo pisa, **pero es un artefacto de Docker Desktop**: los
+    bind mounts ignoran la propiedad (el archivo se creó como `hermes` dentro de
+    un directorio `root` sin permiso de escritura). En Linux debería negarse.
+  - **Hay que confirmarlo en la VPS, no asumirlo.** Si en Linux tampoco alcanza,
+    el arreglo es montar el script desde un directorio aparte en `:ro`, igual
+    que la política.
 
 - **WhatsApp: pareado pendiente.** El puente corre y el QR sale por el portal,
   pero nadie lo escaneó. Cuando se haga, tiene que ser con un **número
