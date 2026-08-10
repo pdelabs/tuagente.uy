@@ -1,52 +1,77 @@
 # Instagram
 
-**No hay conector todavía, y es a propósito.** Esto es una decisión pendiente,
-no trabajo pendiente.
+**Graph API oficial, empezando por leer.** Base:
+[`mcpware/instagram-mcp`](https://github.com/mcpware/instagram-mcp) — 23
+herramientas, token de larga duración, sin API privada de por medio.
 
-## Lo que ya funciona sin conectar nada
+## Por qué leer es la mitad que importa
 
-El flujo `post-semanal-instagram` **ya hace la parte cara**: elige una historia
-real del trabajo de la semana, escribe el caption en criollo y arma la imagen
-siguiendo el brand kit. Te lo deja marcado "BORRADOR — NO PUBLICAR" para que lo
-apruebes.
+Un agente que publica sin leer escribe a ciegas: repite temas, se contradice con
+lo que ya salió, rompe la línea. `get_media_posts` y `get_media_insights` son el
+motivo de esta conexión — con eso el flujo semanal deja de inventar en el vacío
+y escribe sabiendo qué se dijo y qué funcionó.
 
-Lo único que falta es apretar publicar.
+Leer vale aunque nunca prendas publicar.
 
-## Los dos caminos, con su costo real
+## Lo que cuesta de verdad
 
-### (a) Graph API propia
+**Para tu propia cuenta no hay app review.** Standard Access está
+auto-aprobado y cubre las cuentas que son tuyas: leer **y publicar** andan el
+mismo día. Hace falta que la cuenta sea profesional (Business o Creator, las
+personales no tienen API), vinculada a una página de Facebook, y una app de Meta
+para sacar el token.
 
-Requiere cuenta de Facebook Business, una página vinculada, cuenta profesional
-de Instagram, app de Meta y **dos permisos que pasan por app review**:
-`instagram_business_basic` y `instagram_business_content_publish`. Cada uno
-lleva **2 a 4 semanas** y pide un screencast del recorrido completo del usuario.
+**Las 2 a 4 semanas de app review son para operar cuentas AJENAS** — Advanced
+Access, o sea el día que esto se venda como producto y cada cliente conecte la
+suya. Eso es espera y no trabajo: cuando se decida, el trámite se arranca el
+mismo día.
 
-Publicar es en tres pasos: crear el container, mirar su estado, publicarlo.
-Solo JPEG. Máximo 25 posts por cuenta cada 24 horas.
+> Una corrección honesta: en la primera vuelta dije que publicar costaba 2 a 4
+> semanas. Estaba mal — eso aplica solo a cuentas ajenas.
 
-Se revisa **una vez y se reusa en todos los clientes** — el mismo patrón que la
-app OAuth de Google.
+**Excepción: los mensajes directos.** `instagram_manage_messages` pide Advanced
+Access aun en la cuenta propia. Las tres herramientas de DM
+(`get_conversations`, `get_conversation_messages`, `send_dm`) están declaradas
+pero **no van a andar** hasta que se haga esa revisión.
 
-### (b) Un scheduler (Buffer, Metricool)
+## Por qué NO usamos un MCP no oficial
 
-Ya hicieron el app review ellos: publicás por su API y nosotros no tramitamos
-nada. Días en vez de semanas. A cambio: dependencia de un tercero en el camino
-de algo que sale con la marca del cliente, y costo por canal (Buffer tiene API
-en el plan gratis; Metricool arranca en USD 22/mes).
+Hay varios buenos basados en `instagrapi` (la API privada). Los descartamos:
 
-## Por qué no lo construimos todavía
+| | instagrapi | Graph API oficial |
+|---|---|---|
+| Login | usuario + contraseña | token |
+| Detección | **horas** — genera un fingerprint nuevo por corrida | ninguna, es la vía legítima |
+| Escalada | challenge → bloqueo → 30 días → **baja permanente** | — |
+| Cuenta propia | — | sin app review |
 
-Para pdelabs solo, la cuenta no cierra: el flujo ya escribe el post y la imagen,
-y el humano aprueba igual porque sale con su marca. La API ahorra **un copiar y
-pegar por semana**. Cuatro semanas de trámite por eso, no.
+Con WhatsApp aceptamos ese riesgo **porque el número es descartable**. Acá no
+hay equivalente: si Meta da de baja la cuenta de una empresa, se pierden el
+handle, los seguidores y el historial, y no se recuperan. El MCP no oficial no
+da nada que el oficial no dé gratis.
 
-**La cuenta se da vuelta si "tu agente maneja tu Instagram" se vende como
-producto.** Ahí son muchos posts en muchos clientes, y una app revisada una vez
-paga sola. Y como el review es **espera y no trabajo**, si la decisión es que sí,
-el trámite conviene arrancarlo el mismo día — no cuando haga falta.
+## Reparto de permisos
 
-## Si se decide que sí
+15 leen, 8 actúan (ver `tools.json`). Con la conexión recién conectada
+—**leer sí, actuar no**— el agente ve las 15 de lectura y **ni siquiera sabe que
+existen** `publish_media`, `delete_comment` y `send_dm`.
 
-1. Arrancar el app review de los dos permisos (en paralelo, son independientes).
-2. Mientras se espera, el flujo sigue entregando borradores: no se pierde nada.
-3. Cuando salga, el conector es chico — tres llamadas y el `IG_ACCESS_TOKEN`.
+Dos decisiones que no se leen del nombre:
+
+- **`delete_comment` actúa**, obvio, pero vale decir por qué pesa: no se
+  deshace, y borrar el comentario de un cliente enojado —decidido por un
+  agente— es peor que el comentario.
+- **`validate_access_token` lee**, y es más importante de lo que parece: el
+  token dura 60 días y después **se cae en silencio**. Que el agente pueda
+  mirarlo convierte una falla muda en un aviso.
+
+## Límites
+
+200 llamadas por hora. 25 publicaciones por día. Las imágenes van en JPEG.
+
+## Lo que falta
+
+- **Refrescar el token antes de los 60 días.** Sin eso la conexión se muere
+  sola cada dos meses y el cliente se entera cuando el flujo falla.
+- Conectar una cuenta real y correr las de lectura de punta a punta. Nada de
+  esto tocó Instagram todavía.

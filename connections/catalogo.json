@@ -135,18 +135,18 @@
       "id": "instagram",
       "label": "Instagram",
       "grupo": "canal",
-      "para_que": "Que el agente publique en el Instagram de la empresa lo que ya te deja aprobado.",
-      "como": "Hoy tu agente escribe el post y arma la imagen, y vos publicás. Para que publique solo hace falta un permiso de Meta que lleva semanas: lo tramitamos nosotros. Avisanos si lo querés.",
+      "para_que": "Que el agente lea lo que ya publicaste — para no repetirse ni pisarse con lo que salio — y, si lo habilitas, publique.",
+      "como": "Tu cuenta tiene que ser profesional y estar vinculada a una pagina de Facebook. Con eso sacamos el permiso y queda andando el mismo dia.",
       "detecta": {
         "env": [
           "IG_ACCESS_TOKEN"
         ]
       },
-      "esfuerzo": "dias",
-      "quien": "nosotros",
+      "esfuerzo": "horas",
+      "quien": "asistido",
       "recomendado": true,
-      "advertencia": "El agente ya te deja el post y la imagen listos para aprobar. Lo unico que agrega la conexion es publicarlo sin que copies y pegues.",
-      "nota_interna": "DECISION PENDIENTE, no es solo trabajo. Dos caminos: (a) Graph API propia — cuenta Business + pagina de Facebook + cuenta profesional de IG + app de Meta + DOS permisos con app review de 2-4 semanas CADA UNO (instagram_business_basic y instagram_business_content_publish), con screencast del recorrido. Se revisa una vez y se reusa en todos los clientes, como la app OAuth de Google. Publicar es container -> poll -> publish, solo JPEG, 25 posts/24h. (b) Un scheduler (Buffer, Metricool) que ya hizo el review: dias en vez de semanas, pero dependencia de un tercero y costo por canal. Para pdelabs solo no vale la pena: el flujo ya escribe el post y la imagen, y el humano aprueba igual — la API ahorra un copiar/pegar por semana. Vale la pena SI se vende como producto, y ahi conviene arrancar el review ya, porque son semanas de ESPERA."
+      "advertencia": "Arranca en solo leer. Publicar es un permiso aparte que prendes vos, y lo que sale lleva tu marca.",
+      "nota_interna": "CORREGIDO 9/8 — la nota anterior decia 2-4 semanas y estaba MAL. Standard Access esta AUTO-APROBADO y alcanza para la cuenta PROPIA: leer y publicar andan hoy, sin app review. Las 2-4 semanas (Advanced Access) son solo para operar cuentas AJENAS, o sea si esto se vende como producto — ahi si conviene arrancar el tramite temprano, porque es espera y no trabajo. Los DM son la excepcion: instagram_manage_messages pide Advanced Access aun en la cuenta propia, asi que las 3 tools de mensajes no van a andar. Se descarto instagrapi y todo MCP de API privada: login con usuario+contrasena, detectado en horas, escala a baja PERMANENTE. Con WhatsApp el riesgo se acepta porque el numero es descartable; una cuenta de marca no lo es. OJO: el token dura 60 dias y se cae en silencio — hay que refrescarlo."
     }
   ]
 }
