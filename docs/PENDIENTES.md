@@ -140,9 +140,20 @@ queda en "Más" como vista cruda del workspace.
 - **El correo sigue sin conectar**, y es la única conexión que un flujo pide
   hoy (prospección está en ámbar esperándola).
 
-- **Instagram: curado, SIN CONECTAR.** 23 herramientas del MCP oficial
-  (`mcpware/instagram-mcp`, Graph API) clasificadas 15 leen / 8 actúan. Falta
-  conectar una cuenta real y correr las de lectura de punta a punta.
+- **Instagram: curado, SIN CONECTAR y SIN AUDITAR EL CÓDIGO.** 23 herramientas
+  del MCP oficial (`mcpware/instagram-mcp`, Graph API) clasificadas 15 leen /
+  8 actúan.
+  - **La clasificación salió de leer el README del repo, no el código.** Con
+    Mercado Pago aprendimos que eso no alcanza: los tres bugs (el
+    `X-Idempotency-Key` faltante entre ellos) aparecieron recién al leer la
+    implementación. **Falta bajar mcpware y hacerle el mismo pase**: verificar
+    que cada función haga lo que dice el nombre y que la clase lee/actúa
+    coincida con lo que realmente toca.
+  - Falta conectar una cuenta real y correr las de lectura de punta a punta.
+  - Pasos previos del lado del cliente: cuenta **profesional Business** y
+    **pública**, y una **página de Facebook** vinculada (el MCP elegido usa
+    Facebook Login; el camino liviano *Instagram API with Instagram Login* no
+    pide página pero deja afuera los DM).
   - **Leer es el motivo de la conexión**, no publicar: sin `get_media_posts` el
     flujo semanal escribe a ciegas, repite temas y se pisa con lo que ya salió.
   - **Para la cuenta propia NO hay app review** — Standard Access está
