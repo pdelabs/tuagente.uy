@@ -52,6 +52,21 @@ services:
       # write_file o por terminal, y un guardrail que el guardado puede
       # cambiar no es un guardrail.
       - ./politica:/opt/politica:ro
+      # LA MISMA IDEA, Y NOS FALTABA. config.yaml vive dentro de ./data y es
+      # PROPIEDAD DEL AGENTE (-rw-r----- hermes hermes): verificado el 9/8/2026,
+      # el agente lo escribe. Y ahí adentro están `disabled_toolsets` —donde
+      # apagamos `cronjob` a propósito— y donde se registran los MCP. O sea que
+      # podía devolverse cronjob y registrar un MCP salteando la guardia; solo
+      # tenía que esperar un reinicio.
+      #
+      # OJO CON EL ORDEN: en el PRIMER arranque Hermes escribe y migra este
+      # archivo solo. Se levanta una vez SIN esta línea, y se agrega después.
+      # Lo mismo al subir de versión: si la nueva migra el config, hay que
+      # sacarla, arrancar, y volver a ponerla.
+      #
+      # Verificado: con el archivo :ro el gateway levanta en 18 s y
+      # portal-check da 14 ok / 0 fallas.
+      - ./data/config.yaml:/opt/data/config.yaml:ro
     environment:
       - TZ=America/Montevideo
       - HERMES_DASHBOARD=1

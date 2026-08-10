@@ -28,6 +28,14 @@ services:
       # write_file o por terminal, y un guardrail que el guardado puede
       # cambiar no es un guardrail.
       - ./politica:/opt/politica:ro
+      # La misma idea, y nos faltaba: config.yaml vive dentro de ./data y es
+      # PROPIEDAD del agente. Verificado el 9/8/2026 — lo escribe. Ahí están
+      # `disabled_toolsets` (donde apagamos cronjob a propósito) y el registro
+      # de MCP: podía devolverse cronjob y saltearse la guardia esperando un
+      # reinicio.
+      # En el PRIMER arranque Hermes lo escribe y lo migra: levantar una vez
+      # sin esta línea y agregarla después. Igual al subir de versión.
+      - ./data/config.yaml:/opt/data/config.yaml:ro
     environment:
       - TZ=America/Montevideo
       - HERMES_DASHBOARD=1
