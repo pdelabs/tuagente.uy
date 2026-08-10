@@ -13,24 +13,42 @@ y escribe sabiendo qué se dijo y qué funcionó.
 
 Leer vale aunque nunca prendas publicar.
 
-## Lo que cuesta de verdad
+## Standard vs Advanced, sin el atajo
 
-**Para tu propia cuenta no hay app review.** Standard Access está
-auto-aprobado y cubre las cuentas que son tuyas: leer **y publicar** andan el
-mismo día. Hace falta que la cuenta sea profesional (Business o Creator, las
-personales no tienen API), vinculada a una página de Facebook, y una app de Meta
-para sacar el token.
+La regla de Standard Access **no es "cuentas propias"** — ese atajo confunde y
+lleva a conclusiones falsas. La regla es: se le puede pedir permiso a quien
+tenga **un rol en nuestra app de Meta** (admin, developer o tester).
 
-**Las 2 a 4 semanas de app review son para operar cuentas AJENAS** — Advanced
-Access, o sea el día que esto se venda como producto y cada cliente conecte la
-suya. Eso es espera y no trabajo: cuando se decida, el trámite se arranca el
-mismo día.
+| | Standard | Advanced |
+|---|---|---|
+| App review | no, auto-aprobado | sí, 2 a 4 semanas |
+| Quién puede conectar | solo quien tenga un rol en la app | cualquiera |
+| Qué hace el cliente | acepta una invitación en el panel de desarrolladores de Meta | aprieta un botón |
 
-> Una corrección honesta: en la primera vuelta dije que publicar costaba 2 a 4
-> semanas. Estaba mal — eso aplica solo a cuentas ajenas.
+**Los permisos son los mismos y hacen lo mismo.** Lo único que cambia es a quién
+se le puede pedir.
+
+Consecuencia práctica, que es la que importa: **la cuenta de un cliente SÍ se
+conecta sin app review** — se lo agrega como tester y acepta. Anda hoy. Lo que
+no anda es el onboarding: ese cliente tiene que entrar al panel de
+desarrolladores de Meta, y es justo el cliente que no sabe qué es un token.
+Sirve para **pilotear con uno o dos, no para vender**.
+
+O sea que el app review no habilita capacidades nuevas: **habilita que
+conectarse deje de ser una pantalla de desarrollador**. Se pide cuando esto se
+venda, y como es espera y no trabajo, se arranca temprano.
+
+> Corrección: en la primera vuelta dije que publicar costaba 2 a 4 semanas.
+> Estaba mal. En la segunda dije "solo cuentas propias", que también es
+> impreciso. Vale lo de esta tabla.
+
+**Requisito que no se saltea:** la cuenta tiene que ser **profesional** (Business
+o Creator) y **pública**, vinculada a una página de Facebook. Las personales no
+tienen API — Meta les cortó el soporte en octubre de 2024. Convertirla es gratis,
+lleva 5 minutos, es reversible y no se pierden seguidores ni posts.
 
 **Excepción: los mensajes directos.** `instagram_manage_messages` pide Advanced
-Access aun en la cuenta propia. Las tres herramientas de DM
+Access **siempre**, aun en la cuenta propia. Las tres herramientas de DM
 (`get_conversations`, `get_conversation_messages`, `send_dm`) están declaradas
 pero **no van a andar** hasta que se haga esa revisión.
 

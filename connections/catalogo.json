@@ -136,7 +136,7 @@
       "label": "Instagram",
       "grupo": "canal",
       "para_que": "Que el agente lea lo que ya publicaste — para no repetirse ni pisarse con lo que salio — y, si lo habilitas, publique.",
-      "como": "Tu cuenta tiene que ser profesional y estar vinculada a una pagina de Facebook. Con eso sacamos el permiso y queda andando el mismo dia.",
+      "como": "Tu cuenta tiene que ser profesional (Business o Creator, no personal) y estar vinculada a una pagina de Facebook. Pasarla es gratis y lleva 5 minutos: conservas seguidores y posts. Con eso queda andando el mismo dia.",
       "detecta": {
         "env": [
           "IG_ACCESS_TOKEN"
@@ -146,7 +146,7 @@
       "quien": "asistido",
       "recomendado": true,
       "advertencia": "Arranca en solo leer. Publicar es un permiso aparte que prendes vos, y lo que sale lleva tu marca.",
-      "nota_interna": "CORREGIDO 9/8 — la nota anterior decia 2-4 semanas y estaba MAL. Standard Access esta AUTO-APROBADO y alcanza para la cuenta PROPIA: leer y publicar andan hoy, sin app review. Las 2-4 semanas (Advanced Access) son solo para operar cuentas AJENAS, o sea si esto se vende como producto — ahi si conviene arrancar el tramite temprano, porque es espera y no trabajo. Los DM son la excepcion: instagram_manage_messages pide Advanced Access aun en la cuenta propia, asi que las 3 tools de mensajes no van a andar. Se descarto instagrapi y todo MCP de API privada: login con usuario+contrasena, detectado en horas, escala a baja PERMANENTE. Con WhatsApp el riesgo se acepta porque el numero es descartable; una cuenta de marca no lo es. OJO: el token dura 60 dias y se cae en silencio — hay que refrescarlo."
+      "nota_interna": "OJO CON EL ATAJO: la regla de Standard Access NO es 'cuentas propias' — es cuentas cuyo dueno tiene un ROL en nuestra app de Meta (admin/developer/tester). Consecuencia practica: la cuenta de un CLIENTE se puede conectar sin app review, agregandolo como tester y que acepte la invitacion. Anda hoy. Lo que no anda es el onboarding: el cliente tiene que entrar al panel de desarrolladores de Meta, y ese es justo el cliente que no sabe que es un token. Sirve para pilotear con 1 o 2, no para vender. Advanced Access (2-4 semanas) no habilita capacidades nuevas: habilita que cualquiera conecte con un boton. Se pide cuando conectarse tenga que dejar de ser una pantalla de desarrollador. Cuenta PERSONAL no se conecta de ninguna manera: Meta corto el soporte a perfiles personales en octubre 2024. Tiene que ser profesional y PUBLICA. Los DM son aparte: instagram_manage_messages pide Advanced Access siempre, asi que las 3 tools de mensajes no andan ni en la cuenta propia. Se descarto instagrapi y todo MCP de API privada: detectado en horas, escala a baja PERMANENTE, y una cuenta de marca no es descartable como un numero. El token dura 60 dias y se cae en silencio — hay que refrescarlo."
     }
   ]
 }
