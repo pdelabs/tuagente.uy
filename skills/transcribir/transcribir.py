@@ -33,6 +33,14 @@ MODELO = "openai/whisper-large-v3-turbo"
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
 MAX_SUBIDA = 24 * 1024 * 1024  # margen bajo el limite de 25 MB de whisper-1
 
+# Lo que el proveedor acepta tal cual. TODO LO DEMAS SE CONVIERTE, aunque sea
+# chico y aunque no sea video: probado el 10/8/2026 con un .aiff de 400 KB y el
+# proveedor contesto un `400` pelado, sin decir que el formato era el problema.
+# Un agente frente a ese error no tiene como saber que le pasa, y el cliente se
+# queda sin su transcripcion. Convertir de mas cuesta un segundo de ffmpeg;
+# convertir de menos cuesta un flujo que falla sin explicacion.
+AUDIO_OK = {".mp3", ".wav", ".m4a", ".ogg", ".oga", ".opus", ".flac", ".mpga", ".mp4a"}
+
 
 def fallo(msg):
     print(json.dumps({"ok": False, "error": msg}, ensure_ascii=False))
@@ -96,7 +104,8 @@ def main():
 
     temporal = None
     try:
-        if origen.suffix.lower() in VIDEO_EXT or origen.stat().st_size > MAX_SUBIDA:
+        suf = origen.suffix.lower()
+        if suf in VIDEO_EXT or suf not in AUDIO_OK or origen.stat().st_size > MAX_SUBIDA:
             try:
                 temporal = a_mp3_liviano(origen)
             except FileNotFoundError:
