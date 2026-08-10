@@ -78,6 +78,18 @@ agent:
   disabled_toolsets:
     - tts
     - delegation
+    # cronjob apagado A PROPOSITO, y no para ahorrar contexto: es lo que
+    # empuja al agente a la skill `flujo` en vez de improvisar un cron suelto.
+    # Verificado el 8/8: un cliente pidio "quiero saber regularmente sobre la
+    # competencia", el agente MIRO la skill flujo (skill_view) y aun asi llamo
+    # a `cronjob` directo. Salio un cron invisible —sin carpeta, sin FLUJO.md,
+    # sin pestaña Flujos— y encima con `deliver=origin`, que entrega a la
+    # sesion del portal: iba a correr todos los lunes y no iba a llegar nunca
+    # nada, sin ningun aviso. Con el toolset apagado el unico camino comodo es
+    # `crear_flujo.py`, que crea el cron con --deliver=local y deja el flujo a
+    # la vista. No es una pared: por terminal se puede igual, y de eso se
+    # encarga el SOUL. Es sacar la puerta facil que daba al lugar equivocado.
+    - cronjob
 
 platform_toolsets:
   api_server:
@@ -86,6 +98,20 @@ platform_toolsets:
   telegram:
     - hermes-telegram
     - kanban
+
+# Sin `platforms.telegram.enabled` el adapter de Telegram bootea a medias:
+# loguea "Connecting" pero el polling nunca arranca y los mensajes no llegan
+# (descubierto el 7/8/2026 con East: /start sin respuesta, cero errores).
+# El home_channel arranca apuntando a soporte; se cambia al chat del cliente
+# cuando se empareja.
+platforms:
+  telegram:
+    enabled: true
+    home_channel:
+      platform: telegram
+      chat_id: 'COMPLETAR_CHAT_ID'
+      name: COMPLETAR_NOMBRE
+      user_id: 'COMPLETAR_CHAT_ID'
   cron:
     - hermes-cron
     - kanban

@@ -38,7 +38,14 @@ def main():
     ap.add_argument("--slug", default="")
     ap.add_argument("--replace", action="store_true")
     ap.add_argument("--body-file", default="")
+    # El flujo al que pertenece: el entregable cae en SU carpeta canonica y el
+    # portal lo muestra dentro del flujo. Sin esto va a la raiz, como siempre.
+    ap.add_argument("--flujo", default="")
     args = ap.parse_args()
+
+    if args.flujo and not re.match(r"^[a-z0-9][a-z0-9-]{0,48}$", args.flujo):
+        print(json.dumps({"ok": False, "error": "flujo invalido: minusculas, numeros y guiones"}))
+        return 2
 
     body = Path(args.body_file).read_text("utf-8") if args.body_file else sys.stdin.read()
     body = body.strip()
@@ -52,15 +59,16 @@ def main():
     now = time.time()
     day = time.strftime("%Y-%m-%d", time.localtime(now))
     slug = slugify(args.slug or args.title)
-    ENTREGABLES.mkdir(parents=True, exist_ok=True)
-    path = ENTREGABLES / f"{day}-{slug}.md"
+    destino = ENTREGABLES / args.flujo if args.flujo else ENTREGABLES
+    destino.mkdir(parents=True, exist_ok=True)
+    path = destino / f"{day}-{slug}.md"
 
     if path.exists() and not args.replace:
         # No pisamos trabajo previo por accidente: sufijo incremental.
         n = 2
-        while (ENTREGABLES / f"{day}-{slug}-{n}.md").exists():
+        while (destino / f"{day}-{slug}-{n}.md").exists():
             n += 1
-        path = ENTREGABLES / f"{day}-{slug}-{n}.md"
+        path = destino / f"{day}-{slug}-{n}.md"
 
     tags = [t.strip() for t in args.tags.split(",") if t.strip()]
     front = [

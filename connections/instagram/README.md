@@ -93,3 +93,12 @@ Dos decisiones que no se leen del nombre:
   sola cada dos meses y el cliente se entera cuando el flujo falla.
 - Conectar una cuenta real y correr las de lectura de punta a punta. Nada de
   esto tocó Instagram todavía.
+
+## TODO antes de darlo por bueno
+
+**Auditar el código de mcpware, no solo su README.** Las 23 clases de
+`tools.json` salieron de leer la documentación del repo. Con Mercado Pago eso
+no alcanzó: los tres bugs que encontramos —el `X-Idempotency-Key` faltante
+entre ellos, que podía devolver la plata dos veces— aparecieron recién al leer
+la implementación. Hay que bajarlo y verificar que cada función haga lo que
+dice el nombre, y que `lee`/`actua` coincida con lo que realmente toca.

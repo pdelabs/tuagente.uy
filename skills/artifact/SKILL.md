@@ -88,3 +88,12 @@ Ejemplo de barras sin librerías:
 
 En `/opt/data/workspace/artifacts/<id>/` (`index.html` + `meta.json`). No escribas
 ahí a mano ni muevas esos archivos: el portal los lee de ese lugar.
+
+## Antes de darlo por terminado: releelo
+
+Después de crear el artefacto, **abrí el HTML final y releelo entero**. Si
+encontrás texto tuyo que no es contenido (razonamientos, "necesito revisar…"),
+caracteres basura o etiquetas rotas, regeneralo — no lo entregues anotando el
+error adentro. Lo que queda en el archivo lo ve el cliente tal cual.
+(Regla nacida el 8/8/2026: un artefacto salió con el monólogo interno del
+modelo y una sopa de tokens incrustados antes del footer.)

@@ -60,3 +60,9 @@ lo agrega.
 - Un dato suelto o una respuesta de dos líneas → contestá en el chat y listo.
 - Algo que se entiende mejor **mirándolo** (comparaciones, evolución, KPIs) →
   usá la skill `artifact`, que hace una visualización.
+
+## Si el trabajo es parte de un flujo
+
+Pasá `--flujo <slug>` (el slug de la carpeta en `flujos/`): el entregable cae
+en la carpeta de ese flujo y el cliente lo ve dentro del flujo en su portal.
+Todo trabajo que nace de un flujo lleva su `--flujo` — sin excepción.
