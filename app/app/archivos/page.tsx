@@ -47,7 +47,18 @@ const is404 = (msg: string) => /^404\b/.test(msg);
 
 const clean = (p: string) => (p || "").replace(/^\/+/, "");
 
-const isInternal = (path: string) => path === INTERNAL || path.startsWith(`${INTERNAL}/`);
+// Andamiaje: los scripts que el agente se escribe para trabajar. Viven
+// SUELTOS en la raíz del workspace, no en `interno/`, así que la regla vieja
+// (solo esa carpeta) los dejaba a la vista: un cliente de prueba abrió
+// Archivos y lo primero que vio fueron dieciséis `create_batch_tickets.py`,
+// justo debajo de una explicación que le prometía que "el andamiaje queda
+// aparte". Se siguen pudiendo ver con el interruptor de abajo.
+const SCRIPT_EXT = /\.(py|sh|bash|zsh|rb|pl|js|mjs|cjs|ts|tsx|jsx|ipynb)$/i;
+
+const isInternal = (path: string) =>
+  path === INTERNAL ||
+  path.startsWith(`${INTERNAL}/`) ||
+  SCRIPT_EXT.test(path.split("/").pop() || "");
 
 // Comparación insensible a tildes y mayúsculas (búsqueda y títulos duplicados).
 const norm = (s: string) =>
@@ -310,7 +321,7 @@ export default function ArchivosPage() {
           <EmptyState
             icon={FolderOpen}
             title="Los archivos no están disponibles en este agente"
-            hint="Tu agente todavía no comparte los archivos de su workspace."
+            hint="Cuando tu agente escriba algo, lo vas a poder abrir desde acá."
           />
           <div className="flex justify-center"><Btn kind="ghost" size="sm" onClick={load}>Reintentar</Btn></div>
         </>
@@ -354,7 +365,7 @@ export default function ArchivosPage() {
               onClick={() => goTo("")}
               className={dir ? "font-medium text-ink-soft transition hover:text-ink" : "font-semibold text-ink"}
             >
-              Workspace
+              Todo
             </button>
             {crumbs.map((seg, i) => {
               const isLast = i === crumbs.length - 1;
@@ -488,8 +499,8 @@ export default function ArchivosPage() {
             >
               {showInternal && <Check className="h-3 w-3" />}
               {showInternal
-                ? "Ocultar archivos internos"
-                : `Ver archivos internos (${hiddenCount})`}
+                ? "Ocultar las cosas técnicas"
+                : `Ver las cosas técnicas de tu agente (${hiddenCount})`}
             </button>
           </div>
         )}
@@ -504,7 +515,7 @@ export default function ArchivosPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-6 md:px-8">
-      <PageHeader title="Archivos" subtitle="Lo que tu agente escribió en su workspace" />
+      <PageHeader title="Archivos" subtitle="Todos los archivos que tu agente fue escribiendo" />
       {body()}
       {viewer && (
         <Modal wide onClose={() => setViewer(null)}>

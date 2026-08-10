@@ -13,6 +13,7 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { getConnections, loadConfig, type Connection } from "./agent";
 import { ConexionLogo } from "./ConexionLogo";
+import Permisos from "./Permisos";
 
 let cache: Promise<Connection[]> | null = null;
 function conexiones(): Promise<Connection[]> {
@@ -72,4 +73,23 @@ export function ConexionCardInline({ id }: { id: string }) {
       )}
     </span>
   );
+}
+
+/** Los interruptores de permisos, DENTRO del chat. El agente escribe
+ *  `permisos:<id>` cuando choca contra la política: en vez de un "no puedo"
+ *  seco, deja el control adelante y el cliente decide sin salir de la
+ *  conversación. Él no lo puede cambiar — solo señalarlo. */
+export function PermisosInline({ id }: { id: string }) {
+  const [c, setC] = useState<Connection | null | undefined>(undefined);
+  useEffect(() => {
+    let vivo = true;
+    conexiones()
+      .then((cs) => { if (vivo) setC(cs.find((x) => x.id === id) ?? null); })
+      .catch(() => { if (vivo) setC(null); });
+    return () => { vivo = false; };
+  }, [id]);
+
+  if (c === undefined) return <span className="text-[13px] text-ink-soft">…</span>;
+  if (!c) return null;   // conexión que no existe: no inventamos una tarjeta
+  return <div className="my-2 max-w-sm"><Permisos conexion={c} /></div>;
 }

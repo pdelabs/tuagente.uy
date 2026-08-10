@@ -115,3 +115,58 @@ Una sola pestaña principal con TODO lo que el agente produce — entregables
 (solo HTML) quedó promovida a principal como interim; la skill `artifact`
 tiene que ganar `--flujo` como ya lo tiene `entregable`. Al fusionar, Archivos
 queda en "Más" como vista cruda del workspace.
+
+## Conexiones — abierto tras el 9/8
+
+- **Mercado Pago: escrito y auditado, SIN PROBAR contra una cuenta real.**
+  Ningún endpoint tocó Mercado Pago todavía. Hay que correrlo con credenciales
+  de **sandbox** (no producción) y verificar de punta a punta: los cuatro de
+  lectura, el link de cobro, la devolución (con su idempotencia y su chequeo
+  previo) y un webhook **firmado de verdad**. Hasta que eso pase, no se le
+  promete a ningún cliente. El código está en
+  `hermes-kit/connections/mercadopago/`, con tres bugs ya corregidos que
+  salieron de leer la integración de demoda — los dos MCP no oficiales más
+  populares todavía los tienen.
+
+- **La guardia no está registrada en Hermes.** Está construida y probada (con
+  un MCP falso y con Mercado Pago), pero falta el `hermes mcp add` que la
+  ponga en el camino del agente. Hasta entonces el agente NO ve ninguna de las
+  herramientas nuevas: ni las 12 de WhatsApp ni las 6 de Mercado Pago.
+
+- **WhatsApp: pareado pendiente.** El puente corre y el QR sale por el portal,
+  pero nadie lo escaneó. Cuando se haga, tiene que ser con un **número
+  descartable**: la vía por QR usa whatsmeow y Meta puede bloquear el número.
+
+- **El correo sigue sin conectar**, y es la única conexión que un flujo pide
+  hoy (prospección está en ámbar esperándola).
+
+- **Instagram: curado, SIN CONECTAR y SIN AUDITAR EL CÓDIGO.** 23 herramientas
+  del MCP oficial (`mcpware/instagram-mcp`, Graph API) clasificadas 15 leen /
+  8 actúan.
+  - **La clasificación salió de leer el README del repo, no el código.** Con
+    Mercado Pago aprendimos que eso no alcanza: los tres bugs (el
+    `X-Idempotency-Key` faltante entre ellos) aparecieron recién al leer la
+    implementación. **Falta bajar mcpware y hacerle el mismo pase**: verificar
+    que cada función haga lo que dice el nombre y que la clase lee/actúa
+    coincida con lo que realmente toca.
+  - Falta conectar una cuenta real y correr las de lectura de punta a punta.
+  - Pasos previos del lado del cliente: cuenta **profesional Business** y
+    **pública**, y una **página de Facebook** vinculada (el MCP elegido usa
+    Facebook Login; el camino liviano *Instagram API with Instagram Login* no
+    pide página pero deja afuera los DM).
+  - **Leer es el motivo de la conexión**, no publicar: sin `get_media_posts` el
+    flujo semanal escribe a ciegas, repite temas y se pisa con lo que ya salió.
+  - **Para la cuenta propia NO hay app review** — Standard Access está
+    auto-aprobado y cubre leer *y* publicar. (Una nota anterior decía 2-4
+    semanas; estaba mal.) Las 2-4 semanas son Advanced Access, para operar
+    cuentas **ajenas**: eso es el día que se venda como producto, y ahí conviene
+    arrancar el trámite temprano porque es espera y no trabajo.
+  - **Los DM no van a andar**: `instagram_manage_messages` pide Advanced Access
+    aun en cuenta propia. Las 3 tools están declaradas pero muertas.
+  - **El token dura 60 días y se cae en silencio.** Falta refrescarlo antes de
+    que venza; sin eso la conexión se muere sola cada dos meses.
+  - Se descartaron los MCP basados en `instagrapi`: detección en horas y
+    escalada a **baja permanente**. Con WhatsApp el riesgo se acepta porque el
+    número es descartable; una cuenta de marca no lo es.
+
+  El razonamiento largo está en `hermes-kit/connections/instagram/README.md`.

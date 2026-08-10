@@ -252,9 +252,10 @@ export default function UsoPage() {
 
     const minis: { label: string; value: string; hint?: string | null }[] = [];
     if (sess != null) minis.push({ label: "Sesiones", value: nf.format(sess) });
-    if (conCosto && total != null) {
-      minis.push({ label: "Tokens", value: nf.format(total), hint: tokensHint });
-    }
+    // "Tokens 1,24 M" ocupaba el mismo lugar que "Sesiones" y no significaba
+    // nada para el cliente ("¿fichas? ¿como las del ómnibus?"). Cuando hay
+    // costo, la plata alcanza: los tokens quedan en el detalle del gráfico.
+    void total; void tokensHint;
     if (!conCosto) {
       if (input != null) minis.push({ label: "Tokens de entrada", value: nf.format(input) });
       if (output != null) minis.push({ label: "Tokens de salida", value: nf.format(output) });
@@ -271,8 +272,7 @@ export default function UsoPage() {
 
     const canales = filas(usage.by_channel, (n) => CANALES[n] ?? n, true);
     const modelos = filas(usage.by_model, (n) => n, false);
-    const ambos = canales.length > 0 && modelos.length > 0;
-
+    
     return (
       <>
         <Card>
@@ -287,8 +287,9 @@ export default function UsoPage() {
           </p>
           {conCosto && (
             <p className="mt-2 text-[11px] leading-snug text-ink-soft">
-              Lo estima el motor del agente a partir de lo que consumió cada sesión. Es una
-              referencia, no una factura.
+              Es lo que costó el trabajo de tu agente este período, estimado por el motor.
+              No incluye tu abono mensual y no es un cobro: lo mostramos para que veas
+              cuánto se usa.
             </p>
           )}
 
@@ -361,11 +362,26 @@ export default function UsoPage() {
           </Card>
         )}
 
-        {(canales.length > 0 || modelos.length > 0) && (
-          <div className={`mt-3 grid gap-3 ${ambos ? "lg:grid-cols-2" : ""}`}>
-            {canales.length > 0 && <Desgloses title="Por canal" rows={canales} />}
-            {modelos.length > 0 && <Desgloses title="Por modelo" rows={modelos} />}
+        {canales.length > 0 && (
+          <div className="mt-3">
+            <Desgloses title="Por dónde se usó" rows={canales} />
           </div>
+        )}
+
+        {/* "Por modelo" son nombres de motor (`openai/gpt-5.6-luna`,
+            `anthropic/claude-haiku-4.5`): para el cliente son códigos con
+            barras, y enterarse ahí de costado por qué proveedores pasa su
+            información genera más desconfianza que transparencia. Queda, pero
+            plegado y dicho en criollo: el que lo quiera ver, lo abre. */}
+        {modelos.length > 0 && (
+          <details className="mt-3 group">
+            <summary className="cursor-pointer list-none text-[12px] font-semibold text-ink-soft transition hover:text-ink [&::-webkit-details-marker]:hidden">
+              Ver con qué motores de IA trabajó
+            </summary>
+            <div className="mt-2">
+              <Desgloses title="Por motor" rows={modelos} />
+            </div>
+          </details>
         )}
       </>
     );

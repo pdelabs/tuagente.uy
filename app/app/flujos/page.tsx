@@ -21,8 +21,8 @@ import {
   Zap, type LucideIcon,
 } from "lucide-react";
 import {
-  getFlujos, loadConfig,
-  type Flujo, type HttpError, type PortalConfig,
+  etiquetaConexion, getConnections, getFlujos, loadConfig,
+  type Connection, type Flujo, type HttpError, type PortalConfig,
 } from "../lib/agent";
 import { EntityProvider } from "../lib/EntityViewer";
 import { EntityChip } from "../lib/entities";
@@ -65,7 +65,36 @@ function EstadoFlujo({ f }: { f: Flujo }) {
   return <Chip tone="green">Activo</Chip>;
 }
 
-function TarjetaFlujo({ f }: { f: Flujo }) {
+/** Qué le falta a este flujo, cómo se llama y para qué sirve. */
+function FaltaConexion({ ids, conexiones }: {
+  ids: string[]; conexiones: Connection[] | null;
+}) {
+  const nombres = ids.map((id) => etiquetaConexion(id, conexiones));
+  const porQue = ids
+    .map((id) => conexiones?.find((c) => c.id === id)?.para_que)
+    .filter(Boolean) as string[];
+  return (
+    <div className="rounded-lg border border-c-amber bg-c-amber/25 p-3">
+      <p className="text-[13px] font-semibold text-c-amber-ink">
+        Le falta {nombres.length === 1 ? nombres[0] : nombres.join(" y ")}.
+      </p>
+      {porQue.length > 0 && (
+        <p className="mt-1 text-[12.5px] leading-relaxed text-c-amber-ink/85">
+          {porQue.join(" ")}
+        </p>
+      )}
+      <Link
+        href={`/app/conexiones#c=${encodeURIComponent(ids[0])}`}
+        className="mt-2.5 inline-flex h-9 w-fit items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
+      >
+        Conectar {nombres[0]}
+        <ArrowRight className="h-4 w-4" />
+      </Link>
+    </div>
+  );
+}
+
+function TarjetaFlujo({ f, conexiones }: { f: Flujo; conexiones: Connection[] | null }) {
   const Icono = GATILLO_ICON[f.gatillo_tipo] ?? Workflow;
   return (
     <Card className="flex flex-col gap-2.5">
@@ -90,15 +119,13 @@ function TarjetaFlujo({ f }: { f: Flujo }) {
         </p>
       )}
 
-      {/* Incompleto: el paso que lo destraba, no un diagnóstico. */}
-      {f.estado === "incompleto" && (
-        <Link
-          href="/app/conexiones"
-          className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
-        >
-          Conectar lo que falta
-          <ArrowRight className="h-4 w-4" />
-        </Link>
+      {/* Incompleto: el paso que lo destraba, no un diagnóstico. Y con NOMBRE
+          y MOTIVO: "Conectar lo que falta" no dice qué falta ni para qué, y al
+          llegar a Conexiones el cliente se perdía entre seis tarjetas sin
+          saber cuál era la suya. El "para qué" sale del catálogo, que ya lo
+          tiene escrito en criollo — no lo inventamos acá. */}
+      {f.estado === "incompleto" && f.conexiones_faltan.length > 0 && (
+        <FaltaConexion ids={f.conexiones_faltan} conexiones={conexiones} />
       )}
 
       {f.resultados.length > 0 && (
@@ -147,8 +174,17 @@ export default function FlujosPage() {
   const [flujos, setFlujos] = useState<Flujo[] | null>(null);
   const [err, setErr] = useState<Falla | null>(null);
   const [cargando, setCargando] = useState(false);
+  // Solo para poder nombrar la conexión que falta y decir para qué sirve.
+  const [conexiones, setConexiones] = useState<Connection[] | null>(null);
 
   useEffect(() => setCfg(loadConfig()), []);
+
+  useEffect(() => {
+    if (!cfg) return;
+    getConnections(cfg)
+      .then((r) => setConexiones(r.conexiones ?? []))
+      .catch(() => { /* sin catálogo caemos a los rótulos conocidos */ });
+  }, [cfg]);
 
   const cargar = useCallback(() => {
     if (!cfg) return;
@@ -193,7 +229,7 @@ export default function FlujosPage() {
     }
     return (
       <div className="grid gap-3 md:grid-cols-2">
-        {flujos.map((f) => <TarjetaFlujo key={f.slug} f={f} />)}
+        {flujos.map((f) => <TarjetaFlujo key={f.slug} f={f} conexiones={conexiones} />)}
       </div>
     );
   };

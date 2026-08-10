@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown, ArrowUp, Brain, Check, ChevronRight, Copy, Download, Loader2, Menu,
-  Paperclip, Pencil, RefreshCw, Square, Wrench,
+  Paperclip, Pencil, RefreshCw, Square, Wrench, X,
 } from "lucide-react";
 import {
   loadConfig, chatStream, sessionChatStream, getSessions, getSessionMessages,
@@ -166,6 +166,11 @@ export default function ChatPage() {
   const [mentionIdx, setMentionIdx] = useState(0);
 
   const [uploading, setUploading] = useState(false);
+  // Los adjuntos NO se pegan como texto en el cuadro de escribir: ahí el
+  // cliente veía aparecer "workspace/entrada/clientes.csv" mezclado con sus
+  // palabras ("feo, pero funcionó"). Viven acá y se suman al mensaje recién
+  // al enviarlo, que es lo que el agente necesita leer.
+  const [adjuntos, setAdjuntos] = useState<{ nombre: string; path: string }[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const sendingRef = useRef(false);
@@ -240,7 +245,9 @@ export default function ChatPage() {
     setSendErr(null);
     try {
       const r = await uploadFile(cfg, file);
-      setInput((prev) => (prev ? `${prev.trimEnd()} ${r.path} ` : `${r.path} `));
+      setAdjuntos((prev) => (prev.some((a) => a.path === r.path)
+        ? prev
+        : [...prev, { nombre: file.name, path: r.path }]));
       taRef.current?.focus();
     } catch (e) {
       setSendErr(e instanceof Error ? e.message : "no pude subir el archivo");
@@ -402,7 +409,13 @@ export default function ChatPage() {
     }
   };
 
-  const send = (raw: string) => run(raw.trim(), msgs);
+  const send = (raw: string) => {
+    const rutas = adjuntos.map((a) => a.path).join("\n");
+    const texto = [raw.trim(), rutas].filter(Boolean).join("\n");
+    if (!texto) return;
+    setAdjuntos([]);
+    run(texto, msgs);
+  };
 
   // Regenerar: repite el último pedido del usuario. En conversación nueva
   // reemplaza la respuesta; en una sesión guardada del agente no se puede
@@ -650,6 +663,26 @@ export default function ChatPage() {
                 onPick={pickMention}
               />
             )}
+            {adjuntos.length > 0 && (
+              <div className="mb-1.5 flex flex-wrap gap-1.5">
+                {adjuntos.map((a) => (
+                  <span
+                    key={a.path}
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-black/[0.07] bg-white px-2 py-1 text-[12px] text-ink"
+                  >
+                    <Paperclip className="h-3 w-3 shrink-0 text-ink-soft" />
+                    <span className="truncate">{a.nombre}</span>
+                    <button
+                      aria-label={`Quitar ${a.nombre}`}
+                      onClick={() => setAdjuntos((prev) => prev.filter((x) => x.path !== a.path))}
+                      className="shrink-0 rounded p-0.5 text-ink-soft transition hover:text-c-coral-ink"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-2 rounded-2xl border border-black/10 bg-white p-2 pl-2 transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
               <input
                 ref={fileRef}
@@ -729,8 +762,11 @@ export default function ChatPage() {
               )}
             </div>
             <p className="mt-1.5 text-center text-[11px] text-ink-soft/60">
-              Enter envía · Shift+Enter salto de línea · <b className="font-semibold">#</b> ticket ·{" "}
-              <b className="font-semibold">@</b> archivo · ⌘K buscar
+              {/* Cuatro atajos apretados en letra chica: de eso el cliente
+                  entiende el primero y el resto es ruido. Queda lo que sirve
+                  sin saber nada, en palabras. */}
+              Enter envía · escribí <b className="font-semibold">#</b> para nombrar una tarea
+              o <b className="font-semibold">@</b> para un archivo
             </p>
           </div>
         </div>

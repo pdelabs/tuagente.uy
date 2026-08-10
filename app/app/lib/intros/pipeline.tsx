@@ -131,7 +131,7 @@ export default function PipelineIntro({ onOk }: IntroProps) {
       <TableroDemo />
 
       <div className="mt-6 max-w-2xl">
-        <Eyebrow icon={Columns3}>Pipeline</Eyebrow>
+        <Eyebrow icon={Columns3}>Tablero</Eyebrow>
         <Title>Todo lo que tu agente tiene entre manos</Title>
         <Lead>
           Cada tarjeta es una tarea. Las vas viendo pasar de esperando tu aprobación a en

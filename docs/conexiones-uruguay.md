@@ -139,3 +139,42 @@ Las tres primeras se pueden tener funcionando sin depender de nadie externo.
 - [Plexo](https://www.plexo.com.uy/)
 - [Mercado Pago Uruguay — guía](https://tiendli.com/blog/mercadopago-uruguay-guia)
 - [Acuerdo Scanntech — BBVA Uruguay](https://www.bbva.com.uy/empresas/acuerdo-scanntech.html)
+
+
+---
+
+## Facturación electrónica: la pregunta abierta, contestada (9/8/2026)
+
+La duda era *"si Uruware da API a un integrador o solo a partners"*. **Ninguna
+de las dos: las credenciales son del CLIENTE, no nuestras.**
+
+- La integración se hace por **bandejas de entrada** (web service, base de
+  datos o intercambio de archivos) o por componentes programables (.NET, Java,
+  ActiveX).
+- Las credenciales —usuario, contraseña, **código de comercio**, **código de
+  terminal** y URL— las entrega el **departamento de operaciones de Uruware al
+  cliente** que contrató el servicio.
+- **No hace falta ningún acuerdo de partner de nuestro lado.** Es el mismo
+  modelo que el correo o Mercado Pago: el cliente ya tiene la relación, nosotros
+  usamos sus credenciales.
+
+**Lo que sí hay que preguntarle a cada cliente:** si su plan incluye
+integración. Uruware da documentación y soporte técnico *"si el cliente contrata
+un plan para integrar un sistema de facturación"* — un plan solo-portal puede no
+alcanzar. Esa es la pregunta del alta, no un supuesto.
+
+**El costo real:** UCFE es SOAP/XML, no REST. Bastante más trabajo que Mercado
+Pago. Hay un cliente PHP público (`planetadeleste/ucfe`) que sirve de referencia
+y el manual se baja de `portal.mifactura.com.uy`.
+
+### Y no es un conector, son varios
+
+La DGI tiene 77 proveedores habilitados y **cada uno expone lo suyo**. Ejemplo
+concreto encontrado el mismo día: **Surtec** (`facturaelectronica.com.uy`) tiene
+**API REST con documentación pública y Bearer token** — crear CFE, consultar
+emitidos y consultar recibidos. Mucho más barato de construir que UCFE.
+
+**Conclusión:** "conectar la facturación electrónica" no es un conector, es un
+patrón con un proveedor adentro. Conviene construir la forma una vez y
+empezar por **el proveedor que use el primer cliente que lo pida** — no por el
+más grande. Adivinar cuál va a ser es tirar trabajo a la basura.

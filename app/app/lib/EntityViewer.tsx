@@ -87,7 +87,7 @@ function EntityViewer({ cfg, entity, onClose }: {
     let alive = true;
     setErr(null);
     // "conexion" nunca llega acá: su chip ES la tarjeta y no abre modal.
-    if (entity.kind === "conexion") return;
+    if (entity.kind === "conexion" || entity.kind === "permisos") return;
     const p =
       entity.kind === "ticket"
         ? getTicketDetail(cfg, entity.id).then((d) => { if (alive) setTicket(d); })
@@ -100,7 +100,7 @@ function EntityViewer({ cfg, entity, onClose }: {
       const faltante = {
         ticket: "Ese ticket ya no existe.",
         artifact: "Ese artefacto ya no está disponible.",
-        file: "No encontré ese archivo en el workspace.",
+        file: "No encontré ese archivo.",
         conexion: "",
       }[entity.kind];
       setErr(msg.startsWith("404") ? faltante : msg);
@@ -108,7 +108,7 @@ function EntityViewer({ cfg, entity, onClose }: {
     return () => { alive = false; };
   }, [cfg, entity]);
 
-  if (entity.kind === "conexion") return null; // su chip ES la tarjeta
+  if (entity.kind === "conexion" || entity.kind === "permisos") return null; // su chip ES la tarjeta
 
   const title =
     entity.kind === "ticket" ? ticket?.ticket.title ?? entity.id
@@ -148,7 +148,7 @@ function EntityViewer({ cfg, entity, onClose }: {
                 )}
               </>
             ) : (
-              <Chip>archivo del workspace</Chip>
+              <Chip>archivo</Chip>
             )}
           </div>
         </div>

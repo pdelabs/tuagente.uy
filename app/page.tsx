@@ -7,6 +7,10 @@ import {
   Clock,
   Eye,
   FileText,
+  FolderOpen,
+  Hand,
+  LayoutDashboard,
+  MapPin,
   Headphones,
   Megaphone,
   MessageCircle,
@@ -19,7 +23,6 @@ import {
   ShieldCheck,
   Sparkles,
   TrendingUp,
-  Trophy,
   Zap,
 } from "lucide-react";
 import Reveal from "./Reveal";
@@ -38,6 +41,7 @@ export default function Page() {
       <Steps />
       <UseCases />
       <Control />
+      <Portal />
       <Integrations />
       <Pricing />
       <Reveal><Proof /></Reveal>
@@ -69,6 +73,7 @@ function Header() {
         {[
           ["Cómo funciona", "#como-funciona"],
           ["Casos", "#casos"],
+          ["Tu portal", "#portal"],
           ["Planes", "#planes"],
           ["FAQ", "#faq"],
           ["Blog", "/blog"],
@@ -100,8 +105,11 @@ function Hero() {
   return (
     <section className="aurora relative">
       <div className="mx-auto max-w-5xl px-5 pb-16 pt-14 text-center sm:px-8 sm:pb-24 sm:pt-20">
+        {/* Un "#1 de LATAM" de una marca que el cliente no conoce no genera
+            confianza: la descuenta. Lo que sí es verificable y sí importa a
+            quien compra esto en Uruguay es dónde estamos y quién lo hace. */}
         <span className="animate-fadeup inline-flex items-center gap-2 rounded-pill border border-primary/20 bg-white/70 px-4 py-1.5 text-sm font-bold text-primary backdrop-blur">
-          <Trophy size={15} /> La #1 en agentes de IA de LATAM
+          <MapPin size={15} /> Hecho en Uruguay, para empresas de LATAM
         </span>
 
         <h1
@@ -146,7 +154,7 @@ function Hero() {
           className="animate-fadeup mt-6 text-sm font-medium text-ink-soft"
           style={{ animationDelay: "380ms" }}
         >
-          +150 agentes desplegados · empresas líderes de toda la región
+          Un agente por empresa, aislado y con su propia clave · vos ves todo lo que hace
         </p>
       </div>
     </section>
@@ -178,9 +186,9 @@ const CARDS = [
     ink: "text-c-coral-ink",
   },
   {
-    Icon: Trophy,
-    title: "El equipo #1 de LATAM",
-    body: "Somos los que más agentes pusieron a trabajar en la región. Estás en las mejores manos de Latinoamérica.",
+    Icon: Eye,
+    title: "Nada pasa a tus espaldas",
+    body: "Tenés un portal donde ves qué hizo, qué está haciendo y qué produjo. Y lo sensible — un mail a un cliente, un pago — espera tu ok.",
     bg: "bg-c-amber",
     ink: "text-c-amber-ink",
   },
@@ -211,6 +219,10 @@ function Cards() {
 
 /* ─────────────────────────────────────────── Hype stats */
 
+// Acá había cuatro números que no podíamos sostener (+150 agentes, 40+
+// empresas, 3× productividad). Un número inventado no se puede defender en la
+// primera reunión, y el cliente que compra esto pregunta. Van cuatro hechos
+// del producto, todos verificables contra lo que se entrega.
 const STATS: {
   l: string;
   value?: number;
@@ -218,10 +230,10 @@ const STATS: {
   suffix?: string;
   static?: string;
 }[] = [
-  { prefix: "+", value: 150, l: "agentes desplegados" },
-  { value: 40, suffix: "+", l: "empresas en LATAM" },
-  { static: "24/7", l: "operando sin parar" },
-  { value: 3, suffix: "×", l: "más productividad" },
+  { static: "24/7", l: "trabaja sin parar" },
+  { static: "1 a 1", l: "un agente por empresa, aislado" },
+  { static: "Tu ok", l: "para todo lo sensible" },
+  { static: "Semanas", l: "de la charla a producción" },
 ];
 
 function Stats() {
@@ -373,7 +385,7 @@ const CONTROL_POINTS = [
   {
     Icon: MessageCircle,
     title: "Chateá con tu agente",
-    body: "Le hablás por WhatsApp o Slack como a un empleado más: le pedís tareas, le preguntás qué hizo y te responde al momento.",
+    body: "Le hablás desde tu portal o desde el celular, como a un empleado más: le pedís tareas, le preguntás qué hizo y te responde al momento.",
   },
   {
     Icon: SlidersHorizontal,
@@ -460,20 +472,88 @@ function Control() {
   );
 }
 
+/* ─────────────────────────────────────────── El portal */
+
+// El portal no aparecía en ninguna parte del sitio, y es lo que hace creíble
+// todo lo demás: "cero cajas negras" dicho en prosa es una promesa; mostrado
+// es una prueba. Es además lo único que el cliente va a tocar todos los días.
+const PORTAL_PANTALLAS = [
+  {
+    Icon: Eye,
+    title: "Qué hizo y qué está haciendo",
+    body: "Entrás a la mañana y ves lo del día: qué terminó, qué está en curso y qué te está esperando a vos.",
+  },
+  {
+    Icon: Hand,
+    title: "Lo que espera tu ok",
+    body: "Antes de mandar un mail o gastar plata, tu agente frena y te muestra el texto completo. Aprobás, lo corregís o lo rechazás.",
+  },
+  {
+    Icon: FolderOpen,
+    title: "Lo que produjo",
+    body: "Informes, listados y planillas, ordenados por trabajo y con fecha. Se abren ahí mismo, sin bajar nada.",
+  },
+  {
+    Icon: MessageCircle,
+    title: "Hablarle, como a cualquiera",
+    body: "Le pedís algo escrito como te salga. Si le falta un dato o un archivo para hacerlo, te lo pide.",
+  },
+];
+
+function Portal() {
+  return (
+    <section id="portal" className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-24">
+      <div className="mx-auto max-w-2xl text-center">
+        <span className="inline-flex items-center gap-2 rounded-pill bg-primary/10 px-4 py-1.5 text-sm font-bold text-primary">
+          <LayoutDashboard size={15} /> Tu portal
+        </span>
+        <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
+          Un lugar donde ver todo lo que hace
+        </h2>
+        <p className="mt-4 text-lg text-ink-soft">
+          Tu agente trabaja solo, pero no a ciegas. Cada empresa tiene su portal: entrás
+          con un link, y ahí está todo lo que pasó — sin instalar nada y sin saber de
+          computación.
+        </p>
+      </div>
+
+      <div className="mt-12 grid gap-5 sm:grid-cols-2">
+        {PORTAL_PANTALLAS.map(({ Icon, title, body }, i) => (
+          <Reveal key={title} delay={(i % 2) * 90} className="h-full">
+            <article className="h-full rounded-card border border-ink/5 bg-white p-7 shadow-soft">
+              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                <Icon size={22} />
+              </span>
+              <h3 className="mt-5 text-xl font-extrabold tracking-tight text-ink">{title}</h3>
+              <p className="mt-2 text-ink-soft">{body}</p>
+            </article>
+          </Reveal>
+        ))}
+      </div>
+
+      <p className="mx-auto mt-8 max-w-2xl text-center text-sm font-medium text-ink-soft">
+        Te lo mostramos funcionando en la demo, con tu caso adentro.
+      </p>
+    </section>
+  );
+}
+
 /* ─────────────────────────────────────────── Integrations */
 
+// Lo que HOY está en el catálogo curado que se instala en cada agente
+// (hermes-kit/connections/catalogo.json). La lista anterior prometía HubSpot,
+// Odoo, Mercado Libre, Notion, PostgreSQL y "+50 más" sin que existiera el
+// conector: eso se descubre en la primera reunión y quema la confianza justo
+// cuando más se necesita. Lo que no está, se escribe — y eso se dice aparte.
 const INTEGRATIONS = [
-  "WhatsApp Business",
-  "Gmail",
-  "Google Sheets",
-  "HubSpot",
-  "Odoo",
-  "Mercado Libre",
+  "Telegram",
+  "Correo de la empresa",
+  "Google Planillas",
+  "Google Drive",
+  "Google Agenda",
+  "Google Docs",
   "Slack",
-  "Notion",
-  "PostgreSQL",
-  "APIs propias",
-  "+ 50 más",
+  "WhatsApp",
 ];
 
 function Integrations() {
@@ -495,8 +575,9 @@ function Integrations() {
             ))}
           </div>
           <p className="mx-auto mt-6 max-w-xl text-sm font-medium text-c-green-ink/70">
-            ¿Tu sistema no está en la lista? Escribimos la integración a medida. Esa es literalmente
-            nuestra especialidad.
+            Estas son las que ya vienen listas. ¿Tu sistema no está? Le escribimos la
+            integración a medida — es lo que sabemos hacer. Y te decimos de entrada cuánto
+            lleva: WhatsApp, por ejemplo, depende de un trámite ante Meta y son días, no horas.
           </p>
         </div>
       </Reveal>
@@ -658,7 +739,7 @@ const FAQS = [
   },
   {
     q: "¿A qué sistemas se conecta?",
-    a: "CRM (HubSpot, Odoo), WhatsApp Business, Gmail, Google Sheets, Mercado Libre, bases de datos (PostgreSQL, MySQL) y cualquier sistema propio con API. Si no existe la integración, la escribimos nosotros a medida.",
+    a: "Ya vienen listas: Telegram, la casilla de correo de la empresa, y Google Planillas, Drive, Agenda y Documentos. Slack y WhatsApp los conectamos nosotros (WhatsApp lleva días por la verificación de Meta). Para tu CRM, tu ERP o cualquier sistema propio con API escribimos la integración a medida — eso es lo que hacemos. Si te decimos que sí, es porque lo probamos.",
   },
   {
     q: "¿Es seguro? ¿Qué pasa con mis datos?",
@@ -666,11 +747,11 @@ const FAQS = [
   },
   {
     q: "¿Puedo hablar con mi agente y modificarlo?",
-    a: "Sí, y es de lo mejor que tiene. Cada agente viene con un canal de chat directo (WhatsApp o Slack): le preguntás qué hizo, le pedís tareas nuevas y le cambiás las instrucciones hablándole, como a un empleado. Y si algo no te cierra, lo pausás con un botón. Autonomía no significa perder el control.",
+    a: "Sí, y es de lo mejor que tiene. Le hablás desde tu portal y desde el celular por Telegram, que se activa en cinco minutos: le preguntás qué hizo, le pedís tareas nuevas y le cambiás las instrucciones hablándole, como a un empleado. WhatsApp también se puede, pero es el más lento de conectar porque depende de una verificación ante Meta: lo tramitamos nosotros y lleva días. Y si algo no te cierra, lo pausás. Autonomía no significa perder el control.",
   },
   {
     q: "¿Dónde trabajan y quién está detrás?",
-    a: "Atendemos toda Latinoamérica de forma remota, con base en Uruguay. tuagente es un producto de pdelabs, un estudio de ingeniería de software con años construyendo sistemas en producción — no somos una agencia de marketing que descubrió la IA el mes pasado.",
+    a: "Atendemos toda Latinoamérica de forma remota, con base en Montevideo. tuagente es un producto de pdelabs, un estudio de ingeniería de software con años construyendo sistemas en producción — no somos una agencia de marketing que descubrió la IA el mes pasado. Estamos arrancando con tuagente, y lo decimos de frente: el primer agente que pusimos a trabajar fue el nuestro.",
   },
 ];
 
@@ -716,7 +797,7 @@ const JSON_LD = {
       name: "tuagente.uy",
       url: "https://tuagente.uy",
       description:
-        "Configuramos agentes de IA autónomos para empresas de Latinoamérica: conectados a tus sistemas, operando 24/7, listos en semanas.",
+        "Instalamos agentes de IA autónomos para empresas de Latinoamérica: conectados a tus sistemas, operando 24/7, con un portal donde el cliente ve todo lo que hacen y aprueba lo sensible.",
       slogan: "Agentes de IA que trabajan por vos",
       email: "hola@tuagente.uy",
       telephone: "+59899002835",
@@ -762,27 +843,25 @@ const JSON_LD = {
 function Proof() {
   return (
     <section className="mx-auto max-w-7xl px-5 sm:px-8">
-      <div className="rounded-card bg-c-violet px-6 py-14 text-center sm:px-12">
-        <p className="text-sm font-bold uppercase tracking-wider text-c-violet-ink/60">
-          Empresas líderes de LATAM ya confían en tuagente
-        </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          {["Retail", "Fintech", "Salud", "Logística", "SaaS", "Agro"].map((x) => (
-            <span
-              key={x}
-              className="rounded-pill bg-white/70 px-6 py-3 text-lg font-extrabold text-c-violet-ink/70"
-            >
-              {x}
-            </span>
-          ))}
+      <div className="rounded-card bg-c-violet px-6 py-14 sm:px-12">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="text-sm font-bold uppercase tracking-wider text-c-violet-ink/60">
+            Somos nuestro propio cliente
+          </p>
+          <h2 className="mt-4 text-3xl font-extrabold leading-snug tracking-tight text-c-violet-ink sm:text-4xl">
+            El primer agente que pusimos a trabajar fue el nuestro.
+          </h2>
+          <p className="mt-5 text-lg leading-relaxed text-c-violet-ink/80">
+            Investiga empresas, arma informes, prepara los mails que salen a nombre nuestro
+            y nos los deja esperando aprobación. Todo lo que ves en este sitio lo probamos
+            primero adentro de pdelabs, y el portal que usás vos es el mismo que usamos
+            nosotros todos los días.
+          </p>
+          <p className="mt-6 text-sm font-semibold text-c-violet-ink/70">
+            Estamos arrancando: si buscás una lista larga de logos, todavía no la tenemos.
+            Lo que sí tenemos es un producto andando y la charla es gratis.
+          </p>
         </div>
-        <blockquote className="mx-auto mt-10 max-w-2xl text-2xl font-bold leading-snug tracking-tight text-c-violet-ink sm:text-3xl">
-          &ldquo;En dos semanas teníamos un agente respondiendo y cerrando tareas que antes nos
-          comían el día. No volvemos atrás.&rdquo;
-        </blockquote>
-        <p className="mt-4 text-sm font-semibold text-c-violet-ink/60">
-          — Dirección de Operaciones, empresa de logística *
-        </p>
       </div>
     </section>
   );
@@ -858,8 +937,7 @@ function Footer() {
       </div>
       <div className="mx-auto max-w-7xl px-5 pb-10 text-center text-xs text-ink-soft/70 sm:px-8">
         © {new Date().getFullYear()} tuagente.uy · Un producto de pdelabs. Hecho en Uruguay 🇺🇾
-        <br />
-        <span className="opacity-70">* Testimonios ilustrativos — reemplazar por casos reales.</span>
+
       </div>
     </footer>
   );

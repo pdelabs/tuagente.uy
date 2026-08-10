@@ -56,7 +56,7 @@ function AprobacionDemo() {
             Aprobás
           </p>
           <p className="mt-0.5 break-words text-[10.5px] leading-snug text-c-green-ink/80">
-            La tarea se destraba y sigue.
+            La tarea sigue adelante.
           </p>
         </div>
         <div className="min-w-0 rounded-lg border border-c-coral bg-c-coral/50 p-2">
@@ -93,15 +93,22 @@ export default function ApprovalsIntro({ onOk }: IntroProps) {
       <div className="mt-6 flex gap-3 rounded-2xl border border-c-amber bg-c-amber/40 px-4 py-3">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-c-amber-ink" />
         <p className="min-w-0 text-[13px] leading-relaxed text-c-amber-ink">
-          <span className="font-semibold">Aprobar no quiere decir «se envía ya».</span>{" "}
-          Quiere decir que tu agente queda habilitado a seguir: qué hace después lo deciden
-          sus reglas.
+          {/* La versión anterior («aprobar no quiere decir se envía ya… lo
+              deciden sus reglas») se escribió para no prometer de más y lograba
+              lo contrario: un cliente de prueba la leyó como "dale el ok y
+              después no sabemos qué pasa". Misma honestidad, dicha al derecho:
+              antes de decidir vas a leer exactamente qué va a hacer. */}
+          <span className="font-semibold">Antes de decidir, leelo.</span>{" "}
+          Abriendo el pedido ves el texto completo de lo que tu agente quiere hacer y qué
+          pasa con cada respuesta. Si aprobás, hace eso; si algo no te cierra, lo corregís
+          o lo rechazás.
         </p>
       </div>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <Point icon={Settings2} title="Vos elegís qué se te consulta">
-          Qué pasos necesitan tu aprobación se define cuando se configura tu agente.
+        <Point icon={Settings2} title="Qué se te consulta">
+          Los pasos que necesitan tu ok los dejamos definidos al armar tu agente. Si querés
+          que te pregunte por algo más — o por algo menos — pedínoslo y lo cambiamos.
         </Point>
         <Point icon={Clock} title="Mientras espera, no avanza">
           En el tablero esa tarea te queda visible como «Esperando aprobación».

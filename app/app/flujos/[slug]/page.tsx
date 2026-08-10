@@ -13,7 +13,7 @@ import {
   RefreshCw, Workflow, Zap, type LucideIcon,
 } from "lucide-react";
 import {
-  getFlujoDetalle, loadConfig,
+  etiquetaConexion, getFlujoDetalle, loadConfig,
   type FlujoDetalle, type HttpError, type PortalConfig,
 } from "../../lib/agent";
 import Markdown from "../../lib/Markdown";
@@ -106,14 +106,27 @@ export default function FlujoDetallePage() {
           )}
         </div>
 
-        {flujo.estado === "incompleto" && (
-          <Link
-            href="/app/conexiones"
-            className="mb-5 inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
-          >
-            Conectar lo que falta
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+        {/* Igual que en la lista: con nombre y motivo, y el link apunta a la
+            tarjeta concreta. Acá no traemos el catálogo (una llamada más por
+            una pantalla de detalle no vale la pena): el rótulo sale de la
+            tabla de conocidas y el motivo lo pone el flujo. */}
+        {flujo.estado === "incompleto" && flujo.conexiones_faltan.length > 0 && (
+          <div className="mb-5 rounded-lg border border-c-amber bg-c-amber/25 p-3">
+            <p className="text-[13px] font-semibold text-c-amber-ink">
+              Le falta {flujo.conexiones_faltan.map((c) => etiquetaConexion(c)).join(" y ")}.
+            </p>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-c-amber-ink/85">
+              Hasta que esté conectada, este trabajo queda a medias: te dejo lo que puedo
+              y el resto espera.
+            </p>
+            <Link
+              href={`/app/conexiones#c=${encodeURIComponent(flujo.conexiones_faltan[0])}`}
+              className="mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
+            >
+              Conectar {etiquetaConexion(flujo.conexiones_faltan[0])}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         )}
 
         <section className="mb-6">
@@ -224,7 +237,7 @@ function PedirCambio({ cfg, flujo }: { cfg: PortalConfig; flujo: FlujoDetalle })
         </div>
         {listo && (
           <p className="text-[13px] font-medium text-c-green-ink">
-            Pedido. Lo ves avanzar en el Pipeline, y estas instrucciones se actualizan solas.
+            Pedido. Lo ves avanzar en el Tablero, y estas instrucciones se actualizan solas.
           </p>
         )}
         {err && <p className="text-[13px] font-medium text-c-coral-ink">{err}</p>}

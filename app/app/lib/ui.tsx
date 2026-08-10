@@ -5,7 +5,33 @@
 // Los features importan de acá; no re-estilar por feature.
 
 import { ReactNode } from "react";
-import { Hand, Loader2, type LucideIcon } from "lucide-react";
+import { Hand, LifeBuoy, Loader2, type LucideIcon } from "lucide-react";
+
+// Soporte de tuagente (nuestro, igual para todos los clientes — no es dato de
+// cliente, así que no viola el principio cero). Existe porque un cliente de
+// prueba se quedó dos veces frente a una pantalla rota sin nadie a quien
+// avisarle: "no tenía a quién preguntarle" fue de lo primero que anotó.
+export const SOPORTE = {
+  whatsapp: "https://wa.me/59899002835",
+  mail: "mailto:hola@tuagente.uy",
+  telefono: "+598 99 002 835",
+};
+
+/** Link de auxilio. Va en las pantallas donde el cliente se puede quedar
+ *  trabado (login, sin conexión, error) y al pie del menú. */
+export function Soporte({ className = "" }: { className?: string }) {
+  return (
+    <a
+      href={SOPORTE.whatsapp}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-soft transition hover:text-primary ${className}`}
+    >
+      <LifeBuoy className="h-3.5 w-3.5 shrink-0" />
+      ¿Algo no anda? Escribinos
+    </a>
+  );
+}
 
 // Clases de input compartidas (texto, búsqueda, textarea).
 export const inputCls =

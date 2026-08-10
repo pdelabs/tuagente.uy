@@ -67,7 +67,7 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
   return (
     <IntroPage
       onOk={onOk}
-      cta="Ver mis artefactos"
+      cta="Ver mis entregas"
       note="Si tu agente recién arranca, puede estar vacío."
     >
       <style>{`
@@ -76,12 +76,12 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
         @media (prefers-reduced-motion: reduce) { .tga-art-bar { animation: none; } }
       `}</style>
 
-      <Eyebrow icon={LayoutDashboard}>Artefactos</Eyebrow>
+      <Eyebrow icon={LayoutDashboard}>Entregas</Eyebrow>
       <Title>Cuando conviene mirar los datos, tu agente los dibuja</Title>
       <Lead>
         Hay respuestas que se entienden mejor mirándolas que leyéndolas. En esos casos tu agente
         arma una visualización —un gráfico, una tabla grande, un informe— y la deja guardada acá.
-        A eso le decimos un artefacto.
+        A eso le decimos una visualización.
       </Lead>
 
       {/* ── Maqueta: tres artefactos como se ven en la grilla ─────────────── */}
@@ -197,7 +197,7 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
           </div>
 
           <p className="mt-3 border-t border-black/[0.07] pt-3 text-[12px] leading-relaxed text-ink-soft">
-            Cuando tu agente cita un artefacto en una respuesta, se abre de un click.
+            Cuando tu agente cita una entrega en una respuesta, se abre de un click.
           </p>
         </div>
 
