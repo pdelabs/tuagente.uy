@@ -69,7 +69,14 @@ services:
       - ./data/config.yaml:/opt/data/config.yaml:ro
     environment:
       - TZ=America/Montevideo
-      - HERMES_DASHBOARD=1
+      # DASHBOARD APAGADO, y no es por ahorrar: con HERMES_DASHBOARD=1 el
+      # runtime SE NIEGA A ARRANCAR en un servidor remoto. El dashboard
+      # bindearia 0.0.0.0 sin autenticacion, y Hermes prefiere no levantar
+      # antes que exponerlo — bien hecho de su parte. En la Mac no se nota
+      # porque igual queda detras de 127.0.0.1.
+      # Nunca fue para el cliente: si hace falta mirarlo, se prende y se
+      # entra por un tunel SSH, no publicandolo.
+      - HERMES_DASHBOARD=0
       # Sin esto el browser descarta todas las respuestas del gateway.
       # OJO: va el dominio PÚBLICO. Sin localhost — en remoto no aplica y es
       # una fuente de falsa confianza al leerlo.

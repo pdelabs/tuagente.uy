@@ -64,6 +64,19 @@ rsync -a --delete "$KIT/skills/"            "$SERVIDOR:$REMOTO/data/skills/"
 rsync -a          "$KIT/adapter/portal_adapter.py" "$SERVIDOR:$REMOTO/data/scripts/"
 rsync -a          "$KIT/compose/docker-compose.remoto.yml" "$SERVIDOR:$REMOTO/docker-compose.yml"
 rsync -a          "$KIT/compose/Caddyfile"  "$SERVIDOR:$REMOTO/Caddyfile"
+
+# EL config.yaml, QUE FALTABA Y ROMPIA TODO. Sin el, Hermes escribe en el
+# primer arranque su config de EJEMPLO (86 KB, todo comentado) y arranca con
+# los defaults: sin `api_server.enabled` NUNCA bindea el 8642, asi que Caddy
+# devuelve 502 para siempre y el sintoma parece de red. Verificado el 10/8 con
+# East: el gateway "arrancaba" y no escuchaba nada.
+# No se pisa si ya existe: despues del primer arranque Hermes lo migra solo.
+if ! ssh "$SERVIDOR" "grep -q 'enabled: true' $REMOTO/data/config.yaml 2>/dev/null"; then
+  rsync -a "$KIT/compose/config.base.yaml" "$SERVIDOR:$REMOTO/data/config.yaml"
+  echo "→ config.yaml base instalado"
+else
+  echo "→ config.yaml ya configurado, no lo toco"
+fi
 ssh "$SERVIDOR" "mkdir -p $REMOTO/data/connections"
 rsync -a "$KIT/connections/catalogo.json" "$SERVIDOR:$REMOTO/data/connections/"
 
