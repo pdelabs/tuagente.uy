@@ -74,6 +74,27 @@ for c in "$KIT"/connections/*/tools.json; do
   rsync -a "$c" "$SERVIDOR:$REMOTO/politica/tools/$(basename "$(dirname "$c")").json"
 done
 
+# LA GUARDIA Y LOS SERVIDORES REALES VAN A politica/, que se monta :ro en el
+# contenedor del agente. Si vivieran en data/ el agente podría editarlos, y
+# entonces le alcanzaría con sacar la guardia del medio y llamar al servidor
+# directo. (Faltaba: la primera corrida del script subió solo los tools.json y
+# la guardia quedó sin subir.)
+rsync -a "$KIT/mcp-guardia/guardia.py" "$SERVIDOR:$REMOTO/politica/guardia.py"
+for m in "$KIT"/connections/*/mcp; do
+  [[ -d "$m" ]] || continue
+  conexion="$(basename "$(dirname "$m")")"
+  ssh "$SERVIDOR" "mkdir -p $REMOTO/politica/mcp/$conexion"
+  rsync -a --exclude __pycache__ "$m/" "$SERVIDOR:$REMOTO/politica/mcp/$conexion/"
+done
+ssh "$SERVIDOR" "[ -s $REMOTO/politica/politica.json ] || echo '{}' > $REMOTO/politica/politica.json"
+
+# EL PRIMER ARRANQUE VA SIN EL CANDADO DE config.yaml, y no es opcional: el
+# archivo todavía NO EXISTE, y Docker, al montar algo inexistente, crea un
+# DIRECTORIO con ese nombre. Hermes entonces no puede escribir su config y el
+# agente no levanta. Se sube comentado y se cierra después del primer arranque
+# con tools/cerrar-config.sh.
+ssh "$SERVIDOR" "sed -i 's|^\\( *\\)- \\./data/config\\.yaml:/opt/data/config\\.yaml:ro|\\1# PRIMER ARRANQUE: descomentar con tools/cerrar-config.sh|' $REMOTO/docker-compose.yml"
+
 # ── 4. El .env del compose (sin secretos) ─────────────────────────────────
 ssh "$SERVIDOR" "cat > $REMOTO/.env" <<EOF
 CLIENTE=$SLUG
