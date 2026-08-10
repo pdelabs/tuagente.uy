@@ -1,0 +1,111 @@
+# Igual que docker-compose.example.yml pero para una VPS, con TLS.
+#
+# LA DIFERENCIA QUE IMPORTA: acá los servicios del agente NO publican ningún
+# puerto en el host. Ni 8642 ni 8643. Caddy los alcanza por la red interna de
+# compose (por nombre de servicio), y es lo ÚNICO que escucha en la interfaz
+# pública. Si mañana alguien escanea la IP, ve 443 y nada más.
+#
+# Es a propósito: `docker publish` abre el puerto SALTEANDO ufw/iptables —
+# creer que el firewall te cubre y tener 8642 abierto al mundo es un clásico.
+# Sin `ports:` no hay nada que saltear.
+#
+# Una VPS por cliente. Compartir caja entre clientes rompe justo lo que
+# vendemos: Hermes EJECUTA CÓDIGO, y un contenedor no es un límite duro contra
+# un agente al que le inyectaron instrucciones. A USD 4,59 el aislamiento sale
+# casi gratis.
+#
+# LA VERSION VA FIJA, no `latest` (ver docker-compose.example.yml).
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: ${CLIENTE}-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"     # solo para el desafío de Let's Encrypt y el redirect a 443
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # los certificados: SI SE PIERDEN, se re-emiten y
+      - caddy_config:/config  # Let's Encrypt tiene tope semanal. No borrar.
+    environment:
+      - DOMINIO_API=${DOMINIO_API}
+      - DOMINIO_PORTAL=${DOMINIO_PORTAL}
+      - EMAIL_TLS=${EMAIL_TLS}
+    depends_on:
+      - hermes
+      - portal-adapter
+
+  hermes:
+    image: nousresearch/hermes-agent:v2026.7.30
+    container_name: ${CLIENTE}-hermes
+    restart: unless-stopped
+    command: gateway run
+    # SIN `ports:` — ver la nota de arriba. El dashboard (9119) queda adentro y
+    # no lo alcanza nadie desde afuera, que es donde tiene que estar.
+    expose:
+      - "8642"
+    volumes:
+      - ./data:/opt/data
+      # SOLO LECTURA, y es el punto entero: acá vive qué puede hacer el agente
+      # con cada conexión. Si estuviera dentro de ./data podría editarlo con
+      # write_file o por terminal, y un guardrail que el guardado puede
+      # cambiar no es un guardrail.
+      - ./politica:/opt/politica:ro
+    environment:
+      - TZ=America/Montevideo
+      - HERMES_DASHBOARD=1
+      # Sin esto el browser descarta todas las respuestas del gateway.
+      # OJO: va el dominio PÚBLICO. Sin localhost — en remoto no aplica y es
+      # una fuente de falsa confianza al leerlo.
+      - API_SERVER_CORS_ORIGINS=https://app.tuagente.uy
+    env_file:
+      - ./data/.env
+    deploy:
+      resources:
+        limits:
+          memory: 3G      # medido: un agente pica en 1,1 GB. 3G deja aire y
+          cpus: "2.0"     # todavía entra Caddy en una caja de 4 GB.
+
+  portal-adapter:
+    image: nousresearch/hermes-agent:v2026.7.30
+    container_name: ${CLIENTE}-portal-adapter
+    restart: unless-stopped
+    entrypoint: ["python3", "/opt/data/scripts/portal_adapter.py"]
+    expose:
+      - "8643"
+    volumes:
+      - ./data:/opt/data
+      # El adapter SÍ escribe: es quien recibe el clic del cliente en el portal.
+      - ./politica:/opt/politica
+    environment:
+      - TZ=America/Montevideo
+      - PORTAL_CORS_ORIGINS=https://app.tuagente.uy
+      # El nombre que el cliente ve en su portal. Si falta, dice "Agente".
+      - AGENT_NAME=${AGENT_NAME}
+      # El adapter habla con el gateway por la red interna, no por localhost:
+      # en esta topología no comparten host.
+      - HERMES_ENDPOINT=http://hermes:8642
+    env_file:
+      - ./data/.env
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+# .env al lado de este archivo (NUNCA se commitea):
+#   CLIENTE=east
+#   AGENT_NAME=Washi
+#   DOMINIO_API=east.agentes.tuagente.uy
+#   DOMINIO_PORTAL=east-portal.agentes.tuagente.uy
+#   EMAIL_TLS=soporte@tuagente.uy      para los avisos de Let's Encrypt
+#
+# data/.env (tampoco se commitea):
+#   API_SERVER_KEY=          openssl rand -hex 32, única por cliente
+#   OPENROUTER_API_KEY=
+#   TELEGRAM_BOT_TOKEN=
+#   TELEGRAM_ALLOWED_USERS=
