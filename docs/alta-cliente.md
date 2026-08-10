@@ -14,8 +14,23 @@ Sacado de haberlo hecho una vez (La Mano). Lo marcado "verificado" ya lo probamo
 
 **Nuestro:**
 - `API_SERVER_KEY` (`openssl rand -hex 32`) — única por cliente, nunca reusada.
+- **Clave SSH del servidor, también una por cliente** y con el mismo criterio:
+  `ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_tuagente_<slug> -C "tuagente_<slug>"`.
+  En Hetzner se carga con ese mismo nombre (`tuagente_east`), igual que los
+  bots son `tuagente_<slug>_bot`. Si se compromete la de un cliente, no abre
+  los servidores de los demás.
 - Clave del proveedor de modelos (OpenRouter en nuestro caso).
-- Servidor: Railway si necesita WhatsApp o que el portal se vea desde afuera.
+- **Servidor: una VPS por cliente** — Hetzner CX23 (2 vCPU, 4 GB, 40 GB,
+  20 TB) a USD 7,09 con la IPv4. No una caja compartida: Hermes ejecuta código
+  y un contenedor no es un límite duro contra un agente al que le inyectaron
+  instrucciones. A ese precio el aislamiento sale casi gratis.
+  - Al crearla: **SSH key sí o sí** (sin ella Hetzner manda la contraseña de
+    root por mail), **backups activados** (+20%; ahí vive toda la memoria del
+    cliente) y después un **Firewall de Hetzner** con solo 22, 80 y 443.
+  - El firewall de Hetzner es mejor que `ufw` **porque vive afuera de la VM**:
+    Docker no lo puede saltear escribiendo iptables por debajo, que es
+    exactamente lo que hace `docker publish`.
+  - El alta la corre `hermes-kit/desplegar-remoto.sh`.
 
 **Costo real de operación** (medido en un mes de La Mano): **USD 2 de cómputo**.
 Lo que se cobra es la operación, no los tokens.
