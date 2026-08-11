@@ -50,6 +50,21 @@ async def subir(api_id, api_hash, token, png):
     await client.disconnect()
 
 
+def _tiene_alfa(png: Path) -> bool:
+    """True si el PNG declara canal alfa (color type 4 o 6 del IHDR).
+
+    Telegram NO soporta transparencia en las fotos de perfil: la aplasta
+    contra NEGRO. Una carita clara recortada sobre un cuadrado negro se
+    descubre mirando el telefono, no el log — y ahi ya la vio el cliente.
+    """
+    try:
+        with open(png, "rb") as f:
+            cabecera = f.read(26)
+        return cabecera[:8] == b"\x89PNG\r\n\x1a\n" and cabecera[25] in (4, 6)
+    except OSError:
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--png", required=True)
@@ -61,6 +76,11 @@ def main():
                  '(formato: {"api_id": 123, "api_hash": "..."})')
     creds = json.loads(API_JSON.read_text())
     png = Path(args.png)
+    if _tiene_alfa(png):
+        print("AVISO: el PNG tiene transparencia. Telegram la aplasta contra "
+              "NEGRO en las fotos de perfil — la cara va a quedar recortada "
+              "sobre un cuadrado negro. Componela sobre un fondo opaco antes.",
+              file=sys.stderr)
     if not png.is_file() or not png.read_bytes().startswith(b"\x89PNG"):
         sys.exit("el PNG no existe o no es un PNG")
     asyncio.run(subir(creds["api_id"], creds["api_hash"],
