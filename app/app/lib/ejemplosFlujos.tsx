@@ -92,7 +92,12 @@ export const linkArmar = (prompt: string) =>
  *  "hay más, seguí". Y es máscara y no un div con gradiente encima porque el
  *  fondo del portal cambia entre pantallas — un gradiente pintado tendría que
  *  saber de qué color es el fondo, y la máscara no. */
-export function CarruselEjemplos() {
+export function CarruselEjemplos({ onElegir }: { onElegir?: (prompt: string) => void } = {}) {
+  // DENTRO DEL ONBOARDING no se puede navegar con <Link>: la puerta del
+  // onboarding sigue montada y atrapa cualquier ruta, asi que el clic no hace
+  // NADA visible. Ahi va `onElegir`, que primero cierra el onboarding y
+  // despues manda. Fuera del onboarding (pestaña Flujos) el link comun alcanza
+  // y conserva el clic del medio y "abrir en pestaña nueva".
   return (
     <div
       className="-mx-7 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-p-7 px-7 pb-3 text-left [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
@@ -103,23 +108,31 @@ export function CarruselEjemplos() {
           "linear-gradient(to right, transparent 0, black 28px, black calc(100% - 28px), transparent 100%)",
       }}
     >
-      {EJEMPLOS_FLUJOS.map((e) => (
-        <Link
-          key={e.titulo}
-          href={linkArmar(e.prompt)}
-          className="group w-[300px] shrink-0 snap-start rounded-card border border-black/[0.07] bg-white p-4 transition hover:border-primary/40 hover:bg-primary/[0.02]"
-        >
-          <p className="text-sm font-bold leading-snug text-ink transition group-hover:text-primary">
-            {e.titulo}
-          </p>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">{e.texto}</p>
-          {e.falta && (
-            <p className="mt-3 text-[12px] font-medium text-ink-soft">
-              Necesita conectar {e.falta}
+      {EJEMPLOS_FLUJOS.map((e) => {
+        const clase = "group w-[300px] shrink-0 snap-start rounded-card border border-black/[0.07] bg-white p-4 text-left transition hover:border-primary/40 hover:bg-primary/[0.02]";
+        const contenido = (
+          <>
+            <p className="text-sm font-bold leading-snug text-ink transition group-hover:text-primary">
+              {e.titulo}
             </p>
-          )}
-        </Link>
-      ))}
+            <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">{e.texto}</p>
+            {e.falta && (
+              <p className="mt-3 text-[12px] font-medium text-ink-soft">
+                Necesita conectar {e.falta}
+              </p>
+            )}
+          </>
+        );
+        return onElegir ? (
+          <button key={e.titulo} className={clase} onClick={() => onElegir(e.prompt)}>
+            {contenido}
+          </button>
+        ) : (
+          <Link key={e.titulo} href={linkArmar(e.prompt)} className={clase}>
+            {contenido}
+          </Link>
+        );
+      })}
     </div>
   );
 }

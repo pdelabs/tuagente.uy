@@ -54,7 +54,14 @@ export default function AvatarPage() {
   return (
     <div
       id="avatar-listo"
-      style={{ width: 640, height: 640, display: "grid", placeItems: "center" }}
+      // FONDO OPACO, obligatorio: sin esto el PNG sale con transparencia y
+      // Telegram la aplasta contra NEGRO — la carita queda recortada sobre un
+      // cuadrado negro. Es el mismo #FBFAFF que compone la captura del
+      // bautizo, así las dos vías dan la misma foto.
+      style={{
+        width: 640, height: 640, display: "grid", placeItems: "center",
+        background: "#FBFAFF",
+      }}
     >
       <div style={{ width: 560, height: 560 }}>
         <AgentitoRive festejos={0} look={look} estado="normal" className="h-full w-full" />

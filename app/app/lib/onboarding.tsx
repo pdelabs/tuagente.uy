@@ -39,8 +39,8 @@ const NAME_KEY = "tuagente_agent_name";
 // evitar. Y nadie se llama legalmente Chispa, asi que la chance de pisarle el
 // nombre al cliente es minima.
 const NOMBRES_SUGERIDOS = [
-  "Tota", "Rulo", "Pepa", "Milo", "Coco", "Nina", "Beto", "Cuca", "Tito", "Lola",
-  "Kiko", "Mora", "Nino", "Pocha", "Chispa", "Lino", "Juana", "Bruno", "Tuca", "Rosita",
+  "Tota", "Rulo", "Pepa", "Milo", "Nina", "Beto", "Cuca", "Tito", "Lola",
+  "Kiko", "Mora", "Nino", "Pocha", "Chispa", "Lino", "Juana", "Bruno", "Tuca", "Rosita", "Nilo",
 ];
 
 /** La cara que eligió, capturada del canvas de Rive: termina siendo la foto
@@ -49,7 +49,36 @@ const NOMBRES_SUGERIDOS = [
 function capturaDelAgentito(): { avatar_png?: string } {
   try {
     const canvas = document.querySelector("canvas");
-    const data = canvas?.toDataURL("image/png") ?? "";
+    if (!canvas || !canvas.width) return {};
+
+    // NO se sube el canvas tal cual. Rive dibuja con FONDO TRANSPARENTE, y
+    // Telegram no soporta alfa en las fotos de perfil: la aplasta contra
+    // NEGRO. La carita naranja del cliente terminaba recortada sobre un
+    // cuadrado negro, con los bordes dentados. (Visto el 11/8 con Washington.)
+    //
+    // Así que se compone sobre el fondo del portal, cuadrado y en 512: es el
+    // tamaño que Telegram usa para el avatar grande, y salir con menos lo deja
+    // escalar a él —que es de donde venían los dientes—.
+    const LADO = 512;
+    const fuera = document.createElement("canvas");
+    fuera.width = LADO;
+    fuera.height = LADO;
+    const ctx = fuera.getContext("2d");
+    if (!ctx) return {};
+
+    ctx.fillStyle = "#FBFAFF";           // bg-surface: la misma que ve en el portal
+    ctx.fillRect(0, 0, LADO, LADO);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    // Cuadrado, centrado y sin deformar: el canvas del onboarding no siempre
+    // es cuadrado y estirar la cara se nota más que cualquier otra cosa.
+    const escala = Math.min(LADO / canvas.width, LADO / canvas.height);
+    const w = canvas.width * escala;
+    const h = canvas.height * escala;
+    ctx.drawImage(canvas, (LADO - w) / 2, (LADO - h) / 2, w, h);
+
+    const data = fuera.toDataURL("image/png");
     if (data.startsWith("data:image/png") && data.length > 2000) {
       return { avatar_png: data.split(",", 2)[1] };
     }
@@ -602,7 +631,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
           </div>
         ) : (
           <div className="w-full animate-fadeup">
-            <CarruselEjemplos />
+            <CarruselEjemplos onElegir={(p) => terminar(linkArmar(p))} />
             {/* Primaria a armar el primero: el objetivo del onboarding entero
                 es que el cliente salga con UNO andando, no que entre al portal.
                 "Ir al inicio" existe igual — obligarlo sería un peaje, y el
