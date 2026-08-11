@@ -1,0 +1,26 @@
+# Proxy OpenAI-compatible que Hermes usa como `model.base_url` cuando la
+# observabilidad esta prendida. Reenvia todo a OpenRouter y manda las trazas a
+# Phoenix.
+
+model_list:
+  # Comodin: Hermes manda el modelo que tenga configurado (por ejemplo
+  # `openai/gpt-5.6-luna`) y esto lo enruta tal cual a OpenRouter, sin tener
+  # que enumerar modelos ni tocar esto cada vez que cambie el default.
+  - model_name: "*"
+    litellm_params:
+      model: openrouter/*
+      api_key: os.environ/OPENROUTER_API_KEY
+
+litellm_settings:
+  # Manda prompts, respuestas, tokens y costo a Phoenix por OTLP.
+  callbacks: ["arize_phoenix"]
+  # Si el callback falla, la llamada al modelo SIGUE: la observabilidad nunca
+  # puede voltear al agente. Es la diferencia entre una herramienta nuestra y
+  # un punto de falla del cliente.
+  turn_off_message_logging: false
+
+general_settings:
+  # Sin master_key a proposito: solo escucha en la red interna del compose,
+  # sin puerto publicado. Agregar una clave aca seria una credencial mas para
+  # rotar sin cerrar ninguna puerta que no este ya cerrada.
+  telemetry: false
