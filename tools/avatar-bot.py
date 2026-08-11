@@ -51,17 +51,30 @@ async def subir(api_id, api_hash, token, png):
 
 
 def _tiene_alfa(png: Path) -> bool:
-    """True si el PNG declara canal alfa (color type 4 o 6 del IHDR).
+    """True si el PNG tiene pixeles REALMENTE transparentes.
 
-    Telegram NO soporta transparencia en las fotos de perfil: la aplasta
-    contra NEGRO. Una carita clara recortada sobre un cuadrado negro se
-    descubre mirando el telefono, no el log — y ahi ya la vio el cliente.
+    Telegram no soporta alfa en las fotos de perfil: la aplasta contra NEGRO.
+    Una carita clara recortada sobre un cuadrado negro se descubre mirando el
+    telefono, no el log — y ahi ya la vio el cliente.
+
+    OJO CON EL ATAJO: mirar el color type del IHDR NO sirve. Un canvas de
+    browser SIEMPRE exporta RGBA, tenga o no transparencia, asi que ese
+    chequeo grita en todas las fotos —incluidas las correctas— y un aviso que
+    grita siempre se ignora. Hay que mirar los pixeles.
+
+    Sin Pillow no se avisa nada: mejor callado que dando alarmas falsas.
     """
     try:
-        with open(png, "rb") as f:
-            cabecera = f.read(26)
-        return cabecera[:8] == b"\x89PNG\r\n\x1a\n" and cabecera[25] in (4, 6)
-    except OSError:
+        from PIL import Image
+    except ImportError:
+        return False
+    try:
+        with Image.open(png) as im:
+            if im.mode not in ("RGBA", "LA", "PA"):
+                return False
+            alfa = im.convert("RGBA").getchannel("A")
+            return (alfa.getextrema() or (255, 255))[0] < 250
+    except Exception:
         return False
 
 

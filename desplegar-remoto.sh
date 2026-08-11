@@ -173,6 +173,10 @@ Listo, y apagado a propósito. Falta:
            --adapter  https://$DOMINIO_PORTAL \\
            --origin   https://tuagente.uy
 
-  5. El link, que ES la credencial:
+  5. Despues del bautizo, la foto del bot (la Bot API no deja que un bot
+     cambie la suya, va por MTProto desde tu Mac):
+       tools/foto-bot.sh $SLUG
+
+  6. El link, que ES la credencial:
        https://tuagente.uy/app#endpoint=https://$DOMINIO_API&adapter=https://$DOMINIO_PORTAL&key=<clave>
 EOF
