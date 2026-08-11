@@ -169,6 +169,93 @@ function TarjetaFlujo({ f, conexiones }: { f: Flujo; conexiones: Connection[] | 
   );
 }
 
+// ── Vacío de flujos: lo único que ve un cliente el primer día ────────────────
+// No es un cartel de "no hay nada": es donde se explica el producto. Los flujos
+// son la razón de ser de esto — para conversar el cliente tiene ChatGPT; lo que
+// justifica un agente propio es que HAGA cosas solo.
+//
+// Los ejemplos dicen cuáles necesitan conexión y cuáles no. Prometer lo que el
+// agente todavía no puede hacer es la peor manera de empezar una relación en la
+// que le vas a confiar tu trabajo.
+const EJEMPLOS: { titulo: string; texto: string; falta?: string }[] = [
+  { titulo: "Vigilar a la competencia",
+    texto: "Cada lunes miro qué publicaron y te dejo un resumen de lo que cambió." },
+  { titulo: "Contenido para redes",
+    texto: "Todas las semanas te dejo tres posts escritos con su imagen, listos para que apruebes." },
+  { titulo: "Resumen de reuniones",
+    texto: "Me pasás el audio y te devuelvo las decisiones y quién quedó a cargo de qué." },
+  { titulo: "Reseñas de tu negocio",
+    texto: "Miro las que aparecen y te aviso solo cuando hay una mala." },
+  { titulo: "Precios de proveedores",
+    texto: "Reviso sus listas y te aviso si alguno cambió." },
+  { titulo: "El newsletter del mes",
+    texto: "Junto lo que pasó y te dejo el borrador escrito." },
+  { titulo: "Presupuestos",
+    texto: "Me contás lo que hablaste con el cliente y lo armo con tu formato." },
+  { titulo: "Leads que llegan por mail",
+    texto: "Cada pedido de presupuesto queda anotado con el contacto y qué necesita.",
+    falta: "tu casilla" },
+  { titulo: "Los cobros del día",
+    texto: "Todas las mañanas te digo qué entró ayer y qué quedó pendiente.",
+    falta: "Mercado Pago" },
+  { titulo: "WhatsApp sin responder",
+    texto: "Reviso quién quedó esperando y te paso la lista.",
+    falta: "WhatsApp" },
+];
+
+function SinFlujos() {
+  return (
+    <div>
+      <div className="mx-auto max-w-xl text-center">
+        <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-c-violet">
+          <Workflow className="h-5 w-5 text-primary" />
+        </div>
+        <h2 className="text-[19px] font-bold tracking-tight text-ink">
+          Todavía no hay nada corriendo solo
+        </h2>
+        <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-ink-soft">
+          Un flujo es un trabajo que tu agente hace sin que se lo pidas: se ocupa
+          cada vez que corresponde y te deja el resultado acá para que lo revises.
+          Estos son ejemplos de lo que le pide otra gente — el tuyo va a salir de
+          contarle a qué te dedicás.
+        </p>
+      </div>
+
+      {/* Carrusel: se arrastra de costado y engancha en cada tarjeta. En el
+          teléfono es el gesto natural, y en escritorio deja ver que hay más
+          sin comerse la pantalla con una grilla de diez. */}
+      <div className="-mx-1 mt-7 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-3 [scrollbar-width:thin]">
+        {EJEMPLOS.map((e) => (
+          <div
+            key={e.titulo}
+            className="w-[260px] shrink-0 snap-start rounded-card border border-black/[0.07] bg-white p-4"
+          >
+            <p className="text-sm font-bold leading-snug text-ink">{e.titulo}</p>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">{e.texto}</p>
+            {e.falta && (
+              <p className="mt-3 text-[12px] font-medium text-ink-soft">
+                Necesita conectar {e.falta}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6 flex flex-col items-center gap-2">
+        <a
+          href="/app/chat"
+          className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-dark"
+        >
+          Armar el primero
+        </a>
+        <span className="text-[12px] text-ink-soft">
+          Contale a qué se dedica tu empresa y te propone por dónde empezar.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function FlujosPage() {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [flujos, setFlujos] = useState<Flujo[] | null>(null);
@@ -207,26 +294,12 @@ export default function FlujosPage() {
   const cuerpo = () => {
     if (err && flujos === null) {
       if (es404(err)) {
-        return (
-          <EmptyState
-            icon={Workflow}
-            title="Este agente todavía no tiene flujos"
-            hint="Cuando armemos el primero — o se lo pidas por el chat — lo vas a ver acá con sus resultados."
-          />
-        );
+        return <SinFlujos />;
       }
       return <ErrorState message={err.message} onRetry={cargar} />;
     }
     if (flujos === null) return <Spinner />;
-    if (flujos.length === 0) {
-      return (
-        <EmptyState
-          icon={Workflow}
-          title="Todavía no hay flujos armados"
-          hint="Pedile uno a tu agente por el chat: contale qué tarea querés sacarte de encima."
-        />
-      );
-    }
+    if (flujos.length === 0) return <SinFlujos />;
     return (
       <div className="grid gap-3 md:grid-cols-2">
         {flujos.map((f) => <TarjetaFlujo key={f.slug} f={f} conexiones={conexiones} />)}
