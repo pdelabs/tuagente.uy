@@ -99,6 +99,9 @@ done
 # directo. (Faltaba: la primera corrida del script subió solo los tools.json y
 # la guardia quedó sin subir.)
 rsync -a "$KIT/mcp-guardia/guardia.py" "$SERVIDOR:$REMOTO/politica/guardia.py"
+rsync -a "$KIT/tools/parche-pairing.py"      "$SERVIDOR:$REMOTO/politica/"
+rsync -a "$KIT/tools/cont-init-parches.sh"  "$SERVIDOR:$REMOTO/politica/"
+ssh "$SERVIDOR" "chmod +x $REMOTO/politica/cont-init-parches.sh"
 for m in "$KIT"/connections/*/mcp; do
   [[ -d "$m" ]] || continue
   conexion="$(basename "$(dirname "$m")")"

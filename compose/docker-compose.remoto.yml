@@ -52,6 +52,11 @@ services:
       # write_file o por terminal, y un guardrail que el guardado puede
       # cambiar no es un guardrail.
       - ./politica:/opt/politica:ro
+      # s6 corre esto antes del gateway, en cada arranque. Hoy traduce al
+      # español el mensaje de pairing de Telegram, que viene hardcodeado en
+      # run.py y le pide al cliente que corra un comando de terminal —
+      # contradiciendo al portal, que le dice "pegá el código acá".
+      - ./politica/cont-init-parches.sh:/etc/cont-init.d/03-parches:ro
       # LA MISMA IDEA, Y NOS FALTABA. config.yaml vive dentro de ./data y es
       # PROPIEDAD DEL AGENTE (-rw-r----- hermes hermes): verificado el 9/8/2026,
       # el agente lo escribe. Y ahí adentro están `disabled_toolsets` —donde
