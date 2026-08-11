@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home,
   LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Plug, Puzzle, Workflow,
@@ -90,7 +90,6 @@ function Login({ onReady }: { onReady: () => void }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   // /app/avatar es la página utilitaria que fotografía Chrome headless para el
   // PNG del bot: va SIN shell (ni sidebar ni puerta de onboarding — un browser
   // headless siempre tiene localStorage virgen y caería en la bienvenida:
@@ -199,15 +198,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           setLookAgente(loadAgentLook());
           dismiss("onboarding");
           dismiss("home");
-          // A FLUJOS, no a Inicio. Recién bautizado no hay nada que mostrar:
-          // Inicio son cuatro ceros y "todavía no registró actividad", que no
-          // le dice a nadie qué hacer. Flujos con cero flujos SÍ: es donde se
-          // explica el producto y donde están los ejemplos. Es lo primero que
-          // el cliente tiene que entender, así que es donde tiene que caer.
-          // Solo la primera vez: quien ya pasó por acá entra por Inicio.
-          if (pathname === "/app" || pathname === "/app/inicio") {
-            router.replace("/app/flujos");
-          }
         }}
       />
     );

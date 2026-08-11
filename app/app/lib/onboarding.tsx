@@ -12,8 +12,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Columns3, Dices, Hand, MessageSquare } from "lucide-react";
 import { Btn, inputCls } from "./ui";
+import { CarruselEjemplos } from "./ejemplosFlujos";
 import {
   getConnections, guardarIdentidad,
   type Connection, type Manifest, type PortalConfig,
@@ -116,13 +118,14 @@ export default function Onboarding({ manifest, cfg, onDone }: {
 }) {
   // Si el agente YA fue bautizado (otra máquina, otra persona de la empresa),
   // no se le vuelve a pedir el nombre: se salta directo a la presentación.
+  const router = useRouter();
   const yaBautizado = Boolean(manifest.bautizado);
   const [nombre, setNombre] = useState(
     () => loadAgentName() ?? (yaBautizado ? manifest.agent : ""));
   // El canal de aviso es un paso PROPIO y no el pie de la presentación. Es la
   // decisión que decide si el portal sirve —"la hoja espera que yo venga y yo
   // no voy a venir"— y apretada abajo de tres tarjetas competía con ellas.
-  const [paso, setPaso] = useState<"bautismo" | "negocio" | "presentacion" | "aviso">(
+  const [paso, setPaso] = useState<"bautismo" | "negocio" | "presentacion" | "aviso" | "automatizaciones">(
     yaBautizado ? "presentacion" : "bautismo");
   // Quien es EL CLIENTE. El onboarding le preguntaba el nombre al agente y
   // nunca por el negocio: el portal terminaba hablandole de "nosotros" y el
@@ -258,7 +261,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
 
   /** El bautizo viaja al agente; si el adapter es viejo o está caído, el
    *  portal sigue andando con la copia del browser. */
-  const terminar = () => {
+  const terminar = (destino: string) => {
     const n = nombre.trim();
     if (eligioAlgo.current) {
       const contacto = canal === "telegram"
@@ -273,6 +276,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
       });
     }
     onDone(n);
+    router.push(destino);
   };
 
   // La pestaña Aprobaciones es condicional (existe cuando hay algo esperando),
@@ -306,6 +310,18 @@ export default function Onboarding({ manifest, cfg, onDone }: {
             <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-soft">
               Me pedís cosas en tus palabras, las resuelvo, y todo lo que hago
               queda a la vista acá.
+            </p>
+          </div>
+        )}
+        {paso === "automatizaciones" && (
+          <div className="mb-8 animate-fadeup">
+            <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
+              Y no hace falta que me lo pidas
+            </h1>
+            <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-ink-soft">
+              Lo mejor que puedo hacer por vos es ocuparme de lo que se repite,
+              sin que tengas que acordarte. Vos me contás qué, yo lo hago cada
+              vez que corresponde y te dejo el resultado listo para revisar.
             </p>
           </div>
         )}
@@ -465,7 +481,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
               </Btn>
             </div>
           </div>
-        ) : (
+        ) : paso === "aviso" ? (
           <div className="animate-fadeup">
             {/* Es la ultima pregunta que hace EL AGENTE, y se lee como tal.
                 Tiene pantalla propia porque es lo que decide si el portal
@@ -569,13 +585,37 @@ export default function Onboarding({ manifest, cfg, onDone }: {
             </div>
 
             <div className="mt-6 flex flex-col items-center gap-2">
-              <Btn disabled={!puedeEntrar} onClick={terminar}>Entrar al portal</Btn>
+              <Btn disabled={!puedeEntrar} onClick={() => setPaso("automatizaciones")}>
+                Continuar <ArrowRight className="h-4 w-4" />
+              </Btn>
               <span className="text-[12px] text-ink-soft">
                 {!puedeEntrar
-                  ? "Elegí por dónde te aviso para entrar."
+                  ? "Elegí por dónde te aviso para seguir."
                   : url.trim()
                     ? "Mientras tanto sigo leyendo tu web. Lo que saque queda en Entregas."
-                    : "Cada sección se explica sola la primera vez que entrás."}
+                    : "Falta una sola cosa más."}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="w-full animate-fadeup">
+            <CarruselEjemplos />
+            {/* Primaria a armar el primero: el objetivo del onboarding entero
+                es que el cliente salga con UNO andando, no que entre al portal.
+                "Ir al inicio" existe igual — obligarlo sería un peaje, y el
+                que quiere mirar antes de decidir tiene que poder. */}
+            <div className="mt-7 flex flex-col items-center gap-3">
+              <Btn onClick={() => terminar("/app/chat")}>
+                Armar el primero <ArrowRight className="h-4 w-4" />
+              </Btn>
+              <button
+                onClick={() => terminar("/app/inicio")}
+                className="text-[13px] font-semibold text-ink-soft underline-offset-4 transition hover:text-ink hover:underline"
+              >
+                Ir al inicio
+              </button>
+              <span className="text-[12px] text-ink-soft">
+                Contame a qué se dedica tu empresa y te propongo por dónde empezar.
               </span>
             </div>
           </div>
