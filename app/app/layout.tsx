@@ -110,6 +110,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => { setNombre(loadAgentName()); }, []);
   const { seen, dismiss } = useIntroGate();
 
+  // LOS HOOKS VAN TODOS ACÁ ARRIBA, antes de cualquier `return` condicional.
+  // Puestos más abajo —después de los returns de loading/login/error— la
+  // cantidad de hooks cambia entre renders y React tira el #310, que en
+  // producción es una pantalla en blanco con "Application error". Me pasó el
+  // 11/8 y dejó el chat inusable.
+  //
+  // Se lee de window y no con useSearchParams: ese hook obliga a envolver todo
+  // el layout en un <Suspense> para que Next prerenderice, y no vale la pena
+  // por un parámetro que solo importa después de montar.
+  const [conIntencion, setConIntencion] = useState(false);
+  useEffect(() => {
+    setConIntencion(new URLSearchParams(window.location.search).has("p"));
+  }, [pathname]);
+  const moduloActual = MODULES.find((m) => pathname.startsWith(m.path));
+  useEffect(() => {
+    if (conIntencion && moduloActual && seen && !seen[moduloActual.key]) {
+      dismiss(moduloActual.key);
+    }
+  }, [conIntencion, moduloActual, seen, dismiss]);
+
   // Si este browser no conoce al agente pero el agente sí se conoce a sí mismo
   // (el cliente lo bautizó desde otra máquina), el portal se lo copia.
   const aprenderDelAgente = (m: Manifest) => {
@@ -206,7 +226,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const enabled = MODULES.filter(
     (m) => m.key === "home" || m.key === "capabilities" || manifest.modules[m.key]);
   // Bienvenida por módulo: se ve una sola vez, hasta que el cliente da "Ok".
-  const current = MODULES.find((m) => pathname.startsWith(m.path));
+  const current = moduloActual;
   const Intro = current ? INTROS[current.key] : undefined;
   // La bienvenida del módulo NO se muestra si el cliente llegó con una
   // intención explícita (/app/chat?p=…): venía de tocar "armá esto" y su
@@ -214,18 +234,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // puerta que se abre después de que entró — y esconde la conversación que
   // él mismo pidió. Se marca como vista para que no reaparezca más tarde,
   // en el medio de esa conversación.
-  // Se lee de window y no con useSearchParams: ese hook obliga a envolver
-  // TODO el layout en un <Suspense> para que Next pueda prerenderizar, y no
-  // vale la pena por un parámetro que solo importa después de montar.
-  const [conIntencion, setConIntencion] = useState(false);
-  useEffect(() => {
-    setConIntencion(new URLSearchParams(window.location.search).has("p"));
-  }, [pathname]);
   const showIntro = Boolean(
     current && Intro && seen && !seen[current.key] && !conIntencion);
-  useEffect(() => {
-    if (conIntencion && current && seen && !seen[current.key]) dismiss(current.key);
-  }, [conIntencion, current, seen, dismiss]);
 
   const item = (m: (typeof MODULES)[number]) => {
     const active = pathname.startsWith(m.path);
