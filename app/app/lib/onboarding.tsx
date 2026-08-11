@@ -12,10 +12,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
 import { ArrowRight, Columns3, Dices, Hand, MessageSquare } from "lucide-react";
 import { Btn, inputCls } from "./ui";
-import { CarruselEjemplos } from "./ejemplosFlujos";
+import { CarruselEjemplos, linkArmar } from "./ejemplosFlujos";
 import {
   getConnections, guardarIdentidad,
   type Connection, type Manifest, type PortalConfig,
@@ -118,7 +117,6 @@ export default function Onboarding({ manifest, cfg, onDone }: {
 }) {
   // Si el agente YA fue bautizado (otra máquina, otra persona de la empresa),
   // no se le vuelve a pedir el nombre: se salta directo a la presentación.
-  const router = useRouter();
   const yaBautizado = Boolean(manifest.bautizado);
   const [nombre, setNombre] = useState(
     () => loadAgentName() ?? (yaBautizado ? manifest.agent : ""));
@@ -276,7 +274,12 @@ export default function Onboarding({ manifest, cfg, onDone }: {
       });
     }
     onDone(n);
-    router.push(destino);
+    // Navegación DURA a propósito. Con router.push, al cerrar el onboarding se
+    // montaba la página de /app —que hace replace("/app/inicio") en un efecto—
+    // y se comía el destino: "Armar el primero" terminaba en Inicio. Esto pasa
+    // una vez en la vida del cliente; un reload de más es barato al lado de un
+    // llamado a la acción que no lleva a ningún lado.
+    window.location.assign(destino);
   };
 
   // La pestaña Aprobaciones es condicional (existe cuando hay algo esperando),
@@ -316,19 +319,19 @@ export default function Onboarding({ manifest, cfg, onDone }: {
         {paso === "automatizaciones" && (
           <div className="mb-8 animate-fadeup">
             <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
-              Y no hace falta que me lo pidas
+              ¿Qué te saco de encima?
             </h1>
             <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-ink-soft">
               Lo mejor que puedo hacer por vos es ocuparme de lo que se repite,
-              sin que tengas que acordarte. Vos me contás qué, yo lo hago cada
-              vez que corresponde y te dejo el resultado listo para revisar.
+              sin que tengas que acordarte. Tocá algo parecido a lo que
+              necesitás y lo armamos ahora.
             </p>
           </div>
         )}
         {paso === "aviso" && (
           <div className="mb-8 animate-fadeup">
             <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
-              Una última cosa
+              ¿Por dónde te aviso?
             </h1>
             <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-soft">
               Necesito saber por dónde encontrarte. Si no, trabajo y no te enterás.
@@ -605,18 +608,18 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                 "Ir al inicio" existe igual — obligarlo sería un peaje, y el
                 que quiere mirar antes de decidir tiene que poder. */}
             <div className="mt-7 flex flex-col items-center gap-3">
-              <Btn onClick={() => terminar("/app/chat")}>
-                Armar el primero <ArrowRight className="h-4 w-4" />
+              <Btn onClick={() => terminar(linkArmar(
+                "Quiero que te encargues de algo que se repite en mi empresa. " +
+                "Proponeme dos o tres cosas que podrías hacer solo, de a una por " +
+                "vez, y armamos la que más me sirva."))}>
+                Contarle lo mío <ArrowRight className="h-4 w-4" />
               </Btn>
               <button
                 onClick={() => terminar("/app/inicio")}
                 className="text-[13px] font-semibold text-ink-soft underline-offset-4 transition hover:text-ink hover:underline"
               >
-                Ir al inicio
+                Ahora no, ir al inicio
               </button>
-              <span className="text-[12px] text-ink-soft">
-                Contame a qué se dedica tu empresa y te propongo por dónde empezar.
-              </span>
             </div>
           </div>
         )}

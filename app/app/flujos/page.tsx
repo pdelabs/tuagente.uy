@@ -26,7 +26,7 @@ import {
 } from "../lib/agent";
 import { EntityProvider } from "../lib/EntityViewer";
 import { EntityChip } from "../lib/entities";
-import { CarruselEjemplos } from "../lib/ejemplosFlujos";
+import { CarruselEjemplos, linkArmar } from "../lib/ejemplosFlujos";
 import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner,
 } from "../lib/ui";
@@ -191,14 +191,17 @@ function SinFlujos() {
       <div className="mt-7"><CarruselEjemplos /></div>
 
       <div className="mt-6 flex flex-col items-center gap-2">
-        <a
-          href="/app/chat"
+        <Link
+          href={linkArmar(
+            "Quiero que te encargues de algo que se repite en mi empresa. " +
+            "Proponeme dos o tres cosas que podrías hacer solo, de a una por " +
+            "vez, y armamos la que más me sirva.")}
           className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-dark"
         >
-          Armar el primero
-        </a>
+          Contarle lo mío
+        </Link>
         <span className="text-[12px] text-ink-soft">
-          Contale a qué se dedica tu empresa y te propone por dónde empezar.
+          O tocá uno de arriba y lo armamos a partir de ahí.
         </span>
       </div>
     </div>

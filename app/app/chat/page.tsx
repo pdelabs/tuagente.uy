@@ -6,6 +6,7 @@
 // Hermes (assistant.delta / tool.progress / run.completed).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowDown, ArrowUp, Brain, Check, ChevronRight, Copy, Download, Loader2, Menu,
   Paperclip, Pencil, RefreshCw, Square, Wrench, X,
@@ -181,6 +182,24 @@ export default function ChatPage() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setCfg(loadConfig()); }, []);
+
+  // ABRIR EL CHAT CON EL PEDIDO YA ESCRITO: /app/chat?p=<texto>.
+  // Es lo que convierte una tarjeta de ejemplo en algo que PASA. Sin esto, el
+  // cliente que toca "armar el primero" cae en una caja de texto vacía — que
+  // es exactamente el problema que la pantalla venía a resolver.
+  //
+  // Se manda UNA sola vez: `arrancado` evita que un re-render lo repita, y se
+  // limpia la URL para que refrescar no vuelva a mandarlo.
+  const params = useSearchParams();
+  const arrancado = useRef(false);
+  useEffect(() => {
+    if (arrancado.current || !cfg) return;
+    const pedido = params?.get("p");
+    if (!pedido?.trim()) return;
+    arrancado.current = true;
+    window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    run(pedido.trim(), []);
+  }, [cfg, params]);
 
   const refreshSessions = useCallback((c: PortalConfig) => {
     getSessions(c)
