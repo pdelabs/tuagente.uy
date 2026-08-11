@@ -110,6 +110,13 @@ for m in "$KIT"/connections/*/mcp; do
 done
 ssh "$SERVIDOR" "[ -s $REMOTO/politica/politica.json ] || echo '{}' > $REMOTO/politica/politica.json"
 
+# EL SOUL, QUE TAMPOCO SE INSTALABA. Sin el, el agente corre con los ~800 bytes
+# del preambulo de Nous y nada mas: sin regla de aprobacion, sin convenciones de
+# entrega, sin idioma — y contesta como un asistente generico. Se instalan los
+# cuatro bloques que podemos completar solos; `00-identidad.md` queda para la
+# persona que da de alta al cliente.
+"$KIT/tools/instalar-soul.sh" "$SERVIDOR" || echo "   (el SOUL no se instalo; revisar a mano)"
+
 # EL PRIMER ARRANQUE VA SIN EL CANDADO DE config.yaml, y no es opcional: el
 # archivo todavía NO EXISTE, y Docker, al montar algo inexistente, crea un
 # DIRECTORIO con ese nombre. Hermes entonces no puede escribir su config y el

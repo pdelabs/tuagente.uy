@@ -168,25 +168,52 @@ def _contacto_limpio(valor):
     return {"canal": canal, "valor": destino} if destino else None
 
 
-def _bloque_soul(nombre):
-    # El bloque se delimita con comentarios HTML, asi que el nombre NO puede
-    # traer `<` ni `>`: con ellos podria cerrarlo antes de tiempo y la proxima
-    # reescritura se comeria un pedazo del SOUL. Se sanea aca —donde vive el
-    # invariante— y no solo en la puerta de entrada.
-    nombre = re.sub(r"\s+", " ", nombre).replace("<", "").replace(">", "").strip()
-    return (
-        f"{SOUL_INICIO}\n"
-        "## Tu nombre\n"
-        "\n"
-        f"Tu cliente te bautizo **{nombre}** desde el portal. Ese es tu nombre:\n"
-        "presentate asi cuando saludes, cuando te pregunten quien sos y en\n"
-        "todos los canales. Si el resto de este documento te llama de otra\n"
-        "forma, vale este.\n"
-        f"{SOUL_FIN}"
-    )
+def _limpio_para_soul(texto):
+    # El bloque se delimita con comentarios HTML, asi que nada de lo que entra
+    # puede traer `<` ni `>`: con ellos podria cerrarlo antes de tiempo y la
+    # proxima reescritura se comeria un pedazo del SOUL. Se sanea aca —donde
+    # vive el invariante— y no solo en la puerta de entrada.
+    return re.sub(r"\s+", " ", str(texto or "")).replace("<", "").replace(">", "").strip()
 
 
-def escribir_nombre_en_soul(nombre):
+def _bloque_soul(nombre, empresa="", url=""):
+    """Quien es el agente Y PARA QUIEN TRABAJA.
+
+    Antes solo llevaba el nombre. La empresa y la web quedaban en
+    portal_identidad.json, que el agente NUNCA lee — asi que el cliente le
+    contaba su negocio en el onboarding y el agente igual le preguntaba "¿que
+    vendes?" en el primer flujo. Visto el 11/8: pidio seguir competidores y el
+    agente no sabia de que empresa hablaba.
+    """
+    nombre = _limpio_para_soul(nombre)
+    empresa = _limpio_para_soul(empresa)
+    url = _limpio_para_soul(url)
+
+    partes = [
+        SOUL_INICIO,
+        "## Quien sos y para quien trabajas",
+        "",
+        f"Tu cliente te bautizo **{nombre}** desde el portal. Ese es tu nombre:",
+        "presentate asi cuando saludes, cuando te pregunten quien sos y en",
+        "todos los canales. Si el resto de este documento te llama de otra",
+        "forma, vale este.",
+    ]
+    if empresa:
+        donde = f" Su sitio es {url}." if url else ""
+        partes += [
+            "",
+            f"Trabajas para **{empresa}**.{donde} Cuando te hablen de \"la",
+            "empresa\", \"nosotros\", \"mis clientes\" o \"mis competidores\", es de",
+            "ella que hablan: YA SABES cual es y no lo vuelvas a preguntar. Si",
+            "necesitas algo mas del negocio —a que se dedica exactamente, que",
+            "vende, donde— buscalo vos primero y recien despues preguntá lo que",
+            "no puedas averiguar.",
+        ]
+    partes.append(SOUL_FIN)
+    return "\n".join(partes)
+
+
+def escribir_identidad_en_soul(nombre, empresa="", url=""):
     """Deja el nombre en el system prompt, para que el agente SE PRESENTE asi.
 
     Reemplaza solo lo que hay entre los marcadores (o agrega el bloque al final
@@ -199,7 +226,7 @@ def escribir_nombre_en_soul(nombre):
         texto = SOUL.read_text(encoding="utf-8")
     except OSError as exc:
         return f"no pude leerlo: {exc}"
-    bloque = _bloque_soul(nombre)
+    bloque = _bloque_soul(nombre, empresa, url)
     ini, fin = texto.find(SOUL_INICIO), texto.find(SOUL_FIN)
     if ini != -1 and fin > ini:
         nuevo = texto[:ini] + bloque + texto[fin + len(SOUL_FIN):]
@@ -2145,8 +2172,16 @@ class Handler(BaseHTTPRequestHandler):
         # best-effort a proposito: el bautizo ya quedo guardado, y que Telegram
         # nos limite o falte el SOUL no puede tumbar la respuesta.
         aplicado = {}
+        # El bloque del SOUL se reescribe si cambio el nombre, la empresa O la
+        # web: antes solo miraba el nombre, asi que contar el negocio en el
+        # paso 2 del onboarding no llegaba nunca al agente.
+        if any(nuevo.get(k) and nuevo.get(k) != previo.get(k)
+               for k in ("nombre", "empresa", "url")):
+            aplicado["soul"] = escribir_identidad_en_soul(
+                nuevo.get("nombre") or previo.get("nombre") or "",
+                nuevo.get("empresa") or previo.get("empresa") or "",
+                nuevo.get("url") or previo.get("url") or "")
         if nuevo.get("nombre") and nuevo.get("nombre") != previo.get("nombre"):
-            aplicado["soul"] = escribir_nombre_en_soul(nuevo["nombre"])
             aplicado["telegram"] = nombre_en_telegram(nuevo["nombre"])
         # URL nueva: el agente sale a leer la web de su propia empresa y
         # entrega el brief. Va como TICKET y no como sesion a proposito: se ve
