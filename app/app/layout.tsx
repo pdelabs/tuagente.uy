@@ -208,7 +208,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Bienvenida por módulo: se ve una sola vez, hasta que el cliente da "Ok".
   const current = MODULES.find((m) => pathname.startsWith(m.path));
   const Intro = current ? INTROS[current.key] : undefined;
-  const showIntro = Boolean(current && Intro && seen && !seen[current.key]);
+  // La bienvenida del módulo NO se muestra si el cliente llegó con una
+  // intención explícita (/app/chat?p=…): venía de tocar "armá esto" y su
+  // mensaje ya está enviado. Mostrarle la portada del chat encima es una
+  // puerta que se abre después de que entró — y esconde la conversación que
+  // él mismo pidió. Se marca como vista para que no reaparezca más tarde,
+  // en el medio de esa conversación.
+  // Se lee de window y no con useSearchParams: ese hook obliga a envolver
+  // TODO el layout en un <Suspense> para que Next pueda prerenderizar, y no
+  // vale la pena por un parámetro que solo importa después de montar.
+  const [conIntencion, setConIntencion] = useState(false);
+  useEffect(() => {
+    setConIntencion(new URLSearchParams(window.location.search).has("p"));
+  }, [pathname]);
+  const showIntro = Boolean(
+    current && Intro && seen && !seen[current.key] && !conIntencion);
+  useEffect(() => {
+    if (conIntencion && current && seen && !seen[current.key]) dismiss(current.key);
+  }, [conIntencion, current, seen, dismiss]);
 
   const item = (m: (typeof MODULES)[number]) => {
     const active = pathname.startsWith(m.path);

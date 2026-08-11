@@ -95,7 +95,7 @@ export const linkArmar = (prompt: string) =>
 export function CarruselEjemplos() {
   return (
     <div
-      className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-3 text-left [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="-mx-7 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-p-7 px-7 pb-3 text-left [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       style={{
         maskImage:
           "linear-gradient(to right, transparent 0, black 28px, black calc(100% - 28px), transparent 100%)",

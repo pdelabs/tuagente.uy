@@ -6,7 +6,6 @@
 // Hermes (assistant.delta / tool.progress / run.completed).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import {
   ArrowDown, ArrowUp, Brain, Check, ChevronRight, Copy, Download, Loader2, Menu,
   Paperclip, Pencil, RefreshCw, Square, Wrench, X,
@@ -190,16 +189,15 @@ export default function ChatPage() {
   //
   // Se manda UNA sola vez: `arrancado` evita que un re-render lo repita, y se
   // limpia la URL para que refrescar no vuelva a mandarlo.
-  const params = useSearchParams();
   const arrancado = useRef(false);
   useEffect(() => {
     if (arrancado.current || !cfg) return;
-    const pedido = params?.get("p");
+    const pedido = new URLSearchParams(window.location.search).get("p");
     if (!pedido?.trim()) return;
     arrancado.current = true;
     window.history.replaceState(null, "", window.location.pathname + window.location.hash);
     run(pedido.trim(), []);
-  }, [cfg, params]);
+  }, [cfg]);
 
   const refreshSessions = useCallback((c: PortalConfig) => {
     getSessions(c)
