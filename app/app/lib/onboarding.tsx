@@ -119,7 +119,10 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   const yaBautizado = Boolean(manifest.bautizado);
   const [nombre, setNombre] = useState(
     () => loadAgentName() ?? (yaBautizado ? manifest.agent : ""));
-  const [paso, setPaso] = useState<"bautismo" | "negocio" | "presentacion">(
+  // El canal de aviso es un paso PROPIO y no el pie de la presentación. Es la
+  // decisión que decide si el portal sirve —"la hoja espera que yo venga y yo
+  // no voy a venir"— y apretada abajo de tres tarjetas competía con ellas.
+  const [paso, setPaso] = useState<"bautismo" | "negocio" | "presentacion" | "aviso">(
     yaBautizado ? "presentacion" : "bautismo");
   // Quien es EL CLIENTE. El onboarding le preguntaba el nombre al agente y
   // nunca por el negocio: el portal terminaba hablandole de "nosotros" y el
@@ -143,7 +146,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   const [pareado, setPareado] = useState(false);
 
   useEffect(() => {
-    if (paso !== "presentacion") return;
+    if (paso !== "presentacion" && paso !== "aviso") return;
     getConnections(cfg)
       .then((r) => {
         const t = (r.conexiones ?? []).find((c) => c.id === "telegram") ?? null;
@@ -152,6 +155,14 @@ export default function Onboarding({ manifest, cfg, onDone }: {
       })
       .catch(() => { /* sin catalogo seguimos: el mail alcanza para pasar */ });
   }, [paso, cfg]);
+
+  // Dos fuentes para el mismo dato, porque el paso NO se puede completar sin
+  // él: el manifiesto (adapter 0.35+, siempre presente) y la conexión (que
+  // puede no haber llegado si falló la llamada al catálogo).
+  const handleBot = manifest.telegram_bot
+    || tg?.link?.replace(/^https:\/\/t\.me\//, "")
+    || null;
+  const enlaceBot = handleBot ? `https://t.me/${handleBot}` : null;
 
   const activarTelegram = async () => {
     if (!codigo.trim()) return;
@@ -179,7 +190,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   // loop; alternándolos parece alguien trabajando. Arranca por `buscando`
   // porque es el orden real. El state machine cruza los gestos en 220 ms, así
   // que el cambio no salta.
-  const leyendoWeb = paso === "presentacion" && Boolean(url.trim());
+  const leyendoWeb = (paso === "presentacion" || paso === "aviso") && Boolean(url.trim());
   const [gesto, setGesto] = useState<"buscando" | "leyendo">("buscando");
   useEffect(() => {
     if (!leyendoWeb) return;
@@ -287,6 +298,27 @@ export default function Onboarding({ manifest, cfg, onDone }: {
             </p>
           </div>
         )}
+        {paso === "presentacion" && (
+          <div className="mb-8 animate-fadeup">
+            <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
+              Así vamos a trabajar
+            </h1>
+            <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-soft">
+              Me pedís cosas en tus palabras, las resuelvo, y todo lo que hago
+              queda a la vista acá.
+            </p>
+          </div>
+        )}
+        {paso === "aviso" && (
+          <div className="mb-8 animate-fadeup">
+            <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
+              Una última cosa
+            </h1>
+            <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-soft">
+              Necesito saber por dónde encontrarte. Si no, trabajo y no te enterás.
+            </p>
+          </div>
+        )}
         {paso === "bautismo" && (
           <div className="mb-10 animate-fadeup">
             <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
@@ -332,8 +364,12 @@ export default function Onboarding({ manifest, cfg, onDone }: {
             2. Antes de esta pantalla va a haber un login donde el cliente ya
                puso SU nombre — cuando llega acá, la pregunta de quién es quién
                ya está contestada. (Pendiente: ese login todavía no existe.) */}
+        {/* "¡Hola! Soy X" SOLO en el bautizo. Repetirlo después es presentarse
+            de nuevo con alguien que ya te puso el nombre dos pantallas atrás:
+            se lee como si no se acordara. En el resto va el nombre solo, y lo
+            que dice qué está pasando es el h1 de arriba. */}
         <h2 className="mt-6 text-[32px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
-          {paso === "negocio" ? (
+          {paso !== "bautismo" ? (
             <span className="text-primary">{nombre}</span>
           ) : (
             <>
@@ -404,17 +440,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
               </Btn>
             </div>
           </div>
-        ) : (
+        ) : paso === "presentacion" ? (
           <div className="animate-fadeup">
-            <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-ink-soft">
-              {/* Sin género: el cliente le pone el nombre que quiere y
-                  "Encantado" con un nombre femenino se lee mal. Y sacamos "con
-                  tus sistemas": todavía no le conectó ninguno, así que sonaba
-                  a que alguien le dio sus cosas sin avisarle. */}
-              Un gusto. Trabajo para tu empresa: me pedís cosas en tus palabras, las
-              resuelvo y todo lo que hago queda a la vista acá.
-            </p>
-
             {puntos.length > 0 && (
               <div className="mt-8 grid gap-3 text-left sm:grid-cols-3">
                 {puntos.map((p) => {
@@ -432,11 +459,19 @@ export default function Onboarding({ manifest, cfg, onDone }: {
               </div>
             )}
 
-            {/* Va acá y no en un formulario: es la ultima pregunta que hace
-                EL AGENTE, y se lee como tal. Es ademas lo que decide si el
-                portal sirve — un cliente de prueba lo dijo sin vueltas: "la
-                hoja espera que yo venga y yo no voy a venir". */}
-            <div className="mx-auto mt-8 w-full max-w-md rounded-card border border-black/[0.07] bg-white p-5 text-left">
+            <div className="mt-8">
+              <Btn onClick={() => setPaso("aviso")}>
+                Continuar <ArrowRight className="h-4 w-4" />
+              </Btn>
+            </div>
+          </div>
+        ) : (
+          <div className="animate-fadeup">
+            {/* Es la ultima pregunta que hace EL AGENTE, y se lee como tal.
+                Tiene pantalla propia porque es lo que decide si el portal
+                sirve — un cliente de prueba lo dijo sin vueltas: "la hoja
+                espera que yo venga y yo no voy a venir". */}
+            <div className="mx-auto mt-2 w-full max-w-md rounded-card border border-black/[0.07] bg-white p-5 text-left">
               <p className="text-[15px] font-bold text-ink">
                 ¿Por dónde te aviso cuando pase algo?
               </p>
@@ -473,9 +508,9 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                   </p>
                 ) : (
                   <div className="mt-3 flex flex-col gap-2">
-                    {tg?.link && (
+                    {enlaceBot && (
                       <a
-                        href={tg.link}
+                        href={enlaceBot}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
@@ -483,8 +518,14 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                         Abrir el chat conmigo
                       </a>
                     )}
+                    {/* El handle va TAMBIÉN escrito, no solo en el botón: si la
+                        llamada a conexiones falla, el paso vuelve a ser
+                        imposible. Y así se puede buscar a mano desde el
+                        teléfono, que es donde la gente tiene Telegram. */}
                     <p className="text-[12px] leading-snug text-ink-soft">
-                      Mandame un hola. Te contesto con un código: pegalo acá.
+                      {handleBot
+                        ? <>Buscame en Telegram como <span className="font-semibold text-ink">@{handleBot}</span> y mandame un hola. Te contesto con un código: pegalo acá.</>
+                        : <>Mandame un hola por Telegram. Te contesto con un código: pegalo acá.</>}
                     </p>
                     <div className="flex gap-2">
                       <input

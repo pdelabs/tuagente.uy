@@ -22,6 +22,10 @@ export type Manifest = {
   look?: Record<string, number> | null;
   /** true si el cliente ya lo bautizó desde el portal alguna vez. */
   bautizado?: boolean;
+  /** Handle del bot de Telegram, sin @ (adapter 0.35+). El onboarding decía
+   *  "mandame un hola" y nunca a dónde: sin esto el paso es imposible de
+   *  completar salvo que el cliente ya sepa el handle. null si no tiene bot. */
+  telegram_bot?: string | null;
 };
 
 export type Ticket = {
