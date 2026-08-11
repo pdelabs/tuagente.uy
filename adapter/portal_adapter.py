@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.35.0"
+VERSION = "0.36.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -313,10 +313,13 @@ def manifest():
             "crons": CRON_JOBS.exists(),
             # La pestaña de conexiones solo si el kit dejo su catalogo.
             "connections": CONNECTIONS_CATALOG.is_file(),
-            # Los trabajos del cliente con nombre y resultados. Sin carpeta
-            # flujos/ la pestaña no existe (agentes anteriores al concepto).
-            "flujos": FLUJOS_DIR.is_dir() and any(
-                (c / "FLUJO.md").is_file() for c in FLUJOS_DIR.iterdir() if c.is_dir()),
+            # SIEMPRE encendida, aunque no haya ninguno todavía. Los flujos son
+            # el producto: si para charlar el cliente tiene ChatGPT, lo que
+            # justifica esto es que el agente HAGA cosas solo. La pestaña estaba
+            # condicionada a que ya existiera un flujo, o sea que el concepto
+            # central era invisible justo el primer día — cuando hay que
+            # presentarlo. El vacío no se esconde: se usa para explicar.
+            "flujos": True,
             # No es una pestaña: le avisa al chat que puede adjuntar archivos.
             "upload": WORKSPACE.is_dir(),
         },
