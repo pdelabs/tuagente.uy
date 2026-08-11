@@ -14,7 +14,8 @@ import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { ArrowRight, Columns3, Dices, Hand, MessageSquare } from "lucide-react";
 import { Btn, inputCls } from "./ui";
-import { CarruselEjemplos, linkArmar } from "./ejemplosFlujos";
+import { CarruselEjemplos } from "./ejemplosFlujos";
+import ChatOnboarding from "./ChatOnboarding";
 import {
   getConnections, guardarIdentidad,
   type Connection, type Manifest, type PortalConfig,
@@ -152,7 +153,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   // El canal de aviso es un paso PROPIO y no el pie de la presentación. Es la
   // decisión que decide si el portal sirve —"la hoja espera que yo venga y yo
   // no voy a venir"— y apretada abajo de tres tarjetas competía con ellas.
-  const [paso, setPaso] = useState<"bautismo" | "negocio" | "presentacion" | "aviso" | "automatizaciones">(
+  const [paso, setPaso] = useState<"bautismo" | "negocio" | "presentacion" | "aviso" | "automatizaciones" | "charla">(
     yaBautizado ? "presentacion" : "bautismo");
   // Quien es EL CLIENTE. El onboarding le preguntaba el nombre al agente y
   // nunca por el negocio: el portal terminaba hablandole de "nosotros" y el
@@ -174,6 +175,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   const [activando, setActivando] = useState(false);
   const [pairErr, setPairErr] = useState<string | null>(null);
   const [pareado, setPareado] = useState(false);
+  // Lo que el cliente eligio del carrusel: arranca la charla sin salir de acá.
+  const [pedido, setPedido] = useState("");
 
   useEffect(() => {
     if (paso !== "presentacion" && paso !== "aviso") return;
@@ -345,6 +348,17 @@ export default function Onboarding({ manifest, cfg, onDone }: {
             </p>
           </div>
         )}
+        {paso === "charla" && (
+          <div className="mb-6 animate-fadeup">
+            <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
+              Ya estamos
+            </h1>
+            <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-ink-soft">
+              Contestale lo que te pregunte y lo armamos entre los dos. Cuando
+              quieras, entrá al portal: la charla sigue ahí.
+            </p>
+          </div>
+        )}
         {paso === "automatizaciones" && (
           <div className="mb-8 animate-fadeup">
             <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
@@ -378,7 +392,11 @@ export default function Onboarding({ manifest, cfg, onDone }: {
             </p>
           </div>
         )}
-        <div className={`relative transition-all duration-500 ${paso === "bautismo" ? "h-40 w-40" : "h-28 w-28"}`}>
+        <div
+          className={`relative transition-all duration-500 ${
+            paso === "bautismo" ? "h-40 w-40" : paso === "charla" ? "h-16 w-16" : "h-28 w-28"
+          }`}
+        >
           {/* Si le pasó la web, el agentito no está quieto: la está leyendo de
               verdad — el adapter ya creó el ticket del brief. El gesto no es
               decorativo, muestra lo que está pasando. */}
@@ -416,7 +434,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
             de nuevo con alguien que ya te puso el nombre dos pantallas atrás:
             se lee como si no se acordara. En el resto va el nombre solo, y lo
             que dice qué está pasando es el h1 de arriba. */}
-        <h2 className="mt-6 text-[32px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
+        <h2 className={`mt-6 font-extrabold leading-tight tracking-tight text-ink ${paso === "charla" ? "sr-only" : "text-[32px] sm:text-[38px]"}`}>
           {paso !== "bautismo" ? (
             <span className="text-primary">{nombre}</span>
           ) : (
@@ -629,18 +647,28 @@ export default function Onboarding({ manifest, cfg, onDone }: {
               </span>
             </div>
           </div>
+        ) : paso === "charla" ? (
+          <ChatOnboarding
+            cfg={cfg}
+            pedido={pedido}
+            nombreAgente={nombre || "Tu agente"}
+            onListo={() => terminar("/app/inicio")}
+          />
         ) : (
           <div className="w-full animate-fadeup">
-            <CarruselEjemplos onElegir={(p) => terminar(linkArmar(p))} />
+            <CarruselEjemplos onElegir={(p) => { setPedido(p); setPaso("charla"); }} />
             {/* Primaria a armar el primero: el objetivo del onboarding entero
                 es que el cliente salga con UNO andando, no que entre al portal.
                 "Ir al inicio" existe igual — obligarlo sería un peaje, y el
                 que quiere mirar antes de decidir tiene que poder. */}
             <div className="mt-7 flex flex-col items-center gap-3">
-              <Btn onClick={() => terminar(linkArmar(
-                "Quiero que te encargues de algo que se repite en mi empresa. " +
-                "Proponeme dos o tres cosas que podrías hacer solo, de a una por " +
-                "vez, y armamos la que más me sirva."))}>
+              <Btn onClick={() => {
+                setPedido(
+                  "Quiero que te encargues de algo que se repite en mi empresa. " +
+                  "Proponeme dos o tres cosas que podrías hacer solo, de a una por " +
+                  "vez, y armamos la que más me sirva.");
+                setPaso("charla");
+              }}>
                 Contarle lo mío <ArrowRight className="h-4 w-4" />
               </Btn>
               <button
