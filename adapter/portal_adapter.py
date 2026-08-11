@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.34.0"
+VERSION = "0.35.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -293,6 +293,12 @@ def manifest():
         # Por donde avisarle. Sin esto el portal espera que el cliente entre, y
         # el cliente no entra: "la hoja espera que yo venga y yo no voy a venir".
         "aviso": (identidad().get("contacto") or {}).get("canal"),
+        # A QUIEN escribirle en Telegram. El onboarding decia "mandame un hola"
+        # y NUNCA decia a donde: el paso era imposible de completar salvo que
+        # el cliente ya supiera el handle (encontrado el 10/8/2026 con Kiko).
+        # El dato ya existia acá adentro y solo se usaba en Conexiones.
+        # None si el agente no tiene bot: el portal ofrece mail y listo.
+        "telegram_bot": _telegram_username(),
         "portal_plugin": f"adapter-{VERSION}",
         "modules": {
             "chat": True,  # el gateway (:8642) es parte del deploy Hermes
@@ -993,9 +999,15 @@ def connections():
         })
         # Telegram: el token prueba nuestra mitad. La del cliente (ya chateo
         # alguna vez) es lo que separa "conectado" de "lista para vos".
-        if c.get("id") == "telegram" and salida[-1]["estado"] == "conectado":
-            if not _canal_usado("telegram"):
+        if c.get("id") == "telegram":
+            if salida[-1]["estado"] == "conectado" and not _canal_usado("telegram"):
                 salida[-1]["estado"] = "lista"
+            # EL LINK VA SIEMPRE QUE HAYA BOT, no solo si ya esta conectado.
+            # Estaba adentro del `if estado == "conectado"`, o sea que aparecia
+            # justo cuando ya no hacia falta y faltaba cuando el cliente tenia
+            # que escribirle por primera vez. En el onboarding el estado todavia
+            # es "sin_conectar": el paso decia "mandame un hola" sin decir a
+            # donde, y era imposible de completar. (10/8/2026, con Kiko.)
             username = _telegram_username()
             if username:
                 salida[-1]["link"] = f"https://t.me/{username}"
