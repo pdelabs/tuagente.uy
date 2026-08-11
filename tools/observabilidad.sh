@@ -41,19 +41,32 @@ case "$ACCION" in
     echo "→ subiendo el overlay"
     rsync -a "$KIT/compose/docker-compose.observabilidad.yml" "$HOST:$DIR/"
     rsync -a "$KIT/compose/litellm.yaml" "$HOST:$DIR/"
+    rsync -a "$KIT/compose/otel-collector.yaml" "$HOST:$DIR/"
+
+    # El modelo sale de la config del agente: litellm no lo manda en el span
+    # util y sin el la traza no dice a que le hablaste.
+    MODELO="$(ssh "$HOST" "grep -E '^\s*default:' $DIR/data/config.yaml | head -1 | sed 's/.*default:[[:space:]]*//'" | tr -d '\r')"
+    echo "→ modelo del agente: ${MODELO:-desconocido}"
+    ssh "$HOST" "grep -q '^MODELO_DEL_AGENTE=' $DIR/.env 2>/dev/null \
+      && sed -i 's|^MODELO_DEL_AGENTE=.*|MODELO_DEL_AGENTE=${MODELO}|' $DIR/.env \
+      || echo 'MODELO_DEL_AGENTE=${MODELO}' >> $DIR/.env"
 
     echo "→ levantando phoenix y litellm"
-    compose "up -d phoenix litellm" >/dev/null 2>&1
-    sleep 20
+    compose "up -d phoenix otel-collector litellm" >/dev/null 2>&1
 
     # El proxy tiene que contestar ANTES de que Hermes dependa de el: si no,
     # el agente queda mudo hasta que alguien se acuerde de mirar los logs.
     echo -n "→ el proxy responde: "
+    listo=""
+    for _ in $(seq 1 12); do
+      sleep 8
+      ssh "$HOST" "docker exec $HOST-hermes curl -s -o /dev/null -w '%{http_code}' -m 8 http://litellm:4000/health/liveliness" 2>/dev/null | grep -q 200 && { listo=1; break; }
+    done
     # Se pregunta DESDE hermes y no desde litellm: la imagen del proxy no
     # trae curl, y su ausencia se ve igual que "el proxy no responde". Ademas
     # esto prueba lo que importa de verdad — que hermes LO ALCANCE por la red
     # interna—, que es la unica pregunta que decide si se puede seguir.
-    if ssh "$HOST" "docker exec $HOST-hermes curl -s -o /dev/null -w '%{http_code}' -m 8 http://litellm:4000/health/liveliness" 2>/dev/null | grep -q 200; then
+    if [[ -n "$listo" ]]; then
       echo "sí"
     else
       echo "NO — no toco el agente, revisá 'docker compose logs litellm'" >&2
@@ -99,8 +112,8 @@ PY"
     compose "restart hermes" >/dev/null 2>&1
     esperar_gateway || { echo "el gateway no volvió — mirá los logs" >&2; exit 1; }
     echo "→ el agente habla directo con OpenRouter"
-    compose "stop phoenix litellm" >/dev/null 2>&1
-    echo "→ phoenix y litellm apagados (las trazas quedan en su volumen)"
+    compose "stop phoenix otel-collector litellm" >/dev/null 2>&1
+    echo "→ phoenix, colector y litellm apagados (las trazas quedan en su volumen)"
     ;;
 
   *) echo "acción desconocida: $ACCION (on | off | estado)" >&2; exit 1 ;;

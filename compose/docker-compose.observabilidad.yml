@@ -38,6 +38,25 @@ services:
     volumes:
       - phoenix_data:/data
 
+  # Entre litellm y phoenix: tira los spans duplicados y agrega los atributos
+  # que Phoenix necesita para renderizar la llamada y abrir el playground.
+  # Ver otel-collector.yaml para el detalle de qué arregla y por qué.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: ${CLIENTE}-otel
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    expose:
+      - "4318"
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      # litellm no manda el modelo en el span util, asi que se inyecta acá. Un
+      # agente usa uno solo, definido en su config.yaml.
+      - MODELO=${MODELO_DEL_AGENTE:-desconocido}
+    depends_on:
+      - phoenix
+
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     container_name: ${CLIENTE}-litellm
@@ -51,12 +70,13 @@ services:
       # OJO: la clave NO va acá. `environment` PISA a `env_file`, y como
       # ${OPENROUTER_API_KEY} se interpola del .env del compose (que no la
       # tiene), le entraba la clave VACIA al proxy. Viene sola por env_file.
-      - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://phoenix:6006/v1/traces
+      # Al colector, no directo a Phoenix: en el medio se limpia.
+      - PHOENIX_COLLECTOR_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
     env_file:
       - ./data/.env
     depends_on:
-      - phoenix
+      - otel-collector
 
 volumes:
   phoenix_data:
