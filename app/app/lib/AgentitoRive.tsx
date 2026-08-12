@@ -3,10 +3,12 @@
 // El agentito de verdad: personaje Rive (public/agentito.riv, hecho con
 // rivemcp — sesión "Onboarding" del 6-8/8). El state machine "Agentito" expone:
 //   miradaX / miradaY (number 0-100): hacia dónde miran las pupilas
-//   gesto (number 0-5): qué está haciendo — 0 nada, 1 pensar (cabeza ladeada y
+//   gesto (number): qué está haciendo — 0 nada, 1 pensar (cabeza ladeada y
 //     una ceja en arco), 2 libro, 3 libreta y lápiz, 4 lupa, 5 llave inglesa
-//     girando un tornillo
-//   festejar / matear (trigger): el rebote de festejo y la cebada de mate
+//     girando un tornillo, 10 el celu (no lo pide el portal: es el fondo de la
+//     escalera del ocio, más abajo)
+//   festejar / matear / bostezar (trigger): el rebote de festejo, la cebada de
+//     mate y el bostezo de aburrido
 //   tono, antena, accesorio, pupila, boca, piel, traje, cejas: los ejes del look
 // Encima trae flote y parpadeo como loops propios. El runtime es el "lite"
 // (solo vectores) y el wasm se sirve desde /public — nada sale a un CDN.
@@ -46,6 +48,10 @@ const NUMERO_DE_GESTO: Record<string, number> = {
   pensando: 1, leyendo: 2, escribiendo: 3, buscando: 4, haciendo: 5,
 };
 
+/** El celu. No está en NUMERO_DE_GESTO a propósito: no es un estado que el
+ *  portal pida, sino el fondo de la escalera del ocio (más abajo). */
+const GESTO_CELU = 10;
+
 type Props = {
   /** Contador: cada incremento dispara el trigger de festejo. */
   festejos: number;
@@ -75,9 +81,28 @@ export default function AgentitoRive(props: Props) {
 // mueve los ojos.
 const ALCANCE_MIRADA = 300;
 
+// ── La escalera del ocio ──
+// Cuánto hace que el cliente no toca nada. NO habla del agente sino del
+// USUARIO, por eso vive acá adentro y no en el prop `estado`: el portal sabe
+// si hay pendientes, no si te fuiste a hacer otra cosa. Solo corre con
+// `estado === "tranquilo"`: si algo espera tu ok o el agente está laburando,
+// no es momento de bostezar.
+const OCIO_BOSTEZO = 90_000;   // 1½ min sin actividad: el primer bostezo
+const OCIO_CELU = 240_000;     // 4 min: se aburre y saca el celu
+const REPETIR_BOSTEZO = 50_000;
+
+// Mover el mouse cuenta como "estás acá" para que no saque el celu mientras
+// leés, pero NO se lo guarda: si el mousemove cortara el gesto, la guardada no
+// se vería nunca (siempre movés el mouse ANTES de hacer clic). Una vez que
+// está enganchado con el celu, solo lo despierta una acción deliberada.
+const ACTIVIDAD = ["mousemove", "pointerdown", "keydown", "wheel", "touchstart"] as const;
+const DELIBERADAS = ["pointerdown", "keydown", "wheel", "touchstart"] as const;
+
 function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props) {
   // Mientras mira el badge, el cursor no manda: si no, se pisan.
   const mirandoBadge = useRef(false);
+  // Enganchado con el celu (el fondo de la escalera del ocio).
+  const [distraido, setDistraido] = useState(false);
   // Dónde está el personaje en la pantalla: la mirada se calcula desde ACÁ, no
   // desde el centro de la ventana. Si no, mira torcido en cuanto no está
   // centrado (por ejemplo arriba a la izquierda, en Inicio).
@@ -101,6 +126,7 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
   const inTraje = useStateMachineInput(rive, "Agentito", "traje");
   const inCejas = useStateMachineInput(rive, "Agentito", "cejas");
   const matear = useStateMachineInput(rive, "Agentito", "matear");
+  const bostezar = useStateMachineInput(rive, "Agentito", "bostezar");
 
   useEffect(() => {
     if (inTono) inTono.value = look.tono;
@@ -131,6 +157,57 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
     programar(20_000 + Math.random() * 15_000);
     return () => clearTimeout(t);
   }, [matear, estado]);
+
+  // ── La escalera del ocio: mates → bostezo → el celu ──
+  // Un solo reloj: cada actividad lo pone en cero y reprograma los dos
+  // escalones. La guardada del celu no se programa: la dispara el clic.
+  useEffect(() => {
+    if (estado !== "tranquilo") {
+      setDistraido(false);
+      return;
+    }
+    let aBostezo: ReturnType<typeof setTimeout>;
+    let aCelu: ReturnType<typeof setTimeout>;
+
+    const programar = () => {
+      clearTimeout(aBostezo);
+      clearTimeout(aCelu);
+      // El bostezo se repite solo mientras siga sin pasar nada; el celu es el
+      // final del camino y se queda hasta que lo interrumpan.
+      const bostezos = () => {
+        try { bostezar?.fire(); } catch { /* el runtime se fue */ }
+        aBostezo = setTimeout(bostezos, REPETIR_BOSTEZO + Math.random() * 20_000);
+      };
+      aBostezo = setTimeout(bostezos, OCIO_BOSTEZO);
+      aCelu = setTimeout(() => setDistraido(true), OCIO_CELU);
+    };
+
+    const alMoverse = () => {
+      // Con el celu afuera el mousemove NO lo interrumpe (está enganchado, no
+      // te ve): solo reprograma para cuando vuelva a guardarlo.
+      programar();
+    };
+    const alTocar = () => {
+      // Acá está el chiste: te ve, guarda el celu de golpe y vuelve a lo suyo.
+      // El `guardarCelu` del .riv sale solo al dejar de ser gesto 10.
+      setDistraido(false);
+      programar();
+    };
+
+    programar();
+    for (const ev of ACTIVIDAD) {
+      const deliberada = (DELIBERADAS as readonly string[]).includes(ev);
+      window.addEventListener(ev, deliberada ? alTocar : alMoverse, { passive: true });
+    }
+    return () => {
+      clearTimeout(aBostezo);
+      clearTimeout(aCelu);
+      for (const ev of ACTIVIDAD) {
+        const deliberada = (DELIBERADAS as readonly string[]).includes(ev);
+        window.removeEventListener(ev, deliberada ? alTocar : alMoverse);
+      }
+    };
+  }, [estado, bostezar]);
 
   // Si algo espera tu visto bueno, cada tanto pega una mirada a la barra
   // lateral —donde está el badge de aprobaciones— y vuelve.
@@ -169,11 +246,13 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
   useEffect(() => {
     if (!inGesto) return;
     try {
-      inGesto.value = NUMERO_DE_GESTO[estado] ?? 0;
+      // El celu gana sobre el reposo, pero nunca sobre un gesto pedido: si
+      // llega laburo mientras estaba distraído, guarda y va a lo suyo.
+      inGesto.value = distraido ? GESTO_CELU : (NUMERO_DE_GESTO[estado] ?? 0);
     } catch {
       /* el runtime se fue; el personaje es adorno, no puede tumbar el chat */
     }
-  }, [inGesto, estado]);
+  }, [inGesto, estado, distraido]);
 
   // ── Los gestos de trabajo, parte 2: la mirada ──
   // La gracia es que DICEN LA VERDAD: el chat sabe qué herramienta está
@@ -264,8 +343,23 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
     return () => cancelAnimationFrame(raf);
   }, [miradaX, miradaY, estado]);
 
+  // Con el celu afuera la mirada la manda el .riv (pupilas leyendo la
+  // pantalla): la dejamos estacionada mirando el aparato y no seguimos al
+  // cursor. Estacionarla no es redundante con los keyframes: los layers de
+  // mirada corren después y le ganarían, y ahí los ojos volverían al frente
+  // con el celu en la mano.
   useEffect(() => {
-    if (!miradaX || !miradaY || trabajando(estado)) return;
+    if (!miradaX || !miradaY || !distraido) return;
+    try {
+      miradaX.value = 58;
+      miradaY.value = 82;
+    } catch {
+      /* el runtime se fue */
+    }
+  }, [miradaX, miradaY, distraido]);
+
+  useEffect(() => {
+    if (!miradaX || !miradaY || trabajando(estado) || distraido) return;
     if (window.matchMedia("(pointer: coarse)").matches) return;
     const onMove = (e: MouseEvent) => {
       if (mirandoBadge.current) return;
@@ -284,11 +378,11 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
     };
     window.addEventListener("mousemove", onMove, { passive: true });
     return () => window.removeEventListener("mousemove", onMove);
-  }, [miradaX, miradaY, estado]);
+  }, [miradaX, miradaY, estado, distraido]);
 
   // Sin cursor (táctil) la mirada quedaría clavada al frente: paseo lento.
   useEffect(() => {
-    if (!miradaX || !miradaY || trabajando(estado)) return;
+    if (!miradaX || !miradaY || trabajando(estado) || distraido) return;
     if (!window.matchMedia("(pointer: coarse)").matches) return;
     let raf = 0;
     const tick = (t: number) => {
@@ -300,7 +394,7 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [miradaX, miradaY, estado]);
+  }, [miradaX, miradaY, estado, distraido]);
 
   return (
     <div ref={caja} className={`relative ${className ?? ""}`}>

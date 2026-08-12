@@ -187,6 +187,31 @@ en cada empty state, ni en las intros de módulo.
 (`@rive-app/react-canvas-lite`, wasm ~330 KB servido desde `/public`) entra solo
 con `next/dynamic` en el onboarding y en Inicio.
 
+### La escalera del ocio (12/8)
+Dos animaciones nuevas, las dos sobre el ABURRIMIENTO DEL USUARIO, no sobre el
+estado del agente — por eso el reloj vive dentro de `AgentitoRive` y no en el
+prop `estado`: el portal sabe si hay pendientes, no si te fuiste a hacer otra
+cosa. Solo corre con `estado === "tranquilo"`. Mates (~20 s, ya estaba) →
+**bostezo** (trigger `bostezar`, 1½ min, se repite) → **el celu** (`gesto = 10`,
+4 min): saca el teléfono DADO VUELTA —la cámara le ve la espalda—, la pantalla
+le baña la cara con un haz de cuatro elipses de gradiente radial, y los ojos
+leen siguiendo los tirones del scroll.
+
+**El clic es el remate.** Mover el mouse NO le guarda el celu (solo reprograma
+el reloj): si el mousemove cortara el gesto, la guardada no se vería nunca,
+porque siempre movés el mouse ANTES de hacer clic. Lo despiertan solo las
+acciones deliberadas —clic, tecla, scroll, toque— y ahí el `.riv` dispara
+`guardarCelu` solo, por la condición `gesto != 10`. Si llega laburo mientras
+está distraído, el gesto pedido gana: guarda y va a lo suyo.
+
+Sale en Inicio (64-72 px) y en la bienvenida del chat (144 px). En el avatar de
+28 px del chat no puede salir: ahí el estado siempre es un gesto de trabajo.
+
+Las otras ocho que se probaron y NO entraron están en
+`scratchpad/agentito/drafts/` de la sesión del 12/8 (desperezarse, cabecear,
+disimular, entregar, apagado, preocupado, escuchando, hablando), cada una con
+su `.riv` propio y su gif.
+
 ### Trampas verificadas
 1. **Z-order al revés**: los hijos de un grupo se listan de ADELANTE hacia
    atrás. Un `add_*` con `group=` entra al FONDO (detrás de la panza,
@@ -233,3 +258,44 @@ con `next/dynamic` en el onboarding y en Inicio.
    nunca más aparece. Pasó con el lápiz: se movió mientras `libreta` estaba en
    0 y desapareció, aunque el orden de dibujo estuviera bien. Después de mover
    algo dentro de un grupo apagado, revisar su opacidad con `get_object_info`.
+9. **La opacidad ESTÁTICA de un objeto es lo que se ve en el primer frame, y
+   `sinGesto` no siempre llega a tiempo.** `herramienta` estaba en 1 estático
+   desde el día uno y no se notaba porque `sinGesto` lo apaga al entrar; al
+   sumar el layer del celu esa aplicación inicial dejó de darse y la llave
+   inglesa apareció flotando en reposo, en Inicio y en el chat. El arreglo no
+   es tocar el state machine: es que **el reposo del archivo sea el reposo de
+   verdad**, o sea opacidad estática 0 en todo lo que `sinGesto` apaga
+   (`libro`, `libreta`, `lupa`, `herramienta`, `cejaArco`, `celu`, `luzCelu`).
+   Cada gesto prende el suyo explícitamente en el frame 0, así que poner los
+   estáticos en 0 no rompe nada. Se caza mirando el primer frame en el
+   navegador, no en el editor ni en el gif.
+10. **`preview_riv_gif` con `stateMachine` MIENTE en el reposo.** Muestra la
+   llave inglesa que el runtime real no muestra. Verificado: el checkpoint de
+   `save_session` es byte-idéntico al `.riv` de producción y aun así rendea
+   distinto. Para el estado inicial, el navegador es la única fuente.
+11. **`describe_scene` devuelve TODO** —cada keyframe con frame, valor,
+   interpolación y los cuatro puntos de control cúbicos, más el grafo completo
+   del state machine con condiciones y flags—. Es lo que convierte "fusionar
+   dos animaciones" en un trasplante exacto en vez de un redibujo a ojo. Con
+   `includeKeyframes:false` sale la vista estructural, que es la que conviene
+   para comparar cableados.
+12. **`set_gradient_fill` AGREGA un fill, no lo reemplaza.** Tres llamadas
+   seguidas dejan tres gradientes apilados; el síntoma fue una luz que lavaba
+   las pupilas a gris. Para retocar un gradiente hay que borrar la forma y
+   rehacerla. Y **`set_feather` se aplica pero el render lo ignora**: los
+   bordes suaves salen del gradiente, no del feather.
+13. **Un gradiente lineal deja filo en los costados.** Una luz con caída solo
+   longitudinal muestra dos rectas donde termina la forma. Lo que no deja
+   ningún borde visible es un gradiente RADIAL que llega a alpha 0 justo en el
+   borde de la geometría —si la forma termina donde el alpha ya es 0, no puede
+   delatarse— y darle dirección escalando el círculo a elipse.
+
+### Trabajar en paralelo con rivemcp
+La sesión del MCP es UNA sola y en memoria: dos agentes editando a la vez se
+pisan el archivo. Para las diez animaciones del 12/8 se usó
+`scratchpad/agentito/rive-driver.mjs`, que le levanta a cada agente su propio
+servidor `rivemcp` por socket Unix (`start` / `call <tool> '<json>'` / `stop`).
+Dos detalles que costaron: el socket tiene que vivir en `tmpdir` con nombre
+corto (los unix sockets de macOS aguantan ~104 caracteres y el scratchpad se
+pasa), y **`call` trunca stdout si lo pipeás** —hace `process.exit` justo
+después del `console.log`—, así que hay que redirigir a archivo.
