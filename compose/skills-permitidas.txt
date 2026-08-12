@@ -1,0 +1,14 @@
+# Las UNICAS skills del motor que quedan prendidas en un agente de cliente.
+# Una por linea; lo que empieza con # es comentario.
+#
+# El resto se apaga con `skills.disabled` en config.yaml — la lista la genera
+# tools/perilla-skills.py, no se escribe a mano. Este archivo es la excepcion,
+# o sea la politica: lo leen el generador y agente-check.py.
+#
+# Por que estas tres y no otras: son las que leen documentos que el cliente
+# manda por el chat (una planilla, un PDF, una foto de un remito). Sin ellas el
+# agente recibe un archivo y no puede abrirlo. No hablan hacia afuera, no
+# publican y no tocan sistemas: leen lo que ya te mandaron.
+xlsx
+pdf
+ocr-and-documents

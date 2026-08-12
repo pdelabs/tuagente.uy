@@ -12,7 +12,7 @@ con fecha vieja no es un problema; una fila que dice algo que ya no es cierto s�
 
 | Agente | Host | SOUL | Motor | Último check |
 |---|---|---|---|---|
-| pdelabs (cliente 0, fixture) | local — `~/Desktop/Luis/Projects/agente-pdelabs` | sin marcador (pre-v1) | `v2026.7.30` | 2026-08-12 — 2 fallas |
+| pdelabs (cliente 0, fixture) | local — `~/Desktop/Luis/Projects/agente-pdelabs` | sin marcador (pre-v1) | `v2026.7.30` | 2026-08-12 — 5 fallas |
 | Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | v1 (marcador sin versión, 11/8/2026) | `v2026.7.30` (por el compose remoto) | TODO — nunca se corrió |
 | East Comunicación | `east` → `/opt/agentes/east` | TODO | TODO | TODO |
 
@@ -40,12 +40,12 @@ python3 tools/agente-check.py <ruta>/data
 
 ## Estado al 2026-08-12
 
-**pdelabs** — el fixture local. Su SOUL lo compuso `nuevo-agente.sh` antes de que
-existieran los marcadores, así que no tiene bloque marcado, y arrastra los huecos
-`<ASÍ>` de `00-identidad.md` sin completar: entre ellos el de la REGLA DURA, que
-quedó literalmente como "JAMÁS `<la acción sensible: …>`". Las dos cosas las
-reporta `agente-check.py` desde hoy. Sirve igual como fixture; para producción no
-saldría.
+**pdelabs** — el fixture local. Cinco fallas, todas conocidas: dos del SOUL (lo
+compuso `nuevo-agente.sh` antes de que existieran los marcadores, y arrastra los
+huecos `<ASÍ>` de `00-identidad.md` — entre ellos el de la REGLA DURA, que quedó
+literalmente como "JAMÁS `<la acción sensible: …>`") y tres de las perillas de
+C1, que ningún agente tiene aplicadas todavía. Sirve igual como fixture; para
+producción no saldría.
 
 **Mr.Wobble** — se le instaló el bloque base el 11/8/2026 (commit `4fd95ef`),
 cuando el marcador todavía no llevaba versión: cuenta como v1 y le falta el
@@ -57,6 +57,15 @@ en la lista de Luis, y requiere ssh.
 `notas/modelos-auxiliares.md`). Del repo no se puede deducir en qué quedó: si se
 desplegó antes del 11/8, salió sin SOUL, porque el despliegue remoto no lo
 instalaba.
+
+## Perillas del motor: nadie las tiene aplicadas todavía
+
+La tanda C1 dejó en el kit las skills del motor apagadas, el preámbulo del
+portal reemplazado y las skills del kit montadas `:ro`. **Eso viaja solo a los
+agentes nuevos**: los tres de la tabla son anteriores y siguen con las 70 skills
+del motor prendidas. `agente-check.py` lo reporta como falla en cada uno hasta
+que se aplique. El runbook (es un redeploy, y el `config.yaml` está `:ro`) está
+en `notas/perillas-aplicadas.md`.
 
 ## Antes de actualizarle el bloque a alguien
 

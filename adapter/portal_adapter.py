@@ -364,6 +364,14 @@ def manifest():
 SKILLS_DIR = DATA / "skills"
 SKILLS_SNAPSHOT = DATA / ".skills_prompt_snapshot.json"
 
+# Las skills del kit viven AFUERA de data/, montadas :ro, y el motor las toma
+# por `skills.external_dirs`. Hay que mirarlas aparte por dos razones: no estan
+# en el scan de data/skills/, y TAMPOCO en el snapshot del prompt (el motor lo
+# escribe antes de recorrer los directorios externos —
+# agent/prompt_builder.py:1730-1775). Sin esto, las que sostienen las pantallas
+# del portal desaparecen de la pestaña de habilidades.
+KIT_SKILLS_DIR = Path(os.environ.get("KIT_SKILLS_DIR", "/opt/kit/skills"))
+
 
 def _skill_meta(skill_md):
     """(resumen, titulo) de una skill, para mostrarle AL CLIENTE.
@@ -418,14 +426,21 @@ def _kit_names():
     (entregable→Archivos, aprobacion→Aprobaciones, artifact→visualizaciones):
     no se presentan como "hechas para vos" ni se editan desde el portal.
     """
+    nombres = set()
+    if KIT_SKILLS_DIR.is_dir():
+        nombres = {d.name for d in KIT_SKILLS_DIR.iterdir()
+                   if d.is_dir() and (d / "SKILL.md").is_file()}
     try:
-        return {
+        # El manifiesto sigue valiendo para un agente todavia no migrado, donde
+        # las del kit estan adentro de data/skills/.
+        nombres |= {
             l.strip() for l in
             (SKILLS_DIR / ".kit_manifest").read_text(encoding="utf-8").splitlines()
             if l.strip()
         }
     except OSError:
-        return set()
+        pass
+    return nombres
 
 
 SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -450,13 +465,68 @@ def _skill_editable(nombre):
     return md if md.is_file() else None
 
 
+def _apagadas():
+    """Las skills que config.yaml deshabilita — el agente NO las tiene.
+
+    Sin esto el portal le muestra al cliente 70 habilidades "de fábrica" que el
+    motor no le da al agente: pide una y la respuesta es que no puede. La
+    lectura es a mano, con la misma cautela que el resto del archivo: PyYAML
+    esta en la imagen, pero un config a medio escribir no puede tumbar la
+    pantalla de capacidades.
+    """
+    try:
+        texto = CONFIG.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    m = re.search(r"^skills:[ \t]*$", texto, re.M)
+    if not m:
+        return set()
+    resto = texto[m.end():]
+    fin = re.search(r"^\S", resto, re.M)
+    bloque = resto[: fin.start()] if fin else resto
+    m2 = re.search(r"^[ \t]+disabled:[ \t]*(.*)$", bloque, re.M)
+    if not m2:
+        return set()
+    if m2.group(1).strip().startswith("["):
+        return {x.strip().strip("\"'") for x in m2.group(1).strip().strip("[]").split(",") if x.strip()}
+    nombres = set()
+    for linea in bloque[m2.end():].splitlines():
+        s = linea.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("- "):
+            nombres.add(s[2:].strip().strip("\"'"))
+        else:
+            break
+    return nombres
+
+
 def capabilities():
     skills, vistos = [], set()
     bundled = _bundled_names()
     kit = _kit_names()
+    apagadas = _apagadas()
+    # Primero las del kit montadas afuera: son las que sostienen pantallas
+    # (entregable→Archivos, aprobacion→Aprobaciones, artifact→visualizaciones).
+    if KIT_SKILLS_DIR.is_dir():
+        for folder in sorted(KIT_SKILLS_DIR.iterdir()):
+            md = folder / "SKILL.md"
+            if not folder.is_dir() or not md.is_file():
+                continue
+            resumen, titulo = _skill_meta(md)
+            entrada = {"name": folder.name, "summary": resumen,
+                       "origen": "tuagente", "editable": False}
+            if titulo:
+                entrada["label"] = titulo
+            skills.append(entrada)
+            vistos.add(folder.name)
     if SKILLS_DIR.is_dir():
         for folder in sorted(SKILLS_DIR.iterdir()):
             if folder.name.startswith(".") or not folder.is_dir():
+                continue
+            if folder.name in vistos:   # una copia vieja que quedó tapando: no la mostramos dos veces
+                continue
+            if folder.name in apagadas:  # apagada en config: el agente no la tiene
                 continue
             md = folder / "SKILL.md"
             if md.exists():
@@ -482,6 +552,8 @@ def capabilities():
             # Categorias: carpetas que agrupan skills (ej. productivity/xlsx).
             for sub in sorted(folder.iterdir()):
                 sub_md = sub / "SKILL.md"
+                if sub.name in apagadas:
+                    continue
                 if sub.is_dir() and sub_md.exists() and sub.name not in vistos:
                     resumen, titulo = _skill_meta(sub_md)
                     entrada = {"name": sub.name, "summary": resumen,
@@ -495,7 +567,7 @@ def capabilities():
         snap = json.loads(SKILLS_SNAPSHOT.read_text(encoding="utf-8"))
         for s in snap.get("skills", []):
             nombre = s.get("skill_name") or s.get("frontmatter_name")
-            if not nombre or nombre in vistos:
+            if not nombre or nombre in vistos or nombre in apagadas:
                 continue
             skills.append({"name": nombre, "summary": s.get("description") or "",
                            "origen": "de fábrica", "categoria": s.get("category") or ""})

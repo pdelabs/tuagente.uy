@@ -21,30 +21,47 @@ if [[ ! -d "$DATA" ]]; then
   exit 2
 fi
 
+# LAS SKILLS DEL KIT YA NO VAN ADENTRO DE data/. Van a <agente>/kit-skills/,
+# que el compose monta :ro en /opt/kit/skills y que config.yaml declara en
+# `skills.external_dirs`. El motor las indexa igual, pero:
+#   - el agente no puede reescribirlas (skill_manage sobre un :ro da EROFS),
+#   - el curator no las archiva nunca: para el motor una skill externa no es
+#     elegible, y las de data/skills/ SÍ lo eran — a los 90 dias sin uso se
+#     mueve el directorio a .archive/ y el portal se queda sin `entregable`.
+AGENTE="$(cd "$DATA/.." && pwd)"
+KIT_SKILLS="$AGENTE/kit-skills"
+
 # La lista de archivos se ARMA desde el repo: cada skill del kit entra entera.
 # Antes era una lista a mano y el costo fue real: se agregaron dos skills al
 # kit (transcribir, entrada-drive) y el primer agente nuevo salió sin ellas —
 # con el SOUL prometiendo transcripciones que el agente no podía hacer.
+# El destino de cada par es una ruta absoluta: no todo va al mismo lado.
 ARCHIVOS=(
-  "adapter/portal_adapter.py:scripts/portal_adapter.py"
-  "connections/catalogo.json:connections/catalogo.json"
+  "adapter/portal_adapter.py:$DATA/scripts/portal_adapter.py"
+  "connections/catalogo.json:$DATA/connections/catalogo.json"
 )
 while IFS= read -r f; do
-  rel="${f#"$KIT"/}"
-  ARCHIVOS+=("$rel:$rel")
+  rel="${f#"$KIT"/}"                       # skills/entregable/SKILL.md
+  ARCHIVOS+=("$rel:$KIT_SKILLS/${rel#skills/}")
 done < <(find "$KIT/skills" -type f \( -name "*.md" -o -name "*.py" \) | sort)
+
+corta() { echo "${1#"$AGENTE"/}"; }        # rutas legibles en los mensajes
 
 if [[ "$MODO" == "--diff" ]]; then
   distintos=0
   for par in "${ARCHIVOS[@]}"; do
-    origen="$KIT/${par%%:*}"; destino="$DATA/${par##*:}"
+    origen="$KIT/${par%%:*}"; destino="${par##*:}"
     if [[ ! -f "$destino" ]]; then
-      echo "FALTA    ${par##*:}"; distintos=$((distintos+1))
+      echo "FALTA    $(corta "$destino")"; distintos=$((distintos+1))
     elif ! diff -q "$origen" "$destino" >/dev/null; then
-      echo "DISTINTO ${par##*:}"
+      echo "DISTINTO $(corta "$destino")"
       diff -u "$origen" "$destino" | sed 's/^/    /' | head -20
       distintos=$((distintos+1))
     fi
+  done
+  for s in "$KIT"/skills/*/; do
+    vieja="$DATA/skills/$(basename "$s")"
+    [[ -d "$vieja" ]] && { echo "SOBRA    data/skills/$(basename "$s") — copia vieja, tapa a la del kit"; distintos=$((distintos+1)); }
   done
   if [[ $distintos -eq 0 ]]; then
     echo "El agente está al día con el kit."
@@ -57,10 +74,45 @@ if [[ "$MODO" == "--diff" ]]; then
 fi
 
 for par in "${ARCHIVOS[@]}"; do
-  origen="$KIT/${par%%:*}"; destino="$DATA/${par##*:}"
+  origen="$KIT/${par%%:*}"; destino="${par##*:}"
   mkdir -p "$(dirname "$destino")"
   cp "$origen" "$destino"
-  echo "instalado ${par##*:}"
+  echo "instalado $(corta "$destino")"
+done
+
+# MIGRACION: la copia vieja adentro de data/skills/ TAPA a la del kit-skills.
+# El motor resuelve por directorio local primero (agent/skill_utils.py:566-574,
+# tools/skill_manager_tool.py:645-662) y el indice del prompt saltea la externa
+# si ya vio ese nombre (agent/prompt_builder.py:1738-1760). O sea: con las dos
+# presentes, el agente sigue usando la vieja y este install.sh no tiene efecto,
+# sin un solo mensaje de error. No se borra —se aparta— porque borrar el
+# trabajo de alguien no es idempotente.
+#
+# Y se aparta AFUERA de data/skills/, que es lo unico que cuenta: el motor
+# indexa ese arbol entero y solo saltea los nombres de EXCLUDED_SKILL_DIRS
+# (agent/skill_utils.py:26-44). Un directorio con punto NO alcanza —`.archive`
+# esta en esa lista, `.loquesea` no—, asi que "apartar" adentro de data/skills/
+# deja la copia vieja indexada y tapando igual. Va a un hermano de data/.
+# Se busca en TODO el arbol, no solo en data/skills/<nombre>: una copia bajo una
+# categoria (data/skills/productivity/flujo/) tapa exactamente igual, y es lo
+# que reporta agente-check. Se saltean los directorios que el motor tampoco
+# indexa (EXCLUDED_SKILL_DIRS): lo que esta en .archive/ ya esta fuera de juego.
+APARTADAS_DIR="$AGENTE/skills-reemplazadas"
+apartadas=0
+for s in "$KIT"/skills/*/; do
+  nombre="$(basename "$s")"
+  while IFS= read -r vieja; do
+    [[ -f "$vieja/SKILL.md" ]] || continue
+    rel="${vieja#"$DATA"/skills/}"
+    mkdir -p "$APARTADAS_DIR/$(dirname "$rel")"
+    rm -rf "${APARTADAS_DIR:?}/$rel"
+    mv "$vieja" "$APARTADAS_DIR/$rel"
+    echo "apartada  data/skills/$rel → skills-reemplazadas/$rel (tapaba a la del kit)"
+    apartadas=$((apartadas+1))
+  done < <(find "$DATA/skills" \
+             \( -name .archive -o -name .git -o -name .github -o -name .hub \
+                -o -name node_modules -o -name __pycache__ -o -name .venv \) -prune -o \
+             -type d -name "$nombre" -print 2>/dev/null)
 done
 
 # Carpetas que el kit da por sentadas (el portal las lee, las skills escriben).
@@ -73,12 +125,30 @@ done
 # se editan desde ahí) de las hechas para ESTE cliente (editables). Sin esto,
 # todas parecen del cliente y el portal ofrece editar la que sostiene la
 # pestaña de entregas.
+mkdir -p "$DATA/skills"
 ls -1 "$KIT/skills" > "$DATA/skills/.kit_manifest"
-echo "instalado skills/.kit_manifest"
+echo "instalado data/skills/.kit_manifest"
+
+if [[ $apartadas -gt 0 ]]; then
+  cat <<AVISO
+
+OJO: aparté $apartadas skill(s) que estaban duplicadas en data/skills/. Ese
+directorio le gana al externo, así que hasta ahora el agente corría la copia
+vieja. Quedaron en $APARTADAS_DIR/
+—afuera del árbol que el motor indexa—: revisá que no hubiera nada hecho a
+mano y borralas cuando estés seguro.
+AVISO
+fi
 
 cat <<'FIN'
 
 Instalado. Lo que falta hacer a mano:
+
+  0. El compose tiene que montar las skills del kit de solo lectura y el
+     config declararlas, o el agente no las ve:
+       volumes:  - ./kit-skills:/opt/kit/skills:ro     (hermes y portal-adapter)
+       config:   skills.external_dirs: ["/opt/kit/skills"]
+     Los dos vienen puestos en compose/ y en compose/config.base.yaml.
 
   1. Componer el SOUL con los bloques de soul/ (ver soul/README.md).
      Sin eso el agente tiene las herramientas pero no las reglas.

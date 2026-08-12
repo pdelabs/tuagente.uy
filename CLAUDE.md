@@ -48,6 +48,17 @@ Las escrituras van por subprocess del CLI `hermes kanban ...` desde el sidecar.
   `relative_to`, y en artefactos además se compara el padre — sin eso, un `.`
   borraba la carpeta entera.
 
+## Las skills del motor van apagadas, y la lista se genera
+
+El motor trae 70 skills y las copia al volumen en cada arranque. Quedan tres
+(`xlsx`, `pdf`, `ocr-and-documents`); el resto se apaga con `skills.disabled`,
+que **genera** `tools/perilla-skills.py` desde la imagen o desde el manifiesto
+del agente — nunca listando `data/skills/`, que también tiene las del kit y las
+que el agente escribió para ese cliente. Las del kit ya no viven ahí: van en
+`<agente>/kit-skills/`, montadas `:ro` y declaradas en `skills.external_dirs`.
+El porqué de cada perilla y el runbook para aplicarlo a un agente que ya existe:
+`notas/perillas-aplicadas.md`.
+
 ## Las tools de kanban se habilitan con DOS claves
 
 No hay plugin: Hermes ya las trae. Pero hace falta `toolsets: [kanban]` **y**
@@ -93,6 +104,13 @@ llenar, ningún comentario HTML con las palabras que hacen que el motor descarte
 el archivo entero, el bloque `kit:base` presente y balanceado, qué versión tiene
 puesta contra la del kit, y que haya identidad. De paso avisa si el `soul/VERSION`
 del kit no tiene forma de versión.
+
+Y las tres perillas de la tanda C1: que **ninguna skill del motor** quede
+prendida fuera de `xlsx`/`pdf`/`ocr-and-documents` (compara contra el
+`.bundled_manifest` que escribe el motor, así que un bump que traiga skills
+nuevas falla en vez de pasar), que `platform_hints.api_server.replace` esté
+puesto, y que las skills del kit estén montadas afuera de `data/` y **sin copia
+vieja que las tape**.
 
 Sobre un SOUL suelto —o sobre un bloque que todavía no instalaste— corren los dos
 chequeos de texto solos:

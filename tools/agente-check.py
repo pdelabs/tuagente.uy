@@ -61,6 +61,11 @@ PORTAL_IDENTIDAD = re.compile(
 )
 IDENTIDAD_H1 = re.compile(r"^#\s+\S", re.M)
 
+# Las únicas skills del motor que quedan prendidas. La lista de verdad está en
+# compose/skills-permitidas.txt; esto es el respaldo por si corren el script
+# suelto, para que no apruebe por no encontrar la política.
+PERMITIDAS_POR_DEFECTO = ("ocr-and-documents", "pdf", "xlsx")
+
 # Lo que install.sh deja en el data/. Si falta, el kit no está instalado.
 # Las skills que instala el kit: si una de ESTAS se indexa muda, es culpa nuestra.
 DEL_KIT_SKILLS = {"artifact", "entregable", "aprobacion"}
@@ -101,12 +106,60 @@ def frontmatter(path):
     return campos
 
 
-def skills_en_disco(data):
-    """Toda carpeta con un SKILL.md, a cualquier profundidad (hay categorías)."""
-    raiz = os.path.join(data, "skills")
-    for base, _, archivos in os.walk(raiz):
+# Los ÚNICOS directorios que el motor saltea al indexar skills: copiado tal
+# cual de EXCLUDED_SKILL_DIRS (hermes: agent/skill_utils.py:26-44), que es lo
+# que usa `is_excluded_skill_path` sobre cada SKILL.md que encuentra.
+#
+# Ojo con la trampa que esto evita: NO alcanza con que el directorio empiece
+# con punto. `.archive` está en la lista y `.reemplazadas-por-el-kit` no, así
+# que "apartar" una skill a un dot-dir cualquiera adentro de data/skills/ la
+# deja indexada y tapando a la del kit exactamente igual que antes.
+EXCLUIDAS_DEL_INDICE = frozenset((
+    ".git", ".github", ".hub", ".archive", ".venv", "venv", "node_modules",
+    "site-packages", "__pycache__", ".tox", ".nox", ".pytest_cache",
+    ".mypy_cache", ".ruff_cache",
+))
+
+
+def skills_indexadas(raiz):
+    """(nombre, ruta) de cada SKILL.md que el motor indexaría bajo `raiz`.
+
+    Reproduce el walker del motor en lo que importa acá: recorre todo el árbol
+    y descarta lo que cae bajo un nombre de EXCLUDED_SKILL_DIRS. No reproduce
+    la regla de los directorios de soporte (references/templates/assets/
+    scripts), que el motor aplica SOLO cuando cuelgan directo de una skill: si
+    hay un SKILL.md ahí adentro preferimos reportarlo de más y que alguien lo
+    mire, porque el error que buscamos es una copia que tapa en silencio.
+    """
+    if not os.path.isdir(raiz):
+        return
+    for base, dirs, archivos in os.walk(raiz):
+        dirs[:] = [d for d in dirs if d not in EXCLUIDAS_DEL_INDICE]
+        if os.path.basename(base) in EXCLUIDAS_DEL_INDICE:
+            continue
         if "SKILL.md" in archivos:
-            yield os.path.relpath(base, raiz), os.path.join(base, "SKILL.md")
+            yield os.path.basename(base), os.path.join(base, "SKILL.md")
+
+
+def kit_skills_dir(data):
+    """Donde el kit deja sus skills: <agente>/kit-skills, hermano de data/.
+
+    El compose lo monta :ro en /opt/kit/skills y el config lo declara en
+    `skills.external_dirs`. Un agente de antes de esa mudanza no lo tiene.
+    """
+    return os.path.join(os.path.dirname(data), "kit-skills")
+
+
+def skills_en_disco(data):
+    """Toda carpeta con un SKILL.md: las del data/ y las del kit montado afuera.
+
+    Las dos entran al mismo índice del motor, así que las dos tienen que tener
+    frontmatter utilizable — que es el chequeo que llama a esto.
+    """
+    for raiz in (os.path.join(data, "skills"), kit_skills_dir(data)):
+        for base, _, archivos in os.walk(raiz):
+            if "SKILL.md" in archivos:
+                yield os.path.relpath(base, raiz), os.path.join(base, "SKILL.md")
 
 
 def conf(data):
@@ -116,6 +169,95 @@ def conf(data):
         raise AssertionError("no existe config.yaml")
     with open(ruta, encoding="utf-8", errors="replace") as fh:
         return fh.read()
+
+
+def lista_yaml(texto, clave, subclave):
+    """Los items de `clave: subclave:` en un YAML, sin depender de PyYAML.
+
+    Entiende las dos formas que escribimos: bloque con guiones y flow inline
+    (`disabled: [a, b]`). Alcanza para listas de nombres, que es todo lo que
+    miramos acá; no pretende ser un parser.
+    """
+    # Ojo con `\s`: incluye el salto de línea, así que un `\s*` después de los
+    # dos puntos se come el primer item de la lista. Todo lo que va dentro de
+    # una línea se matchea con [ \t].
+    m = re.search(rf"^{re.escape(clave)}:[ \t]*$", texto, re.M)
+    if not m:
+        return []
+    resto = texto[m.end():]
+    fin = re.search(r"^\S", resto, re.M)          # la próxima clave de primer nivel
+    bloque = resto[: fin.start()] if fin else resto
+    m2 = re.search(rf"^[ \t]+{re.escape(subclave)}:[ \t]*(.*)$", bloque, re.M)
+    if not m2:
+        return []
+    if m2.group(1).strip().startswith("["):        # flow: [a, b, c]
+        dentro = m2.group(1).strip().strip("[]")
+        return [x.strip().strip("\"'") for x in dentro.split(",") if x.strip()]
+    items = []
+    for linea in bloque[m2.end():].splitlines():
+        if not linea.strip() or linea.lstrip().startswith("#"):
+            continue
+        s = linea.strip()
+        if s.startswith("- "):
+            items.append(s[2:].strip().strip("\"'"))
+        else:
+            break                                  # se terminó la lista
+    return items
+
+
+def skills_del_motor(data):
+    """Las skills que el motor sembró en este agente, según su manifiesto.
+
+    Lo escribe `skills_sync.py` al copiar las skills de la imagen a
+    data/skills/ en cada arranque, con formato `nombre:hash`. Es la única
+    lista confiable de qué es "del motor": data/skills/ mezcla eso con las del
+    kit y con las que el agente escribió para este cliente.
+    """
+    ruta = os.path.join(data, "skills", ".bundled_manifest")
+    if not os.path.isfile(ruta):
+        return None                                # el agente nunca arrancó
+    with open(ruta, encoding="utf-8", errors="replace") as fh:
+        return {l.split(":", 1)[0].strip() for l in fh if l.strip()}
+
+
+def conf_del_kit():
+    """El config canónico del kit (compose/config.base.yaml), o '' si no está.
+
+    Sirve para chequear a un agente que todavía no arrancó: no tiene manifiesto
+    del motor, pero su config salió de acá.
+    """
+    ruta = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "compose", "config.base.yaml"
+    )
+    try:
+        with open(ruta, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return ""
+
+
+def skills_permitidas():
+    """Las del motor que dejamos prendidas, de compose/skills-permitidas.txt."""
+    ruta = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "compose", "skills-permitidas.txt"
+    )
+    try:
+        with open(ruta, encoding="utf-8") as fh:
+            nombres = {l.strip() for l in fh
+                       if l.strip() and not l.lstrip().startswith("#")}
+        return nombres or set(PERMITIDAS_POR_DEFECTO)
+    except OSError:
+        return set(PERMITIDAS_POR_DEFECTO)
+
+
+def skills_del_kit():
+    """Los nombres de las skills que instala este kit (las carpetas de skills/)."""
+    raiz = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "skills")
+    try:
+        return {d for d in os.listdir(raiz)
+                if os.path.isfile(os.path.join(raiz, d, "SKILL.md"))}
+    except OSError:
+        return set()
 
 
 def soul(data):
@@ -233,7 +375,17 @@ def main():
 
     # --- el kit está instalado ---
     def _kit():
-        faltan = [r for r in DEL_KIT if not os.path.isfile(os.path.join(data, r))]
+        # Las skills del kit pueden estar en los dos lados: adentro de data/
+        # (agentes de antes) o en kit-skills/ montado :ro (los migrados). Para
+        # este chequeo alcanza con que estén; que estén en el lugar bueno —y en
+        # uno solo— lo mira "skills del kit: montaje externo".
+        faltan = []
+        for r in DEL_KIT:
+            candidatas = [os.path.join(data, r)]
+            if r.startswith("skills/"):
+                candidatas.append(os.path.join(kit_skills_dir(data), r[len("skills/"):]))
+            if not any(os.path.isfile(c) for c in candidatas):
+                faltan.append(r)
         if faltan:
             raise AssertionError("faltan: " + ", ".join(faltan) + " — corré install.sh")
         return f"{len(DEL_KIT)} archivos del kit"
@@ -269,7 +421,13 @@ def main():
             raise AssertionError("todavía no hay índice (el agente no arrancó nunca)")
         with open(ruta, encoding="utf-8") as fh:
             skills = json.load(fh).get("skills", [])
-        mudas = [s.get("skill_name") for s in skills if not (s.get("description") or "").strip()]
+        # Las apagadas por config no entran al índice del agente aunque estén
+        # en el snapshot: avisar por una skill que el agente no ve es ruido.
+        apagadas = set(lista_yaml(conf(data), "skills", "disabled"))
+        mudas = [
+            s.get("skill_name") for s in skills
+            if not (s.get("description") or "").strip() and s.get("skill_name") not in apagadas
+        ]
         if mudas:
             # Algunas mudas son del propio motor (apple-notes, imessage…): no las
             # podemos arreglar y a un agente de cliente no le hacen falta. Las
@@ -298,12 +456,18 @@ def main():
         raiz = os.path.join(data, "skills", "autonomous-ai-agents")
         if not os.path.isdir(raiz):
             return "sin skills de operación del motor"
+        apagadas = set(lista_yaml(conf(data), "skills", "disabled"))
         presentes = sorted(
             d for d in os.listdir(raiz)
-            if os.path.isfile(os.path.join(raiz, d, "SKILL.md"))
+            if os.path.isfile(os.path.join(raiz, d, "SKILL.md")) and d not in apagadas
         )
         if not presentes:
-            return "sin skills de operación del motor"
+            # Están en el disco pero apagadas por config: el motor no las indexa
+            # y `skill_view` las rechaza. Borrarlas también sirve y es
+            # permanente —`skills_sync.py:19` respeta lo que el usuario borró,
+            # no lo vuelve a sembrar—, pero con la config alcanza y es lo que
+            # se puede revisar de un vistazo.
+            return "las del motor están apagadas por config"
         raise AssertionError(
             "el agente tiene skills para operar su propio runtime y otros agentes ("
             + ", ".join(presentes)
@@ -494,9 +658,128 @@ def main():
             )
         return "toolsets + platform_toolsets"
 
+    def _skills_del_motor_apagadas():
+        """Ninguna skill del motor prendida fuera de las tres de documentos.
+
+        Cierra el círculo de la blocklist: la lista de `skills.disabled` la
+        genera tools/perilla-skills.py, y al subir de tag el motor puede traer
+        skills nuevas que esa lista no nombra. Sin este chequeo, un upgrade
+        vuelve a encender himalaya (mandar mails) o computer-use sin que nadie
+        lo note. La comparación es contra el manifiesto que el propio motor
+        escribe, así que no hay lista nuestra que se quede vieja.
+        """
+        sembradas = skills_del_motor(data)
+        apagadas = set(lista_yaml(conf(data), "skills", "disabled"))
+        permitidas = skills_permitidas()
+        if sembradas is None:
+            # Todavía no arrancó, así que no hay manifiesto contra qué comparar.
+            # Igual se puede chequear lo que importa antes de prender: que el
+            # config traiga la lista, y que no le falte ninguna de las que el
+            # kit apaga. Cuando arranque, la comparación pasa a ser contra lo
+            # que el motor sembró de verdad, que es más fuerte.
+            del_kit = set(lista_yaml(conf_del_kit(), "skills", "disabled"))
+            if not apagadas:
+                raise AssertionError(
+                    "config.yaml no apaga ninguna skill del motor — copiá el bloque "
+                    "de compose/config.base.yaml o generalo con tools/perilla-skills.py"
+                )
+            # Sin lista canónica no hay con qué comparar, y un chequeo que no
+            # compara nada no puede dar verde. Acá no hay respaldo posible como
+            # el de skills_permitidas(): esa son tres nombres estables (la
+            # política), esta son ~70 que cambian con cada versión del motor.
+            if not del_kit:
+                raise AssertionError(
+                    "no pude leer la lista de skills apagadas de "
+                    "compose/config.base.yaml, así que no tengo contra qué comparar "
+                    "el config de este agente. Regenerala con "
+                    "tools/perilla-skills.py --imagen <tag> --aplicar compose/config.base.yaml"
+                )
+            faltan = sorted(del_kit - apagadas - permitidas)
+            if faltan:
+                raise AssertionError(
+                    f"al config le faltan {len(faltan)} skill(s) que el kit apaga: "
+                    + ", ".join(faltan[:12]) + ("…" if len(faltan) > 12 else "")
+                )
+            return f"{len(apagadas)} apagadas por config (sin arrancar todavía)"
+        prendidas = sorted(sembradas - apagadas - permitidas)
+        if prendidas:
+            raise AssertionError(
+                f"{len(prendidas)} skill(s) del motor prendidas: "
+                + ", ".join(prendidas[:12])
+                + ("…" if len(prendidas) > 12 else "")
+                + " — regenerá la lista: python3 tools/perilla-skills.py --agente "
+                + f"{data} --aplicar <config.yaml>"
+            )
+        return f"{len(sembradas)} del motor · {len(sembradas & permitidas)} prendidas a propósito"
+
+    def _skills_del_kit_externas():
+        """Las del kit, montadas afuera y sin copia vieja que las tape.
+
+        Si la misma skill está en data/skills/ y en el directorio externo, gana
+        la de data/ —el motor resuelve local primero y el índice saltea el
+        nombre repetido—, así que el agente sigue corriendo la copia vieja y
+        `install.sh` deja de tener efecto, sin un solo error.
+        """
+        externas_dir = kit_skills_dir(data)
+        declarados = lista_yaml(conf(data), "skills", "external_dirs")
+        del_kit = skills_del_kit()
+        presentes = set()
+        if os.path.isdir(externas_dir):
+            presentes = {d for d in os.listdir(externas_dir)
+                         if os.path.isfile(os.path.join(externas_dir, d, "SKILL.md"))}
+        # La pregunta no es "¿está en data/skills/<nombre>?" sino "¿queda alguna
+        # copia en el árbol que el motor INDEXA?". Una copia en una subcarpeta,
+        # o apartada a un dot-dir que no sea `.archive`, tapa igual.
+        tapando = sorted({
+            f"{nombre} ({os.path.relpath(os.path.dirname(ruta), data)})"
+            for nombre, ruta in skills_indexadas(os.path.join(data, "skills"))
+            if nombre in del_kit
+        })
+        if tapando:
+            raise AssertionError(
+                "el motor todavía indexa copias de skills del kit adentro de data/: "
+                + ", ".join(tapando)
+                + " — esas ganan sobre las externas y el agente sigue corriendo la "
+                "vieja; corré install.sh, que las aparta afuera de data/skills/"
+            )
+        if not presentes:
+            raise AssertionError(
+                f"no hay skills del kit en {externas_dir} — este agente es de antes "
+                "de la mudanza a skills.external_dirs; migralo con install.sh y "
+                "agregá el montaje :ro al compose (ver notas/perillas-aplicadas.md)"
+            )
+        if not declarados:
+            raise AssertionError(
+                "kit-skills/ existe pero config.yaml no declara skills.external_dirs: "
+                "el motor no las indexa y el agente no las ve"
+            )
+        faltan = sorted(del_kit - presentes)
+        if faltan:
+            raise AssertionError("faltan en kit-skills/: " + ", ".join(faltan) + " — corré install.sh")
+        return f"{len(presentes)} skills del kit, montadas afuera de data/"
+
+    def _hint_del_portal():
+        """El preámbulo del api_server, reemplazado por el nuestro."""
+        texto = conf(data)
+        if not re.search(r"^platform_hints:", texto, re.M):
+            raise AssertionError(
+                "sin platform_hints.api_server.replace el motor le dice al agente "
+                "'assume plain text, no markdown formatting' en cada sesión del "
+                "portal — y el portal renderiza markdown completo"
+            )
+        if not re.search(r"^platform_hints:(?:.|\n)*?api_server:(?:.|\n)*?replace:", texto, re.M):
+            raise AssertionError(
+                "platform_hints está pero sin api_server.replace (con `append` el "
+                "texto del motor se queda igual, al lado del nuestro)"
+            )
+        return "el preámbulo del portal es el nuestro"
+
     check("config: api_server", _api)
     check("config: modelo por defecto", _modelo)
     check("config: kanban nativo", _kanban)
+    check("config: skills del motor apagadas", _skills_del_motor_apagadas)
+    check("config: preámbulo del portal", _hint_del_portal)
+    check("skills del kit: montaje externo", _skills_del_kit_externas)
 
     # --- lo que las skills dan por sentado ---
     def _workspace():

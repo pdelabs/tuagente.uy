@@ -96,16 +96,25 @@ skills:
   interactivo, `skills_config.py`), pero **el config.yaml de los clientes está
   montado `:ro`**, así que en nuestra flota es edición de archivo + redeploy.
 
-**Hoy hay 78 skills en el índice de La Mano y 72 son stock.** Del snapshot
-`data/.skills_prompt_snapshot.json` (VERIFICADO), las nuestras son solo
-`aprobacion, artifact, entrada-drive, entregable, flujo, transcribir`. El resto
-son categorías enteras que no tienen nada que hacer en un agente de empresa:
+**Hoy hay 78 skills en el índice de La Mano: 70 del motor, 6 nuestras y 2 que
+escribió el agente.** (Corregido el 12/8: antes esta nota decía "72 son stock".
+Las del motor son exactamente las 70 del `.bundled_manifest`, que es la lista
+que el propio motor escribe al sembrarlas, y coinciden una a una con las de la
+imagen. Las dos restantes —`competitive-intelligence-monitoring` y
+`social-content-operations`— tienen `created_by: agent` en `.usage.json`: son
+del cliente, no del motor, aunque vivan bajo una categoría del motor. La
+diferencia no es cosmética: un generador de blocklist que liste el directorio
+en vez del manifiesto le apaga al cliente lo que su agente escribió.)
+
+Las nuestras son `aprobacion, artifact, entrada-drive, entregable, flujo,
+transcribir`. Las del motor son categorías enteras que no tienen nada que hacer
+en un agente de empresa:
 
 `apple` (apple-notes, apple-reminders, findmy, imessage), `creative` (16:
 comfyui, manim-video, p5js, touchdesigner-mcp, songwriting-and-ai-music…),
-`email` (**himalaya**), `social-media` (**xurl**, social-content-operations),
+`email` (**himalaya**), `social-media` (**xurl**),
 `autonomous-ai-agents` (claude-code, codex, **computer-use**, opencode),
-`mlops` (5), `github` (6), `software-development` (11), `research` (6),
+`mlops` (5), `github` (6), `software-development` (11), `research` (5),
 `productivity` (11: **google-workspace**, notion, airtable…), `media`,
 `note-taking`, `smart-home`.
 

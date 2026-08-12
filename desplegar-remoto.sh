@@ -62,11 +62,17 @@ mkdir -p /opt/agentes
 REMOTO_SCRIPT
 
 # ── 2. Estructura ─────────────────────────────────────────────────────────
-ssh "$SERVIDOR" "mkdir -p $REMOTO/data/skills $REMOTO/data/scripts $REMOTO/politica/tools"
+ssh "$SERVIDOR" "mkdir -p $REMOTO/data/skills $REMOTO/data/scripts $REMOTO/kit-skills $REMOTO/politica/tools"
 
 # ── 3. El kit ─────────────────────────────────────────────────────────────
 echo "→ subiendo el kit"
-rsync -a --delete "$KIT/skills/"            "$SERVIDOR:$REMOTO/data/skills/"
+# Las skills del kit van a kit-skills/, NO a data/skills/: el compose las monta
+# :ro en /opt/kit/skills y el config las declara en `skills.external_dirs`. Si
+# subieran a data/ el agente podria reescribirlas y el curator archivarlas, y
+# ademas taparian a las externas (gana el arbol local) dejando el montaje sin
+# efecto. El --delete es contra kit-skills/, que es NUESTRO: ahi no hay nada
+# del cliente.
+rsync -a --delete "$KIT/skills/"            "$SERVIDOR:$REMOTO/kit-skills/"
 rsync -a          "$KIT/adapter/portal_adapter.py" "$SERVIDOR:$REMOTO/data/scripts/"
 rsync -a          "$KIT/compose/docker-compose.remoto.yml" "$SERVIDOR:$REMOTO/docker-compose.yml"
 rsync -a          "$KIT/compose/Caddyfile"  "$SERVIDOR:$REMOTO/Caddyfile"

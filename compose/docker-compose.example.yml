@@ -28,6 +28,12 @@ services:
       # write_file o por terminal, y un guardrail que el guardado puede
       # cambiar no es un guardrail.
       - ./politica:/opt/politica:ro
+      # Las skills del kit, de SOLO LECTURA y fuera de ./data. El motor las
+      # indexa igual (skills.external_dirs en config.yaml), pero el agente no
+      # puede reescribirlas con skill_manage ni por terminal, y el curator
+      # —que archiva a los 90 dias sin uso lo que toma por "creado por el
+      # agente"— no las toca: una skill externa nunca es elegible.
+      - ./kit-skills:/opt/kit/skills:ro
       # La misma idea, y nos faltaba: config.yaml vive dentro de ./data y es
       # PROPIEDAD del agente. Verificado el 9/8/2026 — lo escribe. Ahí están
       # `disabled_toolsets` (donde apagamos cronjob a propósito) y el registro
@@ -60,6 +66,9 @@ services:
       - ./data:/opt/data
       # El adapter SÍ escribe: es quien recibe el clic del cliente en el portal.
       - ./politica:/opt/politica
+      # Las mismas skills del kit: el adapter las lista en la pestaña de
+      # habilidades del portal, y sin este montaje desaparecerian de ahi.
+      - ./kit-skills:/opt/kit/skills:ro
     environment:
       - TZ=America/Montevideo
       - PORTAL_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy,http://localhost:8090

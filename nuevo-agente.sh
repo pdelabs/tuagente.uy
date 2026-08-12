@@ -53,84 +53,11 @@ ENV
 
 printf 'data/.env\ndata/*.db*\ndata/cache/\ndata/logs/\n__pycache__/\n.DS_Store\n' > .gitignore
 
-# Config mínima. Hermes la completa y la migra sola en el primer arranque; acá
-# solo dejamos lo que el kit necesita y que nadie adivinaría.
-cat > data/config.yaml <<'CFG'
-model:
-  provider: openrouter
-  api_key: ${OPENROUTER_API_KEY}
-  default: openai/gpt-5.6-luna
-
-api_server:
-  enabled: true
-  host: 0.0.0.0
-  port: 8642
-  key: ${API_SERVER_KEY}
-
-# Herramientas nativas de kanban. Hacen falta LAS DOS claves de abajo y no es
-# adivinable: `toolsets` abre la compuerta (check_fn), y `platform_toolsets`
-# pasa el filtro por plataforma. Con una sola, el agente no ve ninguna tool de
-# kanban y termina improvisando por terminal. Verificado el 4/8/2026.
-toolsets:
-  - kanban
-
-# Herramientas que un agente de cliente no usa nunca y cuyo esquema se paga en
-# CADA llamada al modelo. Medido con `hermes prompt-size` sobre un agente
-# recien creado: los esquemas pesan 67,6 KB (casi el doble del system prompt
-# entero), y sacando estas dos bajan a 60,0 KB sin perder nada.
-#   tts        1,8 KB  hablar en voz alta
-#   delegation 5,8 KB  crear sub-agentes
-# Si un cliente llega a necesitarlas, se sacan de esta lista y se reinicia.
-agent:
-  # Effort al maximo. Probado el 5/8 sobre el mismo agente, mismos datos y
-  # mismas consignas: con el default del proveedor dejaba 3 de 18 clientes
-  # afuera de una hoja de ruta diciendo que eran 18, mezclaba meses en un
-  # ranking y erraba una bonificacion en cascada. Con `max` las tres salieron
-  # bien de primera. Costo: ruido (USD 0,18 por 13 sesiones completas).
-  # OJO: no arregla la complacencia — con max igual se auto-acuso de inventar
-  # a alguien que estaba en su propio SOUL.
-  reasoning_effort: max
-  disabled_toolsets:
-    - tts
-    - delegation
-    # cronjob apagado A PROPOSITO, y no para ahorrar contexto: es lo que
-    # empuja al agente a la skill `flujo` en vez de improvisar un cron suelto.
-    # Verificado el 8/8: un cliente pidio "quiero saber regularmente sobre la
-    # competencia", el agente MIRO la skill flujo (skill_view) y aun asi llamo
-    # a `cronjob` directo. Salio un cron invisible —sin carpeta, sin FLUJO.md,
-    # sin pestaña Flujos— y encima con `deliver=origin`, que entrega a la
-    # sesion del portal: iba a correr todos los lunes y no iba a llegar nunca
-    # nada, sin ningun aviso. Con el toolset apagado el unico camino comodo es
-    # `crear_flujo.py`, que crea el cron con --deliver=local y deja el flujo a
-    # la vista. No es una pared: por terminal se puede igual, y de eso se
-    # encarga el SOUL. Es sacar la puerta facil que daba al lugar equivocado.
-    - cronjob
-
-platform_toolsets:
-  api_server:
-    - hermes-api-server
-    - kanban
-  telegram:
-    - hermes-telegram
-    - kanban
-
-# Sin `platforms.telegram.enabled` el adapter de Telegram bootea a medias:
-# loguea "Connecting" pero el polling nunca arranca y los mensajes no llegan
-# (descubierto el 7/8/2026 con East: /start sin respuesta, cero errores).
-# El home_channel arranca apuntando a soporte; se cambia al chat del cliente
-# cuando se empareja.
-platforms:
-  telegram:
-    enabled: true
-    home_channel:
-      platform: telegram
-      chat_id: 'COMPLETAR_CHAT_ID'
-      name: COMPLETAR_NOMBRE
-      user_id: 'COMPLETAR_CHAT_ID'
-  cron:
-    - hermes-cron
-    - kanban
-CFG
+# Config: la MISMA que usa el despliegue remoto, sin copia paralela. Antes esto
+# era un heredoc con el config repetido acá adentro, y ya habia empezado a
+# separarse del de compose/. El bloque de skills apagadas son 67 nombres
+# generados: mantenerlo en dos lados era garantia de que uno quedara viejo.
+cp "$KIT/compose/config.base.yaml" data/config.yaml
 
 # Borrador del SOUL: los bloques pegados, con los placeholders intactos.
 # La identidad va PRIMERO y AFUERA de los marcadores: es la parte que se escribe

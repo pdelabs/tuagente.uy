@@ -15,8 +15,14 @@ compose/                    plantilla de docker-compose
 tools/agente-check.py       revisa el data/ de un agente sin prenderlo (offline)
 tools/portal-check.py       verifica que un agente cumpla el contrato del portal
 tools/instalar-soul.sh      pone el bloque de SOUL en un agente que no lo tiene
+tools/perilla-skills.py     genera la lista de skills del motor a apagar
 flota.md                    qué agente corre dónde, con qué SOUL y qué motor
 ```
+
+Un agente instalado queda así: `data/` es del agente (ahí escribe), y
+`kit-skills/` son las skills del kit, montadas de **solo lectura** para que ni
+el agente ni el curator del motor las toquen. El porqué está en
+`notas/perillas-aplicadas.md`.
 
 ## Alta de un cliente nuevo
 

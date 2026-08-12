@@ -56,6 +56,33 @@ platform_toolsets:
     - hermes-telegram
     - kanban
 
+# EL PREAMBULO DEL PORTAL. Sin esto, el motor le mete al agente —en cada sesion
+# del api_server, 200 lineas DESPUES del SOUL— un parrafo que dice "the
+# rendering layer is unknown, assume plain text, no markdown formatting" y que
+# le explica las etiquetas MEDIA: con rutas absolutas del host
+# (hermes:agent/prompt_builder.py:912-923). Las dos cosas son falsas en nuestro
+# portal, que renderiza markdown completo con Markdown.tsx y convierte rutas e
+# ids en chips clicables. `replace` lo reemplaza entero; `append` lo dejaria y
+# sumaria al lado (hermes:agent/system_prompt.py:73-119).
+#
+# El texto lo lee el modelo: se escribe con el mismo cuidado que el SOUL.
+platform_hints:
+  api_server:
+    replace: |
+      Estás respondiendo dentro del portal de tu cliente, en el navegador.
+
+      Se renderiza markdown completo: encabezados, listas, tablas, bloques de
+      código, fórmulas y diagramas mermaid. Usalo cuando ayude a leer, no para
+      adornar: una respuesta de dos líneas sigue siendo dos líneas.
+
+      Los ids de ticket (t_...), los artefactos (art_...) y las rutas que
+      arrancan en workspace/ se convierten solos en algo que se abre de un
+      click. Nombralos tal cual, sin adornarlos.
+
+      Nunca escribas rutas absolutas del sistema ni etiquetas MEDIA:. No se
+      renderizan, y una ruta absoluta muestra las tripas del servidor sin
+      ayudar a nadie: la ruta desde workspace/ ya alcanza.
+
 # Sin `platforms.telegram.enabled` el adapter de Telegram bootea a medias:
 # loguea "Connecting" pero el polling nunca arranca y los mensajes no llegan
 # (descubierto el 7/8/2026 con East: /start sin respuesta, cero errores).
@@ -72,3 +99,95 @@ platforms:
   cron:
     - hermes-cron
     - kanban
+
+# <<< generado por tools/perilla-skills.py — no editar a mano
+#   fuente: imagen nousresearch/hermes-agent:v2026.7.30
+#   apagadas: 67 · prendidas: ocr-and-documents, pdf, xlsx
+#
+# Regenerar al subir de tag el motor:
+#   python3 tools/perilla-skills.py --imagen <tag> --aplicar compose/config.base.yaml
+#
+# Un agente de empresa no manda mails por su cuenta (himalaya), no postea
+# (xurl), no maneja la casa de nadie ni sabe operar su propio motor
+# (hermes-agent, computer-use, claude-code). Cada una de esas es superficie
+# que no pedimos, que no pasa por la guardia, y que ademas se paga en cada
+# llamada al modelo: el indice de skills son ~9 KB del prompt.
+#
+# Prender una para un cliente: sacarla de esta lista, anotar por que en el
+# repo de ESE agente, y agregarla a compose/skills-permitidas.txt SOLO si
+# la decision vale para todos.
+skills:
+  disabled:
+    - airtable
+    - apple-notes
+    - apple-reminders
+    - architecture-diagram
+    - arxiv
+    - ascii-art
+    - ascii-video
+    - baoyu-infographic
+    - blogwatcher
+    - claude-code
+    - claude-design
+    - codebase-inspection
+    - codex
+    - comfyui
+    - computer-use
+    - design-md
+    - docx
+    - dogfood
+    - evaluating-llms-harness
+    - excalidraw
+    - findmy
+    - gif-search
+    - github-auth
+    - github-code-review
+    - github-issues
+    - github-pr-workflow
+    - github-repo-management
+    - google-workspace
+    - hermes-agent
+    - hermes-agent-skill-authoring
+    - himalaya
+    - huggingface-hub
+    - humanizer
+    - imessage
+    - inspecting-hermes-desktop-dom
+    - llama-cpp
+    - llm-wiki
+    - manim-video
+    - maps
+    - nano-pdf
+    - node-inspect-debugger
+    - notion
+    - obsidian
+    - opencode
+    - openhue
+    - p5js
+    - plan
+    - polymarket
+    - popular-web-designs
+    - powerpoint
+    - pretext
+    - python-debugpy
+    - requesting-code-review
+    - research-paper-writing
+    - serving-llms-vllm
+    - simplify-code
+    - sketch
+    - songsee
+    - songwriting-and-ai-music
+    - spike
+    - systematic-debugging
+    - teams-meeting-pipeline
+    - test-driven-development
+    - touchdesigner-mcp
+    - weights-and-biases
+    - xurl
+    - youtube-content
+  # Las skills del kit, montadas de solo lectura desde el compose. Viven
+  # afuera de data/skills/ para que el agente no pueda reescribirlas y para
+  # que el curator no las archive a los 90 dias sin uso.
+  external_dirs:
+    - /opt/kit/skills
+# >>> fin del bloque generado
