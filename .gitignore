@@ -5,3 +5,7 @@ __pycache__/
 # Copias del SOUL viejo que deja instalar-soul.sh --reemplazar: son datos de
 # un cliente (su identidad, su bloque del bautizo), no del kit.
 respaldos-soul/
+
+# Copias del config.yaml previo que deja perilla-skills.py --aplicar: son de
+# un agente concreto, no del kit.
+respaldos-config/

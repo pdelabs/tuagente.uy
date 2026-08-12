@@ -328,9 +328,18 @@ AG=/ruta/al/agente          # el repo del agente; adentro están data/ y kit-ski
 #    viejo hay que agregárselo a mano.
 
 # 3. El config del agente. Está montado :ro: se abre, se edita, se cierra
-#    (tools/con-config-abierta.sh, o a mano en el host). Un solo comando deja
-#    los dos bloques: skills (disabled + external_dirs, generado) y
-#    platform_hints (el preámbulo del portal, copiado de config.base.yaml).
+#    (tools/con-config-abierta.sh, o a mano en el host). UN SOLO COMANDO deja
+#    las cuatro perillas puestas:
+#      · skills (disabled + external_dirs, generado desde el manifiesto)
+#      · platform_hints (el preámbulo del portal)
+#      · display.file_mutation_verifier (el pie de página del motor)
+#      · platform_toolsets, las tres plataformas sin browser
+#    Cada bloque es idempotente —si ya está igual no lo toca, si difiere lo
+#    reemplaza y lo dice— y no pisa nada del agente: un `model.base_url` propio,
+#    una plataforma que el kit no conoce, otras claves de `display`.
+#    Escribe atómico (archivo al lado + os.replace) y deja copia del config
+#    anterior en respaldos-config/, así que no hace falta respaldarlo a mano.
+#    Se niega si el YAML no parsea o si hay una clave de primer nivel repetida.
 python3 tools/perilla-skills.py --agente $AG/data --aplicar $AG/data/config.yaml
 
 # 3b. Las excepciones de ESE cliente, si tiene (ver "Prender una skill para un
