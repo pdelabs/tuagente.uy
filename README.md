@@ -14,6 +14,8 @@ onboarding/                 la primera tarea del agente (brief de la empresa)
 compose/                    plantilla de docker-compose
 tools/agente-check.py       revisa el data/ de un agente sin prenderlo (offline)
 tools/portal-check.py       verifica que un agente cumpla el contrato del portal
+tools/instalar-soul.sh      pone el bloque de SOUL en un agente que no lo tiene
+flota.md                    qué agente corre dónde, con qué SOUL y qué motor
 ```
 
 ## Alta de un cliente nuevo

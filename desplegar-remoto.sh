@@ -113,9 +113,12 @@ ssh "$SERVIDOR" "[ -s $REMOTO/politica/politica.json ] || echo '{}' > $REMOTO/po
 # EL SOUL, QUE TAMPOCO SE INSTALABA. Sin el, el agente corre con los ~800 bytes
 # del preambulo de Nous y nada mas: sin regla de aprobacion, sin convenciones de
 # entrega, sin idioma — y contesta como un asistente generico. Se instalan los
-# cuatro bloques que podemos completar solos; `00-identidad.md` queda para la
-# persona que da de alta al cliente.
-"$KIT/tools/instalar-soul.sh" "$SERVIDOR" || echo "   (el SOUL no se instalo; revisar a mano)"
+# cinco bloques genericos, que podemos completar solos; `00-identidad.md` queda
+# para la persona que da de alta al cliente.
+# Los dos argumentos: por donde entra el ssh y como se llama el directorio del
+# agente. Aca no coinciden —el ssh va a usuario@ip y el agente vive en
+# /opt/agentes/$SLUG— y con uno solo el SOUL no se instalaba.
+"$KIT/tools/instalar-soul.sh" "$SERVIDOR" "$SLUG" || echo "   (el SOUL no se instalo; revisar a mano)"
 
 # EL PRIMER ARRANQUE VA SIN EL CANDADO DE config.yaml, y no es opcional: el
 # archivo todavía NO EXISTE, y Docker, al montar algo inexistente, crea un

@@ -6,8 +6,13 @@ verifica el contrato HTTP; este mira los archivos y agarra los errores que se
 cometen al dar de alta un cliente, antes de prender nada.
 
     python3 tools/agente-check.py /ruta/al/agente/data
+    python3 tools/agente-check.py --revisar /ruta/a/un.md   ← un SOUL suelto
 
 Exit 0 = cumple. Exit 1 = hay fallas (se listan al final).
+
+El segundo modo existe para `instalar-soul.sh`, que lo corre sobre el bloque que
+está por subir: huecos de plantilla y comentarios que el motor lee como
+inyección, con la misma implementación que mira el SOUL de un agente instalado.
 
 Por qué existe: la regla "toda SKILL.md necesita frontmatter" estaba escrita en
 CLAUDE.md y aun así un agente en producción tenía una skill sin él — justo la que
@@ -22,8 +27,39 @@ import sys
 OK, FAIL, WARN = "OK  ", "FALLA", "aviso"
 results = []
 
-# Los bloques de soul/ vienen con estos huecos; si sobreviven, nadie escribió el SOUL.
-PLACEHOLDER = re.compile(r"<(?:CLIENTE|RESPONSABLE|NOMBRE|EMPRESA)>")
+# Un hueco de plantilla es CUALQUIER <cosa entre corchetes angulares>, no solo
+# <CLIENTE>: la REGLA DURA llegó una vez a producción diciendo literalmente
+# "JAMÁS <la acción sensible: …>", y la lista de nombres conocidos no la agarraba.
+# Los `<...>` legítimos del SOUL —`conexion:<id>`, `permisos:<id de la conexión>`—
+# van SIEMPRE entre backticks, y las notas para quien lo compone van en
+# comentarios HTML: los dos se sacan antes de buscar (ver huecos_de_plantilla).
+HUECO = re.compile(r"<[^<>]{1,200}>", re.S)
+AUTOLINK = re.compile(r"<(?:https?://|mailto:|[^@<>\s]+@)")
+
+# Los marcadores que envuelven el bloque genérico. Traen versión desde v2; el
+# marcador pelado `<!-- kit:base -->` es el v1, de antes del versionado.
+KIT_ABRE = re.compile(r"<!--\s*kit:base(?:\s+(v\d+))?\s*-->")
+KIT_CIERRA = re.compile(r"<!--\s*/kit:base\s*-->")
+VERSION_VALIDA = re.compile(r"^v[0-9]+$")
+
+# CINCO PALABRAS QUE NO PUEDEN ESTAR EN UN COMENTARIO HTML DEL SOUL. El motor
+# escanea los archivos de contexto antes de armar el prompt, y uno de sus
+# patrones —`html_comment_injection`, alcance "all", case-insensitive— matchea
+# cualquier comentario que las contenga. Cuando matchea NO limpia el comentario:
+# descarta el archivo entero y lo reemplaza por "[BLOCKED: SOUL.md contained
+# potential prompt injection]". El agente se queda sin identidad y sin reglas,
+# sigue contestando como si nada, y no avisa a nadie. Verificado contra el
+# escáner del motor (`tools/threat_patterns.py`, `agent/prompt_builder.py`).
+COMENTARIO_HTML = re.compile(r"<!--.*?-->", re.S)
+VETADAS = re.compile(r"ignore|override|system|secret|hidden", re.I)
+
+# Identidad: o la escribió el portal en el bautizo, o la escribió una persona a
+# partir de `soul/00-identidad.md` — que es el único bloque con título de primer
+# nivel ("# Sos …"); los genéricos abren todos en `##`.
+PORTAL_IDENTIDAD = re.compile(
+    r"<!--\s*portal:identidad\s*-->(.*?)<!--\s*/portal:identidad\s*-->", re.S
+)
+IDENTIDAD_H1 = re.compile(r"^#\s+\S", re.M)
 
 # Lo que install.sh deja en el data/. Si falta, el kit no está instalado.
 # Las skills que instala el kit: si una de ESTAS se indexa muda, es culpa nuestra.
@@ -82,7 +118,109 @@ def conf(data):
         return fh.read()
 
 
+def soul(data):
+    """SOUL.md como texto. Lo miran cuatro chequeos distintos."""
+    ruta = os.path.join(data, "SOUL.md")
+    if not os.path.isfile(ruta):
+        raise AssertionError("no existe SOUL.md — el agente no sabe quién es")
+    with open(ruta, encoding="utf-8", errors="replace") as fh:
+        return fh.read()
+
+
+def version_del_kit():
+    """La versión del bloque genérico que instala ESTE repo, o '' si no se sabe.
+
+    Devuelve lo que dice el archivo, tal cual, aunque sea basura: quién decide
+    si sirve es `_kit_version`, y así el aviso dice el valor real.
+    """
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "soul", "VERSION")
+    try:
+        with open(ruta, encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""  # el chequeo sigue: reporta la versión instalada y nada más
+
+
+def huecos_de_plantilla(texto):
+    """Los `<huecos>` sin llenar de un SOUL, o de un bloque a punto de instalarse.
+
+    Se sacan primero los dos lugares donde un `<...>` es legítimo:
+    los comentarios HTML (notas para quien compone el SOUL, que el agente puede
+    ignorar) y todo lo que va entre backticks (`conexion:<id>` y
+    `permisos:<id de la conexión>` son menciones que el portal convierte en
+    tarjetas). Lo que queda entre corchetes angulares no lo llenó nadie.
+    """
+    limpio = re.sub(r"<!--.*?-->", " ", texto, flags=re.S)
+    limpio = re.sub(r"```.*?```", " ", limpio, flags=re.S)
+    limpio = re.sub(r"`[^`\n]*`", " ", limpio)
+    encontrados = []
+    for m in HUECO.finditer(limpio):
+        crudo = m.group(0)
+        if "\n\n" in crudo:  # cruzó un párrafo entero: es un "<" suelto, no un hueco
+            continue
+        if AUTOLINK.match(crudo):  # <https://…> y <alguien@ejemplo.com> son markdown
+            continue
+        plano = " ".join(crudo.split())
+        encontrados.append(plano if len(plano) <= 60 else plano[:57] + "…")
+    return sorted(set(encontrados))
+
+
+def comentarios_riesgosos(texto):
+    """Los comentarios HTML que harían que el motor descarte el archivo entero.
+
+    Devuelve una línea por comentario problemático, ya lista para imprimir. Es
+    más estricta que el motor a propósito: él exige que las palabras estén a
+    menos de 512 caracteres del `<!--` y sin ningún `>` en el medio, y esa
+    frontera es demasiado fina como para construir encima. Acá, si la palabra
+    está adentro de un comentario, se reporta.
+    """
+    sospechosos = []
+    for m in COMENTARIO_HTML.finditer(texto):
+        palabras = sorted({p.lower() for p in VETADAS.findall(m.group(0))})
+        if palabras:
+            resumen = " ".join(m.group(0).split())
+            sospechosos.append(
+                (resumen if len(resumen) <= 50 else resumen[:47] + "…")
+                + " [" + ", ".join(palabras) + "]"
+            )
+    return sospechosos
+
+
+def modo_revisar(ruta):
+    """`--revisar <archivo>`: los dos chequeos de texto sobre un SOUL suelto.
+
+    Huecos de plantilla y comentarios que el motor lee como inyección — los
+    mismos que corren sobre el SOUL de un agente instalado, sobre un archivo
+    que todavía no es de nadie. Lo usa `instalar-soul.sh` ANTES de subir nada,
+    y ese es el punto: las dos fallas son silenciosas y se arreglan mucho más
+    barato acá que en el prompt de un agente en producción. Devuelve 1 si hay
+    algo que arreglar.
+    """
+    if not os.path.isfile(ruta):
+        print(f"No existe {ruta}")
+        return 2
+    with open(ruta, encoding="utf-8", errors="replace") as fh:
+        texto = fh.read()
+    huecos = huecos_de_plantilla(texto)
+    comentarios = comentarios_riesgosos(texto)
+    if huecos:
+        print(f"{len(huecos)} hueco(s) de plantilla sin completar en {ruta}:")
+        for h in huecos:
+            print(f"  {h}")
+    if comentarios:
+        print(f"{len(comentarios)} comentario(s) HTML que el motor lee como inyección en {ruta}:")
+        for c in comentarios:
+            print(f"  {c}")
+        print("  (con uno solo NO carga el archivo: lo reemplaza por [BLOCKED])")
+    if huecos or comentarios:
+        return 1
+    print(f"sin huecos ni comentarios riesgosos: {ruta}")
+    return 0
+
+
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "--revisar":
+        return modo_revisar(sys.argv[2])
     if len(sys.argv) != 2 or sys.argv[1] in ("-h", "--help"):
         print(__doc__)
         return 2
@@ -177,25 +315,147 @@ def main():
 
     # --- el SOUL, que es el system prompt ---
     def _soul():
-        ruta = os.path.join(data, "SOUL.md")
-        if not os.path.isfile(ruta):
-            raise AssertionError("no existe SOUL.md — el agente no sabe quién es")
-        with open(ruta, encoding="utf-8", errors="replace") as fh:
-            texto = fh.read()
-        huecos = sorted(set(PLACEHOLDER.findall(texto)))
+        # El umbral es 18 KB, no 6: los bloques genéricos del kit ya pesan ~14 KB
+        # y cada regla que tienen está porque algo falló sin ella. Avisar por lo
+        # normal entrena a ignorar los avisos. Lo que el umbral cuida es la parte
+        # del cliente (identidad + lo sensible propio): si eso pasa de ~4 KB,
+        # algo de ahí es una skill o un entregable de referencia, no prompt. Si
+        # querés bajar contexto de verdad, el gasto grande son los esquemas de
+        # herramientas (medilo con `hermes prompt-size`), no la prosa.
+        kb = len(soul(data).encode()) / 1024
+        return f"{kb:.1f} KB" + ("  (>18 KB: la parte del cliente se fue de escala)" if kb > 18 else "")
+
+    def _soul_huecos():
+        huecos = huecos_de_plantilla(soul(data))
         if huecos:
             raise AssertionError(
-                "quedaron huecos de la plantilla sin completar: " + ", ".join(huecos)
+                f"{len(huecos)} hueco(s) de la plantilla sin completar: "
+                + ", ".join(huecos)
+                + " — el agente los lee tal cual, así que una regla con un hueco "
+                "adentro no prohíbe nada"
             )
-        # El umbral es 16 KB, no 6: los bloques genéricos del kit ya pesan ~11 KB
-        # y cada regla que tienen está porque algo falló sin ella. Avisar por lo
-        # normal entrena a ignorar los avisos. Si querés bajar contexto de
-        # verdad, el gasto grande son los esquemas de herramientas (medilo con
-        # `hermes prompt-size`), no la prosa.
-        kb = len(texto.encode()) / 1024
-        return f"{kb:.1f} KB" + ("  (>16 KB: la parte del cliente se fue de escala)" if kb > 16 else "")
+        return "ningún <hueco> sin llenar"
+
+    def _soul_bloque():
+        """Los marcadores que envuelven las reglas genéricas.
+
+        Sin ellos no se sabe qué reglas tiene puesto un agente sin leerle el
+        prompt entero, y `05-precedencia.md` queda hablando de un bloque que no
+        se puede señalar.
+        """
+        texto = soul(data)
+        abre = list(KIT_ABRE.finditer(texto))
+        cierra = list(KIT_CIERRA.finditer(texto))
+        if not abre and not cierra:
+            raise AssertionError(
+                "no hay marcadores kit:base — el SOUL se compuso a mano o es "
+                "anterior a los marcadores; instalá el bloque con tools/instalar-soul.sh"
+            )
+        if len(abre) != 1 or len(cierra) != 1:
+            raise AssertionError(
+                f"marcadores desbalanceados: {len(abre)} de apertura y {len(cierra)} "
+                "de cierre — con el bloque partido, la regla de precedencia no señala nada"
+            )
+        if abre[0].start() > cierra[0].start():
+            raise AssertionError("el cierre de kit:base viene ANTES que la apertura")
+        return "bloque genérico entre marcadores (" + (abre[0].group(1) or "sin versión") + ")"
+
+    def _soul_version():
+        """Qué versión del bloque tiene puesta, contra la que instala este kit."""
+        abre = KIT_ABRE.search(soul(data))
+        if not abre:
+            raise AssertionError("sin marcador kit:base no hay versión que leer")
+        puesta, kit = abre.group(1), version_del_kit()
+        if not puesta:
+            raise AssertionError(
+                "el bloque no tiene versión (es anterior al versionado, o sea v1) y "
+                f"este kit instala {kit or 'otra'} — reinstalalo para saber qué reglas corre"
+            )
+        # Contra una versión del kit que no tiene forma de versión no se compara:
+        # diría "quedó atrás" cuando el problema es soul/VERSION (lo dice el
+        # chequeo de abajo).
+        if not VERSION_VALIDA.match(kit or ""):
+            return f"{puesta} (no la puedo comparar: mirá el chequeo de soul/VERSION)"
+        if puesta != kit:
+            raise AssertionError(f"tiene {puesta} y este kit instala {kit} — quedó atrás")
+        return f"{puesta}, al día con el kit"
+
+    def _soul_comentarios():
+        """Comentarios HTML que harían que el motor descarte el SOUL entero.
+
+        No es una precaución teórica: el escáner del motor bloquea el archivo
+        completo, el agente arranca sin identidad y sin reglas, y el único
+        rastro es una línea de log. Un comentario `por-cliente` mal redactado
+        —"ignorar los mails de X", "override de precios", "datos hidden"— es
+        suficiente.
+        """
+        texto = soul(data)
+        total = len(COMENTARIO_HTML.findall(texto))
+        sospechosos = comentarios_riesgosos(texto)
+        if sospechosos:
+            raise AssertionError(
+                "hay comentario(s) HTML con palabras que el motor lee como inyección: "
+                + " · ".join(sospechosos)
+                + " — con eso NO carga el SOUL: lo reemplaza por [BLOCKED] y el agente "
+                "queda sin identidad ni reglas, sin avisar. Reescribí el comentario "
+                "sin esas palabras (o sacalo)"
+            )
+        return f"{total} comentario(s), ninguno con palabra vetada"
+
+    def _soul_identidad():
+        """Un agente sin identidad no sale a producción.
+
+        El hueco no queda vacío: lo llena el preámbulo del motor, y el agente se
+        presenta como el asistente genérico de quien lo fabricó en vez del agente
+        de la empresa que lo paga. Verificado con los agentes remotos, que
+        corrían con 800 bytes de preámbulo y nada más.
+        """
+        texto = soul(data)
+        portal = PORTAL_IDENTIDAD.search(texto)
+        if portal and portal.group(1).strip():
+            return "bloque portal:identidad (lo escribió el bautizo del portal)"
+        # Lo propio se busca AFUERA del bloque genérico: adentro no hay títulos
+        # de primer nivel, así que un "# …" ahí afuera es el bloque de identidad.
+        abre, cierra = KIT_ABRE.search(texto), KIT_CIERRA.search(texto)
+        afuera = texto
+        if abre and cierra and cierra.end() > abre.start():
+            afuera = texto[: abre.start()] + texto[cierra.end():]
+        if IDENTIDAD_H1.search(afuera):
+            return "bloque de identidad propio (00-identidad compuesto)"
+        raise AssertionError(
+            "el SOUL no dice quién es ni para quién trabaja: no hay bloque de "
+            "identidad (un título de primer nivel, '# Sos …, el agente de …') ni "
+            "bloque portal:identidad — se escribe a mano desde soul/00-identidad.md"
+        )
+
+    def _kit_version():
+        """El soul/VERSION de este kit, si el kit está a mano.
+
+        Un valor con otra forma —"2", "v2.1"— se estampa igual en el marcador y
+        después el chequeo del bloque lo reporta como desbalanceado, que manda a
+        buscar el problema a cualquier lado. `instalar-soul.sh` y
+        `nuevo-agente.sh` se niegan a estampar con un valor así.
+        """
+        kit = version_del_kit()
+        if not kit:
+            raise AssertionError(
+                "no encontré soul/VERSION al lado de este script — no puedo decir "
+                "qué versión del bloque instala el kit"
+            )
+        if not VERSION_VALIDA.match(kit):
+            raise AssertionError(
+                f"soul/VERSION dice {kit!r} y tiene que ser vN (v1, v2, v3…) — "
+                "arreglalo antes de instalar nada"
+            )
+        return kit
 
     check("SOUL compuesto", _soul)
+    check("SOUL sin huecos de plantilla", _soul_huecos)
+    check("SOUL: comentarios HTML", _soul_comentarios)
+    check("SOUL: bloque del kit", _soul_bloque)
+    check("SOUL: versión del bloque", _soul_version, required=False)
+    check("SOUL: identidad", _soul_identidad)
+    check("kit: soul/VERSION", _kit_version, required=False)
 
     # --- config: los tres olvidos clásicos del alta ---
     def _api():

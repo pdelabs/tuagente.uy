@@ -67,6 +67,17 @@ Para subir: cambiar el tag, `docker compose pull && up -d`, correr
 `agente-check.py` y `portal-check.py`, y recien ahi darlo por bueno. Si algo se
 rompio, se vuelve al tag anterior.
 
+## El bloque de SOUL también tiene versión
+
+Los bloques genéricos van envueltos entre `<!-- kit:base vN -->` y
+`<!-- /kit:base -->`, con la versión que dice `soul/VERSION`. Con eso se sabe qué
+reglas corre un agente sin leerle el prompt entero, `instalar-soul.sh` no pisa lo
+que ya está, y `05-precedencia.md` puede decir qué gana cuando el documento se
+contradice. Quién tiene qué versión: `flota.md`. El detalle: `soul/README.md`.
+
+Corolario: **un cambio en `soul/` no llega solo a ningún agente.** Hay que subir
+`soul/VERSION` y reinstalar; `agente-check.py` avisa quién quedó atrás.
+
 ## Verificar antes de entregar
 
 Dos chequeos, en este orden. El primero es offline y va **antes** de prender:
@@ -75,9 +86,20 @@ Dos chequeos, en este orden. El primero es offline y va **antes** de prender:
 python3 tools/agente-check.py <ruta>/data
 ```
 
-Mira el kit instalado, el frontmatter de todas las skills, el índice vivo, que el
-SOUL no tenga huecos `<CLIENTE>` de la plantilla, y los tres olvidos clásicos del
-alta (`api_server` apagado, `model.default` vacío, plugin de kanban sin habilitar).
+Mira el kit instalado, el frontmatter de todas las skills, el índice vivo, los
+tres olvidos clásicos del alta (`api_server` apagado, `model.default` vacío,
+plugin de kanban sin habilitar) y cinco cosas del SOUL: ningún hueco `<ASÍ>` sin
+llenar, ningún comentario HTML con las palabras que hacen que el motor descarte
+el archivo entero, el bloque `kit:base` presente y balanceado, qué versión tiene
+puesta contra la del kit, y que haya identidad. De paso avisa si el `soul/VERSION`
+del kit no tiene forma de versión.
+
+Sobre un SOUL suelto —o sobre un bloque que todavía no instalaste— corren los dos
+chequeos de texto solos:
+
+```bash
+python3 tools/agente-check.py --revisar <archivo>.md
+```
 
 El segundo corre contra el agente ya encendido:
 

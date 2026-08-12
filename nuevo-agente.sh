@@ -19,6 +19,21 @@ if [[ -e "$DESTINO" ]]; then
   exit 2
 fi
 
+# La version del bloque de SOUL se valida ACA, antes de crear nada: si no tiene
+# forma de version, el marcador sale mal y `agente-check.py` lo reporta como
+# marcadores desbalanceados, que manda a buscar el problema a otro lado. Y si
+# esto muriera despues del mkdir, quedaria un agente a medio armar.
+[[ -f "$KIT/soul/VERSION" ]] || {
+  echo "falta $KIT/soul/VERSION, que dice qué versión del bloque instala el kit." >&2
+  echo "Es una línea con la versión (vN): echo v2 > $KIT/soul/VERSION" >&2
+  exit 2
+}
+SOUL_VERSION="$(tr -d '[:space:]' < "$KIT/soul/VERSION")"
+[[ "$SOUL_VERSION" =~ ^v[0-9]+$ ]] || {
+  echo "soul/VERSION dice '$SOUL_VERSION' y tiene que ser vN (v1, v2, v3…)." >&2
+  exit 2
+}
+
 mkdir -p "$DESTINO/data"/{skills,scripts,memories,workspace/{entregables,artifacts,entrada,interno}}
 cd "$DESTINO"
 
@@ -118,10 +133,18 @@ platforms:
 CFG
 
 # Borrador del SOUL: los bloques pegados, con los placeholders intactos.
+# La identidad va PRIMERO y AFUERA de los marcadores: es la parte que se escribe
+# cliente por cliente. Lo genérico va adentro de `kit:base`, con su versión —es
+# lo que después dice qué reglas corre este agente sin leerle el prompt entero,
+# y lo que le da sentido al bloque de precedencia que cierra la lista.
+# ($SOUL_VERSION se validó arriba, antes de crear nada.)
 {
-  for bloque in 00-identidad 01-aprobaciones 02-entrega 03-canales 04-lenguaje; do
+  cat "$KIT/soul/00-identidad.md"; echo
+  echo "<!-- kit:base $SOUL_VERSION -->"; echo
+  for bloque in 01-aprobaciones 02-entrega 03-canales 04-lenguaje 05-precedencia; do
     cat "$KIT/soul/$bloque.md"; echo
   done
+  echo "<!-- /kit:base -->"
 } > data/SOUL.md
 
 cat > README.md <<README
