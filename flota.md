@@ -18,9 +18,12 @@ con fecha vieja no es un problema; una fila que dice algo que ya no es cierto s�
 
 ## Qué quiere decir cada columna
 
-- **Host** — el alias ssh, que es también el nombre del directorio en la VPS
-  (`/opt/agentes/<alias>`). `instalar-soul.sh` y `observabilidad.sh` usan el
-  mismo nombre para las dos cosas.
+- **Host** — el alias ssh. Por costumbre se llama igual que el agente, y las
+  herramientas asumen eso: el directorio en la VPS es `/opt/agentes/<slug>` y
+  los contenedores son `<slug>-hermes`. Cuando no coinciden —entrar por
+  `usuario@ip`, por ejemplo— el slug va como argumento aparte:
+  `tools/<script>.sh <host> <slug>` (en `observabilidad.sh`, que ya usa el
+  segundo para la acción, va tercero).
 - **SOUL** — la versión del bloque genérico, la que estampa el marcador
   `<!-- kit:base vN -->`. `v1` es el marcador pelado, de antes del versionado;
   "sin marcador" es un SOUL pegado a mano o anterior a los marcadores. La

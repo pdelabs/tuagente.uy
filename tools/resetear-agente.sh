@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Deja un agente como recién instalado, sin tocar sus claves ni el kit.
 #
-#   ./resetear-agente.sh tuagente          # en una VPS (por ssh)
+#   ./resetear-agente.sh tuagente            # alias ssh que se llama como el agente
+#   ./resetear-agente.sh root@1.2.3.4 east   # host ssh que NO se llama como el agente
+#
+# El segundo argumento es el slug: el nombre del directorio en la VPS
+# (/opt/agentes/<slug>). Por defecto es el mismo que el host ssh.
 #
 # BORRA todo lo del cliente: bautizo, look, empresa, canal, sesiones, tablero,
 # entregables, memorias, flujos, crons, pairing y el SOUL.
@@ -16,13 +20,19 @@
 set -euo pipefail
 
 HOST="${1:-}"
-[[ -n "$HOST" ]] || { echo 'uso: ./resetear-agente.sh <host-ssh>' >&2; exit 1; }
-DIR="/opt/agentes/$HOST"
+[[ -n "$HOST" ]] || { echo 'uso: ./resetear-agente.sh <host-ssh> [slug]' >&2; exit 1; }
+SLUG="${2:-$HOST}"
+DIR="/opt/agentes/$SLUG"
 
-ssh "$HOST" "test -d $DIR" || { echo "no existe $DIR en $HOST" >&2; exit 1; }
+ssh "$HOST" "[ -d $DIR/data ]" || {
+  echo "no existe $DIR/data en $HOST" >&2
+  echo "si el directorio del agente no se llama '$SLUG', pasalo como segundo" >&2
+  echo "argumento:  ./resetear-agente.sh $HOST <slug>" >&2
+  exit 1
+}
 
 echo "→ respaldo"
-ssh "$HOST" "mkdir -p /root/respaldos && tar czf /root/respaldos/$HOST-\$(date +%Y%m%d-%H%M%S).tgz -C $DIR data 2>/dev/null; ls -1t /root/respaldos | head -1 | sed 's/^/   /'"
+ssh "$HOST" "mkdir -p /root/respaldos && tar czf /root/respaldos/$SLUG-\$(date +%Y%m%d-%H%M%S).tgz -C $DIR data 2>/dev/null; ls -1t /root/respaldos | head -1 | sed 's/^/   /'"
 
 echo "→ apagando"
 ssh "$HOST" "cd $DIR && docker compose stop hermes portal-adapter" >/dev/null 2>&1
@@ -49,7 +59,7 @@ for _ in $(seq 1 45); do
   # Se le pregunta al gateway, no al sistema: `ss` no siempre está en la
   # imagen y su ausencia se ve igual que "todavía no levantó" — el script se
   # daba por vencido con el agente ya andando.
-  if [[ "$(ssh "$HOST" "docker exec $HOST-hermes curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8642/health" 2>/dev/null)" == "200" ]]; then
+  if [[ "$(ssh "$HOST" "docker exec $SLUG-hermes curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8642/health" 2>/dev/null)" == "200" ]]; then
     arriba=1; break
   fi
 done

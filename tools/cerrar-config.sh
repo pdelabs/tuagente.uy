@@ -2,7 +2,16 @@
 # Pone config.yaml en solo lectura, después del primer arranque.
 #
 #   ./cerrar-config.sh east                    # en una VPS (por ssh)
+#   ./cerrar-config.sh root@1.2.3.4 east       # idem, si el host no se llama como el agente
 #   ./cerrar-config.sh ~/Projects/agente-x     # en un agente local
+#
+# El segundo argumento es el slug: el nombre del directorio en la VPS
+# (/opt/agentes/<slug>), que ademas es el prefijo del contenedor. Por defecto es
+# el mismo que el host ssh. En un agente local no se usa: sale del directorio.
+#
+# OJO: la rama LOCAL necesita GNU sed, o sea Linux. En macOS el `sed -i` de mas
+# abajo muere con "invalid command code" porque BSD sed pide un sufijo (-i '').
+# Por ssh no pasa: del otro lado siempre hay Linux.
 #
 # POR QUE: config.yaml vive dentro de ./data y es propiedad del usuario del
 # agente, o sea que el agente lo escribe. Ahí están `disabled_toolsets` —donde
@@ -20,17 +29,29 @@
 set -euo pipefail
 
 DESTINO="${1:-}"
-[[ -n "$DESTINO" ]] || { echo 'uso: ./cerrar-config.sh <host-ssh|dir-local>' >&2; exit 1; }
+[[ -n "$DESTINO" ]] || { echo 'uso: ./cerrar-config.sh <host-ssh|dir-local> [slug]' >&2; exit 1; }
+SLUG="${2:-$DESTINO}"
 
 LINEA='      - ./data/config.yaml:/opt/data/config.yaml:ro'
 MARCA='# PRIMER ARRANQUE: descomentar con tools/cerrar-config.sh'
 
+# El compose nombra los contenedores `<slug>-hermes`. En la VPS el slug lo
+# tenemos; en un agente local hay que sacarlo del directorio, que suele llamarse
+# `agente-<slug>` (lo mismo hace con-config-abierta.sh).
 if [[ -d "$DESTINO" ]]; then
   correr() { bash -c "$1"; }
   DIR="$DESTINO"
+  CONTENEDOR="$(basename "$DIR" | sed 's/^agente-//')-hermes"
 else
   correr() { ssh "$DESTINO" "$1"; }
-  DIR="/opt/agentes/$DESTINO"
+  DIR="/opt/agentes/$SLUG"
+  CONTENEDOR="$SLUG-hermes"
+  correr "[ -d $DIR/data ]" || {
+    echo "no existe $DIR/data en $DESTINO" >&2
+    echo "si el directorio del agente no se llama '$SLUG', pasalo como segundo" >&2
+    echo "argumento:  ./cerrar-config.sh $DESTINO <slug>" >&2
+    exit 1
+  }
 fi
 
 correr "grep -q '$MARCA' $DIR/docker-compose.yml" || {
@@ -52,7 +73,6 @@ correr "cd $DIR && docker compose up -d --force-recreate hermes >/dev/null 2>&1"
 # `sh -c '...'` a traves de ssh dentro de otra cadena entrecomillada se rompe
 # en silencio, y el sintoma es un bucle que espera para siempre algo que ya
 # estaba listo.
-CONTENEDOR="${DIR##*/}-hermes"
 echo "→ esperando al gateway"
 arriba=0
 for _ in $(seq 1 40); do

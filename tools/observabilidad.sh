@@ -4,6 +4,11 @@
 #   ./observabilidad.sh tuagente on
 #   ./observabilidad.sh tuagente off
 #   ./observabilidad.sh tuagente estado
+#   ./observabilidad.sh root@1.2.3.4 on east    # host ssh que NO se llama como el agente
+#
+# El TERCER argumento es el slug: el nombre del directorio en la VPS
+# (/opt/agentes/<slug>) y el prefijo del contenedor. Va tercero y no segundo
+# porque el segundo ya es la accion. Por defecto es el mismo que el host ssh.
 #
 # Prendida, las llamadas al modelo pasan por un proxy (litellm) que las manda a
 # Phoenix. Apagada, el agente habla directo con OpenRouter y no queda nada.
@@ -13,17 +18,24 @@
 set -euo pipefail
 
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HOST="${1:-}"; ACCION="${2:-estado}"
-[[ -n "$HOST" ]] || { echo 'uso: ./observabilidad.sh <host-ssh> [on|off|estado]' >&2; exit 1; }
-DIR="/opt/agentes/$HOST"
+HOST="${1:-}"; ACCION="${2:-estado}"; SLUG="${3:-$HOST}"
+[[ -n "$HOST" ]] || { echo 'uso: ./observabilidad.sh <host-ssh> [on|off|estado] [slug]' >&2; exit 1; }
+DIR="/opt/agentes/$SLUG"
 PROXY="http://litellm:4000"
+
+ssh "$HOST" "[ -d $DIR/data ]" || {
+  echo "no existe $DIR/data en $HOST" >&2
+  echo "si el directorio del agente no se llama '$SLUG', pasalo como tercer" >&2
+  echo "argumento:  ./observabilidad.sh $HOST $ACCION <slug>" >&2
+  exit 1
+}
 
 compose() { ssh "$HOST" "cd $DIR && docker compose -f docker-compose.yml -f docker-compose.observabilidad.yml $*"; }
 
 esperar_gateway() {
   for _ in $(seq 1 40); do
     sleep 6
-    [[ "$(ssh "$HOST" "docker exec $HOST-hermes curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8642/health" 2>/dev/null)" == "200" ]] && return 0
+    [[ "$(ssh "$HOST" "docker exec $SLUG-hermes curl -s -o /dev/null -w '%{http_code}' -m 5 http://127.0.0.1:8642/health" 2>/dev/null)" == "200" ]] && return 0
   done
   return 1
 }
@@ -60,7 +72,7 @@ case "$ACCION" in
     listo=""
     for _ in $(seq 1 12); do
       sleep 8
-      ssh "$HOST" "docker exec $HOST-hermes curl -s -o /dev/null -w '%{http_code}' -m 8 http://litellm:4000/health/liveliness" 2>/dev/null | grep -q 200 && { listo=1; break; }
+      ssh "$HOST" "docker exec $SLUG-hermes curl -s -o /dev/null -w '%{http_code}' -m 8 http://litellm:4000/health/liveliness" 2>/dev/null | grep -q 200 && { listo=1; break; }
     done
     # Se pregunta DESDE hermes y no desde litellm: la imagen del proxy no
     # trae curl, y su ausencia se ve igual que "el proxy no responde". Ademas

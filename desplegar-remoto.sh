@@ -183,8 +183,12 @@ Listo, y apagado a propósito. Falta:
            --origin   https://tuagente.uy
 
   5. Despues del bautizo, la foto del bot (la Bot API no deja que un bot
-     cambie la suya, va por MTProto desde tu Mac):
-       tools/foto-bot.sh $SLUG
+     cambie la suya, va por MTProto desde tu Mac). Los dos argumentos: por
+     donde entra el ssh y como se llama el agente en /opt/agentes/:
+       tools/foto-bot.sh $SERVIDOR $SLUG
+
+  5b. Y cuando el agente ya arranco bien, el candado del config.yaml:
+       tools/cerrar-config.sh $SERVIDOR $SLUG
 
   6. El link, que ES la credencial:
        https://tuagente.uy/app#endpoint=https://$DOMINIO_API&adapter=https://$DOMINIO_PORTAL&key=<clave>

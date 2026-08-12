@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Sube al bot de Telegram la carita que el cliente eligio en el bautizo.
 #
-#   ./foto-bot.sh tuagente
+#   ./foto-bot.sh tuagente              # alias ssh que se llama como el agente
+#   ./foto-bot.sh root@1.2.3.4 east     # cuando el host ssh NO se llama como el agente
+#
+# El segundo argumento es el slug, o sea el nombre del directorio en la VPS
+# (/opt/agentes/<slug>). Por defecto es el mismo que el host ssh, que es como
+# entramos siempre; se pasa aparte cuando se entra por usuario@ip.
 #
 # POR QUE ES UN PASO APARTE: la Bot API NO permite que un bot cambie su propia
 # foto (el nombre si, y eso lo hace el adapter solo al bautizar). La unica via
@@ -15,11 +20,22 @@ set -euo pipefail
 
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST="${1:-}"
-[[ -n "$HOST" ]] || { echo 'uso: ./foto-bot.sh <host-ssh>' >&2; exit 1; }
-DIR="/opt/agentes/$HOST"
+[[ -n "$HOST" ]] || { echo 'uso: ./foto-bot.sh <host-ssh> [slug]' >&2; exit 1; }
+SLUG="${2:-$HOST}"
+DIR="/opt/agentes/$SLUG"
 VENV="$HOME/.tuagente-tools/bin/python3"
 
 [[ -x "$VENV" ]] || { echo "falta el venv con telethon: python3 -m venv ~/.tuagente-tools && ~/.tuagente-tools/bin/pip install telethon" >&2; exit 1; }
+
+# Que el directorio exista se pregunta ANTES: si no, el scp de abajo falla con
+# el mismo mensaje para "el cliente no bautizo todavia" y para "el slug esta
+# mal", que son dos problemas muy distintos.
+ssh "$HOST" "[ -d $DIR/data ]" || {
+  echo "no existe $DIR/data en $HOST" >&2
+  echo "si el directorio del agente no se llama '$SLUG', pasalo como segundo" >&2
+  echo "argumento:  ./foto-bot.sh $HOST <slug>" >&2
+  exit 1
+}
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
