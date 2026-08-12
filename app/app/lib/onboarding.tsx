@@ -177,6 +177,12 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   const [pareado, setPareado] = useState(false);
   // Lo que el cliente eligio del carrusel: arranca la charla sin salir de acá.
   const [pedido, setPedido] = useState("");
+  // Mientras se saca la foto, el personaje se queda QUIETO. La captura toma el
+  // frame que hay en pantalla, y en `tranquilo` el agentito se ceba un mate a
+  // los ~20 s y despues cada rato — o sea que casi siempre lo agarraba con el
+  // mate en la mano y la bombilla a mitad de camino. Nadie bautiza a su agente
+  // en menos de veinte segundos. (Visto el 11/8 en la foto de Mr.Wobble.)
+  const [posando, setPosando] = useState(false);
 
   useEffect(() => {
     if (paso !== "presentacion" && paso !== "aviso") return;
@@ -256,9 +262,13 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     eligioAlgo.current = true;
   };
 
-  const bautizar = () => {
+  const bautizar = async () => {
     if (!listo) return;
     const n = nombre.trim();
+    // Pose primero, foto despues. Los 450 ms son para que Rive termine la
+    // transicion: sacarla en el mismo tick devuelve el frame viejo.
+    setPosando(true);
+    await new Promise((r) => setTimeout(r, 450));
     try {
       localStorage.setItem(NAME_KEY, n);
     } catch {
@@ -273,7 +283,9 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     // quedaba en el browser hasta el final: el agente pasaba por todo el
     // pairing de Telegram sin saber como se llamaba, su bot seguia con el
     // nombre viejo, y si el cliente abandonaba ahi el bautizo se perdia.
-    guardarIdentidad(cfg, { nombre: n, look, ...capturaDelAgentito() })
+    const foto = capturaDelAgentito();
+    setPosando(false);
+    guardarIdentidad(cfg, { nombre: n, look, ...foto })
       .catch(() => { /* adapter viejo o caido: queda la copia del browser */ });
   };
 
@@ -403,7 +415,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
           <AgentitoRive
             festejos={festejos}
             look={look}
-            estado={leyendoWeb ? gesto : "tranquilo"}
+            estado={posando ? "normal" : leyendoWeb ? gesto : "tranquilo"}
             className="h-full w-full"
           />
           {/* El dado vive pegado al personaje: cambia SU pinta, no la página. */}
