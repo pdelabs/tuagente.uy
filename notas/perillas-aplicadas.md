@@ -13,6 +13,8 @@ Tres decisiones y una que se dejó pasar a propósito:
 | Preámbulo del portal | **reemplazado** (decía "assume plain text") | `platform_hints.api_server.replace` |
 | Skills del kit | **afuera de `data/`**, montadas de solo lectura | `skills.external_dirs` + volumen `:ro` |
 | Kanban | **se queda**, subordinado por `05-precedencia` | no se toca |
+| Verificador de mutaciones | **apagado**: le hablaba al cliente de rutas del host | `display.file_mutation_verifier: false` |
+| Browser | **afuera**: 9 tools que devuelven capturas en blanco | lista explícita en `platform_toolsets` (NO `disabled_toolsets`) |
 
 Memoria y auto-mejora tampoco se tocaron: `write_approval` sin una pestaña que
 muestre lo pendiente es apagar el aprendizaje sin avisarle a nadie
@@ -48,7 +50,7 @@ python3 tools/perilla-skills.py --imagen nousresearch/hermes-agent:v2026.7.30 \
 Sale de la **imagen** (autoritativa para un tag, sirve antes de instalar nada) o
 del `.bundled_manifest` de un agente ya armado (`--agente <data>`, sin docker).
 Nunca de listar `data/skills/`: ahí conviven las del motor, las del kit y **las
-que el agente escribió para ese cliente** — en La Mano hay dos así
+que el agente escribió para ese cliente** — en La Mano había dos así
 (`competitive-intelligence-monitoring`, `social-content-operations`, las dos con
 `created_by: agent` en `.usage.json`). Un generador que liste el directorio le
 apagaría al cliente su propio trabajo.
@@ -135,6 +137,125 @@ arregla con una clave: `platform_hints.api_server.replace` (`replace`, no
 El texto está en `compose/config.base.yaml`. **Lo lee el modelo**: se escribe con
 el mismo cuidado que un bloque de SOUL, en español y corto.
 
+## 2b. El verificador de mutaciones del motor
+
+Cuando un `write_file` o un `patch` falla y no se repite bien, el motor **le pega
+al final de la respuesta del agente** una línea así, que el cliente lee en su
+portal:
+
+> ⚠️ File-mutation verifier: 1 file(s) were NOT modified this turn…
+> `/tmp/design-kit-instagram.md` — Write denied… outside `HERMES_WRITE_SAFE_ROOT`
+
+Vocabulario de máquina, una ruta del host y el nombre de una variable de
+entorno. Es exactamente lo que `04-lenguaje.md` le prohíbe al agente —"hablás
+del trabajo, no de la máquina"— hecho por encima de él, donde no puede
+evitarlo. Que el intento fallara está bien y hay que arreglarlo; contárselo así
+al cliente, no.
+
+`display.file_mutation_verifier: false` (default `true` en
+`config_defaults.py:1051`, leído en `run_agent.py:3300`; también acepta la
+variable `HERMES_FILE_MUTATION_VERIFIER`). Se apaga el aviso, no la causa: el
+error sigue estando en los logs y en el resultado de la tool, que es donde
+tiene que estar.
+
+## 2c. El browser, apagado
+
+En el despliegue de Mr.Wobble (12/8) el agente gastó ~15 llamadas peleando con
+un navegador que no funciona: `browser_get_images` devolvió 0 imágenes,
+`browser_console` vacío y `browser_vision` "la captura aparece completamente
+blanca" (Browserbase sin proxies residenciales). Se recuperó solo, sacando la
+paleta de la web con `curl` por terminal — pero el cliente vio toda la pelea.
+
+**La forma de sacarlo importa, y la primera que elegimos estaba mal.**
+`agent.disabled_toolsets` no saca un toolset de la lista: **resta su catálogo
+estático** al final de todo (`model_tools.py:410-441` — *"even if a composite
+toolset is enabled, any tools belonging to a disabled toolset are strictly
+stripped out"*). Y el catálogo de `browser` incluye `web_search`
+(`toolsets.py:199-207`), aunque `web_search` esté registrada en el toolset `web`.
+Resultado: apagar el browser por ahí **también apaga la búsqueda web**.
+
+Medido con el intérprete de la imagen, llamando como llama el motor de verdad
+—`agent/agent_init.py:1390`, que pasa `enabled_toolsets` **y**
+`disabled_toolsets`—, **las tres filas en una sola corrida** y con una
+credencial de búsqueda presente para que `check_web_api_key` no tape el
+resultado:
+
+| Config | Tools | `browser_*` | `web_search` | `web_extract` |
+|---|---|---|---|---|
+| bundle, browser adentro | 36 | 9 | sí | sí |
+| bundle + `disabled_toolsets: [browser]` | 26 | 0 | **NO** | sí |
+| **lista explícita de toolsets, sin browser** | **27** | **0** | **sí** | sí |
+
+Y los deltas por nombre, que son lo que no se desarma si alguien vuelve a medir
+en otro estado: (bundle − explícita) = las 9 `browser_*` y nada más;
+(explícita − bundle) = ∅; (explícita − `disabled_toolsets`) = `web_search`.
+
+La tercera es la que quedó. Por eso `platform_toolsets` lista los toolsets uno
+por uno en vez de nombrar el bundle, y `browser` no aparece **en ninguna lista**:
+ni en las tres de `platform_toolsets` ni en `disabled_toolsets`.
+
+### Y en las tres plataformas, no solo en el portal
+
+El mismo agente atiende el portal, Telegram y los flujos del cron. Un browser
+que devuelve páginas en blanco falla igual en los tres, y en el cron encima sin
+nadie mirando.
+
+Además, las declaraciones que había para Telegram y cron **no hacían nada**:
+`platform_toolsets.telegram: [hermes-telegram, kanban]` y un `cron:` colgado de
+`platforms:` (que ni siquiera es donde van los toolsets). Una lista que solo
+nombra bundles y `kanban` no menciona ningún toolset **configurable**, así que
+el motor no entra en modo explícito y cae al default: todo prendido. Verificado
+sacando las claves — el resultado era idéntico con y sin ellas. Las dos
+plataformas venían corriendo con 37 tools, 9 de ellas `browser_*`.
+
+Con la misma lista en las tres, hoy:
+
+| Plataforma | Tools | `browser_*` | `kanban_*` | `web_search` |
+|---|---|---|---|---|
+| `api_server` (portal) | 27 | 0 | 12 | sí |
+| `telegram` | 27 | 0 | 12 | sí |
+| `cron` (flujos) | 27 | 0 | 12 | sí |
+
+**Diferencias deliberadas contra el default que tenían Telegram y cron:** además
+del browser se van `clarify` —preguntar por una UI: el portal nunca lo tuvo, el
+cron lo apaga solo (`cron/scheduler.py`), y el agente pregunta escribiendo— y
+`computer_use`, manejar una computadora, cuya skill ya apagamos. Nada más: el
+delta por nombre entre lo que tenían y lo que tienen son 10 tools —las 9
+`browser_*` y `clarify`— y no se gana ninguna. `computer_use` se va como
+toolset pero no aparece en ese delta: su `check_fn` ya la tapaba, así que no
+había ninguna tool suya que perder. Lo que cambia es que ahora tampoco puede
+aparecer sola.
+
+Queremos `web_search` porque el cliente hace monitoreo de competencia y es
+probable que suba una key de búsqueda; el día que la ponga, la tool está.
+
+**La lista explícita puede quedar vieja** cuando el motor suba de tag y sume o
+renombre toolsets — el mismo problema que la blocklist de skills, y la misma
+solución: se genera y se chequea.
+
+```bash
+python3 tools/perilla-skills.py --toolsets --imagen <tag>   # al subir de tag
+```
+
+Sale de pedirle al motor que resuelva la plataforma con la forma histórica
+(`hermes-api-server` + `kanban`) y restarle lo que no queremos, así que es la
+misma resolución que corre en producción. `agente-check.py` compara la lista del
+agente contra la del kit y falla si difieren.
+
+**Lo que hoy no hay, y no es por esto:** el agente **no tiene búsqueda web** en
+ningún caso, porque `check_web_api_key` da `False` sin credenciales
+(`web_tools.py:1049`). Los backends posibles son `EXA_API_KEY`,
+`TAVILY_API_KEY`, `PARALLEL_API_KEY`, `BRAVE_SEARCH_API_KEY`, Firecrawl o un
+`SEARXNG_URL`; hay uno sin key, `ddgs`, pero **el paquete no está en la imagen**
+(verificado). O sea que para tener búsqueda de verdad hay que poner una key en
+`data/.env` y, si se quiere fijar cuál, `web.backend`. Mientras tanto lo único
+que lee la web es `curl` por terminal, que es lo que el agente ya hace.
+
+**Para un cliente que necesite navegador**: agregar `browser` a la lista de
+`platform_toolsets.api_server` —no sacarlo de `disabled_toolsets`, que ahí no
+está—, poner las credenciales de Browserbase y **probar una captura antes de
+prometérselo**.
+
 ## 3. Las skills del kit, afuera de `data/`
 
 Antes: `install.sh` las copiaba a `data/skills/<skill>/`. Dos problemas, los dos
@@ -144,8 +265,8 @@ verificados en el código del motor (`perillas-motor.md`, puntos 4c y 6):
   `data/skills/` y no figura en el manifiesto de bundled es "creada por el
   agente" y por lo tanto elegible: a los 90 días sin uso mueve el directorio a
   `.archive/`. O sea que `transcribir` podía desaparecer sola y con ella el
-  contrato del portal. En La Mano el curator todavía no corrió nunca
-  (`"run_count": 0`), así que llegamos antes.
+  contrato del portal. En La Mano el curator no llegó a correr nunca
+  (`"run_count": 0`): llegamos antes.
 - **El agente las podía reescribir** con `skill_manage`.
 
 Ahora viven en `<agente>/kit-skills/`, montadas `:ro` en `/opt/kit/skills` y
@@ -216,8 +337,7 @@ python3 tools/perilla-skills.py --agente $AG/data --aplicar $AG/data/config.yaml
 #     cliente puntual"): sacarlas de la lista y declararlas con su motivo.
 #     VAN DESPUES, con el config ya cerrado :ro — un arranque con el config
 #     escribible reescribe el archivo y se lleva puestos los comentarios.
-#     Pendientes anotadas hoy:
-#       La Mano (pdelabs) → humanizer, blogwatcher, youtube-content, gif-search
+#     Hoy no hay ninguna pendiente (ver mas abajo).
 
 # 4. Chequeo offline, ANTES de prender
 python3 tools/agente-check.py $AG/data
@@ -236,6 +356,10 @@ esto no toca y que se arreglan aparte:
 
 - `SOUL: bloque del kit` — su SOUL se compuso antes de los marcadores
   `kit:base`. Se arregla con `tools/instalar-soul.sh`.
+- `SOUL: versión del bloque` (aviso) — el agente tiene un bloque más viejo que
+  el del kit. Se sube con `tools/instalar-soul.sh --reemplazar <host> [slug]`,
+  que conserva la identidad y avisa si el bloque viejo tenía agregados de ese
+  cliente.
 - `SOUL sin huecos de plantilla` — los `<ASÍ>` de `00-identidad.md` sin
   completar. Es el trabajo artesanal, cliente por cliente, y necesita datos que
   no están en ningún repo.
@@ -243,22 +367,22 @@ esto no toca y que se arreglan aparte:
 O sea: **0 fallas recién cuando también se hizo la parte del SOUL.** Un agente
 migrado y con SOUL completo tiene que dar 0.
 
-**Excepciones pendientes, por agente.** Lo que hay que declarar cuando a cada
-uno le toque el runbook:
+**Excepciones pendientes, por agente: hoy ninguna.** Las cuatro que había
+anotadas —`humanizer`, `blogwatcher`, `youtube-content`, `gif-search`— eran de
+La Mano, que se dio de baja el 12/8/2026 (ver `flota.md`). Ni Mr.Wobble ni East
+tienen ninguna declarada.
 
-| Agente | Skills a prenderle | Por qué |
-|---|---|---|
-| La Mano (pdelabs) | `humanizer`, `blogwatcher`, `youtube-content`, `gif-search` | hace contenido y monitorea a la competencia; las cuatro son de escribir y mirar, ninguna publica sola |
-
-Las líneas quedan así en su `config.yaml`:
+El mecanismo se queda, y la lista de arriba sirve de ejemplo de para qué es: un
+cliente que hace contenido y sigue a la competencia necesita cuatro skills que
+el resto no, y eso se declara en el `config.yaml` de ese agente así:
 
 ```yaml
 skills:
   # kit:excepcion humanizer — escribe posts para redes, es lo que hace la empresa
   # kit:excepcion blogwatcher — monitorea la competencia todas las semanas
-  # kit:excepcion youtube-content — arma guiones y descripciones de videos
-  # kit:excepcion gif-search — ilustra los posts que escribe
 ```
+
+Cuando aparezca una de verdad, va acá con su agente y su porqué.
 
 **En un remoto nuevo no hay nada que migrar:** `desplegar-remoto.sh` ya sube las
 skills del kit a `$REMOTO/kit-skills/` (nunca a `data/skills/`), el compose

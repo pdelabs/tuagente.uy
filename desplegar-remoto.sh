@@ -158,6 +158,20 @@ EOF
   echo "→ data/.env creado VACÍO — hay que completarlo en el servidor"
 fi
 
+# ── 6. EL DUEÑO DE data/, QUE ES LO QUE ROMPIO EL PRIMER DESPLIEGUE ────────
+# Todo lo de arriba se creo por ssh, o sea COMO ROOT. El agente corre como uid
+# 10000 y el primer arranque quiere sembrar las 70 skills del motor en
+# data/skills: sin permiso tira ~140 "Permission denied" seguidos, el indice
+# queda VACIO y el agente arranca sin una sola skill. No falla el arranque, no
+# hay error visible en el portal: simplemente no sabe hacer nada. Visto con
+# Mr.Wobble el 12/8/2026.
+#
+# Va al final, cuando ya se subio todo lo que va adentro de data/. `politica/` y
+# `kit-skills/` quedan de root A PROPOSITO: se montan :ro y son justamente lo
+# que el agente no tiene que poder tocar.
+echo "→ permisos: data/ es del agente (uid 10000)"
+ssh "$SERVIDOR" "chown -R 10000:10000 $REMOTO/data"
+
 cat <<EOF
 
 Listo, y apagado a propósito. Falta:

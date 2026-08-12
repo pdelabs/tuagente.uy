@@ -4,6 +4,7 @@
 #   ./instalar-soul.sh tuagente
 #   ./instalar-soul.sh root@1.2.3.4 east   # si el host ssh no se llama como el agente
 #   ./instalar-soul.sh --bloque            # imprime lo que instalaria, sin ssh y sin tocar nada
+#   ./instalar-soul.sh --reemplazar tuagente   # cambia el bloque viejo por el nuevo
 #
 # POR QUE EXISTE: `desplegar-remoto.sh` nunca instalaba SOUL. Los agentes
 # remotos corrian con los 800 bytes del preambulo de Nous y NADA mas: sin regla
@@ -21,6 +22,11 @@
 # escribe una persona, cliente por cliente.
 #
 # Es idempotente: si ya hay un bloque —de la version que sea— no lo duplica.
+# Para PASAR de una version a otra esta `--reemplazar`, que saca el bloque viejo
+# y pone el nuevo conservando todo lo de afuera (la identidad, el bloque que
+# escribio el portal en el bautizo) y negandose si adentro del viejo hay algo
+# escrito para ese cliente. Antes esto era "saca el bloque viejo a mano", sobre
+# un archivo de 15 KB y por ssh.
 #
 # NECESITA python3 EN TU MAQUINA (no en el servidor): antes de subir nada corre
 # `agente-check.py --revisar` sobre el bloque que compuso. Sin python3 no
@@ -69,8 +75,17 @@ if [[ "${1:-}" == "--bloque" ]]; then
   exit 0
 fi
 
+REEMPLAZAR=0
+if [[ "${1:-}" == "--reemplazar" ]]; then
+  REEMPLAZAR=1
+  shift
+fi
+
 HOST="${1:-}"
-[[ -n "$HOST" ]] || { echo 'uso: ./instalar-soul.sh <host-ssh> [slug] | --bloque' >&2; exit 1; }
+[[ -n "$HOST" ]] || {
+  echo 'uso: ./instalar-soul.sh [--reemplazar] <host-ssh> [slug] | --bloque' >&2
+  exit 1
+}
 # El directorio en la VPS es /opt/agentes/<slug>, y por defecto el slug es el
 # mismo nombre del host ssh (asi lo usan observabilidad.sh y resetear-agente.sh).
 # Cuando no coinciden —`desplegar-remoto.sh` entra por usuario@ip— va como
@@ -109,9 +124,41 @@ ssh "$HOST" "[ -d $DIR/data ]" || {
 # quedaran dos bloques, la regla de precedencia haria ganar al de mas abajo, o
 # sea al viejo.
 puesto="$(ssh "$HOST" "grep -o '<!-- kit:base[^>]*-->' $DIR/data/SOUL.md 2>/dev/null | head -1" || true)"
+
+if [[ $REEMPLAZAR -eq 1 ]]; then
+  [[ -n "$puesto" ]] || {
+    echo "$HOST no tiene ningun bloque kit:base: esto es una instalacion, no un" >&2
+    echo "reemplazo. Corré el mismo comando sin --reemplazar." >&2
+    exit 1
+  }
+  viejo="$(mktemp)"; nuevo="$(mktemp)"
+  trap 'rm -f "$tmp" "$viejo" "$nuevo"' EXIT
+  ssh "$HOST" "cat $DIR/data/SOUL.md" > "$viejo"
+  echo "→ $HOST tiene $puesto · este kit instala $VERSION"
+  # El SOUL viejo queda en tu maquina antes de tocar nada: si algo sale mal, el
+  # original esta acá y no hay que ir a buscarlo al servidor.
+  mkdir -p "$KIT/respaldos-soul"
+  respaldo="$KIT/respaldos-soul/$SLUG-$(date +%Y%m%d-%H%M%S).md"
+  cp "$viejo" "$respaldo"
+  echo "   copia del SOUL viejo: $respaldo"
+  if ! python3 "$KIT/tools/reemplazar-bloque.py" "$viejo" "$tmp" > "$nuevo"; then
+    echo >&2
+    echo "No toqué nada en $HOST." >&2
+    exit 1
+  fi
+  ssh "$HOST" "cat > /tmp/soul-nuevo.md" < "$nuevo"
+  ssh "$HOST" "cd $DIR/data && mv /tmp/soul-nuevo.md SOUL.md && chown 10000:10000 SOUL.md"
+  echo "→ bloque reemplazado por $VERSION en $HOST"
+  ssh "$HOST" "wc -c < $DIR/data/SOUL.md | sed 's/^/   /' ; echo '   bytes'"
+  echo
+  echo "Revisá que el agente siga sabiendo quién es: el bloque de identidad y el"
+  echo "del bautizo quedaron afuera del reemplazo, pero mirarlo cuesta un minuto."
+  exit 0
+fi
+
 if [[ -n "$puesto" ]]; then
   echo "$HOST ya tiene el bloque base: $puesto"
-  echo "Este kit instala $VERSION. Para actualizarlo hay que sacar el viejo primero."
+  echo "Este kit instala $VERSION. Para actualizarlo: ./instalar-soul.sh --reemplazar $HOST${2:+ $2}"
   exit 0
 fi
 

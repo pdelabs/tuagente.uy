@@ -67,6 +67,14 @@ done
 
 # El dueño, DESPUES de arrancar: recién ahí existen los archivos que Hermes
 # recrea. `hermes` es uid 10000 en la imagen.
+# Las carpetas del workspace se BORRARON arriba (van adentro de `workspace`) y
+# Hermes no las recrea: son nuestras, no suyas. Sin ellas el agente guarda un
+# entregable y falla, y `agente-check.py` marca "faltan carpetas". Se recrean
+# antes del chown para que salgan con el dueño correcto de una.
+echo "→ recreando el workspace"
+ssh "$HOST" "cd $DIR/data && mkdir -p \
+  workspace/entregables workspace/artifacts workspace/entrada workspace/interno"
+
 echo "→ devolviendo permisos al agente"
 ssh "$HOST" "cd $DIR/data && chown -R 10000:10000 \
   kanban.db kanban.db-shm kanban.db-wal state.db response_store.db \

@@ -4,6 +4,7 @@
     python3 tools/perilla-skills.py --imagen nousresearch/hermes-agent:v2026.7.30
     python3 tools/perilla-skills.py --agente /ruta/al/agente/data
     python3 tools/perilla-skills.py --imagen <tag> --aplicar compose/config.base.yaml
+    python3 tools/perilla-skills.py --toolsets --imagen <tag>   ← la otra lista generada
 
 POR QUE GENERADO Y NO A MANO: son ~70 nombres y cambian con cada version del
 motor. Una lista escrita a mano queda vieja en el primer bump y nadie se
@@ -28,10 +29,13 @@ Las que quedan prendidas estan en compose/skills-permitidas.txt.
 motor prendida fuera de esa lista.
 """
 import argparse
+import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PERMITIDAS_TXT = os.path.join(KIT, "compose", "skills-permitidas.txt")
@@ -90,6 +94,86 @@ def desde_imagen(tag):
             "¿está bajada? `docker pull " + tag + "`"
         )
     return {l.strip() for l in salida.stdout.splitlines() if l.strip()}
+
+
+# Los toolsets que NO queremos en la plataforma del portal, con el porqué. Se
+# sacan por INCLUSIÓN (no listándolos) y no con `agent.disabled_toolsets`,
+# porque esa clave resta el catálogo estático del toolset y el de `browser`
+# incluye `web_search` — apagarlo por ahí se lleva puesta la búsqueda web.
+TOOLSETS_FUERA = {
+    "browser": "9 tools que en producción devuelven capturas en blanco",
+}
+
+
+def toolsets_de_la_plataforma(tag):
+    """Los toolsets del api_server, resueltos POR EL MOTOR y sin los que sacamos.
+
+    No se arma por intersección de catálogos —probé y sale mal: mete `cronjob`,
+    `delegation` y `homeassistant`, que el bundle lista pero nosotros apagamos, y
+    pierde `kanban`, que no está en el bundle y entra por el passthrough
+    explícito—. Se le pide al motor que resuelva la plataforma con la forma
+    HISTÓRICA (`hermes-api-server` + `kanban`) y a eso se le restan los toolsets
+    que no queremos. Es la misma resolución que corre en producción.
+    """
+    referencia = (
+        "toolsets:\n  - kanban\n"
+        "agent:\n  disabled_toolsets:\n    - tts\n    - delegation\n    - cronjob\n"
+        "platform_toolsets:\n  api_server:\n    - hermes-api-server\n    - kanban\n"
+    )
+    codigo = (
+        "import json,sys,os; sys.path.insert(0,'/opt/hermes');"
+        "from hermes_cli.config import load_config;"
+        "from hermes_cli.tools_config import _get_platform_tools;"
+        "print(json.dumps(sorted(_get_platform_tools(load_config(), 'api_server'))))"
+    )
+    tmp = tempfile.mkdtemp()
+    try:
+        with open(os.path.join(tmp, "config.yaml"), "w", encoding="utf-8") as fh:
+            fh.write(referencia)
+        cmd = ["docker", "run", "--rm", "--network", "none",
+               "-v", f"{tmp}:/opt/data", "-e", "HERMES_HOME=/opt/data", "--user", "root",
+               "--entrypoint", "/opt/hermes/.venv/bin/python", tag, "-c", codigo]
+        try:
+            salida = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        except FileNotFoundError:
+            raise SystemExit("no encontré docker, y esta lista sale de la imagen del motor")
+        if salida.returncode != 0:
+            raise SystemExit(f"docker no pudo leer {tag}:\n{salida.stderr.strip()[:400]}")
+        return json.loads(salida.stdout.strip().splitlines()[-1])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+PLATAFORMAS = ("api_server", "telegram", "cron")
+
+
+def bloque_toolsets(nombres, tag):
+    """El `platform_toolsets` de las TRES plataformas, listo para pegar.
+
+    Las tres llevan la misma lista: es el mismo agente atendiendo el portal,
+    Telegram y los flujos, y un browser que devuelve páginas en blanco falla
+    igual en los tres.
+    """
+    quedan = [n for n in nombres if n not in TOOLSETS_FUERA]
+    fuera = [n for n in nombres if n in TOOLSETS_FUERA]
+    lineas = [
+        "# GENERADO: la expansión del bundle del portal menos lo que sacamos, y la",
+        "# misma lista para las tres plataformas.",
+        f"#   fuente: imagen {tag}",
+        "#   afuera: " + (", ".join(f"{n} ({TOOLSETS_FUERA[n]})" for n in fuera) or "nada"),
+        "#",
+        "# Va la lista expandida y no el nombre del bundle porque sacar un toolset",
+        "# con `agent.disabled_toolsets` resta su catálogo estático, y el de",
+        "# `browser` incluye `web_search`: se llevaría puesta la búsqueda web.",
+        "# Y va toolset por toolset porque una lista que solo nombra bundles no",
+        "# menciona ningún toolset configurable: el motor no entra en modo",
+        "# explícito y cae al default, o sea todo prendido.",
+        "platform_toolsets:",
+    ]
+    for plat in PLATAFORMAS:
+        lineas.append(f"  {plat}:")
+        lineas += [f"    - {n}" for n in quedan]
+    return "\n".join(lineas)
 
 
 def desde_agente(data):
@@ -242,7 +326,16 @@ def main():
         "--aplicar", metavar="CONFIG",
         help="escribir el bloque dentro de ese config.yaml (en vez de imprimirlo)",
     )
+    ap.add_argument(
+        "--toolsets", action="store_true",
+        help="generar el platform_toolsets del api_server en vez de la lista de skills",
+    )
     args = ap.parse_args()
+
+    if args.toolsets:
+        tag = args.imagen or "nousresearch/hermes-agent:v2026.7.30"
+        print(bloque_toolsets(toolsets_de_la_plataforma(tag), tag))
+        return 0
 
     if args.agente:
         nombres = desde_agente(os.path.abspath(args.agente))

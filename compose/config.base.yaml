@@ -35,6 +35,9 @@ agent:
   disabled_toolsets:
     - tts
     - delegation
+    # OJO: el browser NO se apaga desde aca. Va por `platform_toolsets`, mas
+    # abajo, y el porque esta explicado ahi: ponerlo en esta lista se lleva
+    # puesto `web_search`.
     # cronjob apagado A PROPOSITO, y no para ahorrar contexto: es lo que
     # empuja al agente a la skill `flujo` en vez de improvisar un cron suelto.
     # Verificado el 8/8: un cliente pidio "quiero saber regularmente sobre la
@@ -48,13 +51,99 @@ agent:
     # encarga el SOUL. Es sacar la puerta facil que daba al lugar equivocado.
     - cronjob
 
+# EL BROWSER SE SACA POR INCLUSION, NO POR `disabled_toolsets`. La diferencia no
+# es de estilo: `disabled_toolsets` resta el CATALOGO ESTATICO del toolset al
+# final de todo (model_tools.py:410-441, "even if a composite toolset is enabled,
+# any tools belonging to a disabled toolset are strictly stripped out"), y el
+# catalogo de `browser` incluye `web_search` (toolsets.py:199-207). O sea que
+# apagar browser por ahi tambien apaga la busqueda web, aunque `web_search` sea
+# del toolset `web`. Medido con el interprete de la imagen, como llama el motor
+# de verdad (agent/agent_init.py:1390, con enabled Y disabled), las tres filas en
+# UNA sola corrida y con una credencial de busqueda presente para que
+# `check_web_api_key` no tape el resultado:
+#
+#   bundle (browser adentro)             → 36 tools · browser 9 · web_search SI
+#   bundle + disabled_toolsets:[browser] → 26 tools · browser 0 · web_search NO
+#   lista explicita sin browser          → 27 tools · browser 0 · web_search SI
+#
+# Por nombre, que es lo que no se desarma: (bundle − explicita) = las 9
+# browser_*, y (explicita − bundle) = nada; (explicita − disabled) = web_search.
+#
+# Queremos `web_search`: el cliente hace monitoreo de competencia y es probable
+# que suba una key de busqueda.
+#
+# LAS TRES PLATAFORMAS LLEVAN LA MISMA LISTA. El mismo agente atiende el portal,
+# Telegram y los flujos del cron: un browser que devuelve paginas en blanco falla
+# igual en los tres, y en el cron encima sin nadie mirando. Ademas las
+# declaraciones viejas de telegram y cron NO HACIAN NADA: una lista que solo
+# nombra bundles y `kanban` no menciona ningun toolset configurable, asi que el
+# motor no entra en modo explicito y cae al default —todo prendido, con browser,
+# `clarify` y `computer_use`—. Verificado: sacar esas claves daba exactamente el
+# mismo resultado que dejarlas.
+#
+# Diferencias deliberadas contra ese default: se van tambien `clarify`
+# (preguntar por una UI — el portal nunca lo tuvo, el cron lo apaga solo, y el
+# agente pregunta escribiendo) y `computer_use` (manejar una computadora, cuya
+# skill ya apagamos).
+#
+# ESTA LISTA SE GENERA, no se escribe de memoria — al subir de tag el motor
+# puede sumar o renombrar toolsets y esto queda viejo en silencio:
+#   python3 tools/perilla-skills.py --toolsets --imagen <tag>
+# `agente-check.py` compara las tres contra esta y falla si difieren.
 platform_toolsets:
   api_server:
-    - hermes-api-server
+    - bfl
+    - code_execution
+    - file
+    - image_gen
     - kanban
+    - memory
+    - session_search
+    - skills
+    - terminal
+    - todo
+    - vision
+    - web
   telegram:
-    - hermes-telegram
+    - bfl
+    - code_execution
+    - file
+    - image_gen
     - kanban
+    - memory
+    - session_search
+    - skills
+    - terminal
+    - todo
+    - vision
+    - web
+  cron:
+    - bfl
+    - code_execution
+    - file
+    - image_gen
+    - kanban
+    - memory
+    - session_search
+    - skills
+    - terminal
+    - todo
+    - vision
+    - web
+
+# EL VERIFICADOR DE MUTACIONES, APAGADO. Cuando un write_file o un patch falla
+# y no se repite bien, el motor le PEGA a la respuesta del agente una linea como
+#   "⚠️ File-mutation verifier: 1 file(s) were NOT modified this turn…
+#    /tmp/design-kit-instagram.md — Write denied… outside HERMES_WRITE_SAFE_ROOT"
+# Eso lo lee el cliente en su portal: vocabulario de maquina, una ruta del host y
+# el nombre de una variable de entorno. Es exactamente lo que el SOUL le prohibe
+# al agente ("hablas del trabajo, no de la maquina") y que el motor hace igual,
+# por arriba, sin que el agente pueda evitarlo. Visto con Mr.Wobble el 12/8.
+# Que el intento fallara esta bien y hay que arreglarlo; contarselo asi al
+# cliente, no. Perilla: hermes_cli/config_defaults.py:1051, leida en
+# run_agent.py:3300.
+display:
+  file_mutation_verifier: false
 
 # EL PREAMBULO DEL PORTAL. Sin esto, el motor le mete al agente —en cada sesion
 # del api_server, 200 lineas DESPUES del SOUL— un parrafo que dice "the
@@ -96,9 +185,6 @@ platforms:
       chat_id: 'COMPLETAR_CHAT_ID'
       name: COMPLETAR_NOMBRE
       user_id: 'COMPLETAR_CHAT_ID'
-  cron:
-    - hermes-cron
-    - kanban
 
 # <<< generado por tools/perilla-skills.py — no editar a mano
 #   fuente: imagen nousresearch/hermes-agent:v2026.7.30

@@ -12,9 +12,22 @@ con fecha vieja no es un problema; una fila que dice algo que ya no es cierto s�
 
 | Agente | Host | SOUL | Motor | Último check |
 |---|---|---|---|---|
-| pdelabs (cliente 0, fixture) | local — `~/Desktop/Luis/Projects/agente-pdelabs` | sin marcador (pre-v1) | `v2026.7.30` | 2026-08-12 — 5 fallas |
-| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | v1 (marcador sin versión, 11/8/2026) | `v2026.7.30` (por el compose remoto) | TODO — nunca se corrió |
+| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v2** (leído del SOUL real el 12/8; el kit ya va por v3) | `v2026.7.30` (por el compose remoto) | TODO — nunca se corrió |
 | East Comunicación | `east` → `/opt/agentes/east` | TODO | TODO | TODO |
+
+**Bajas.** Un agente dado de baja sale de la tabla —la tabla dice qué corre
+dónde— pero no del registro:
+
+| Agente | Baja | Qué queda |
+|---|---|---|
+| La Mano (pdelabs, cliente 0) | 2026-08-12, decisión de Luis | respaldo en `~/Desktop/Luis/Projects/_respaldo-lamano/lamano-final-20260812.tgz`; contenedores eliminados y repo borrado |
+
+La Mano fue el cliente 0 y el fixture de pruebas de todo el kit: casi toda la
+evidencia de `notas/perillas-motor.md` y de `notas/perillas-aplicadas.md` está
+medida sobre ella, y esas notas se quedan como están —son el registro de lo que
+se midió, no el estado de la flota—. Lo que ya no hay es un agente local contra
+el cual correr `agente-check.py`: el fixture ahora sale de desempaquetar ese
+respaldo, o de un agente nuevo hecho con `nuevo-agente.sh`.
 
 ## Qué quiere decir cada columna
 
@@ -43,25 +56,17 @@ python3 tools/agente-check.py <ruta>/data
 
 ## Estado al 2026-08-12
 
-**pdelabs** — el fixture local. Cinco fallas, todas conocidas: dos del SOUL (lo
-compuso `nuevo-agente.sh` antes de que existieran los marcadores, y arrastra los
-huecos `<ASÍ>` de `00-identidad.md` — entre ellos el de la REGLA DURA, que quedó
-literalmente como "JAMÁS `<la acción sensible: …>`") y tres de las perillas de
-C1, que ningún agente tiene aplicadas todavía. Sirve igual como fixture; para
-producción no saldría.
+**Mr.Wobble** — desplegado y en uso. Leyendo su SOUL real el 12/8: tiene el
+bloque **v2** (15.648 bytes) y el `portal:identidad` del bautizo, con el nombre
+que le puso su cliente. Le falta subir a **v3** —el bloque nuevo trae la línea
+que evita el `kanban_show` sin id que hoy se come el primer turno de cada
+conversación— con `tools/instalar-soul.sh --reemplazar tuagente`, y le falta la
+identidad artesanal (`00-identidad.md`), que necesita datos del cliente.
 
-Cuando le toque la migración de perillas, además de lo genérico va a llevar
-**cuatro skills prendidas por decisión**: `humanizer`, `blogwatcher`,
-`youtube-content` y `gif-search` — hace contenido y sigue a la competencia. Van
-declaradas en su `config.yaml` con `# kit:excepcion <skill> — <motivo>`, que es
-lo que hace que `agente-check.py` las acepte en vez de tratarlas como deriva.
-El detalle está en `notas/perillas-aplicadas.md`.
-
-**Mr.Wobble** — se le instaló el bloque base el 11/8/2026 (commit `4fd95ef`),
-cuando el marcador todavía no llevaba versión: cuenta como v1 y le falta el
-bloque de precedencia y la regla dura ya genérica. **Le falta la identidad**
-(`00-identidad.md`), que es la parte artesanal y necesita datos del cliente. Está
-en la lista de Luis, y requiere ssh.
+De su despliegue salieron además tres arreglos que ya están en el kit: el
+verificador de mutaciones apagado, el browser apagado, y el `chown` de `data/`
+en `desplegar-remoto.sh` — sin ese último el agente arrancó **sin una sola
+skill** (140 "Permission denied" al sembrar, índice vacío, ningún error visible).
 
 **East Comunicación** — primera alta con `desplegar-remoto.sh` (ver
 `notas/modelos-auxiliares.md`). Del repo no se puede deducir en qué quedó: si se
@@ -72,7 +77,7 @@ instalaba.
 
 La tanda C1 dejó en el kit las skills del motor apagadas, el preámbulo del
 portal reemplazado y las skills del kit montadas `:ro`. **Eso viaja solo a los
-agentes nuevos**: los tres de la tabla son anteriores y siguen con las 70 skills
+agentes nuevos**: los dos de la tabla son anteriores y siguen con las 70 skills
 del motor prendidas. `agente-check.py` lo reporta como falla en cada uno hasta
 que se aplique. El runbook (es un redeploy, y el `config.yaml` está `:ro`) está
 en `notas/perillas-aplicadas.md`.

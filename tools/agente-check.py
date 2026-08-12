@@ -239,6 +239,23 @@ def lista_yaml(texto, clave, subclave):
     return items
 
 
+def valor_yaml(texto, clave, subclave):
+    """El valor escalar de `clave: subclave:`, o '' si no está en ESE bloque.
+
+    Hermano de `lista_yaml`, con la misma cautela: lo que va dentro de una
+    línea se matchea con [ \\t], y la búsqueda de la subclave se limita al
+    bloque de la clave para que una coincidencia de otra sección no cuente.
+    """
+    m = re.search(rf"^{re.escape(clave)}:[ \t]*$", texto, re.M)
+    if not m:
+        return ""
+    resto = texto[m.end():]
+    fin = re.search(r"^\S", resto, re.M)
+    bloque = resto[: fin.start()] if fin else resto
+    m2 = re.search(rf"^[ \t]+{re.escape(subclave)}:[ \t]*(.*)$", bloque, re.M)
+    return m2.group(1).strip().strip("\"'") if m2 else ""
+
+
 def skills_del_motor(data):
     """Las skills que el motor sembró en este agente, según su manifiesto.
 
@@ -879,9 +896,94 @@ def main():
             )
         return "el preámbulo del portal es el nuestro"
 
+    def _verificador_de_mutaciones():
+        """El pie de página que el motor le agrega a la respuesta del agente.
+
+        Cuando un write falla, el motor pega al final de lo que el cliente lee
+        una línea con la ruta del host y el nombre de una variable de entorno.
+        Es la regla del SOUL —hablás del trabajo, no de la máquina— rota por
+        arriba, donde el agente no puede hacer nada.
+        """
+        # Estricto: la clave tiene que estar DENTRO del bloque `display:`. El
+        # regex laxo de antes (`^display:` … `file_mutation_verifier`) daba por
+        # buena una clave que cayera en otra sección más abajo.
+        valor = valor_yaml(conf(data), "display", "file_mutation_verifier")
+        if valor != "false":
+            raise AssertionError(
+                "falta `display.file_mutation_verifier: false`"
+                + (f" (dice {valor!r})" if valor else "")
+                + " — sin eso el motor le pega a la respuesta del agente un "
+                "'⚠️ File-mutation verifier…' con rutas del host, y eso lo lee el "
+                "cliente en su portal"
+            )
+        return "el motor no le agrega su pie de página al agente"
+
+    def _browser_afuera():
+        """El browser afuera, y `web_search` adentro — que son la misma decisión.
+
+        `browser` NO se saca con `agent.disabled_toolsets`: esa clave resta el
+        catálogo estático del toolset al final de todo
+        (`model_tools.py:410-441`), y el catálogo de `browser` incluye
+        `web_search` (`toolsets.py:199-207`). Medido con el intérprete de la
+        imagen, llamando como llama el motor (`agent_init.py:1390`, con enabled
+        Y disabled): por esa vía quedan 26 tools y `web_search` NO está. Se saca
+        por inclusión —listando los toolsets uno por uno en `platform_toolsets`,
+        sin el bundle y sin browser— y ahí son 27 con `web_search` adentro.
+
+        Se miran las TRES plataformas. Telegram y cron traían listas que no
+        hacían nada —solo nombraban bundles, y sin ningún toolset configurable
+        el motor cae al default— y venían corriendo con las 9 browser_* puestas.
+        """
+        texto = conf(data)
+        if "browser" in lista_yaml(texto, "agent", "disabled_toolsets"):
+            raise AssertionError(
+                "`browser` está en agent.disabled_toolsets, y por ahí se lleva "
+                "puesto `web_search`: esa clave resta el catálogo del toolset, y "
+                "el de browser incluye web_search. Sacalo de ahí y sacá `browser` "
+                "de las listas de platform_toolsets"
+            )
+        # Las TRES plataformas, no solo el portal: el mismo agente atiende
+        # Telegram y corre los flujos, donde una página en blanco falla igual y
+        # encima sin nadie mirando.
+        canon = lista_yaml(conf_del_kit(), "platform_toolsets", "api_server")
+        for plat in ("api_server", "telegram", "cron"):
+            lista = lista_yaml(texto, "platform_toolsets", plat)
+            if not lista:
+                raise AssertionError(
+                    f"platform_toolsets.{plat} vacío o ausente: esa plataforma cae "
+                    "al default del motor, que trae las 12 browser_*"
+                )
+            bundles = [t for t in lista if t.startswith("hermes-")]
+            if bundles:
+                raise AssertionError(
+                    f"platform_toolsets.{plat} nombra el bundle {bundles[0]}, que "
+                    "expande las 12 browser_* — y una lista de puros bundles ni "
+                    "siquiera entra en modo explícito. Va toolset por toolset: "
+                    "python3 tools/perilla-skills.py --toolsets --imagen <tag>"
+                )
+            if "browser" in lista:
+                raise AssertionError(f"`browser` está listado en platform_toolsets.{plat}")
+            if "web" not in lista:
+                raise AssertionError(
+                    f"falta el toolset `web` en platform_toolsets.{plat}: sin él no "
+                    "hay `web_search` ni `web_extract` ni con credenciales"
+                )
+            if canon and sorted(canon) != sorted(lista):
+                faltan = sorted(set(canon) - set(lista))
+                sobran = sorted(set(lista) - set(canon))
+                raise AssertionError(
+                    f"platform_toolsets.{plat} no coincide con la lista del kit"
+                    + (f" · le faltan: {', '.join(faltan)}" if faltan else "")
+                    + (f" · tiene de más: {', '.join(sobran)}" if sobran else "")
+                    + " — regenerala con perilla-skills.py --toolsets"
+                )
+        return f"{len(canon or [])} toolsets en las 3 plataformas, sin browser y con web"
+
     check("config: api_server", _api)
     check("config: modelo por defecto", _modelo)
     check("config: kanban nativo", _kanban)
+    check("config: verificador de mutaciones", _verificador_de_mutaciones)
+    check("config: browser afuera, web adentro", _browser_afuera)
     check("config: skills del motor apagadas", _skills_del_motor_apagadas)
     check("config: preámbulo del portal", _hint_del_portal)
     check("skills del kit: montaje externo", _skills_del_kit_externas)

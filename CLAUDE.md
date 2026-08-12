@@ -4,13 +4,18 @@ Este repo es **el producto que se instala en el agente de cada cliente** de
 tuagente.uy: el adapter del portal, las tres skills del contrato, los bloques de
 SOUL y el chequeo de conformidad. Leé `README.md` para el uso.
 
-## Los tres repos y qué hace cada uno
+## Los dos repos y qué hace cada uno
 
 | Repo | Qué es |
 |---|---|
 | `hermes-kit` (este) | lo que se despliega en cada cliente |
 | `tuagente.uy` | la landing pública + el portal (`app/app/`) + `docs/` |
-| `agente-pdelabs` | el agente de pdelabs — **cliente 0**, y el fixture de pruebas |
+
+Hubo un tercero, `agente-pdelabs` —La Mano, el cliente 0 y el fixture de pruebas
+de casi todo lo que está medido en `notas/`—, **dado de baja el 12/8/2026**: el
+respaldo quedó en `~/Desktop/Luis/Projects/_respaldo-lamano/`. Para probar contra
+un agente de verdad hay que desempaquetarlo o crear uno con `nuevo-agente.sh`.
+Los agentes vivos están en `flota.md`.
 
 **El kit es la fuente de la verdad.** Si arreglás el adapter o una skill mientras
 depurás dentro de un agente, ese cambio hay que traerlo acá: `install.sh --diff`
@@ -108,7 +113,11 @@ el archivo entero, el bloque `kit:base` presente y balanceado, qué versión tie
 puesta contra la del kit, y que haya identidad. De paso avisa si el `soul/VERSION`
 del kit no tiene forma de versión.
 
-Y las tres perillas de la tanda C1: que **ninguna skill del motor** quede
+Y las perillas: que el motor no le pegue su pie de página a la respuesta
+(`display.file_mutation_verifier`), que el browser quede afuera **por la lista
+de `platform_toolsets`** —sacarlo con `disabled_toolsets` se lleva puesto
+`web_search`, que está en el catálogo de `browser`—, que **ninguna skill del
+motor** quede
 prendida fuera de las cuatro de documentos o de lo declarado para ese cliente
 (compara contra el
 `.bundled_manifest` que escribe el motor, así que un bump que traiga skills

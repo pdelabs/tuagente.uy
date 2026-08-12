@@ -6,7 +6,7 @@ romper. Se arma pegando estos bloques en orden y reemplazando lo que está
 
 ```
 00-identidad.md      ← del cliente, se escribe cada vez, y va AFUERA del bloque
-<!-- kit:base v2 -->
+<!-- kit:base v3 -->
 01-aprobaciones.md   ← la regla dura, ya genérica; adentro tiene un comentario
                        para sumarle lo sensible de esta empresa
 02-entrega.md        ← genérico, va tal cual
@@ -22,7 +22,7 @@ marcadores.
 
 ## Los marcadores y la versión
 
-Los bloques genéricos van envueltos entre `<!-- kit:base v2 -->` y
+Los bloques genéricos van envueltos entre `<!-- kit:base v3 -->` y
 `<!-- /kit:base -->`. Los dos marcadores hacen tres cosas:
 
 - **Dicen qué reglas tiene puesto un agente** sin leerle el prompt entero: la
@@ -33,11 +33,18 @@ Los bloques genéricos van envueltos entre `<!-- kit:base v2 -->` y
 - **Hacen idempotente la instalación**: `instalar-soul.sh` no toca un agente que
   ya tiene bloque, sea cual sea su versión, y dice cuál tiene.
 
-**Ojo al actualizar: reemplazar el bloque se lleva puesto lo que el cliente tenga
-adentro.** Las acciones sensibles propias de cada empresa viven en
-`01-aprobaciones.md`, o sea DENTRO de los marcadores. Quien suba a una versión
-nueva tiene que sacarlas del bloque viejo antes y volver a ponerlas después. Hoy
-es a mano y hay que acordarse; que lo resuelva una herramienta viene después.
+**Actualizar el bloque de un agente que ya lo tiene:**
+
+```bash
+tools/instalar-soul.sh --reemplazar <host> [slug]
+```
+
+Saca el bloque viejo entre marcadores y pone el nuevo **conservando todo lo de
+afuera**: la identidad y el `portal:identidad` que escribió el bautizo. Antes de
+subir nada deja una copia del SOUL viejo en tu máquina, y **se niega** si adentro
+del bloque viejo hay texto puesto para ese cliente —el comentario `por-cliente`
+de `01-aprobaciones.md`, donde van sus acciones sensibles— para que no se pierda
+sin que nadie se entere: lo imprime y te manda a copiarlo primero.
 
 La versión vive en `soul/VERSION`: una línea, con forma `vN`. De ahí la leen
 `nuevo-agente.sh`, `tools/instalar-soul.sh` y `tools/agente-check.py`, y si el

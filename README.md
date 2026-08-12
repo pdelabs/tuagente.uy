@@ -16,6 +16,7 @@ tools/agente-check.py       revisa el data/ de un agente sin prenderlo (offline)
 tools/portal-check.py       verifica que un agente cumpla el contrato del portal
 tools/instalar-soul.sh      pone el bloque de SOUL en un agente que no lo tiene
 tools/perilla-skills.py     genera la lista de skills del motor a apagar
+tools/reemplazar-bloque.py  cambia el bloque kit:base de un SOUL sin tocar el resto
 flota.md                    qué agente corre dónde, con qué SOUL y qué motor
 ```
 
