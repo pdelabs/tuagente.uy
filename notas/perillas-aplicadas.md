@@ -340,6 +340,9 @@ AG=/ruta/al/agente          # el repo del agente; adentro están data/ y kit-ski
 #    Escribe atómico (archivo al lado + os.replace) y deja copia del config
 #    anterior en respaldos-config/, así que no hace falta respaldarlo a mano.
 #    Se niega si el YAML no parsea o si hay una clave de primer nivel repetida.
+#    OJO: esa guarda necesita PyYAML EN TU MÁQUINA, que es justo desde donde se
+#    migra. Si `python3 -c "import yaml"` falla, ponelo (pip install pyyaml) o
+#    corré el comando desde la imagen del motor, que ya lo trae.
 python3 tools/perilla-skills.py --agente $AG/data --aplicar $AG/data/config.yaml
 
 # 3b. Las excepciones de ESE cliente, si tiene (ver "Prender una skill para un
@@ -358,6 +361,9 @@ curl -s -H "Authorization: Bearer $API_SERVER_KEY" http://127.0.0.1:8642/v1/skil
 #      (más las excepciones declaradas de ese cliente, si tiene)
 python3 tools/portal-check.py --key $API_SERVER_KEY
 ```
+
+`respaldos-config/` se llena solo y no lo mira nadie: son copias del config de
+clientes, así que revisalo de vez en cuando y borrá lo viejo.
 
 **Qué fallas quedan después del paso 4, y por qué.** Las tres perillas quedan en
 verde, pero un agente anterior a la Fase B arrastra **dos fallas del SOUL** que

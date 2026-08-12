@@ -199,7 +199,7 @@ def desde_agente(data):
         return {l.split(":", 1)[0].strip() for l in fh if l.strip()}
 
 
-def bloque(nombres, fuente, permitidas_set):
+def bloque(nombres, fuente, permitidas_set):  # noqa: ARG001 — `fuente` se informa por stdout
     """El bloque `skills:` entero, listo para pegar en config.yaml.
 
     Sale la clave COMPLETA —`disabled` y `external_dirs`— a propósito: si el
@@ -212,7 +212,7 @@ def bloque(nombres, fuente, permitidas_set):
 
     lineas = [
         MARCA_INICIO,
-        f"#   fuente: {fuente}",
+        "#   fuente: las skills que el motor trae instaladas",
         f"#   apagadas: {len(apagadas)} · prendidas: {', '.join(quedan) or 'ninguna'}",
         "#",
         "# Regenerar al subir de tag el motor:",
@@ -386,15 +386,33 @@ def guardar(ruta, texto):
         agente = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(ruta))))
         destino = os.path.join(KIT, "respaldos-config")
         os.makedirs(destino, exist_ok=True)
-        respaldo = os.path.join(
-            destino, f"{agente}-{datetime.datetime.now():%Y%m%d-%H%M%S}.yaml")
+        # Con segundos alcanzaba para pisarse a si mismo: dos corridas seguidas
+        # dejaban UN archivo, y el que quedaba era el segundo estado — o sea que
+        # el original se perdia. Milisegundos, y si aun asi choca, un sufijo.
+        sello = f"{datetime.datetime.now():%Y%m%d-%H%M%S-%f}"[:-3]
+        respaldo = os.path.join(destino, f"{agente}-{sello}.yaml")
+        n = 2
+        while os.path.exists(respaldo):
+            respaldo = os.path.join(destino, f"{agente}-{sello}-{n}.yaml")
+            n += 1
         shutil.copy2(ruta, respaldo)
     tmp = ruta + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(texto)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(tmp, ruta)
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(texto)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, ruta)
+    finally:
+        # Si algo se rompio entre la escritura y el replace, el .tmp no queda
+        # tirado en el volumen del agente para que alguien lo encuentre despues
+        # y no sepa que es. (Un kill -9 igual lo deja: eso no hay try que lo
+        # atrape, y la corrida siguiente lo pisa.)
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
     return respaldo
 
 
@@ -574,6 +592,10 @@ def main():
         raise SystemExit(f"no encontré ninguna skill del motor en {fuente}")
     texto = bloque(nombres, fuente, permitidas())
     if args.aplicar:
+        # La procedencia se informa acá y no en el archivo: escrita adentro,
+        # cambiaba segun si corriste --imagen o --agente y el bloque figuraba
+        # como "reemplazado" con la lista idéntica.
+        print(f"lista de skills leída de: {fuente}")
         aplicar(texto, args.aplicar)
     else:
         print(texto)

@@ -239,6 +239,62 @@ def lista_yaml(texto, clave, subclave):
     return items
 
 
+def hay_pyyaml():
+    """PyYAML no es requisito de este script, pero si está lo usamos."""
+    try:
+        import yaml  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def config_parseado(data):
+    """El config.yaml como dict, o None si no se puede (sin PyYAML o roto).
+
+    Devolver None en vez de levantar es a propósito: quien no pueda parsear cae
+    al camino de texto —acotado, ver `valor_yaml`/`lista_yaml`— y sigue dando
+    señal. De que el archivo NO parsea se encarga un chequeo propio, para que
+    salga UNA falla clara y no siete.
+    """
+    if not hay_pyyaml():
+        return None
+    import yaml
+    try:
+        d = yaml.safe_load(conf(data))
+    except Exception:
+        return None
+    return d if isinstance(d, dict) else None
+
+
+def bloque_de(texto, clave):
+    """El cuerpo del bloque `clave:`, hasta la próxima clave de primer nivel."""
+    m = re.search(rf"^{re.escape(clave)}:[ \t]*$", texto, re.M)
+    if not m:
+        return ""
+    resto = texto[m.end():]
+    fin = re.search(r"^\S", resto, re.M)
+    return resto[: fin.start()] if fin else resto
+
+
+def lista_top(texto, clave):
+    """Los items de una lista de PRIMER nivel (`toolsets:`), sin PyYAML."""
+    m = re.search(rf"^{re.escape(clave)}:[ \t]*(.*)$", texto, re.M)
+    if not m:
+        return []
+    if m.group(1).strip().startswith("["):
+        dentro = m.group(1).strip().strip("[]")
+        return [x.strip().strip("\"'") for x in dentro.split(",") if x.strip()]
+    items = []
+    for linea in texto[m.end():].splitlines():
+        if not linea.strip() or linea.lstrip().startswith("#"):
+            continue
+        if linea.startswith("- ") or linea.startswith("  - "):
+            items.append(linea.strip()[2:].strip().strip("\"'"))
+        else:
+            break
+    return items
+
+
 def valor_yaml(texto, clave, subclave):
     """El valor escalar de `clave: subclave:`, o '' si no está en ESE bloque.
 
@@ -718,33 +774,92 @@ def main():
     check("kit: soul/VERSION", _kit_version, required=False)
 
     # --- config: los tres olvidos clásicos del alta ---
+    def _yaml():
+        """Que el archivo parsee. Si no, el motor tampoco lo va a poder leer.
+
+        Nada offline agarraba esto: los chequeos son de texto y un config con la
+        indentación cortada los atraviesa entero.
+        """
+        if not hay_pyyaml():
+            return "sin PyYAML no lo puedo verificar (pip install pyyaml)"
+        import yaml
+        try:
+            d = yaml.safe_load(conf(data))
+        except Exception as exc:
+            raise AssertionError(
+                "config.yaml no parsea como YAML: " + " ".join(str(exc).split())[:180]
+            )
+        if not isinstance(d, dict):
+            raise AssertionError("config.yaml no es un mapa de claves")
+        return f"{len(d)} claves de primer nivel"
+
     def _api():
+        """El api_server prendido: sin eso el portal no entra.
+
+        Ojo con el camino de texto: el regex viejo era
+        `api_server:(?:.|\\n)*?enabled:\\s*true`, que cruza el archivo entero y
+        matcheaba el `enabled: true` de `platforms.telegram`. O sea que decía
+        que el agente atendía el portal con el api_server APAGADO.
+        """
+        d = config_parseado(data)
+        if d is not None:
+            bloque = d.get("api_server")
+            if not isinstance(bloque, dict):
+                raise AssertionError("falta el bloque api_server — el portal no puede entrar")
+            if bloque.get("enabled") is not True:
+                raise AssertionError(f"api_server.enabled es {bloque.get('enabled')!r}, no true")
+            return "api_server encendido"
         texto = conf(data)
-        if "api_server:" not in texto:
+        if not re.search(r"^api_server:[ \t]*$", texto, re.M):
             raise AssertionError("falta el bloque api_server — el portal no puede entrar")
-        if not re.search(r"api_server:(?:.|\n)*?enabled:\s*true", texto):
-            raise AssertionError("api_server.enabled no está en true")
-        return "api_server encendido"
+        valor = valor_yaml(texto, "api_server", "enabled")
+        if valor.lower() != "true":
+            raise AssertionError(f"api_server.enabled es {valor or 'nada'!r}, no true")
+        return "api_server encendido (leído sin PyYAML)"
 
     def _modelo():
-        texto = conf(data)
-        m = re.search(r"^model:(?:.|\n)*?^\s+default:\s*(\S+)", texto, re.M)
-        if not m:
+        d = config_parseado(data)
+        if d is not None:
+            valor = (d.get("model") or {}).get("default") if isinstance(d.get("model"), dict) else None
+            if not valor:
+                raise AssertionError(
+                    "model.default vacío — las sesiones que cree el adapter salen con "
+                    "el modelo placeholder y el proveedor las rechaza con 400"
+                )
+            return str(valor)
+        valor = valor_yaml(conf(data), "model", "default")
+        if not valor:
             raise AssertionError(
                 "model.default vacío — las sesiones que cree el adapter salen con "
                 "el modelo placeholder y el proveedor las rechaza con 400"
             )
-        return m.group(1)
+        return valor
 
     def _kanban():
-        """Las tools nativas de kanban necesitan LAS DOS claves. Verificado."""
-        texto = conf(data)
+        """Las tools nativas de kanban necesitan LAS DOS claves. Verificado.
+
+        El regex viejo de la segunda mitad era
+        `^platform_toolsets:(?:.|\\n)*?\\bkanban\\b`: cruzaba el archivo entero,
+        así que la palabra "kanban" en cualquier comentario de más abajo lo daba
+        por bueno.
+        """
+        d = config_parseado(data)
+        if d is not None:
+            en_toolsets = "kanban" in (d.get("toolsets") or [])
+            pt = d.get("platform_toolsets") or {}
+            plataformas = sorted(p for p, lista in pt.items()
+                                 if isinstance(lista, list) and "kanban" in lista)
+        else:
+            texto = conf(data)
+            en_toolsets = "kanban" in lista_top(texto, "toolsets")
+            plataformas = sorted(
+                p for p in ("api_server", "telegram", "cron")
+                if "kanban" in lista_yaml(texto, "platform_toolsets", p)
+            )
         faltan = []
-        if not re.search(r"^toolsets:(?:\s*\n\s+-\s*.*)*?\n\s+-\s*kanban\b", texto, re.M) and not re.search(
-            r"^toolsets:\s*\[[^\]]*\bkanban\b", texto, re.M
-        ):
+        if not en_toolsets:
             faltan.append("toolsets: [kanban] (abre la compuerta del check_fn)")
-        if not re.search(r"^platform_toolsets:(?:.|\n)*?\bkanban\b", texto, re.M):
+        if not plataformas:
             faltan.append("platform_toolsets con kanban por plataforma (pasa el filtro)")
         if faltan:
             raise AssertionError(
@@ -752,7 +867,7 @@ def main():
                 + " — sin las dos el agente no ve ninguna tool de kanban y "
                 "termina improvisando por terminal sobre su propio tablero"
             )
-        return "toolsets + platform_toolsets"
+        return f"toolsets + platform_toolsets ({', '.join(plataformas)})"
 
     def _skills_del_motor_apagadas():
         """Ninguna skill del motor prendida sin permiso.
@@ -771,7 +886,9 @@ def main():
         """
         sembradas = skills_del_motor(data)
         texto = conf(data)
-        apagadas = set(lista_yaml(texto, "skills", "disabled"))
+        d = config_parseado(data)
+        apagadas = set(((d.get("skills") or {}).get("disabled") or [])
+                       if d is not None else lista_yaml(texto, "skills", "disabled"))
         permitidas = skills_permitidas()
         excepciones, mal_escritas = excepciones_declaradas(texto)
         if mal_escritas:
@@ -881,20 +998,40 @@ def main():
         return f"{len(presentes)} skills del kit, montadas afuera de data/"
 
     def _hint_del_portal():
-        """El preámbulo del api_server, reemplazado por el nuestro."""
+        """El preámbulo del api_server, reemplazado por el nuestro.
+
+        El regex viejo (`platform_hints:` … `api_server:` … `replace:`) cruzaba
+        el archivo: un `replace:` de cualquier otra sección lo daba por bueno.
+        """
+        falta = (
+            "sin platform_hints.api_server.replace el motor le dice al agente "
+            "'assume plain text, no markdown formatting' en cada sesión del "
+            "portal — y el portal renderiza markdown completo"
+        )
+        d = config_parseado(data)
+        if d is not None:
+            hints = d.get("platform_hints")
+            if not isinstance(hints, dict) or not hints.get("api_server"):
+                raise AssertionError(falta)
+            api = hints["api_server"]
+            if not isinstance(api, dict) or not str(api.get("replace") or "").strip():
+                raise AssertionError(
+                    "platform_hints.api_server está pero sin `replace` (con `append` "
+                    "el texto del motor se queda igual, al lado del nuestro)"
+                )
+            return "el preámbulo del portal es el nuestro"
         texto = conf(data)
-        if not re.search(r"^platform_hints:", texto, re.M):
+        if not re.search(r"^platform_hints:[ \t]*$", texto, re.M):
+            raise AssertionError(falta)
+        bloque = bloque_de(texto, "platform_hints")
+        if not re.search(r"^  api_server:[ \t]*$", bloque, re.M):
+            raise AssertionError(falta)
+        if not re.search(r"^    replace:", bloque, re.M):
             raise AssertionError(
-                "sin platform_hints.api_server.replace el motor le dice al agente "
-                "'assume plain text, no markdown formatting' en cada sesión del "
-                "portal — y el portal renderiza markdown completo"
+                "platform_hints.api_server está pero sin `replace` (con `append` "
+                "el texto del motor se queda igual, al lado del nuestro)"
             )
-        if not re.search(r"^platform_hints:(?:.|\n)*?api_server:(?:.|\n)*?replace:", texto, re.M):
-            raise AssertionError(
-                "platform_hints está pero sin api_server.replace (con `append` el "
-                "texto del motor se queda igual, al lado del nuestro)"
-            )
-        return "el preámbulo del portal es el nuestro"
+        return "el preámbulo del portal es el nuestro (leído sin PyYAML)"
 
     def _verificador_de_mutaciones():
         """El pie de página que el motor le agrega a la respuesta del agente.
@@ -907,7 +1044,13 @@ def main():
         # Estricto: la clave tiene que estar DENTRO del bloque `display:`. El
         # regex laxo de antes (`^display:` … `file_mutation_verifier`) daba por
         # buena una clave que cayera en otra sección más abajo.
-        valor = valor_yaml(conf(data), "display", "file_mutation_verifier")
+        d = config_parseado(data)
+        if d is not None:
+            puesto = (d.get("display") or {}).get("file_mutation_verifier", None) \
+                if isinstance(d.get("display"), dict) else None
+            valor = "false" if puesto is False else ("" if puesto is None else repr(puesto))
+        else:
+            valor = valor_yaml(conf(data), "display", "file_mutation_verifier").lower()
         if valor != "false":
             raise AssertionError(
                 "falta `display.file_mutation_verifier: false`"
@@ -935,7 +1078,15 @@ def main():
         el motor cae al default— y venían corriendo con las 9 browser_* puestas.
         """
         texto = conf(data)
-        if "browser" in lista_yaml(texto, "agent", "disabled_toolsets"):
+        d = config_parseado(data)
+        def lista_de(plat):
+            if d is not None:
+                v = (d.get("platform_toolsets") or {}).get(plat)
+                return v if isinstance(v, list) else []
+            return lista_yaml(texto, "platform_toolsets", plat)
+        apagados = ((d.get("agent") or {}).get("disabled_toolsets") or []) \
+            if d is not None else lista_yaml(texto, "agent", "disabled_toolsets")
+        if "browser" in apagados:
             raise AssertionError(
                 "`browser` está en agent.disabled_toolsets, y por ahí se lleva "
                 "puesto `web_search`: esa clave resta el catálogo del toolset, y "
@@ -947,7 +1098,7 @@ def main():
         # encima sin nadie mirando.
         canon = lista_yaml(conf_del_kit(), "platform_toolsets", "api_server")
         for plat in ("api_server", "telegram", "cron"):
-            lista = lista_yaml(texto, "platform_toolsets", plat)
+            lista = lista_de(plat)
             if not lista:
                 raise AssertionError(
                     f"platform_toolsets.{plat} vacío o ausente: esa plataforma cae "
@@ -979,6 +1130,7 @@ def main():
                 )
         return f"{len(canon or [])} toolsets en las 3 plataformas, sin browser y con web"
 
+    check("config: YAML válido", _yaml)
     check("config: api_server", _api)
     check("config: modelo por defecto", _modelo)
     check("config: kanban nativo", _kanban)
