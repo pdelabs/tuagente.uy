@@ -253,8 +253,10 @@ def config_parseado(data):
 
     Devolver None en vez de levantar es a propósito: quien no pueda parsear cae
     al camino de texto —acotado, ver `valor_yaml`/`lista_yaml`— y sigue dando
-    señal. De que el archivo NO parsea se encarga un chequeo propio, para que
-    salga UNA falla clara y no siete.
+    señal. De que el archivo NO parsea se encarga un chequeo propio: así la
+    causa sale nombrada, y lo que se suma son las fallas de los bloques que la
+    corrupción haya partido de verdad (una, dos), no las siete de todos los
+    chequeos de config a la vez.
     """
     if not hay_pyyaml():
         return None
@@ -568,8 +570,38 @@ def main():
 
     # --- el índice vivo, que es lo que el agente realmente ve ---
     def _indice():
+        """El índice que el motor cachea en disco, cuando está.
+
+        NO ESTAR ES NORMAL EN UN AGENTE VIVO, y el mensaje viejo ("el agente no
+        arrancó nunca") mentía: el motor **borra** ese archivo en cada
+        `skill_manage` que sale bien y en cada mutación de aprendizaje
+        (`prompt_builder.py:1358-1366`, llamado desde
+        `tools/skill_manager_tool.py:1585` y `agent/learning_mutations.py:204`),
+        y solo lo reescribe cuando alguien arma el índice EN FRÍO
+        (`prompt_builder.py:1730`, dentro de `if snapshot is None`). Un gateway
+        largo con su caché en memoria caliente puede no volver a escribirlo en
+        toda su vida. Verificado en Mr.Wobble el 12/8: sin snapshot, pero con
+        `data/` y `data/skills/` de uid 10000, 71 SKILL.md sembradas, `state.db`
+        escrito a las 21:23 y una skill que el agente creó a las 20:50 y parcheó
+        a las 21:24 — o sea que arrancó, trabajó, y el archivo se borró después.
+        """
         ruta = os.path.join(data, ".skills_prompt_snapshot.json")
         if not os.path.isfile(ruta):
+            arrancado = [
+                señal for señal, existe in (
+                    ("state.db", os.path.exists(os.path.join(data, "state.db"))),
+                    (".bundled_manifest",
+                     os.path.exists(os.path.join(data, "skills", ".bundled_manifest"))),
+                ) if existe
+            ]
+            if arrancado:
+                raise AssertionError(
+                    "no hay índice en disco, pero el agente sí arrancó (está "
+                    + ", ".join(arrancado) + "): el motor lo borra en cada "
+                    "skill_manage y lo reescribe recién en el próximo armado en "
+                    "frío. Es normal — lo que no puedo hacer es verificar acá que "
+                    "ninguna skill quedó muda; para eso, GET /v1/skills"
+                )
             raise AssertionError("todavía no hay índice (el agente no arrancó nunca)")
         with open(ruta, encoding="utf-8") as fh:
             skills = json.load(fh).get("skills", [])
@@ -780,8 +812,6 @@ def main():
         Nada offline agarraba esto: los chequeos son de texto y un config con la
         indentación cortada los atraviesa entero.
         """
-        if not hay_pyyaml():
-            return "sin PyYAML no lo puedo verificar (pip install pyyaml)"
         import yaml
         try:
             d = yaml.safe_load(conf(data))
@@ -1130,7 +1160,19 @@ def main():
                 )
         return f"{len(canon or [])} toolsets en las 3 plataformas, sin browser y con web"
 
-    check("config: YAML válido", _yaml)
+    def _sin_pyyaml():
+        raise AssertionError(
+            "sin PyYAML no puedo verificar que el config parsee — pip install pyyaml, "
+            "o corré este chequeo desde la imagen del motor, que ya lo trae"
+        )
+
+    # Con PyYAML es falla (un config que no parsea no lo lee ni el motor); sin
+    # PyYAML es AVISO, no ok: un chequeo que no chequeó nada no suma un ok.
+    # Mismo criterio que `índice de skills` y `kit: soul/VERSION`.
+    if hay_pyyaml():
+        check("config: YAML válido", _yaml)
+    else:
+        check("config: YAML válido", _sin_pyyaml, required=False)
     check("config: api_server", _api)
     check("config: modelo por defecto", _modelo)
     check("config: kanban nativo", _kanban)
