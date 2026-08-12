@@ -64,7 +64,38 @@ IDENTIDAD_H1 = re.compile(r"^#\s+\S", re.M)
 # Las únicas skills del motor que quedan prendidas. La lista de verdad está en
 # compose/skills-permitidas.txt; esto es el respaldo por si corren el script
 # suelto, para que no apruebe por no encontrar la política.
-PERMITIDAS_POR_DEFECTO = ("ocr-and-documents", "pdf", "xlsx")
+# OJO: tools/perilla-skills.py tiene el MISMO respaldo. Si tocás uno, tocá el
+# otro — ya se separaron una vez (este tenía cuatro nombres y aquel tres).
+PERMITIDAS_POR_DEFECTO = ("docx", "ocr-and-documents", "pdf", "xlsx")
+
+# Una excepción POR AGENTE: una skill del motor que este cliente sí tiene, con
+# el motivo al lado. Se declara en el config.yaml de ESE agente, arriba de la
+# lista:
+#
+#   skills:
+#     # kit:excepcion humanizer — escribe posts y los pidió el cliente
+#     disabled:
+#       - airtable
+#
+# QUE EL COMENTARIO NO ES DURABLE, y conviene saberlo: el motor reescribe el
+# config entero con `yaml.safe_dump` (`atomic_config_write`, hermes_cli/
+# config.py) y ahí se van TODOS los comentarios. Verificado en La Mano: de los
+# que le puso `nuevo-agente.sh` no sobrevivió ninguno, las claves quedaron
+# reordenadas y con `_config_version: 33`. Los comentarios que hoy tiene son los
+# que el propio motor escribe. (Una clave YAML nueva sí sobreviviría: las claves
+# top-level desconocidas se toleran a propósito — config.py:2027-2031.)
+#
+# Entonces por qué un comentario igual: porque el modo de falla es seguro. Si el
+# motor se come la declaración, la skill queda prendida SIN declarar y este
+# chequeo falla fuerte; nunca al revés. Y después del alta el config va montado
+# `:ro`, así que el motor ya no puede reescribirlo. Lo que sí importa es CUANDO
+# se declara: con el config ya cerrado, nunca antes del primer arranque.
+#
+# Lo que esto NO permite: que una skill quede prendida por descuido. Sacarla de
+# `disabled` no alcanza — sin la línea declarada, el chequeo falla igual.
+MARCA_EXCEPCION = re.compile(r"^[ \t]*#[ \t]*kit:excepcion\b(.*)$", re.M | re.I)
+CUERPO_EXCEPCION = re.compile(r"^[ \t]*([A-Za-z0-9][A-Za-z0-9._-]*)[ \t]*[—:-][ \t]*(.*)$")
+MOTIVO_MINIMO = 10
 
 # Lo que install.sh deja en el data/. Si falta, el kit no está instalado.
 # Las skills que instala el kit: si una de ESTAS se indexa muda, es culpa nuestra.
@@ -85,7 +116,10 @@ def check(name, fn, required=True):
         results.append((OK, name, detail or ""))
         return True
     except Exception as exc:  # noqa: BLE001 — queremos reportar cualquier falla
-        results.append((FAIL if required else WARN, name, str(exc)[:200]))
+        # 300 y no 200: los mensajes que dicen QUÉ hacer son más largos que los
+        # que solo dicen qué pasó, y cortarlos justo antes de la instrucción
+        # deja al que lee con el problema y sin la salida.
+        results.append((FAIL if required else WARN, name, str(exc)[:300]))
         return False
 
 
@@ -234,6 +268,51 @@ def conf_del_kit():
             return fh.read()
     except OSError:
         return ""
+
+
+def excepciones_declaradas(texto):
+    """({skill: motivo}, [problemas]) de las excepciones declaradas en un config.
+
+    El nombre se normaliza a minúsculas —así `# KIT:EXCEPCION Humanizer` cubre a
+    `humanizer` en vez de fallar desconcertando— y todo lo que parece una
+    declaración pero no se puede leer sale en `problemas`, que el chequeo
+    convierte en falla. Una línea mal escrita que se ignora en silencio es peor
+    que no tenerla: quien la escribió cree que declaró algo.
+    """
+    excepciones, problemas, vistas = {}, [], set()
+    for m in MARCA_EXCEPCION.finditer(texto):
+        resto = m.group(1)
+        cuerpo = CUERPO_EXCEPCION.match(resto)
+        if not cuerpo:
+            problemas.append(
+                f"no pude leer la línea `{m.group(0).strip()}`: va "
+                "`# kit:excepcion <skill> — <motivo>` (con —, : o - entre los dos)"
+            )
+            continue
+        nombre = cuerpo.group(1).lower()
+        if nombre in vistas:
+            problemas.append(f"`{nombre}` está declarada dos veces: dejá una sola")
+            continue
+        vistas.add(nombre)
+        excepciones[nombre] = cuerpo.group(2).strip()
+    return excepciones, problemas
+
+
+def detalle_excepciones(excepciones, apagadas):
+    """El texto que hace VISIBLE cada excepción en la línea del chequeo.
+
+    Una excepción que nadie ve es una excepción que nadie revisa: por eso se
+    nombran en cada corrida, aunque el chequeo pase. Y si además está en
+    `disabled`, la excepción no hace nada y conviene decirlo.
+    """
+    if not excepciones:
+        return ""
+    nombres = sorted(excepciones)
+    texto = f" · {len(nombres)} excepción(es) de este cliente: " + ", ".join(nombres)
+    contradictorias = sorted(n for n in nombres if n in apagadas)
+    if contradictorias:
+        texto += f" (declarada(s) pero apagada(s) igual: {', '.join(contradictorias)})"
+    return texto
 
 
 def skills_permitidas():
@@ -659,7 +738,12 @@ def main():
         return "toolsets + platform_toolsets"
 
     def _skills_del_motor_apagadas():
-        """Ninguna skill del motor prendida fuera de las tres de documentos.
+        """Ninguna skill del motor prendida sin permiso.
+
+        Con permiso significan dos cosas distintas: las de la política global
+        (compose/skills-permitidas.txt, las de leer documentos) y las
+        excepciones de ESTE cliente, declaradas en su propio config con el
+        motivo al lado. Todo lo demás prendido es una falla.
 
         Cierra el círculo de la blocklist: la lista de `skills.disabled` la
         genera tools/perilla-skills.py, y al subir de tag el motor puede traer
@@ -669,8 +753,23 @@ def main():
         escribe, así que no hay lista nuestra que se quede vieja.
         """
         sembradas = skills_del_motor(data)
-        apagadas = set(lista_yaml(conf(data), "skills", "disabled"))
+        texto = conf(data)
+        apagadas = set(lista_yaml(texto, "skills", "disabled"))
         permitidas = skills_permitidas()
+        excepciones, mal_escritas = excepciones_declaradas(texto)
+        if mal_escritas:
+            raise AssertionError(" · ".join(mal_escritas))
+
+        # Una excepción sin motivo no es una excepción, es un olvido con
+        # sintaxis. Se pide la línea justamente para que quede el porqué.
+        sin_motivo = sorted(n for n, m in excepciones.items() if len(m) < MOTIVO_MINIMO)
+        if sin_motivo:
+            raise AssertionError(
+                "excepción declarada sin motivo: " + ", ".join(sin_motivo)
+                + " — la línea es `# kit:excepcion <skill> — <por qué la tiene este "
+                "cliente>`, y el porqué es el punto"
+            )
+        con_permiso = permitidas | set(excepciones)
         if sembradas is None:
             # Todavía no arrancó, así que no hay manifiesto contra qué comparar.
             # Igual se puede chequear lo que importa antes de prender: que el
@@ -685,7 +784,7 @@ def main():
                 )
             # Sin lista canónica no hay con qué comparar, y un chequeo que no
             # compara nada no puede dar verde. Acá no hay respaldo posible como
-            # el de skills_permitidas(): esa son tres nombres estables (la
+            # el de skills_permitidas(): esa son cuatro nombres estables (la
             # política), esta son ~70 que cambian con cada versión del motor.
             if not del_kit:
                 raise AssertionError(
@@ -694,23 +793,29 @@ def main():
                     "el config de este agente. Regenerala con "
                     "tools/perilla-skills.py --imagen <tag> --aplicar compose/config.base.yaml"
                 )
-            faltan = sorted(del_kit - apagadas - permitidas)
+            faltan = sorted(del_kit - apagadas - con_permiso)
             if faltan:
                 raise AssertionError(
                     f"al config le faltan {len(faltan)} skill(s) que el kit apaga: "
                     + ", ".join(faltan[:12]) + ("…" if len(faltan) > 12 else "")
+                    + " — si alguna es a propósito, declarala con "
+                    "`# kit:excepcion <skill> — <motivo>`"
                 )
-            return f"{len(apagadas)} apagadas por config (sin arrancar todavía)"
-        prendidas = sorted(sembradas - apagadas - permitidas)
+            return (f"{len(apagadas)} apagadas por config (sin arrancar todavía)"
+                    + detalle_excepciones(excepciones, apagadas))
+        prendidas = sorted(sembradas - apagadas - con_permiso)
         if prendidas:
             raise AssertionError(
-                f"{len(prendidas)} skill(s) del motor prendidas: "
-                + ", ".join(prendidas[:12])
-                + ("…" if len(prendidas) > 12 else "")
-                + " — regenerá la lista: python3 tools/perilla-skills.py --agente "
-                + f"{data} --aplicar <config.yaml>"
+                f"{len(prendidas)} skill(s) del motor prendidas sin declarar: "
+                + ", ".join(prendidas[:8])
+                + ("…" if len(prendidas) > 8 else "")
+                + " — o las apagás (perilla-skills.py --aplicar), o las declarás con "
+                "`# kit:excepcion <skill> — <motivo>`. Si YA estaba declarada, el motor "
+                "reescribió el config y se llevó el comentario: pasa si arrancó con el "
+                "config escribible"
             )
-        return f"{len(sembradas)} del motor · {len(sembradas & permitidas)} prendidas a propósito"
+        return (f"{len(sembradas)} del motor · {len(sembradas & permitidas)} prendidas por política"
+                + detalle_excepciones(excepciones, apagadas))
 
     def _skills_del_kit_externas():
         """Las del kit, montadas afuera y sin copia vieja que las tape.

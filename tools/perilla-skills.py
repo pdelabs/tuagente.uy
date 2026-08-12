@@ -49,7 +49,9 @@ MARCA_FIN = "# >>> fin del bloque generado"
 
 # Fallback si el archivo no está (una copia suelta del script). La fuente es
 # el archivo; esto evita que el script mienta por silencio.
-PERMITIDAS_POR_DEFECTO = ("ocr-and-documents", "pdf", "xlsx")
+# OJO: tools/agente-check.py tiene el MISMO respaldo. Si tocás uno, tocá el
+# otro — ya se separaron una vez (aquel tenía cuatro nombres y este tres).
+PERMITIDAS_POR_DEFECTO = ("docx", "ocr-and-documents", "pdf", "xlsx")
 
 
 def permitidas(ruta=PERMITIDAS_TXT):

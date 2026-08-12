@@ -9,7 +9,7 @@ Tres decisiones y una que se dejó pasar a propósito:
 
 | Perilla | Decisión | Dónde vive |
 |---|---|---|
-| Skills del motor | **todas apagadas** salvo `xlsx`, `pdf`, `ocr-and-documents` | `skills.disabled` en `config.yaml`, generado |
+| Skills del motor | **todas apagadas** salvo `xlsx`, `pdf`, `docx`, `ocr-and-documents` | `skills.disabled` en `config.yaml`, generado |
 | Preámbulo del portal | **reemplazado** (decía "assume plain text") | `platform_hints.api_server.replace` |
 | Skills del kit | **afuera de `data/`**, montadas de solo lectura | `skills.external_dirs` + volumen `:ro` |
 | Kanban | **se queda**, subordinado por `05-precedencia` | no se toca |
@@ -18,7 +18,7 @@ Memoria y auto-mejora tampoco se tocaron: `write_approval` sin una pestaña que
 muestre lo pendiente es apagar el aprendizaje sin avisarle a nadie
 (`perillas-motor.md`, punto 4b).
 
-## 1. Las skills del motor: 67 apagadas de 70
+## 1. Las skills del motor: 66 apagadas de 70
 
 El motor trae 70 skills y las **copia a `data/skills/` en cada arranque**
 (`skills_sync.py`, invocado por `docker/stage2-hook.sh`). Un agente de empresa
@@ -28,9 +28,14 @@ documentos, `computer-use` maneja una computadora, `hermes-agent` y
 `claude-code` le enseñan a operar su propio motor —lo que el `soul/README.md`
 dice explícitamente que no queremos.
 
-Quedan tres, y son las de **leer lo que el cliente manda**: `xlsx`, `pdf`,
-`ocr-and-documents`. Una planilla, un PDF, la foto de un remito. No hablan
-hacia afuera, no publican, no tocan sistemas.
+Quedan cuatro, y son las de **leer lo que el cliente manda**: `xlsx`, `pdf`,
+`docx` y `ocr-and-documents`. Una planilla, un PDF, un Word, la foto de un
+remito. Ninguna habla hacia afuera, ninguna publica, ninguna toca sistemas.
+
+`docx` se sumó después de las otras tres, y por lo mismo que están ellas: en una
+pyme los contratos, los briefs y las propuestas circulan en Word. Sin esa skill
+el agente recibe el archivo y contesta "mandámelo en PDF", que es exactamente el
+trabajo que el cliente esperaba no tener que hacer.
 
 **La lista se genera, no se escribe.** Son ~70 nombres que cambian con cada
 versión del motor:
@@ -63,12 +68,54 @@ la allowlist, y falla:
         tools/perilla-skills.py --agente <data> --aplicar <config.yaml>
 ```
 
-**Prender una para un cliente que la necesita:** sacarla de `skills.disabled` en
-el `config.yaml` **de ese agente**, anotar en su repo por qué, reiniciar. Si la
-decisión vale para todos, va a `compose/skills-permitidas.txt` y se regenera.
-El chequeo mira la allowlist del kit, así que una excepción de un cliente le va
-a fallar hasta que quede escrita — es a propósito: una skill saliente prendida
-tiene que costar una línea de justificación.
+### Prender una skill para un cliente puntual
+
+Dos cosas, en el `config.yaml` **de ese agente**: sacarla de `skills.disabled` y
+**declarar la excepción con su motivo**, arriba de la lista.
+
+```yaml
+skills:
+  # kit:excepcion humanizer — escribe posts para redes, es lo que hace la empresa
+  # kit:excepcion blogwatcher — monitorea la competencia todas las semanas
+  disabled:
+    - airtable
+    …
+```
+
+Y reiniciar. La declaración no es burocracia: es lo que separa una decisión de
+una deriva. `agente-check.py` acepta lo declarado, **nombra las excepciones en
+cada corrida** —para que se vean cuando alguien audite el agente seis meses
+después— y sigue fallando por cualquier skill prendida que no tenga su línea.
+Una línea sin motivo (o con un motivo de menos de diez caracteres) también
+falla: el porqué es el punto.
+
+**El comentario no es durable, y hay que saberlo.** El motor reescribe el
+`config.yaml` entero con `yaml.safe_dump` (`atomic_config_write`, en
+`hermes_cli/config.py`) y ahí se van todos los comentarios. Verificado en La
+Mano: de los que le puso `nuevo-agente.sh` no sobrevivió ninguno, las claves
+quedaron reordenadas y con un `_config_version: 33` agregado; los 36
+comentarios que hoy tiene son los que escribe el propio motor. Una clave YAML
+nueva sí sobreviviría —las claves top-level desconocidas se toleran a propósito
+(`config.py:2027-2031`)—, así que la elección del comentario no se justifica por
+durabilidad.
+
+Se sostiene por otra cosa, que es más importante: **el modo de falla es
+seguro.** Si el motor se comiera la declaración, la skill queda prendida y sin
+declarar, y el chequeo falla fuerte; nunca al revés, nunca un permiso que
+aparece solo. Y después del alta el `config.yaml` va montado `:ro`, así que el
+motor ya no puede reescribirlo.
+
+De ahí la regla operativa: **las excepciones se declaran con el config ya
+cerrado `:ro`.** Declararlas antes del primer arranque no sirve — ese arranque
+las borra. Si el chequeo dice que hay skills prendidas que vos juraste haber
+declarado, lo primero a mirar es si el config se reescribió estando abierto.
+
+Ventaja lateral del comentario: `grep -rn kit:excepcion` las encuentra en toda
+la flota.
+
+Si la decisión vale para **todos** los clientes, no es una excepción: va a
+`compose/skills-permitidas.txt` con su porqué y se regenera la lista. Así entró
+`docx`.
 
 ## 2. El preámbulo del portal
 
@@ -138,7 +185,7 @@ agente-<cliente>/
 
 `nuevo-agente.sh` ya no lleva su propia copia del config: copia
 `compose/config.base.yaml`. Había dos configs paralelos y ya habían empezado a
-separarse; con 67 nombres generados adentro, mantener dos era garantía de que
+separarse; con 66 nombres generados adentro, mantener dos era garantía de que
 uno quedara viejo.
 
 ## Runbook: aplicarlo a un agente que ya existe
@@ -165,13 +212,21 @@ AG=/ruta/al/agente          # el repo del agente; adentro están data/ y kit-ski
 #    platform_hints (el preámbulo del portal, copiado de config.base.yaml).
 python3 tools/perilla-skills.py --agente $AG/data --aplicar $AG/data/config.yaml
 
+# 3b. Las excepciones de ESE cliente, si tiene (ver "Prender una skill para un
+#     cliente puntual"): sacarlas de la lista y declararlas con su motivo.
+#     VAN DESPUES, con el config ya cerrado :ro — un arranque con el config
+#     escribible reescribe el archivo y se lleva puestos los comentarios.
+#     Pendientes anotadas hoy:
+#       La Mano (pdelabs) → humanizer, blogwatcher, youtube-content, gif-search
+
 # 4. Chequeo offline, ANTES de prender
 python3 tools/agente-check.py $AG/data
 
 # 5. Reiniciar y verificar contra el motor vivo
 docker compose up -d
 curl -s -H "Authorization: Bearer $API_SERVER_KEY" http://127.0.0.1:8642/v1/skills
-#    → tienen que ser 9: las 6 del kit + xlsx, pdf, ocr-and-documents
+#    → tienen que ser 10: las 6 del kit + xlsx, pdf, docx, ocr-and-documents
+#      (más las excepciones declaradas de ese cliente, si tiene)
 python3 tools/portal-check.py --key $API_SERVER_KEY
 ```
 
@@ -187,6 +242,23 @@ esto no toca y que se arreglan aparte:
 
 O sea: **0 fallas recién cuando también se hizo la parte del SOUL.** Un agente
 migrado y con SOUL completo tiene que dar 0.
+
+**Excepciones pendientes, por agente.** Lo que hay que declarar cuando a cada
+uno le toque el runbook:
+
+| Agente | Skills a prenderle | Por qué |
+|---|---|---|
+| La Mano (pdelabs) | `humanizer`, `blogwatcher`, `youtube-content`, `gif-search` | hace contenido y monitorea a la competencia; las cuatro son de escribir y mirar, ninguna publica sola |
+
+Las líneas quedan así en su `config.yaml`:
+
+```yaml
+skills:
+  # kit:excepcion humanizer — escribe posts para redes, es lo que hace la empresa
+  # kit:excepcion blogwatcher — monitorea la competencia todas las semanas
+  # kit:excepcion youtube-content — arma guiones y descripciones de videos
+  # kit:excepcion gif-search — ilustra los posts que escribe
+```
 
 **En un remoto nuevo no hay nada que migrar:** `desplegar-remoto.sh` ya sube las
 skills del kit a `$REMOTO/kit-skills/` (nunca a `data/skills/`), el compose
@@ -218,7 +290,8 @@ con el motor (`build_system_prompt`, offline, sin llamar al proveedor):
 
 - **El índice de skills quedó en 866 caracteres** (en La Mano son ~9.000) y
   nombra exactamente 9: las 6 del kit —servidas desde el montaje `:ro`— y
-  `ocr-and-documents`, `pdf`, `xlsx`. `himalaya`, `xurl`, `computer-use`,
+  `ocr-and-documents`, `pdf`, `xlsx`. (Medido con la allowlist de tres, antes de
+  sumar `docx`: hoy serían 10.) `himalaya`, `xurl`, `computer-use`,
   `google-workspace`, `hermes-agent`, `claude-code`, `imessage`: ninguna.
 - **`assume plain text` aparece 0 veces** en el prompt, y el texto nuestro está
   entero, en su lugar.

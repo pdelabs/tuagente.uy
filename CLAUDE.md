@@ -50,8 +50,11 @@ Las escrituras van por subprocess del CLI `hermes kanban ...` desde el sidecar.
 
 ## Las skills del motor van apagadas, y la lista se genera
 
-El motor trae 70 skills y las copia al volumen en cada arranque. Quedan tres
-(`xlsx`, `pdf`, `ocr-and-documents`); el resto se apaga con `skills.disabled`,
+El motor trae 70 skills y las copia al volumen en cada arranque. Quedan cuatro
+—las de leer documentos: `xlsx`, `pdf`, `docx`, `ocr-and-documents`—, y un
+cliente puntual puede tener alguna más si queda **declarada con su motivo** en
+su config (`# kit:excepcion <skill> — <por qué>`, que el chequeo exige y
+reporta). El resto se apaga con `skills.disabled`,
 que **genera** `tools/perilla-skills.py` desde la imagen o desde el manifiesto
 del agente — nunca listando `data/skills/`, que también tiene las del kit y las
 que el agente escribió para ese cliente. Las del kit ya no viven ahí: van en
@@ -106,7 +109,8 @@ puesta contra la del kit, y que haya identidad. De paso avisa si el `soul/VERSIO
 del kit no tiene forma de versión.
 
 Y las tres perillas de la tanda C1: que **ninguna skill del motor** quede
-prendida fuera de `xlsx`/`pdf`/`ocr-and-documents` (compara contra el
+prendida fuera de las cuatro de documentos o de lo declarado para ese cliente
+(compara contra el
 `.bundled_manifest` que escribe el motor, así que un bump que traiga skills
 nuevas falla en vez de pasar), que `platform_hints.api_server.replace` esté
 puesto, y que las skills del kit estén montadas afuera de `data/` y **sin copia

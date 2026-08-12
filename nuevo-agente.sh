@@ -55,7 +55,7 @@ printf 'data/.env\ndata/*.db*\ndata/cache/\ndata/logs/\n__pycache__/\n.DS_Store\
 
 # Config: la MISMA que usa el despliegue remoto, sin copia paralela. Antes esto
 # era un heredoc con el config repetido acá adentro, y ya habia empezado a
-# separarse del de compose/. El bloque de skills apagadas son 67 nombres
+# separarse del de compose/. El bloque de skills apagadas son 66 nombres
 # generados: mantenerlo en dos lados era garantia de que uno quedara viejo.
 cp "$KIT/compose/config.base.yaml" data/config.yaml
 

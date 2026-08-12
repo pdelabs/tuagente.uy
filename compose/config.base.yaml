@@ -102,7 +102,7 @@ platforms:
 
 # <<< generado por tools/perilla-skills.py — no editar a mano
 #   fuente: imagen nousresearch/hermes-agent:v2026.7.30
-#   apagadas: 67 · prendidas: ocr-and-documents, pdf, xlsx
+#   apagadas: 66 · prendidas: docx, ocr-and-documents, pdf, xlsx
 #
 # Regenerar al subir de tag el motor:
 #   python3 tools/perilla-skills.py --imagen <tag> --aplicar compose/config.base.yaml
@@ -134,7 +134,6 @@ skills:
     - comfyui
     - computer-use
     - design-md
-    - docx
     - dogfood
     - evaluating-llms-harness
     - excalidraw

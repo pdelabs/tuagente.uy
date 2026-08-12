@@ -50,6 +50,13 @@ literalmente como "JAMÁS `<la acción sensible: …>`") y tres de las perillas 
 C1, que ningún agente tiene aplicadas todavía. Sirve igual como fixture; para
 producción no saldría.
 
+Cuando le toque la migración de perillas, además de lo genérico va a llevar
+**cuatro skills prendidas por decisión**: `humanizer`, `blogwatcher`,
+`youtube-content` y `gif-search` — hace contenido y sigue a la competencia. Van
+declaradas en su `config.yaml` con `# kit:excepcion <skill> — <motivo>`, que es
+lo que hace que `agente-check.py` las acepte en vez de tratarlas como deriva.
+El detalle está en `notas/perillas-aplicadas.md`.
+
 **Mr.Wobble** — se le instaló el bloque base el 11/8/2026 (commit `4fd95ef`),
 cuando el marcador todavía no llevaba versión: cuenta como v1 y le falta el
 bloque de precedencia y la regla dura ya genérica. **Le falta la identidad**
