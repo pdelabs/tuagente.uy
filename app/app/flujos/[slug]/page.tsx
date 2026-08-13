@@ -13,9 +13,11 @@ import {
   RefreshCw, Workflow, Zap, type LucideIcon,
 } from "lucide-react";
 import {
-  etiquetaConexion, getFlujoDetalle, getFlujos, loadConfig,
-  type Flujo, type FlujoDetalle, type HttpError, type PortalConfig,
+  etiquetaConexion, getFlujoDetalle, getFlujos, getJobs, loadConfig,
+  type CronJob, type Flujo, type FlujoDetalle, type HttpError, type PortalConfig,
 } from "../../lib/agent";
+import { estadoReal, jobDeFlujo } from "../corridas";
+import { AccionesFlujo, CartelEstado, Corridas, PorQueNoPudo } from "../EstadoFlujo";
 import Markdown from "../../lib/Markdown";
 import { EntityProvider } from "../../lib/EntityViewer";
 import { EntityChip } from "../../lib/entities";
@@ -60,12 +62,18 @@ export default function FlujoDetallePage() {
   // muestra la lista de los que sí tiene, que es donde puede seguir.
   const [noExiste, setNoExiste] = useState(false);
   const [otros, setOtros] = useState<Flujo[] | null>(null);
+  // La tarea programada del flujo: la próxima corrida, el error de la última y
+  // si está pausada. Sin ella el detalle sigue andando, con menos para contar.
+  const [jobs, setJobs] = useState<CronJob[] | null>(null);
 
   useEffect(() => setCfg(loadConfig()), []);
 
   const cargar = useCallback(() => {
     if (!cfg || !slug) return;
     setCargando(true);
+    getJobs(cfg)
+      .then((r) => setJobs(Array.isArray(r?.jobs) ? r.jobs : []))
+      .catch(() => setJobs(null));
     getFlujoDetalle(cfg, slug)
       .then((f) => { setFlujo(f); setErr(null); setNoExiste(false); })
       .catch((e: HttpError) => {
@@ -119,6 +127,7 @@ export default function FlujoDetallePage() {
   if (!flujo) return <div className={WRAP}><Spinner /></div>;
 
   const Icono = GATILLO_ICON[flujo.gatillo_tipo] ?? Workflow;
+  const e = estadoReal(flujo, jobDeFlujo(flujo, jobs));
 
   return (
     <EntityProvider cfg={cfg}>
@@ -143,20 +152,29 @@ export default function FlujoDetallePage() {
           }
         />
 
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          {flujo.estado === "incompleto" ? (
-            <Chip tone="amber">Le falta una conexión</Chip>
-          ) : flujo.estado === "pausado" ? (
-            <Chip tone="neutral">Pausado</Chip>
-          ) : (
-            <Chip tone="green">Activo</Chip>
-          )}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <CartelEstado e={e} />
           {flujo.gatillo && (
             <span className="flex items-center gap-1.5 text-[13px] text-ink-soft">
               <Icono className="h-3.5 w-3.5 shrink-0" />
               {flujo.gatillo}
             </span>
           )}
+        </div>
+
+        {/* Corrió, cómo salió, cuándo es la próxima — y los botones para
+            tocarlo. Lo mismo que la tarjeta de la lista, para que el cliente no
+            tenga que aprenderse dos pantallas distintas. */}
+        <Corridas e={e} className="mb-3" />
+        <div className="mb-5 flex flex-col gap-3">
+          {flujo.estado !== "incompleto" && <PorQueNoPudo e={e} />}
+          <AccionesFlujo
+            cfg={cfg}
+            e={e}
+            nombre={flujo.nombre}
+            gatillo={flujo.gatillo}
+            onCambio={cargar}
+          />
         </div>
 
         {/* Igual que en la lista: con nombre y motivo, y el link apunta a la

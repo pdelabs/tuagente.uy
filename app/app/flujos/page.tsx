@@ -19,29 +19,32 @@
 // sobre dos flujos que ya habían fallado hacía exactamente lo contrario. El
 // cruce con las tareas del motor (`/api/jobs`) vive en `corridas.ts`.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowRight, Clock, FolderOpen, MessageSquare, RefreshCw, Workflow,
-  Zap, type LucideIcon,
+  AlertTriangle, ArrowRight, Clock, FolderOpen, MessageSquare, RefreshCw,
+  Workflow, Zap, type LucideIcon,
 } from "lucide-react";
 import {
   etiquetaConexion, getConnections, getFlujos, getJobs, loadConfig,
   type Connection, type CronJob, type Flujo, type HttpError, type PortalConfig,
 } from "../lib/agent";
-import { estadoReal, jobDeFlujo, type EstadoReal } from "./corridas";
+import { estadoReal, jobDeFlujo, ordenarPorUrgencia, type EstadoReal } from "./corridas";
 import { AccionesFlujo, CartelEstado, Corridas, PorQueNoPudo } from "./EstadoFlujo";
 import { EntityProvider } from "../lib/EntityViewer";
 import { EntityChip } from "../lib/entities";
 import { CarruselEjemplos, linkArmar } from "../lib/ejemplosFlujos";
 import {
-  Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner,
+  Card, ErrorState, IconBtn, PageHeader, Spinner,
 } from "../lib/ui";
 
 type Falla = { status?: number; message: string };
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
-const REFRESH_MS = 60_000;
+const REFRESH_MS = 30_000;
+// Tras tocar un botón el motor tarda un instante en escribir el nuevo estado:
+// una segunda lectura a los 6 s evita que "Probarlo ahora" se vea sin efecto.
+const RELEER_MS = 6_000;
 
 const es404 = (f: Falla) => f.status === 404 || /^404\b/.test(f.message);
 
@@ -63,14 +66,6 @@ function hace(mtime: number): string {
 function nombreArchivo(path: string): string {
   const base = (path || "").split("/").pop() || path;
   return base.replace(/^\d{4}-\d{2}-\d{2}[-_ ]/, "") || base;
-}
-
-function EstadoFlujo({ f }: { f: Flujo }) {
-  if (f.estado === "incompleto") {
-    return <Chip tone="amber">Le falta una conexión</Chip>;
-  }
-  if (f.estado === "pausado") return <Chip tone="neutral">Pausado</Chip>;
-  return <Chip tone="green">Activo</Chip>;
 }
 
 /** Qué le falta a este flujo, cómo se llama y para qué sirve. */
@@ -102,7 +97,13 @@ function FaltaConexion({ ids, conexiones }: {
   );
 }
 
-function TarjetaFlujo({ f, conexiones }: { f: Flujo; conexiones: Connection[] | null }) {
+function TarjetaFlujo({ f, e, cfg, conexiones, onCambio }: {
+  f: Flujo;
+  e: EstadoReal;
+  cfg: PortalConfig;
+  conexiones: Connection[] | null;
+  onCambio: () => void;
+}) {
   const Icono = GATILLO_ICON[f.gatillo_tipo] ?? Workflow;
   return (
     <Card className="flex flex-col gap-2.5">
@@ -113,7 +114,7 @@ function TarjetaFlujo({ f, conexiones }: { f: Flujo; conexiones: Connection[] | 
         >
           {f.nombre}
         </Link>
-        <span className="shrink-0"><EstadoFlujo f={f} /></span>
+        <span className="shrink-0"><CartelEstado e={e} /></span>
       </div>
 
       {f.para_cliente && (
@@ -127,13 +128,21 @@ function TarjetaFlujo({ f, conexiones }: { f: Flujo; conexiones: Connection[] | 
         </p>
       )}
 
+      {/* Corrió / no corrió / cuándo es la próxima. Las tres preguntas que la
+          tarjeta no contestaba mientras decía "Activo" en verde. */}
+      <Corridas e={e} />
+
       {/* Incompleto: el paso que lo destraba, no un diagnóstico. Y con NOMBRE
           y MOTIVO: "Conectar lo que falta" no dice qué falta ni para qué, y al
           llegar a Conexiones el cliente se perdía entre seis tarjetas sin
           saber cuál era la suya. El "para qué" sale del catálogo, que ya lo
           tiene escrito en criollo — no lo inventamos acá. */}
-      {f.estado === "incompleto" && f.conexiones_faltan.length > 0 && (
+      {f.estado === "incompleto" && f.conexiones_faltan.length > 0 ? (
         <FaltaConexion ids={f.conexiones_faltan} conexiones={conexiones} />
+      ) : (
+        // Una sola explicación por tarjeta: si le falta una conexión, ESA es la
+        // causa y el paso a seguir; el error del motor abajo sería ruido.
+        <PorQueNoPudo e={e} />
       )}
 
       {f.resultados.length > 0 && (
@@ -168,12 +177,51 @@ function TarjetaFlujo({ f, conexiones }: { f: Flujo; conexiones: Connection[] | 
         </div>
       )}
 
-      {f.estado === "activo" && f.resultados.length === 0 && (
+      {/* "Todavía no produjo resultados" sobre un flujo que corrió y falló era
+          la misma mentira en voz baja: ahí no es que todavía no produjo, es que
+          no pudo. Se calla siempre que haya una falla que contar —incluso
+          pausado, que es como queda un flujo roto que el cliente frenó. */}
+      {!e.falla && e.clave !== "incompleto" && f.resultados.length === 0 && (
         <p className="text-[12px] text-ink-soft/80">
           Todavía no produjo resultados: van a aparecer acá solos.
         </p>
       )}
+
+      <AccionesFlujo cfg={cfg} e={e} nombre={f.nombre} gatillo={f.gatillo} onCambio={onCambio} />
     </Card>
+  );
+}
+
+/** ¿Me puedo olvidar del tema? La pregunta con la que la veterinaria entró y
+ *  salió sin respuesta. Una línea arriba de todo, y solo cuando hay algo que
+ *  decir: cuando está todo bien la pantalla se calla y las tarjetas hablan. */
+function Resumen({ estados }: { estados: EstadoReal[] }) {
+  const rotos = estados.filter((e) => e.clave === "fallo").length;
+  const faltan = estados.filter((e) => e.clave === "incompleto").length;
+  if (rotos === 0 && faltan === 0) return null;
+
+  const total = estados.length;
+  const conProblema = rotos + faltan;
+  const sujeto =
+    total === 1 ? "Tu trabajo automático"
+    : conProblema === total ? `Tus ${total} trabajos automáticos`
+    : `${conProblema} de tus ${total} trabajos automáticos`;
+  const plural = conProblema > 1;
+  const texto =
+    rotos > 0 && faltan > 0
+      ? `${sujeto} necesitan que los mires: ${rotos === 1 ? "uno falló" : `${rotos} fallaron`} la última vez y `
+        + `${faltan === 1 ? "a otro le falta una conexión" : `a otros ${faltan} les falta una conexión`}.`
+      : rotos > 0
+        ? `${sujeto} ${plural ? "no pudieron" : "no pudo"} terminar la última vez.`
+        : `${sujeto} ${plural ? "necesitan una conexión que todavía no está" : "necesita una conexión que todavía no está"}.`;
+
+  return (
+    <div className="mb-4 flex items-start gap-2 rounded-lg border border-c-coral bg-c-coral/25 px-3 py-2.5">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-c-coral-ink" />
+      <p className="text-[13px] font-medium leading-snug text-c-coral-ink">
+        {texto} Abajo dice qué pasó en cada uno.
+      </p>
+    </div>
   );
 }
 
@@ -218,6 +266,11 @@ function SinFlujos() {
 export default function FlujosPage() {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [flujos, setFlujos] = useState<Flujo[] | null>(null);
+  // Las tareas programadas del motor: son las que saben cuándo corre la
+  // próxima, por qué falló la última y si está pausada. Si el gateway no
+  // contesta, `jobs` queda en null y la tarjeta cae al `ultima_corrida` del
+  // adapter: dice menos, pero sigue sin mentir.
+  const [jobs, setJobs] = useState<CronJob[] | null>(null);
   const [err, setErr] = useState<Falla | null>(null);
   const [cargando, setCargando] = useState(false);
   // Solo para poder nombrar la conexión que falta y decir para qué sirve.
@@ -235,11 +288,21 @@ export default function FlujosPage() {
   const cargar = useCallback(() => {
     if (!cfg) return;
     setCargando(true);
+    getJobs(cfg)
+      .then((r) => setJobs(Array.isArray(r?.jobs) ? r.jobs : []))
+      .catch(() => setJobs(null));
     getFlujos(cfg)
       .then((r) => { setFlujos(r?.flujos ?? []); setErr(null); })
       .catch((e: HttpError) => setErr({ status: e?.status, message: e?.message || "error" }))
       .finally(() => setCargando(false));
   }, [cfg]);
+
+  // Después de pausar, reanudar o disparar: ahora y de nuevo en un rato.
+  const releer = useCallback(() => {
+    cargar();
+    const t = setTimeout(cargar, RELEER_MS);
+    return () => clearTimeout(t);
+  }, [cargar]);
 
   useEffect(() => { cargar(); }, [cargar]);
   useEffect(() => {
@@ -247,6 +310,12 @@ export default function FlujosPage() {
     const t = setInterval(cargar, REFRESH_MS);
     return () => clearInterval(t);
   }, [cfg, cargar]);
+
+  const conEstado = useMemo(
+    () => ordenarPorUrgencia(
+      (flujos ?? []).map((f) => ({ flujo: f, estado: estadoReal(f, jobDeFlujo(f, jobs)) }))),
+    [flujos, jobs],
+  );
 
   if (!cfg) return <div className={WRAP}><Spinner /></div>;
 
@@ -260,9 +329,21 @@ export default function FlujosPage() {
     if (flujos === null) return <Spinner />;
     if (flujos.length === 0) return <SinFlujos />;
     return (
-      <div className="grid gap-3 md:grid-cols-2">
-        {flujos.map((f) => <TarjetaFlujo key={f.slug} f={f} conexiones={conexiones} />)}
-      </div>
+      <>
+        <Resumen estados={conEstado.map((x) => x.estado)} />
+        <div className="grid items-start gap-3 md:grid-cols-2">
+          {conEstado.map(({ flujo, estado }) => (
+            <TarjetaFlujo
+              key={flujo.slug}
+              f={flujo}
+              e={estado}
+              cfg={cfg}
+              conexiones={conexiones}
+              onCambio={releer}
+            />
+          ))}
+        </div>
+      </>
     );
   };
 

@@ -9,13 +9,40 @@
 // resolvemos cruzando contra /portal/tickets (mapa título→id, se trae una vez
 // y se refresca sólo a pedido). Si el ticket no está en esa lista —archivado o
 // borrado— el evento no es clicable y no mostramos nada raro.
+//
+// POR QUÉ ESTA PANTALLA DECÍA "TODAVÍA NO HAY ACTIVIDAD" (QA a ciegas, 12/8).
+// Una contadora armó tres flujos y le hizo escribir tres documentos, entró acá
+// y leyó "Todavía no hay actividad. Cuando tu agente haga algo, lo vas a ver
+// acá". Su conclusión fue peor que el bug: "si la bitácora me miente cuando
+// estoy mirando, no la voy a creer cuando no estoy".
+//
+// No era una consulta rota: `/portal/activity` tiene DOS fuentes y solo dos —
+// las corridas de crons (`executions`) y los eventos del tablero
+// (`task_events`). Ella no tenía ninguna de las dos: sus flujos todavía no
+// habían corrido (primera corrida el 17/08) y su tablero estaba vacío. Todo lo
+// que su agente hizo lo hizo conversando: escribir archivos y dejar flujos
+// armados NO deja fila en ninguna de esas dos tablas. Verificado el 13/8 contra
+// el agente del laboratorio: `/portal/activity` devolvía UN evento mientras
+// `/portal/files` tenía cuatro archivos y la sesión 128 mensajes.
+//
+// Se arregla sin tocar el agente: las otras dos fuentes ya las publica y el
+// portal ya las usa en otras pestañas. Acá se suman a la misma línea de tiempo
+// —lo que escribió (`/portal/files`) y cuándo hablaron (`/api/sessions`)— para
+// que la bitácora no pueda estar vacía mientras hubo trabajo.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { Activity, ChevronRight, RefreshCw, Search } from "lucide-react";
 import {
   getActivity,
+  getFiles,
+  getFlujos,
+  getJobs,
+  getSessions,
   getTickets,
   loadConfig,
+  type CronJob,
+  type Flujo,
   type PortalConfig,
 } from "../lib/agent";
 import { EntityProvider } from "../lib/EntityViewer";
@@ -23,9 +50,20 @@ import { useOpenEntity } from "../lib/entities";
 import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, SOPORTE, Spinner, inputCls,
 } from "../lib/ui";
-import { esEventoDeMaquina, rotuloEvento } from "../lib/palabras";
+import {
+  esEventoDeMaquina, husoDe, isoConHuso, leerFalla, momento, rotuloCanal, rotuloEvento,
+} from "../lib/palabras";
 
-type ActivityEvent = { ts: string; kind: string; label: string; status: string };
+type ActivityEvent = {
+  ts: string;
+  kind: string;
+  label: string;
+  status: string;
+  /** Adónde lleva la fila (un flujo, un archivo). Los tickets van por `ticketId`. */
+  href?: string;
+  /** Por qué no pudo, en criollo. Solo en las corridas que fallaron. */
+  porQue?: string;
+};
 /** Los status crudos del adapter son muchos; para filtrar alcanzan tres. */
 type Grupo = "ok" | "error" | "curso";
 type RangoKey = "hoy" | "7d" | "30d" | "todo";
@@ -35,9 +73,12 @@ const PAGINA = 30; // eventos por tanda
 const WRAP = "mx-auto max-w-4xl px-6 py-6 md:px-8";
 
 // Kind crudo del adapter → rótulo legible (los chips salen de los datos).
+// `archivo` y `conversacion` los arma el portal: ver la nota de arriba.
 const KIND_LABEL: Record<string, string> = {
-  job_run: "Tarea programada",
+  job_run: "Trabajo automático",
   ticket: "Tarea",
+  archivo: "Documento",
+  conversacion: "Conversación",
 };
 
 // El estado viene crudo del motor y en inglés. Ahora sale del diccionario
@@ -103,29 +144,135 @@ function desdeRango(key: RangoKey): number | null {
   return new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - (dias - 1)).getTime();
 }
 
+// La hora y el día son los del NEGOCIO, no los del browser: la corrida de las
+// 02:37 en Montevideo no puede aparecer bajo "Ayer 23:37" porque quien mira
+// abrió el portal desde otro huso. Ver la nota larga en `lib/palabras.ts`.
 function hourLabel(ts: string): string {
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return momento(ts)?.hora ?? "—";
 }
 
 function dayKey(ts: string): string {
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return "—";
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  const m = momento(ts);
+  return m ? String(m.dias) : "—";
 }
 
 function dayLabel(ts: string): string {
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return "Sin fecha";
-  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const days = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000);
-  if (days === 0) return "Hoy";
-  if (days === 1) return "Ayer";
-  return d.toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" });
+  const m = momento(ts);
+  if (!m) return "Sin fecha";
+  if (m.dias === 0) return "Hoy";
+  if (m.dias === -1) return "Ayer";
+  return m.fechaCorta;
 }
 
 const is404 = (msg: string) => /^404\b/.test(msg);
+
+/* ── Las fuentes que faltaban ─────────────────────────────────────────────── */
+
+const SCRIPT_EXT = /\.(py|sh|bash|zsh|rb|pl|js|mjs|cjs|ts|tsx|jsx|ipynb)$/i;
+const ENTRADA = "entrada/";
+
+/** El nombre del archivo, sin fecha adelante ni carpeta atrás. */
+const nombreArchivo = (path: string) => {
+  const base = (path || "").split("/").pop() || path;
+  return base.replace(/^\d{4}-\d{2}-\d{2}[-_ ]/, "").replace(/\.[a-z0-9]+$/i, "") || base;
+};
+
+/** Lo que el agente escribió, como eventos. El andamiaje (sus propios scripts,
+ *  `interno/`) queda afuera: acá va lo que el cliente reconoce como trabajo. */
+function eventosDeArchivos(
+  files: { path: string; mtime: number }[] | null, huso: number,
+): ActivityEvent[] {
+  if (!files) return [];
+  return files
+    .filter((f) => {
+      const p = f.path || "";
+      return p && !p.startsWith("interno/") && !SCRIPT_EXT.test(p);
+    })
+    .slice(0, 60)
+    .map((f) => ({
+      ts: isoConHuso(f.mtime * 1000, huso),
+      kind: "archivo",
+      // Quién lo puso importa: `entrada/` es lo que sube el cliente, y decir
+      // "tu agente escribió" sobre el CSV que subió ella sería mentir barato.
+      label: (f.path.startsWith(ENTRADA) ? "Recibió " : "Escribió ") + `«${nombreArchivo(f.path)}»`,
+      status: "",
+      href: `/app/archivos?archivo=${encodeURIComponent(f.path)}`,
+    }));
+}
+
+type SesionCruda = {
+  id?: string; source?: string; started_at?: number; last_active?: number;
+  message_count?: number; preview?: string;
+};
+
+// UNA CONVERSACIÓN ES ALGUIEN HABLANDO. El motor abre una "sesión" también para
+// correr un cron y para que el agente trabaje un ticket solo; esas no son
+// conversaciones de nadie y ya tienen su propia fila (la corrida del flujo, el
+// evento del tablero). Listarlas acá ponía «Hablaron por Tareas programadas:
+// "[IMPORTANT: You are running as a scheduled cron job…"» en la pantalla de una
+// veterinaria: el prompt interno, en inglés, presentado como una charla suya.
+const CANALES_HUMANOS = new Set([
+  "api_server", "portal", "api", "telegram", "whatsapp", "discord", "signal",
+]);
+
+/** Cada conversación, una línea. Una sesión de 128 mensajes es UN hecho para el
+ *  cliente ("hablamos el martes"), no ciento veintiocho. */
+function eventosDeSesiones(sesiones: SesionCruda[] | null, huso: number): ActivityEvent[] {
+  if (!sesiones) return [];
+  return sesiones
+    .filter((s) =>
+      (s.message_count ?? 0) > 0
+      && (s.started_at || s.last_active)
+      && CANALES_HUMANOS.has((s.source ?? "").trim().toLowerCase()))
+    .slice(0, 40)
+    .map((s) => {
+      // Los avisos que el portal le inyecta al agente empiezan con un rótulo
+      // entre corchetes («[Aviso del portal] … ticket t_b2dd6735») y traen ids
+      // que el cliente no puede buscar en ningún lado. No son lo que él
+      // escribió: el renglón se queda sin cita antes que con esa.
+      const p = (s.preview ?? "").trim();
+      const cita = p && !p.startsWith("[") ? `: «${p.slice(0, 70)}…»` : "";
+      return {
+        ts: isoConHuso((s.started_at ?? s.last_active ?? 0) * 1000, huso),
+        kind: "conversacion",
+        label: `Conversación por ${rotuloCanal(s.source ?? "")}${cita}`,
+        status: "",
+        href: s.id ? `/app/chat?sesion=${encodeURIComponent(s.id)}` : undefined,
+      };
+    });
+}
+
+/** Las corridas de los flujos, con el nombre que les puso el cliente.
+ *
+ *  «flujo-vacunas-vencidas-semanal · No pudo» era la línea que a la veterinaria
+ *  le reveló la falla, y también la única que no podía abrir para ver por qué.
+ *  Ahora dice el nombre del flujo, cuenta el motivo en criollo y lleva a la
+ *  pantalla donde se puede pausar o volver a probar. */
+function humanizarCorridas(
+  evs: ActivityEvent[], flujos: Flujo[] | null, jobs: CronJob[] | null,
+): ActivityEvent[] {
+  if (!flujos?.length) return evs;
+  const porNombreDeJob = new Map<string, Flujo>();
+  for (const f of flujos) porNombreDeJob.set(`flujo-${f.slug}`, f);
+  return evs.map((ev) => {
+    if (ev.kind !== "job_run") return ev;
+    const f = porNombreDeJob.get((ev.label || "").trim());
+    if (!f) return ev;
+    const job = jobs?.find((j) => (j.name || "").trim() === `flujo-${f.slug}`);
+    // El error del motor es el de la ÚLTIMA corrida: solo se le puede atribuir
+    // a esta fila si esta fila ES la última. Colgárselo a una vieja sería
+    // inventar.
+    const esLaUltima = Boolean(
+      job?.last_run_at && ev.ts && Math.abs(msDe(job.last_run_at) - msDe(ev.ts)) < 120_000);
+    const fallo = /(fail|error|timeout|cancel)/i.test(ev.status || "");
+    return {
+      ...ev,
+      label: f.nombre,
+      href: `/app/flujos/${encodeURIComponent(f.slug)}`,
+      porQue: fallo && esLaUltima ? leerFalla(job?.last_error).que : undefined,
+    };
+  });
+}
 
 function FiltroChip({ activo, onClick, count, children }: {
   activo: boolean;
@@ -161,7 +308,7 @@ function Caption({ children }: { children: ReactNode }) {
   );
 }
 
-/** Una línea del historial. Con ticketId, toda la fila abre el detalle. */
+/** Una línea del historial. Con ticketId o con href, toda la fila abre algo. */
 function Fila({ ev, ticketId, veces = 1 }: {
   ev: ActivityEvent; ticketId?: string; veces?: number;
 }) {
@@ -171,9 +318,16 @@ function Fila({ ev, ticketId, veces = 1 }: {
       <span className="w-12 shrink-0 text-[12px] tabular-nums text-ink-soft">
         {hourLabel(ev.ts)}
       </span>
-      <span className={`h-2 w-2 shrink-0 rounded-full ${dotCls(ev.kind, ev.status)}`} />
-      <p className="min-w-0 flex-1 truncate text-sm text-ink">{ev.label}</p>
-      <span className="flex shrink-0 items-center gap-2">
+      <span className={`mt-1.5 h-2 w-2 shrink-0 self-start rounded-full ${dotCls(ev.kind, ev.status)}`} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm text-ink">{ev.label}</span>
+        {/* La línea que la veterinaria no podía abrir. Ahora el motivo está
+            escrito acá mismo, en criollo, sin tener que ir a buscarlo. */}
+        {ev.porQue && (
+          <span className="block truncate text-[12px] text-c-coral-ink">{ev.porQue}</span>
+        )}
+      </span>
+      <span className="flex shrink-0 items-center gap-2 self-start pt-0.5">
         <Chip>{KIND_LABEL[ev.kind] ?? ev.kind}</Chip>
         {ev.status && (
           <span className="text-[11px] text-ink-soft">
@@ -185,26 +339,35 @@ function Fila({ ev, ticketId, veces = 1 }: {
     </>
   );
 
-  if (!ticketId || !open) {
+  const FILA = "flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-black/[0.03]";
+
+  if (ticketId && open) {
     return (
-      <li className="flex items-center gap-3 px-4 py-2.5">
-        {cuerpo}
-        {/* mismo ancho que el chevron: las columnas quedan alineadas */}
-        <span className="w-4 shrink-0" />
+      <li>
+        <button onClick={() => open({ kind: "ticket", id: ticketId })} title="Ver la tarea" className={FILA}>
+          {cuerpo}
+          <ChevronRight className="h-4 w-4 shrink-0 self-start text-ink-soft/50" />
+        </button>
+      </li>
+    );
+  }
+
+  if (ev.href) {
+    return (
+      <li>
+        <Link href={ev.href} className={FILA}>
+          {cuerpo}
+          <ChevronRight className="h-4 w-4 shrink-0 self-start text-ink-soft/50" />
+        </Link>
       </li>
     );
   }
 
   return (
-    <li>
-      <button
-        onClick={() => open({ kind: "ticket", id: ticketId })}
-        title="Ver el ticket"
-        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-black/[0.03]"
-      >
-        {cuerpo}
-        <ChevronRight className="h-4 w-4 shrink-0 text-ink-soft/50" />
-      </button>
+    <li className="flex items-center gap-3 px-4 py-2.5">
+      {cuerpo}
+      {/* mismo ancho que el chevron: las columnas quedan alineadas */}
+      <span className="w-4 shrink-0" />
     </li>
   );
 }
@@ -229,6 +392,12 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
   const [cargando, setCargando] = useState(false);
   const [ultima, setUltima] = useState<Date | null>(null);
   const [ticketIds, setTicketIds] = useState<Map<string, string>>(new Map());
+  // Las fuentes que el adapter no mezcla en /portal/activity. Ninguna es
+  // obligatoria: si alguna falla, la línea de tiempo pierde ese renglón y sigue.
+  const [archivos, setArchivos] = useState<{ path: string; mtime: number }[] | null>(null);
+  const [sesiones, setSesiones] = useState<SesionCruda[] | null>(null);
+  const [flujos, setFlujos] = useState<Flujo[] | null>(null);
+  const [jobs, setJobs] = useState<CronJob[] | null>(null);
   const hasData = useRef(false);
 
   const [kind, setKind] = useState<string | null>(null);
@@ -275,15 +444,30 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
       .catch(() => { /* sin tickets no hay a dónde ir: queda como está */ });
   }, [cfg]);
 
+  // Lo demás que hizo el agente. Cada una por su lado y sin romper nada: un
+  // agente viejo que no publique alguna de estas simplemente aporta menos.
+  const loadExtras = useCallback(() => {
+    getFiles(cfg).then((r) => setArchivos(Array.isArray(r?.files) ? r.files : [])).catch(() => {});
+    getSessions(cfg)
+      .then((r) => setSesiones(Array.isArray(r?.data) ? r.data : []))
+      .catch(() => {});
+    getFlujos(cfg).then((r) => setFlujos(r?.flujos ?? [])).catch(() => {});
+    getJobs(cfg).then((r) => setJobs(Array.isArray(r?.jobs) ? r.jobs : [])).catch(() => {});
+  }, [cfg]);
+
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadTickets(); }, [loadTickets]);
+  useEffect(() => { loadExtras(); }, [loadExtras]);
 
   useEffect(() => {
-    const t = setInterval(() => load(true), REFRESH_MS);
+    const t = setInterval(() => { load(true); loadExtras(); }, REFRESH_MS);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, loadExtras]);
 
-  const refrescar = useCallback(() => { load(true); loadTickets(); }, [load, loadTickets]);
+  const refrescar = useCallback(
+    () => { load(true); loadTickets(); loadExtras(); },
+    [load, loadTickets, loadExtras],
+  );
 
   // Al cambiar cualquier filtro, volvemos a la primera tanda.
   useEffect(() => { setLimite(PAGINA); }, [kind, grupo, busqueda, rango]);
@@ -292,9 +476,24 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
   // renglones idénticos de la misma tarea con `dependency_wait / spawned /
   // promoted / heartbeat`. El QA lo leyó como "se colgó, y encima no entiendo
   // nada". Los pasos de máquina quedan detrás de un interruptor.
+  // En qué reloj vive el agente. Lo dicen sus propias fechas (vienen con huso);
+  // los `mtime` de los archivos y las sesiones, no, así que se lo prestamos.
+  const huso = useMemo(() => {
+    for (const e of events ?? []) { const o = husoDe(e.ts); if (o !== null) return o; }
+    for (const j of jobs ?? []) {
+      const o = husoDe(j.next_run_at) ?? husoDe(j.last_run_at);
+      if (o !== null) return o;
+    }
+    return -new Date().getTimezoneOffset();
+  }, [events, jobs]);
+
   const todos = useMemo(
-    () => [...(events ?? [])].sort((a, b) => msDe(b.ts) - msDe(a.ts)),
-    [events],
+    () => [
+      ...humanizarCorridas(events ?? [], flujos, jobs),
+      ...eventosDeArchivos(archivos, huso),
+      ...eventosDeSesiones(sesiones, huso),
+    ].sort((a, b) => msDe(b.ts) - msDe(a.ts)),
+    [events, flujos, jobs, archivos, sesiones, huso],
   );
   const tecnicos = useMemo(
     () => todos.filter((e) => esEventoDeMaquina(e.status)).length, [todos]);
@@ -423,13 +622,17 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
         </p>
       )}
 
+      {/* El vacío se mide sobre la línea de tiempo ENTERA, no sobre una de sus
+          fuentes: decir "todavía no hay actividad" mirando solo los crons y el
+          tablero es lo que hizo que esta pantalla se declarara vacía con tres
+          documentos recién escritos al lado. */}
       {!events ? (
         <Spinner />
-      ) : events.length === 0 ? (
+      ) : ordenados.length === 0 ? (
         <EmptyState
           icon={Activity}
           title="Todavía no hay actividad"
-          hint="Cuando tu agente haga algo, lo vas a ver acá."
+          hint="Cuando tu agente haga algo —escribir un documento, correr uno de tus trabajos— lo vas a ver acá."
         />
       ) : (
         <>

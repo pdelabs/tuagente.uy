@@ -7,9 +7,11 @@
 // chip verde con dos copias del mismo ternario, y las dos mentían igual.
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, Pause, Play, Zap } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CalendarClock, CheckCircle2, Loader2, Pause, Play, Zap } from "lucide-react";
 import { jobAction, type PortalConfig } from "../lib/agent";
 import { Chip, SOPORTE } from "../lib/ui";
+import { linkArmar } from "../lib/ejemplosFlujos";
 import type { EstadoReal } from "./corridas";
 
 export function CartelEstado({ e }: { e: EstadoReal }) {
@@ -86,16 +88,23 @@ export function PorQueNoPudo({ e }: { e: EstadoReal }) {
 
 type Aviso = { texto: string; ok: boolean } | null;
 
-/** Pausar, reanudar y probarlo ahora.
+/** Pausar, reanudar, probarlo ahora — y pedir el cambio de horario.
  *
  *  «No lo puedo pausar, ni cambiarle el día, ni probarlo ahora» — los tres
- *  salieron en los dos informes. Los dos primeros y el tercero son verbos
- *  NATIVOS del motor (`POST /api/jobs/{id}/{pause|resume|run}`) y estaban ahí
- *  desde el principio. Cambiar el día no: ver `docs/PENDIENTES.md`. */
-export function AccionesFlujo({ cfg, e, nombre, onCambio }: {
+ *  salieron en los dos informes. Pausar, reanudar y correr son verbos NATIVOS
+ *  del motor (`POST /api/jobs/{id}/{pause|resume|run}`), pasan CORS y estaban
+ *  ahí desde el principio: son botones de verdad.
+ *
+ *  Cambiar el día NO se puede todavía —es `PATCH /api/jobs/{id}` y el gateway
+ *  no publica PATCH en `Access-Control-Allow-Methods`, verificado contra el
+ *  laboratorio; queda anotado en `docs/PENDIENTES.md`—. Mientras tanto el botón
+ *  no se calla ni miente: lleva al chat con el pedido ya escrito, que es lo que
+ *  las dos clientas terminaron haciendo a mano. */
+export function AccionesFlujo({ cfg, e, nombre, gatillo, onCambio }: {
   cfg: PortalConfig;
   e: EstadoReal;
   nombre: string;
+  gatillo?: string;
   onCambio: () => void;
 }) {
   const [ocupado, setOcupado] = useState<"pause" | "resume" | "run" | null>(null);
@@ -131,11 +140,16 @@ export function AccionesFlujo({ cfg, e, nombre, onCambio }: {
     } finally {
       setOcupado(null);
     }
-  }, [cfg, e.jobId, nombre, onCambio]);
+  }, [cfg, e.jobId, onCambio]);
 
   // Sin tarea programada no hay nada que pausar ni disparar: el flujo corre
   // cuando el cliente lo pide. Callarse es más honesto que un botón muerto.
   if (!e.jobId) return null;
+
+  const pedidoHorario = linkArmar(
+    `Quiero cambiarle el día y la hora al flujo "${nombre}"` +
+    (gatillo ? ` (hoy corre así: ${gatillo}).` : ".") +
+    " Decime cuándo puede correr y dejámelo cambiado.");
 
   return (
     <div className="flex flex-col gap-2">
@@ -167,6 +181,13 @@ export function AccionesFlujo({ cfg, e, nombre, onCambio }: {
             Pausar
           </BotonChico>
         )}
+        <Link
+          href={pedidoHorario}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-black/10 bg-white px-2.5 text-[12.5px] font-semibold text-ink transition hover:bg-black/[0.03]"
+        >
+          <CalendarClock className="h-3.5 w-3.5" />
+          Cambiar día u hora
+        </Link>
       </div>
       {aviso && (
         <p className={`text-[12.5px] font-medium leading-snug ${

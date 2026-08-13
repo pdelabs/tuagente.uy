@@ -20,7 +20,7 @@
 // entonces, por el nombre `flujo-<slug>`, que es el que le pone el kit al crear
 // el cron. Ver `docs/PENDIENTES.md`.
 
-import { leerFalla, type Falla } from "../lib/palabras";
+import { cuandoPaso, cuandoVa, leerFalla, type Falla } from "../lib/palabras";
 import type { CronJob, Flujo } from "../lib/agent";
 
 export type ClaveEstado =
@@ -68,44 +68,6 @@ export function jobDeFlujo(f: Flujo, jobs: CronJob[] | null | undefined): CronJo
   })[0];
 }
 
-const HORA = new Intl.DateTimeFormat("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false });
-const DIA_SEMANA = new Intl.DateTimeFormat("es-UY", { weekday: "long" });
-const DIA_MES = new Intl.DateTimeFormat("es-UY", { day: "2-digit", month: "2-digit" });
-
-const diasDeDiferencia = (d: Date): number => {
-  const cero = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  return Math.round((cero(d) - cero(new Date())) / 86_400_000);
-};
-
-/** Cuándo pasó, para una fecha del PASADO. "ayer a las 8:30". */
-export function cuandoPaso(iso: string | null | undefined): string {
-  const t = ms(iso);
-  if (!t) return "";
-  const d = new Date(t);
-  const dias = diasDeDiferencia(d);
-  const hora = HORA.format(d);
-  if (dias === 0) return `hoy a las ${hora}`;
-  if (dias === -1) return `ayer a las ${hora}`;
-  if (dias > -7) return `el ${DIA_SEMANA.format(d)} a las ${hora}`;
-  return `el ${DIA_MES.format(d)} a las ${hora}`;
-}
-
-/** Cuándo va a pasar. LLEVA LA FECHA SIEMPRE: "el lunes 17/08 a las 8:30".
- *  Las dos clientas pidieron esto por separado y las dos escribieron el día Y
- *  la fecha — "el lunes" solo, un martes, no le dice a nadie si es en seis días
- *  o en trece. */
-export function cuandoVa(iso: string | null | undefined): string {
-  const t = ms(iso);
-  if (!t) return "";
-  const d = new Date(t);
-  const dias = diasDeDiferencia(d);
-  const hora = HORA.format(d);
-  if (dias === 0) return `hoy a las ${hora}`;
-  if (dias === 1) return `mañana a las ${hora}`;
-  if (dias > 1 && dias < 7) return `el ${DIA_SEMANA.format(d)} ${DIA_MES.format(d)} a las ${hora}`;
-  return `el ${DIA_MES.format(d)} a las ${hora}`;
-}
-
 /** ¿La última corrida salió bien, mal, o todavía no hubo ninguna? */
 function comoSalio(f: Flujo, job: CronJob | null): "bien" | "mal" | null {
   // El estado del job manda: es el que el motor acaba de escribir. El del
@@ -143,10 +105,15 @@ export function estadoReal(f: Flujo, job: CronJob | null): EstadoReal {
       ultima: salio === "mal" ? `La última vez, ${cuando}, no pudo` : "",
     };
   }
+  // Pausado NO borra lo que pasó: si la última falló, sigue diciéndolo. Un
+  // flujo pausado sobre una corrida rota es justo el que hay que mirar antes de
+  // reanudarlo.
   if (pausado) {
     return {
       ...base, clave: "pausado", tono: "neutral", cartel: "En pausa", proxima: "",
-      ultima: cuando ? `Última vez: ${cuando}` : "",
+      ultima: !cuando ? ""
+        : salio === "mal" ? `Última vez: ${cuando} — no pudo terminar`
+        : `Última vez: ${cuando}`,
     };
   }
   if (job?.state === "running") {
@@ -171,3 +138,15 @@ export function estadoReal(f: Flujo, job: CronJob | null): EstadoReal {
   }
   return { ...base, clave: "sin-correr", tono: "green", cartel: "Activo", ultima: "" };
 }
+
+// EL ORDEN TAMBIÉN DICE ALGO. El adapter ordena por estado guardado, que no
+// sabe nada de corridas: los dos flujos rotos de la veterinaria quedaban abajo
+// de los sanos. Lo que le pide algo al cliente va arriba.
+const PESO: Record<ClaveEstado, number> = {
+  incompleto: 0, fallo: 1, corriendo: 2, bien: 3, "sin-correr": 4, pausado: 5,
+};
+
+export const ordenarPorUrgencia = <T extends { estado: EstadoReal; flujo: Flujo }>(xs: T[]): T[] =>
+  xs.slice().sort((a, b) =>
+    PESO[a.estado.clave] - PESO[b.estado.clave] ||
+    a.flujo.nombre.localeCompare(b.flujo.nombre, "es"));

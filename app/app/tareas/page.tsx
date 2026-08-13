@@ -11,7 +11,10 @@
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Clock, Eye, Pause, Play, TriangleAlert, X, Zap } from "lucide-react";
-import { loadConfig, getJobs, jobAction, type PortalConfig } from "../lib/agent";
+import {
+  loadConfig, getFlujos, getJobs, jobAction, type Flujo, type PortalConfig,
+} from "../lib/agent";
+import { momento } from "../lib/palabras";
 import {
   AvisoLinkViejo, Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner,
 } from "../lib/ui";
@@ -130,6 +133,23 @@ const NOTICE_OK: Record<Action, (name: string) => string> = {
   run: (n) => `Corrida de «${n}» disparada.`,
 };
 
+// ── Nombres ──
+
+// EL SLUG NO ES UN NOMBRE. La tarea del flujo se llama, del lado del motor,
+// `flujo-revision-precios-proveedores`, y así se le mostraba al cliente. Su
+// flujo, en cambio, tiene el nombre que él le puso: «Revisión de precios de
+// proveedores». Es el mismo trabajo escrito en dos idiomas y solo uno es el
+// suyo. Sin la lista de flujos a mano, al menos se le sacan los guiones.
+function nombreDeTarea(name: string, flujos: Flujo[] | null): string {
+  const n = (name || "").trim();
+  const m = /^flujo-(.+)$/.exec(n);
+  if (!m) return n;
+  const f = flujos?.find((x) => x.slug === m[1]);
+  if (f?.nombre) return f.nombre;
+  const limpio = m[1].replace(/-+/g, " ").trim();
+  return limpio.charAt(0).toUpperCase() + limpio.slice(1);
+}
+
 // ── Cadencia legible ──
 
 const DIAS_PLURAL = ["domingos", "lunes", "martes", "miércoles", "jueves", "viernes", "sábados"];
@@ -144,6 +164,15 @@ function diasLegible(dow: string): string | null {
   if (dow === "1-5") return "Lunes a viernes";
   if (dow === "0,6" || dow === "6,0") return "Sábados y domingos";
   if (/^[0-6]$/.test(dow)) return `Los ${DIAS_PLURAL[Number(dow)]}`;
+  // Listas de días. Sin esto, «0 18 * * 1,3» no se reconocía y el cron crudo
+  // pasaba a ser el texto principal de la fila: el flujo de la veterinaria que
+  // corre lunes y miércoles se presentaba como "0 18 * * 1,3".
+  if (/^[0-6](,[0-6])+$/.test(dow)) {
+    const dias = Array.from(new Set(dow.split(",").map(Number))).sort()
+      .map((d) => DIAS_PLURAL[d]);
+    const ultimo = dias.pop()!;
+    return `Los ${dias.join(", ")} y ${ultimo}`;
+  }
   return null;
 }
 
@@ -215,35 +244,28 @@ function haceLegible(iso: string | null | undefined): string | null {
   return d === 1 ? "ayer" : `hace ${d} días`;
 }
 
+// LA MISMA FILA DECÍA DOS HORAS DISTINTAS: «Los lunes a las 09:00» y, al lado,
+// «Próxima lun 17 ago a las 06:00». Son la misma corrida. La cadencia sale del
+// cron —escrito en la hora del agente— y la próxima salía de `next_run_at`
+// (que viene con su huso: "2026-08-17T09:00:00-03:00") formateada con el reloj
+// del browser; con la máquina en México son tres horas de diferencia. Ahora las
+// dos se leen en el reloj del negocio. Ver la nota en `lib/palabras.ts`.
 function proximaLegible(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const dte = new Date(iso);
-  if (Number.isNaN(dte.getTime())) return null;
-  const ahora = new Date();
-  const hm = `${two(dte.getHours())}:${two(dte.getMinutes())}`;
-  const mismoDia = (a: Date, b: Date) => a.toDateString() === b.toDateString();
-  if (mismoDia(dte, ahora)) return `hoy a las ${hm}`;
-  const maniana = new Date(ahora);
-  maniana.setDate(ahora.getDate() + 1);
-  if (mismoDia(dte, maniana)) return `mañana a las ${hm}`;
-  const fecha = dte.toLocaleDateString("es-UY", { weekday: "short", day: "numeric", month: "short" });
-  return `${fecha} a las ${hm}`;
+  const m = momento(iso);
+  if (!m) return null;
+  if (m.dias === 0) return `hoy a las ${m.hora}`;
+  if (m.dias === 1) return `mañana a las ${m.hora}`;
+  return `${m.fechaCorta} a las ${m.hora}`;
 }
 
 // Fecha + hora de una corrida: "hoy 09:56", "ayer 04:07", "1 ago 23:10".
+// También en el reloj del negocio: el historial y la próxima corrida se leen
+// uno debajo del otro y no pueden estar en husos distintos.
 function fechaHoraCorrida(iso: string | null | undefined): { fecha: string; hora: string } | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const ahora = new Date();
-  const ayer = new Date(ahora);
-  ayer.setDate(ahora.getDate() - 1);
-  const mismoDia = (a: Date, b: Date) => a.toDateString() === b.toDateString();
-  const fecha =
-    mismoDia(d, ahora) ? "hoy"
-    : mismoDia(d, ayer) ? "ayer"
-    : d.toLocaleDateString("es-UY", { day: "numeric", month: "short" });
-  return { fecha, hora: `${two(d.getHours())}:${two(d.getMinutes())}` };
+  const m = momento(iso);
+  if (!m) return null;
+  const fecha = m.dias === 0 ? "hoy" : m.dias === -1 ? "ayer" : m.fechaCorta;
+  return { fecha, hora: m.hora };
 }
 
 // Cuánto tardó una corrida. null si todavía no terminó (o si las fechas no
@@ -496,6 +518,8 @@ export default function TareasPage() {
   const abiertoId = useParamRuta(PARAM.programada);
   const [detalle, setDetalle] = useState<CronDetail | null>(null);
   const [detalleErr, setDetalleErr] = useState<string | null>(null);
+  // Solo para ponerle a cada tarea el nombre que el cliente le puso a su flujo.
+  const [flujos, setFlujos] = useState<Flujo[] | null>(null);
   const pedido = useRef(0); // descarta respuestas de detalles que ya no se ven
 
   const refresh = useCallback((c: PortalConfig) => {
@@ -512,6 +536,7 @@ export default function TareasPage() {
     if (!c) return; // el layout muestra el login
     setCfg(c);
     refresh(c);
+    getFlujos(c).then((r) => setFlujos(r?.flujos ?? [])).catch(() => { /* caemos al slug */ });
     const t = setInterval(() => refresh(c), 30_000);
     return () => clearInterval(t);
   }, [refresh]);
@@ -585,7 +610,7 @@ export default function TareasPage() {
       if (actualizado) {
         setJobs((prev) => ordenar([...(prev ?? []).filter((j) => j.id !== actualizado.id), actualizado]));
       }
-      setNotice({ text: NOTICE_OK[action](job.name), ok: true });
+      setNotice({ text: NOTICE_OK[action](nombreDeTarea(job.name, flujos)), ok: true });
       refresh(cfg);
       if (abiertoId === job.id) cargarDetalle(job.id, true);
     } catch (e: unknown) {
@@ -675,11 +700,20 @@ export default function TareasPage() {
                   title="Ver detalle"
                 >
                   {/* spans, no <p>: adentro de un button el markup tiene que ser inline */}
-                  <span className="block truncate text-sm font-semibold text-ink">{job.name}</span>
-                  <span className="block text-[13px] text-ink-soft">{legible}</span>
-                  {cruda && cruda !== legible && (
-                    <span className="block font-mono text-[11px] text-ink-soft/60">{cruda}</span>
-                  )}
+                  <span className="block truncate text-sm font-semibold text-ink">
+                    {nombreDeTarea(job.name, flujos)}
+                  </span>
+                  {/* El cron crudo («0 9 * * 1») se le mostraba al cliente
+                      debajo de la cadencia ya traducida. No agrega nada que él
+                      pueda usar y le dice "esto no es para vos". Va al `title`
+                      y NO al texto: escondido con `sr-only` seguiría leyéndoselo
+                      en voz alta a un cliente ciego, que es peor. */}
+                  <span
+                    className="block text-[13px] text-ink-soft"
+                    title={cruda && cruda !== legible ? cruda : undefined}
+                  >
+                    {legible}
+                  </span>
                 </button>
 
                 {/* Centro: estado + última corrida */}
@@ -706,7 +740,7 @@ export default function TareasPage() {
                   {enConfirm ? (
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       <span className="text-[13px] text-ink-soft">
-                        {CONFIRM_Q[enConfirm.action](job.name)}
+                        {CONFIRM_Q[enConfirm.action](nombreDeTarea(job.name, flujos))}
                       </span>
                       <Btn
                         size="sm"

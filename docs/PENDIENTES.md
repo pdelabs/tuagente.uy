@@ -553,3 +553,91 @@ Lo que **sigue abierto** después de esta tanda:
   09:00" y "Próxima lun 17 ago a las 06:00"): el cron viene en la zona horaria
   del agente y la hora se formatea con la del browser. Mientras las dos no salgan
   de la misma zona, el renglón se contradice solo.
+
+## Flujos que dicen la verdad — cerrado el 13/8, y lo que le queda al kit
+
+El QA a ciegas del 12/8 dejó el peor hallazgo del portal: **la pantalla mentía
+en verde**. La veterinaria tenía dos flujos con el cartel "Activo"; los dos ya
+habían corrido y **fallado**. Lo descubrió en Actividad —escondida en "Más"— y
+cuando se lo preguntó al agente él le dijo la verdad: *"todavía no te podés
+olvidar del tema: la última revisión automática falló"*. Su veredicto: *"lo
+pagaría, pero mientras la pantalla mienta en verde sigo con la misma carga
+mental"*.
+
+**Cerrado en el portal (13/8), sin tocar el agente:** Flujos cruza
+`/portal/flujos` con `/api/jobs` y cada tarjeta dice si corrió, cuándo, cómo
+salió, cuándo es la próxima, y —si falló— por qué en criollo con el error crudo
+plegado. Pausar, reanudar y "probarlo ahora" son botones de verdad. Actividad
+sale de "Más" y suma las fuentes que le faltaban.
+
+Lo que **necesita el kit** (nada de esto se puede hacer desde el portal):
+
+1. **PATCH en el CORS del gateway — es lo que bloquea "cambiar el día y la
+   hora".** Las dos clientas lo pidieron por separado y es la única de las
+   cuatro acciones que no se pudo implementar. El verbo existe y funciona
+   (`PATCH /api/jobs/{id}` con `{"schedule": {...}}`), pero el preflight
+   contesta `Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS` — sin
+   PATCH — así que el browser lo corta antes de salir. Verificado el 13/8 contra
+   el laboratorio:
+
+   ```
+   curl -i -X OPTIONS http://127.0.0.1:8942/api/jobs/<id> \
+     -H "Origin: http://localhost:8090" \
+     -H "Access-Control-Request-Method: PATCH"
+   → Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS
+   ```
+
+   Agregar `PATCH` a esa lista alcanza para que el portal deje de mandar al
+   cliente al chat a pedir un cambio de horario. **Mientras tanto**, el botón
+   "Cambiar día u hora" lleva al chat con el pedido ya escrito: no miente, pero
+   son cinco minutos de espera para mover una hora.
+
+2. **`gatillo_job` en `/portal/flujos`.** El adapter YA lo lee del frontmatter
+   (lo usa para calcular `ultima_corrida`) pero no lo publica. Sin él, el portal
+   ata cada flujo a su tarea **por el nombre `flujo-<slug>`**, que es el que le
+   pone el kit al crear el cron. Anda, y con duplicados elige la viva y más
+   reciente — pero es una convención de nombre haciendo de clave foránea: el día
+   que alguien renombre un cron a mano, ese flujo se queda sin próxima corrida,
+   sin motivo de falla y sin botones, en silencio. Publicar el id lo cierra.
+
+3. **Borrar un flujo.** La veterinaria también pidió poder sacarlo. `DELETE
+   /api/jobs/{id}` sí pasa CORS, pero borrar el cron deja el `FLUJO.md` huérfano
+   y el flujo sigue apareciendo en el portal sin tarea: media baja es peor que
+   ninguna. Hace falta que el adapter exponga una baja que se lleve las dos
+   mitades (y que sea reversible, o que al menos avise que no lo es).
+
+4. **El huso horario del agente, declarado.** El portal ya no formatea con el
+   reloj del browser: usa el offset que traen las fechas del motor
+   (`2026-08-17T08:30:00-03:00`). Pero los `mtime` de `/portal/files` y los
+   `started_at` de `/api/sessions` son epoch pelado, sin huso, así que Actividad
+   les presta el offset que encontró en otra fecha de la misma tanda. Funciona,
+   y se rompe justo en el caso que más importa: **un agente sin ninguna tarea
+   programada todavía** no tiene de dónde sacarlo y cae al reloj de quien mira.
+   Un `timezone` (o el offset) en `/portal/manifest` lo resuelve de una y sirve
+   para todo el portal.
+
+5. **`/portal/activity` no ve casi nada de lo que hace el agente.** La contadora
+   leyó *"Todavía no hay actividad"* justo después de armar tres flujos y de que
+   el agente le escribiera tres documentos, y su conclusión fue peor que el bug:
+   *"si la bitácora me miente cuando estoy mirando, no la voy a creer cuando no
+   estoy"*. La causa: el endpoint tiene **dos fuentes y solo dos** —
+   `executions` (corridas de crons) y `task_events` (tablero)—. Ella no tenía
+   ninguna: sus crons todavía no habían corrido y su tablero estaba vacío. Todo
+   lo que su agente hizo lo hizo conversando, y **escribir archivos o dejar
+   flujos armados no deja fila en ninguna de esas dos tablas**. Medido el 13/8
+   contra el lab: `/portal/activity` devolvía **1** evento mientras
+   `/portal/files` tenía **4** archivos y la sesión **128** mensajes.
+   El portal lo tapó desde afuera mezclando `/portal/files` y `/api/sessions` en
+   la misma línea de tiempo, pero **son tres llamadas para armar una bitácora
+   que el adapter podría entregar hecha** — y ahí adentro sabe cosas que el
+   portal no (qué archivo escribió una corrida y cuál subió el cliente, sin
+   adivinar por la carpeta). Si `/portal/activity` sumara los archivos del
+   workspace y las sesiones humanas, el portal borra ese pegote.
+
+6. **Ninguna corrida que falla avisa por fuera del portal.** El prompt del cron
+   ya le pide al agente que si no pudo trabajar deje un ticket visible —bien—
+   pero las dos corridas de la veterinaria fallaron **antes de que el agente
+   arrancara** (`RuntimeError: No LLM provider configured`), así que no hubo
+   quién dejara el rastro: la única huella quedó en `executions`, donde nadie
+   mira. Un flujo que falla dos lunes seguidos tiene que salir a buscar al
+   cliente por su canal, no esperar a que entre. Eso es del kit.

@@ -253,6 +253,125 @@ export function leerFalla(crudo: string | null | undefined): Falla {
   return { que: base.que, hace: base.hace, nuestro: base.nuestro, crudo: texto };
 }
 
+/* ── Cuándo: el reloj del negocio, no el del que mira ────────────────────── */
+
+// EL MISMO RENGLÓN DECÍA DOS HORAS DISTINTAS. En /app/tareas: «Los lunes a las
+// 09:00» y, tres centímetros a la derecha, «Próxima lun 17 ago a las 06:00».
+// Las dos son la misma corrida. La cadencia sale del cron, que está escrito en
+// la hora del agente; la próxima salía de `next_run_at` —que viene con su huso,
+// "2026-08-17T09:00:00-03:00"— formateado con el reloj de quien mira la
+// pantalla. Con un browser en México eso son tres horas de diferencia y el
+// cliente no tiene forma de saber cuál de las dos es la buena.
+//
+// La respuesta correcta es UNA: la hora que el cliente eligió. Él dijo "los
+// lunes a las nueve" y su agente vive en su ciudad. Que el portal se abra desde
+// otro huso —un viaje, un contador que mira desde afuera— no puede mover el
+// horario de su empresa. Así que toda fecha del motor se muestra en el huso con
+// el que vino, no en el del navegador.
+
+/** Un instante del motor, ya pasado al reloj del negocio. */
+export type Momento = {
+  /** El instante real (epoch ms). Para ordenar y comparar. */
+  ms: number;
+  /** "08:30" — hora de pared donde vive el agente. */
+  hora: string;
+  /** "lunes" */
+  diaSemana: string;
+  /** "17/08" */
+  diaMes: string;
+  /** "lun 17 ago" */
+  fechaCorta: string;
+  /** Días de calendario contra hoy, contados allá: 0 hoy, -1 ayer, 1 mañana. */
+  dias: number;
+};
+
+// "…-03:00", "…+0000" o "…Z". Sin sufijo devolvemos null y caemos al reloj
+// local, que es lo único que se puede suponer de una fecha sin huso.
+const OFFSET_RE = /(?:(Z)|([+-])(\d{2}):?(\d{2}))$/;
+
+function offsetDe(iso: string): number | null {
+  const m = OFFSET_RE.exec(iso);
+  if (!m) return null;
+  if (m[1]) return 0;
+  const min = Number(m[3]) * 60 + Number(m[4]);
+  return m[2] === "-" ? -min : min;
+}
+
+/** El huso con el que vino una fecha del motor, en minutos. null si no trae.
+ *  Sirve para saber en qué reloj vive el agente y aplicárselo a los datos que
+ *  llegan SIN huso (los `mtime` de los archivos son segundos pelados). */
+export const husoDe = (iso: string | null | undefined): number | null =>
+  iso ? offsetDe(iso.trim()) : null;
+
+/** Un instante (epoch ms) escrito en ISO con el huso que se le indique, para
+ *  que después `momento()` lo muestre en el reloj del negocio. */
+export function isoConHuso(ms: number, off: number): string {
+  const d = new Date(ms + off * 60_000);
+  const signo = off < 0 ? "-" : "+";
+  const abs = Math.abs(off);
+  const dos = (n: number) => String(n).padStart(2, "0");
+  return d.toISOString().replace(/\.\d+Z$/, "")
+    + `${signo}${dos(Math.floor(abs / 60))}:${dos(abs % 60)}`;
+}
+
+// Se formatea en UTC a propósito: al instante se le suma el huso del agente,
+// así que la hora "UTC" del resultado ES su hora de pared. Es la única forma de
+// pintar un huso ajeno sin pedirle a Intl un timeZone que no conocemos (el
+// motor manda el offset, no el nombre de la zona).
+const enUTC = (o: Intl.DateTimeFormatOptions) =>
+  new Intl.DateTimeFormat("es-UY", { ...o, timeZone: "UTC" });
+const F_HORA = enUTC({ hour: "2-digit", minute: "2-digit", hour12: false });
+const F_DIA_SEMANA = enUTC({ weekday: "long" });
+const F_DIA_MES = enUTC({ day: "2-digit", month: "2-digit" });
+const F_CORTA = enUTC({ weekday: "short", day: "numeric", month: "short" });
+
+export function momento(iso: string | null | undefined): Momento | null {
+  const texto = (iso ?? "").trim();
+  if (!texto) return null;
+  const real = new Date(texto);
+  const ms = real.getTime();
+  if (Number.isNaN(ms)) return null;
+  const off = offsetDe(texto) ?? -real.getTimezoneOffset();
+  const d = new Date(ms + off * 60_000);
+  // "Hoy" también es el de allá: si en la veterinaria son las 23:40 del lunes y
+  // acá ya es martes, la corrida de recién tiene que decir "hoy", no "ayer".
+  const hoy = new Date(Date.now() + off * 60_000);
+  const cero = (x: Date) => Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate());
+  return {
+    ms,
+    hora: F_HORA.format(d),
+    diaSemana: F_DIA_SEMANA.format(d),
+    diaMes: F_DIA_MES.format(d),
+    // es-UY devuelve "lun, 17 ago."; la coma y el punto sobran leyéndolo
+    // adentro de una frase ("Próxima lun 17 ago a las 08:30").
+    fechaCorta: F_CORTA.format(d).replace(/[.,]/g, "").trim(),
+    dias: Math.round((cero(d) - cero(hoy)) / 86_400_000),
+  };
+}
+
+/** Cuándo pasó: "ayer a las 08:30", "el 02/08 a las 19:00". */
+export function cuandoPaso(iso: string | null | undefined): string {
+  const m = momento(iso);
+  if (!m) return "";
+  if (m.dias === 0) return `hoy a las ${m.hora}`;
+  if (m.dias === -1) return `ayer a las ${m.hora}`;
+  if (m.dias > -7) return `el ${m.diaSemana} a las ${m.hora}`;
+  return `el ${m.diaMes} a las ${m.hora}`;
+}
+
+/** Cuándo va a pasar. LLEVA LA FECHA SIEMPRE: "el lunes 17/08 a las 08:30".
+ *  Las dos clientas pidieron esto por separado y las dos lo escribieron con el
+ *  día Y la fecha — "el lunes", leído un martes, no dice si es en seis días o
+ *  en trece. */
+export function cuandoVa(iso: string | null | undefined): string {
+  const m = momento(iso);
+  if (!m) return "";
+  if (m.dias === 0) return `hoy a las ${m.hora}`;
+  if (m.dias === 1) return `mañana a las ${m.hora}`;
+  if (m.dias > 1 && m.dias < 7) return `el ${m.diaSemana} ${m.diaMes} a las ${m.hora}`;
+  return `el ${m.diaMes} a las ${m.hora}`;
+}
+
 /* ── Por dónde le hablaron al agente ─────────────────────────────────────── */
 
 // Va en Uso ("cli · 28 sesiones" era la pantalla de la plata hablando en
