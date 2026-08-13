@@ -22,6 +22,11 @@ export type Manifest = {
   look?: Record<string, number> | null;
   /** true si el cliente ya lo bautizó desde el portal alguna vez. */
   bautizado?: boolean;
+  /** Por dónde le avisa el agente: `telegram`, `correo` o `ninguno` — lo que
+   *  el cliente contestó en el alta. Ausente con adapters viejos y con quien
+   *  nunca llegó a contestar; `"ninguno"` es una respuesta explícita ("ahora
+   *  no") y es la que hace que el portal se lo vuelva a ofrecer. */
+  aviso?: string | null;
   /** Handle del bot de Telegram, sin @ (adapter 0.35+). El onboarding decía
    *  "mandame un hola" y nunca a dónde: sin esto el paso es imposible de
    *  completar salvo que el cliente ya sepa el handle. null si no tiene bot. */

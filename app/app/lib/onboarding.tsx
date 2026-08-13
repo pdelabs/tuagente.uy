@@ -10,14 +10,16 @@
 // cualquier máquina; el browser es solo la copia rápida. Que el agente además
 // se PRESENTE con ese nombre (escribirlo en el SOUL) sigue pendiente.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import dynamic from "next/dynamic";
-import { ArrowRight, Columns3, Dices, Hand, MessageSquare } from "lucide-react";
+import { ArrowRight, BellOff, Columns3, Dices, Hand, MessageSquare, X } from "lucide-react";
 import { Btn, inputCls } from "./ui";
 import { CarruselEjemplos } from "./ejemplosFlujos";
 import ChatOnboarding from "./ChatOnboarding";
+import { urlApuntaADetalle } from "./rutas";
 import {
-  getConnections, guardarIdentidad,
+  createTicket, getConnections, guardarIdentidad, MARCA_PEDIDO, PREFIJO_PEDIDO,
   type Connection, type Manifest, type PortalConfig,
 } from "./agent";
 import {
@@ -175,11 +177,18 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     () => NOMBRES_SUGERIDOS[Math.floor(Math.random() * NOMBRES_SUGERIDOS.length)]);
   const [empresa, setEmpresa] = useState("");
   const [url, setUrl] = useState("");
-  const [canal, setCanal] = useState<"telegram" | "correo" | "" >("");
+  // Las opciones son CANALES CON NOMBRE, y "ahora no" es una de ellas. Antes
+  // eran dos botones, "Por Telegram" y "No uso Telegram", y el segundo no era
+  // una respuesta sino otra obligación: te pedía el mail igual. Las dos
+  // clientas de prueba dijeron lo mismo con distintas palabras — "me sentí
+  // vieja por no usar Telegram" y "nadie en mi barrio usa Telegram" — y las
+  // dos terminaron dando un dato para que la pantalla las dejara pasar.
+  const [canal, setCanal] = useState<"telegram" | "whatsapp" | "correo" | "ninguno" | "">("");
   const [mail, setMail] = useState("");
-  // El aviso es OBLIGATORIO, asi que tiene que funcionar de verdad acá: elegir
-  // "Telegram" sin activarlo dejaria al agente sin donde escribir. Traemos la
-  // conexion para tener el link del bot y su estado real.
+  const [tel, setTel] = useState("");
+  // Elegir "Telegram" sin activarlo dejaria al agente sin donde escribir, asi
+  // que se activa acá mismo. Traemos la conexion para tener el link del bot y
+  // su estado real.
   const [tg, setTg] = useState<Connection | null>(null);
   const [codigo, setCodigo] = useState("");
   const [activando, setActivando] = useState(false);
@@ -187,6 +196,19 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   const [pareado, setPareado] = useState(false);
   // Lo que el cliente eligio del carrusel: arranca la charla sin salir de acá.
   const [pedido, setPedido] = useState("");
+  // A DÓNDE VOLVER AL TERMINAR. El onboarding se pone adelante de CUALQUIER
+  // ruta, y al cerrarse mandaba siempre a /app/inicio: el que llegaba con el
+  // link de un entregable —el que el login le prometió que iba a respetar—
+  // terminaba en la portada y tenía que salir a buscar lo que le habían
+  // mandado. Se captura una sola vez al montar, antes de que cualquier cosa
+  // toque la URL. (La credencial ya se limpió del hash en el layout; acá solo
+  // viajan path y parámetros.)
+  const [destinoDelLink] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return urlApuntaADetalle()
+      ? window.location.pathname + window.location.search
+      : null;
+  });
   // Mientras se saca la foto, el personaje se queda QUIETO. La captura toma el
   // frame que hay en pantalla, y en `tranquilo` el agentito se ceba un mate a
   // los ~20 s y despues cada rato — o sea que casi siempre lo agarraba con el
@@ -250,26 +272,41 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   }, [leyendoWeb]);
 
   const mailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail.trim());
-  // La puerta: o Telegram activado, o un mail donde escribirte. Sin canal el
-  // portal espera que el cliente entre solo, y no entra.
-  const puedeEntrar =
-    (canal === "telegram" && pareado) || (canal === "correo" && mailOk);
+  // Un teléfono uruguayo son ocho o nueve dígitos; con o sin 598, con o sin
+  // espacios. No se valida más que eso: lo que llega es para que lo llamemos
+  // nosotros, y rebotarle el formato a alguien que escribió bien su número es
+  // el peaje de nuevo, más chico.
+  const telOk = (tel.match(/\d/g)?.length ?? 0) >= 8;
+  // YA NO HAY PUERTA. Antes era "o Telegram activado, o un mail": sin eso el
+  // botón quedaba apagado y no se entraba al portal. La decisión de producto
+  // (13/8) es que el canal se pueda dejar para después — el precio de forzarlo
+  // era que la clienta diera un dato cualquiera para pasar, que no es un canal
+  // sino un trámite trucho. Lo único que se pide es CONTESTAR la pregunta:
+  // "Ahora no" es una respuesta y está al lado de las otras.
+  const contestoAlgo = canal !== "";
+  // Qué canal queda de verdad. Elegir Telegram y no activarlo NO es un canal:
+  // el agente escribiría a un chat que no existe. Se cuenta como "todavía no",
+  // se dice, y se ofrece de nuevo adentro del portal.
+  const canalReal = canal === "telegram" && pareado ? "telegram"
+    : canal === "correo" && mailOk ? "correo"
+      : null;
+  // Lo que se tramita a mano: acá no hay nada que el cliente pueda enchufar
+  // solo, así que queda un pedido nuestro con su dato al lado.
+  const pedidoDeConexion = canal === "whatsapp" && telOk ? "whatsapp"
+    : canal === "correo" && mailOk ? "correo"
+      : null;
   // Contador de festejos: cada bautismo dispara el trigger del personaje.
   const [festejos, setFestejos] = useState(0);
   const [look, setLook] = useState<AgentitoLook>(
     () => (hayLookGuardado()
       ? loadAgentLook()
       : lookDesdeAgente(manifest.look) ?? LOOK_DEFAULT));
-  // Solo escribimos en el agente si el cliente eligió algo ACÁ; si no, entrar
-  // desde otra máquina le pisaría la pinta con el default.
-  const eligioAlgo = useRef(false);
   const listo = nombre.trim().length > 0;
 
   const otroLook = () => {
     const nuevo = sortearLook(look);
     saveAgentLook(nuevo);
     setLook(nuevo);
-    eligioAlgo.current = true;
   };
 
   const bautizar = async () => {
@@ -283,7 +320,6 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     setNombre(n);
     setFestejos((f) => f + 1);
     setPaso("negocio");
-    eligioAlgo.current = true;
     // El bautizo se guarda ACA, cuando pasa, y no al final del onboarding.
     // Cuando el ultimo paso se volvio obligatorio (elegir canal), el nombre se
     // quedaba en el browser hasta el final: el agente pasaba por todo el
@@ -307,29 +343,72 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     setPaso("presentacion");
   };
 
-  /** El bautizo viaja al agente; si el adapter es viejo o está caído, el
-   *  portal sigue andando con la copia del browser. */
-  const terminar = (destino: string) => {
-    const n = nombre.trim();
-    if (eligioAlgo.current) {
-      const contacto = canal === "telegram"
-        ? { canal: "telegram" as const, valor: "portal" }
-        : canal === "correo" && mail.trim()
-          ? { canal: "correo" as const, valor: mail.trim() }
+  /** El mismo pedido que deja la pestaña Conexiones: un ticket marcado como
+   *  "esto lo pidió el cliente" para que no vuelva por Aprobaciones como si
+   *  tuviera que aprobar su propia solicitud. */
+  const pedirConexion = (id: "whatsapp" | "correo") => {
+    const wa = id === "whatsapp";
+    createTicket(cfg, {
+      title: wa ? "Conectar WhatsApp" : "Conectar el correo de la empresa",
+      body:
+        `${PREFIJO_PEDIDO} ${MARCA_PEDIDO}\n\n` +
+        `Lo pidió en el alta del portal, cuando eligió por dónde quiere que le avise.\n` +
+        (wa
+          ? `Número: ${tel.trim()}\n\n` +
+            `Vía oficial (Cloud API): pide verificación de la empresa ante Meta y ` +
+            `la tramitamos nosotros.`
+          : `Casilla: ${mail.trim()}\n\n` +
+            `Hay que conectar la casilla de la empresa (IMAP/SMTP) para que el ` +
+            `agente pueda escribir desde ahí.`) +
+        `\n\nNo hagas nada por tu cuenta con esto: avisale al equipo de tuagente ` +
+        `que hay que conectarlo y dejá el ticket esperando.`,
+    }).catch(() => { /* si no se pudo anotar, el alta no se traba por eso */ });
+  };
+
+  /** El paso del aviso, resuelto donde se decide y no al final del onboarding.
+   *
+   *  Es la misma lección que el bautizo: guardarlo recién en la última pantalla
+   *  significaba perderlo si el cliente cerraba antes — y encima solo se
+   *  guardaba si había pasado por el bautismo, así que el que entraba desde
+   *  otra máquina a un agente YA bautizado elegía canal y no se guardaba nunca.
+   *
+   *  Lo que NO se manda: `whatsapp` como canal de aviso. El adapter solo acepta
+   *  telegram/correo/ninguno (`CANALES_AVISO`), y mandarle otra cosa hace
+   *  fallar la llamada entera. Mientras el kit no lo agregue, WhatsApp vive
+   *  como pedido —un ticket, igual que en Conexiones— y no como canal. */
+  const seguirDesdeAviso = () => {
+    const contacto = canalReal === "telegram"
+      ? { canal: "telegram" as const, valor: "portal" }
+      : canalReal === "correo"
+        ? { canal: "correo" as const, valor: mail.trim() }
+        // "Ahora no" se guarda EXPLÍCITO. Es el dato que le permite al portal
+        // volver a ofrecerlo adentro (y al agente saber que no tiene dónde
+        // escribir); si no se guardara nada, sería indistinguible de un
+        // cliente viejo que nunca contestó la pregunta.
+        : canal === "ninguno" || (canal === "telegram" && !pareado)
+          ? { canal: "ninguno" as const }
           : undefined;
-      guardarIdentidad(cfg, {
-        nombre: n, look, ...(contacto ? { contacto } : {}),
-      }).catch(() => {
-        /* adapter viejo (404) o caído: queda en el browser */
-      });
+    if (contacto) {
+      guardarIdentidad(cfg, { contacto })
+        .catch(() => { /* adapter viejo o caído: el portal sigue */ });
     }
+    if (pedidoDeConexion) pedirConexion(pedidoDeConexion);
+    setPaso("automatizaciones");
+  };
+
+  /** Cierra el onboarding y deja al cliente donde iba.
+   *
+   *  Sin destino explícito manda a donde APUNTABA EL LINK con el que entró, y
+   *  recién si no venía a nada concreto, al inicio. */
+  const terminar = (destino?: string) => {
+    const n = nombre.trim();
     onDone(n);
     // Navegación DURA a propósito. Con router.push, al cerrar el onboarding se
     // montaba la página de /app —que hace replace("/app/inicio") en un efecto—
     // y se comía el destino: "Armar el primero" terminaba en Inicio. Esto pasa
     // una vez en la vida del cliente; un reload de más es barato al lado de un
     // llamado a la acción que no lleva a ningún lado.
-    window.location.assign(destino);
+    window.location.assign(destino ?? destinoDelLink ?? "/app/inicio");
   };
 
   // La pestaña Aprobaciones es condicional (existe cuando hay algo esperando),
@@ -395,7 +474,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
               ¿Por dónde te aviso?
             </h1>
             <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-soft">
-              Necesito saber por dónde encontrarte. Si no, trabajo y no te enterás.
+              Cuando termine algo tuyo o necesite tu ok, te escribo por donde
+              vos digas. Si preferís verlo más adelante, también está bien.
             </p>
           </div>
         )}
@@ -563,10 +643,18 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                 Cuando algo necesite tu ok, o cuando anote algo tuyo y quiera confirmarlo.
                 Te escribo yo, no te llegan mails del sistema.
               </p>
+              {/* CUATRO RESPUESTAS, TODAS CON NOMBRE. La cuarta es "ahora no" y
+                  está al lado de las otras a propósito: es una respuesta, no
+                  una escapatoria escondida abajo. WhatsApp figura porque es lo
+                  que la mitad del país usa — y figura diciendo la verdad sobre
+                  lo que lleva, en vez de faltar y dejar a la clienta pensando
+                  que el producto no la entiende. */}
               <div className="mt-3 flex flex-wrap gap-2">
                 {([
-                  ["telegram", "Por Telegram"],
-                  ["correo", "No uso Telegram"],
+                  ["telegram", "Telegram"],
+                  ["whatsapp", "WhatsApp"],
+                  ["correo", "Correo"],
+                  ["ninguno", "Ahora no"],
                 ] as const).map(([k, label]) => (
                   <button
                     key={k}
@@ -630,6 +718,38 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                 )
               )}
 
+              {/* WHATSAPP DICE LO QUE CUESTA Y NO SE OFRECE COMO SI FUERA UN
+                  BOTÓN. Lo que el kit tiene hoy son dos caminos: el oficial
+                  (Cloud API), que pide que Meta verifique a la empresa y lleva
+                  días, y un puente por QR que solo existe si se lo instalamos
+                  al agente y que puede hacer que le bloqueen el número. Ni uno
+                  ni otro es "apretar Conectar": ofrecerlo así fue lo que le
+                  devolvió un error de Python en la cara a una veterinaria. */}
+              {canal === "whatsapp" && (
+                <div className="mt-3">
+                  <p className="text-[12.5px] leading-relaxed text-ink-soft">
+                    Por WhatsApp todavía no te puedo escribir solo. La vía que sirve
+                    para un número de empresa pide que Meta verifique el negocio, y
+                    ese trámite lo hacemos nosotros: suele llevar unos días. Dejanos
+                    el número y lo arrancamos hoy.
+                  </p>
+                  <input
+                    autoFocus
+                    value={tel}
+                    onChange={(e) => setTel(e.target.value)}
+                    placeholder="099 123 456"
+                    inputMode="tel"
+                    maxLength={30}
+                    aria-label="Tu número de WhatsApp"
+                    className={`${inputCls} mt-2`}
+                  />
+                  <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
+                    Mientras tanto, si querés que te avise desde hoy, Telegram se
+                    activa acá en dos toques.
+                  </p>
+                </div>
+              )}
+
               {canal === "correo" && (
                 <div className="mt-3">
                   <input
@@ -650,18 +770,49 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                   </p>
                 </div>
               )}
+
+              {/* Lo que se pierde, dicho una vez y sin dramatizar: no cambia lo
+                  que el agente hace, cambia quién avisa a quién. */}
+              {canal === "ninguno" && (
+                <div className="mt-3">
+                  <p className="text-[12.5px] leading-relaxed text-ink-soft">
+                    Entonces no te escribo a ningún lado: lo que haga te va a estar
+                    esperando acá y lo ves cuando entres. Trabaja igual — lo que
+                    cambia es que te enterás cuando venís, en vez de que te avise yo.
+                  </p>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-soft">
+                    Cuando quieras prenderlo, está en Conexiones y son dos minutos.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex flex-col items-center gap-2">
-              <Btn disabled={!puedeEntrar} onClick={() => setPaso("automatizaciones")}>
+              <Btn disabled={!contestoAlgo} onClick={seguirDesdeAviso}>
                 Continuar <ArrowRight className="h-4 w-4" />
               </Btn>
-              <span className="text-[12px] text-ink-soft">
-                {!puedeEntrar
-                  ? "Elegí por dónde te aviso para seguir."
-                  : url.trim()
-                    ? "Mientras tanto sigo leyendo tu web. Lo que saque queda en Entregas."
-                    : "Falta una sola cosa más."}
+              {/* Qué va a pasar al tocar Continuar, dicho antes de tocarlo. Es
+                  el renglón que evita la sorpresa de la clienta que eligió algo,
+                  siguió, y recién adentro se enteró de que no le llegaba nada. */}
+              <span className="max-w-sm text-[12px] leading-relaxed text-ink-soft">
+                {canal === ""
+                  ? "Elegí una, o tocá «Ahora no» si preferís verlo más adelante."
+                  : canalReal === "telegram"
+                    ? "Listo: te escribo por Telegram."
+                    : canal === "telegram"
+                      ? "Todavía no lo activaste: entrás sin avisos y lo terminás cuando quieras desde Conexiones."
+                      : canal === "whatsapp"
+                        ? telOk
+                          ? "Queda pedido: te escribimos para conectarlo."
+                          : "Dejanos el número, o seguí y lo vemos más adelante."
+                        : canal === "correo"
+                          ? mailOk
+                            ? "Queda pedido: te escribimos para conectar la casilla."
+                            : "Escribí tu dirección, o seguí y lo vemos más adelante."
+                          : "Seguís sin avisos. Lo prendés cuando quieras desde Conexiones."}
+                {url.trim() && (
+                  <> Mientras tanto sigo leyendo tu web: lo que saque queda en Entregas.</>
+                )}
               </span>
             </div>
           </div>
@@ -670,7 +821,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
             cfg={cfg}
             pedido={pedido}
             nombreAgente={nombre || "Tu agente"}
-            onListo={() => terminar("/app/inicio")}
+            onListo={() => terminar()}
+            volviendoA={Boolean(destinoDelLink)}
           />
         ) : (
           <div className="w-full animate-fadeup">
@@ -690,15 +842,73 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                 Contarle lo mío <ArrowRight className="h-4 w-4" />
               </Btn>
               <button
-                onClick={() => terminar("/app/inicio")}
+                onClick={() => terminar()}
                 className="text-[13px] font-semibold text-ink-soft underline-offset-4 transition hover:text-ink hover:underline"
               >
-                Ahora no, ir al inicio
+                {destinoDelLink ? "Ahora no, llevame a lo que vine a ver" : "Ahora no, ir al inicio"}
               </button>
             </div>
           </div>
         )}
       </div>
     </main>
+  );
+}
+
+/* ── La otra mitad de dejar saltear el canal ─────────────────────────────── */
+
+const AVISO_CANAL_KEY = "tuagente_canal_pospuesto";
+
+/** El recordatorio de que todavía no hay por dónde avisarle.
+ *
+ *  Dejar entrar sin canal solo es honesto si el portal vuelve a ofrecerlo: si
+ *  no, "después" es nunca y el cliente se queda con un agente que trabaja y no
+ *  le avisa — que es exactamente lo que las dos clientas de prueba dijeron que
+ *  las haría no pagar.
+ *
+ *  Aparece SOLO cuando el cliente contestó "ahora no" (el manifiesto lo
+ *  guarda como `aviso: "ninguno"`). Con adapters viejos el campo no viene y no
+ *  se muestra nada: es preferible no recordar nada a recordarle algo a alguien
+ *  que ya tiene su canal puesto. Se puede cerrar, y cerrarlo dura: el camino
+ *  no se pierde porque Conexiones sigue estando siempre. */
+export function AvisoSinCanal({ manifest }: { manifest: Manifest }) {
+  const [cerrado, setCerrado] = useState(true);
+  useEffect(() => {
+    try {
+      setCerrado(localStorage.getItem(AVISO_CANAL_KEY) === "1");
+    } catch {
+      setCerrado(false);
+    }
+  }, []);
+  if (manifest.aviso !== "ninguno" || cerrado) return null;
+  const cerrar = () => {
+    setCerrado(true);
+    try {
+      localStorage.setItem(AVISO_CANAL_KEY, "1");
+    } catch { /* modo privado: vale para esta sesión */ }
+  };
+  return (
+    <div className="border-b border-black/[0.07] bg-c-amber/25 px-6 py-2.5 md:px-8">
+      <div className="mx-auto flex max-w-5xl items-center gap-3">
+        <BellOff className="h-4 w-4 shrink-0 text-c-amber-ink" />
+        <p className="min-w-0 flex-1 text-[13px] leading-snug text-c-amber-ink">
+          Todavía no tengo por dónde avisarte: lo que haga te espera acá hasta que entres.{" "}
+          <Link
+            href="/app/conexiones?conexion=telegram"
+            className="font-semibold underline underline-offset-2"
+          >
+            Elegir un canal
+          </Link>
+        </p>
+        <button
+          onClick={cerrar}
+          aria-label="Cerrar el aviso"
+          title="Cerrar el aviso"
+          className="shrink-0 rounded-lg p-1 text-c-amber-ink transition hover:bg-black/[0.05]"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
   );
 }

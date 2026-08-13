@@ -16,8 +16,20 @@ import { ConexionLogo } from "../lib/ConexionLogo";
 
 type Estado = { paired: boolean; pairing: boolean; has_qr: boolean };
 
-export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada }: {
+/** ESTE ES EL ERROR QUE UNA VETERINARIA LEYÓ EN LA PANTALLA:
+ *  «el puente de WhatsApp no responde: <urlopen error [Errno -2] Name or
+ *  service not known>». No es una caída pasajera y no se arregla reintentando:
+ *  el puente del QR es un servicio APARTE que se le instala al agente cuando el
+ *  cliente lo pide, así que en el 99% de los agentes simplemente no existe. El
+ *  adapter no puede distinguir "no está instalado" de "está caído" —los dos son
+ *  un urlopen que falla— pero para el cliente la respuesta útil es la misma:
+ *  esta vía no la tenés, y la que sirve la hacemos nosotros. */
+const NO_ESTA = /name or service not known|no responde|connection refused|econnrefused|temporary failure in name resolution|urlopen|503/i;
+
+export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada, onPedir }: {
   cfg: PortalConfig; conexion: Connection; onCerrar: () => void; onConectada: () => void;
+  /** Pedir que lo conectemos nosotros: el mismo pedido de la tarjeta. */
+  onPedir?: () => void;
 }) {
   const [estado, setEstado] = useState<Estado | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -66,6 +78,9 @@ export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada }
   // Soltar el último blob al cerrar.
   useEffect(() => () => { if (qrUrl) URL.revokeObjectURL(qrUrl); }, [qrUrl]);
 
+  // Sin estado y con un error de red del lado del agente = el puente no está.
+  const sinPuente = Boolean(err && !estado && NO_ESTA.test(err));
+
   const empezar = () => {
     setArrancando(true);
     setErr(null);
@@ -85,7 +100,31 @@ export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada }
           </div>
         </div>
 
-        {estado?.paired ? (
+        {sinPuente ? (
+          /* Ni el aviso del riesgo ni el botón: acá no hay nada que apretar.
+             Lo único honesto es decir que esta vía no está y ofrecer la que
+             sí existe. */
+          <div className="flex flex-col items-start gap-3">
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              La vía del código QR no está instalada en tu agente: es un agregado
+              aparte y hoy no lo tiene. Igual no es la que te conviene para el
+              número de la empresa.
+            </p>
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              La que sirve para una línea comercial es la oficial de WhatsApp.
+              Pide que Meta verifique tu empresa y la tramitamos nosotros: son
+              unos días y no tenés que configurar nada.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {onPedir && (
+                <Btn size="sm" onClick={() => { onPedir(); onCerrar(); }}>
+                  Pedir que la conecten
+                </Btn>
+              )}
+              <Btn kind="secondary" size="sm" onClick={onCerrar}>Cerrar</Btn>
+            </div>
+          </div>
+        ) : estado?.paired ? (
           <div className="flex flex-col items-start gap-3">
             <p className="flex items-center gap-2 text-sm font-semibold text-c-green-ink">
               <Check className="h-4 w-4" /> ¡Conectado! Tu agente ya puede leer tus mensajes.
@@ -142,7 +181,15 @@ export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada }
             )}
           </>
         )}
-        {err && <p className="mt-3 text-[13px] font-medium text-c-coral-ink">{err}</p>}
+        {/* El texto crudo del motor NUNCA a la vista: si el caso es el del
+            puente ausente ya está contado arriba, y cualquier otro se dice en
+            castellano. Queda en el `title` para nosotros. */}
+        {err && !sinPuente && (
+          <p className="mt-3 text-[13px] font-medium text-c-coral-ink" title={err}>
+            No pude preparar el código. Probá de nuevo en un rato; si sigue igual,
+            escribinos y lo conectamos nosotros.
+          </p>
+        )}
       </div>
     </Modal>
   );

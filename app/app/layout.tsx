@@ -22,7 +22,7 @@ import {
   volverAlaPestania,
 } from "./lib/rutas";
 import { INTROS, useIntroGate } from "./lib/intros";
-import Onboarding, { loadAgentName, saveAgentName } from "./lib/onboarding";
+import Onboarding, { AvisoSinCanal, loadAgentName, saveAgentName } from "./lib/onboarding";
 import {
   AgentitoAvatar, hayLookGuardado, loadAgentLook, lookDesdeAgente, saveAgentLook,
 } from "./lib/agentito";
@@ -37,6 +37,13 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   { key: "home", path: "/app/inicio", label: "Inicio", icon: Home },
   { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
   { key: "flujos", path: "/app/flujos", label: "Flujos", icon: Workflow },
+  // Actividad sale de "Más" (13/8) y queda pegada a Flujos. Las dos clientas
+  // del QA a ciegas la fueron a buscar y las dos dijeron lo mismo: "es donde
+  // está la verdad" y "debería estar arriba". Una de ellas descubrió AHÍ que
+  // sus dos flujos habían fallado, mientras Flujos los mostraba en verde. Ese
+  // agujero ya está tapado del otro lado, pero la bitácora de lo que hizo el
+  // agente no es una vista de taller: es la prueba de que trabajó.
+  { key: "activity", path: "/app/actividad", label: "Actividad", icon: Activity },
   { key: "kanban", path: "/app/pipeline", label: "Tablero", icon: Columns3 },
   { key: "approvals", path: "/app/aprobaciones", label: "Aprobaciones", icon: Hand },
   // Principal por decisión de Luis (7/8): la vitrina de lo producido —
@@ -49,7 +56,6 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   // ropero". Media docena de pantallas le prometen "los sistemas que le
   // conectaste": el lugar donde se conectan no puede estar plegado.
   { key: "connections", path: "/app/conexiones", label: "Conexiones", icon: Plug },
-  { key: "activity", path: "/app/actividad", label: "Actividad", icon: Activity, sec: true },
   { key: "files", path: "/app/archivos", label: "Archivos", icon: Folder, sec: true },
   { key: "usage", path: "/app/uso", label: "Uso", icon: BarChart3, sec: true },
   { key: "capabilities", path: "/app/habilidades", label: "Habilidades", icon: Puzzle, sec: true },
@@ -451,7 +457,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {showIntro && current && Intro ? (
           <Intro onOk={() => dismiss(current.key)} />
         ) : (
-          children
+          <>
+            {/* El alta dejó pasar sin canal de aviso: acá se vuelve a ofrecer.
+                Se dibuja solo cuando el cliente contestó "ahora no"; el resto
+                del tiempo no ocupa ni un píxel. */}
+            <AvisoSinCanal manifest={manifest} />
+            {children}
+          </>
         )}
       </main>
     </div>

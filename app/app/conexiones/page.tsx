@@ -609,6 +609,7 @@ export default function ConexionesPage() {
           conexion={dialogo}
           onCerrar={() => setDialogo(null)}
           onConectada={cargar}
+          onPedir={() => pedir(dialogo)}
         />
       )}
 
