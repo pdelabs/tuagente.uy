@@ -118,6 +118,16 @@ def main():
         return 1
     mods = manifest.get("modules", {})
 
+    # El alias en español de la misma ruta. Es un aviso y no una falla: un
+    # agente instalado antes del adapter 0.37 cumple el contrato igual —el
+    # portal pide `/portal/manifest`—, pero quien depure a mano contra ese
+    # agente se va a comer el `404 {"error":"not found"}` de `/portal/manifiesto`
+    # y va a creer que el manifiesto no existe.
+    check("Alias /portal/manifiesto", lambda: (
+        jget(f"{A}/portal/manifiesto", K)[0].get("agent") == manifest.get("agent")
+        or (_ for _ in ()).throw(AssertionError("responde otra cosa que /portal/manifest")),
+        "el alias en español devuelve lo mismo")[1], required=False)
+
     # Auth y CORS: un portal sin esto no funciona en el browser aunque curl ande.
     check("Rechaza sin credenciales", lambda: (
         http(f"{A}/portal/manifest", None, expect=401), "401")[1])

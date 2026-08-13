@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.36.0"
+VERSION = "0.37.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -2481,7 +2481,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(png)
                 return
-            if path == "/portal/manifest":
+            # `/portal/manifiesto` es un ALIAS, no un renombre: la ruta buena
+            # sigue siendo `/portal/manifest`, que es la que piden el portal en
+            # produccion y todos los agentes ya instalados. Existe porque en un
+            # kit donde todo lo demas esta en español la ruta en ingles es una
+            # adivinanza: pedir `/portal/manifiesto` devolvia
+            # `404 {"error":"not found"}`, que se lee como "este agente no tiene
+            # manifiesto" y manda a depurar el adapter.
+            if path in ("/portal/manifest", "/portal/manifiesto"):
                 return self._send(200, manifest())
             if path == "/portal/capabilities":
                 return self._send(200, capabilities())
