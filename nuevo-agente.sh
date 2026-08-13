@@ -111,7 +111,37 @@ TELEGRAM_ALLOWED_USERS=  # ids autorizados; sin esto le escribe cualquiera
 ENV
 chmod 600 secretos.env
 
-printf 'secretos.env\ndata/.env\ndata/*.db*\ndata/cache/\ndata/logs/\n__pycache__/\n.DS_Store\n' > .gitignore
+# EL .gitignore VA POR LISTA BLANCA, y no es prolijidad: `data/` es del agente y
+# del motor, que escriben ahi en cada arranque (auth.json, gateway.pid,
+# gateway-starts.log, cron/, bin/, state/, sus 70 skills stock, las bases y sus
+# -wal/-shm…). Con la lista negra que habia —`data/*.db*`, `cache/` y `logs/`—
+# el `git status` del repo del cliente salia con 30 entradas despues del PRIMER
+# arranque, casi todas del motor, y dejaba de servir para lo unico que sirve:
+# ver si tocaste algo. Y una lista negra nace incompleta: cada version del motor
+# estrena archivos nuevos y nadie va a volver a este archivo a agregarlos.
+#
+# Se versiona lo que escribe una PERSONA o lo que pone el kit: el SOUL, el
+# config, el catalogo de conexiones y el manifiesto de skills del kit. Todo lo
+# de afuera de data/ (kit-skills/, kit-adapter/, politica/, el compose) ya se
+# versiona entero — es justamente lo que un `install.sh` cambia y hay que poder
+# revisar.
+cat > .gitignore <<'IGNORE'
+# Las claves, nunca.
+secretos.env
+data/.env
+
+# data/ es del agente: se ignora entero y se nombra lo que si versionamos.
+data/*
+!data/SOUL.md
+!data/config.yaml
+!data/connections/
+!data/skills/
+data/skills/*
+!data/skills/.kit_manifest
+
+__pycache__/
+.DS_Store
+IGNORE
 
 # Config: la MISMA que usa el despliegue remoto, sin copia paralela. Antes esto
 # era un heredoc con el config repetido acá adentro, y ya habia empezado a
