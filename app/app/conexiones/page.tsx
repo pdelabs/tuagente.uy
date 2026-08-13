@@ -27,7 +27,8 @@ import {
   ArrowRight, Check, Clock, ExternalLink, Link2, Plug, RefreshCw, TriangleAlert,
 } from "lucide-react";
 import {
-  crearPedidoDeConexion, esPedidoDelCliente, getConnections, getTickets,
+  activateTelegramPairing, crearPedidoDeConexion, esPedidoDelCliente,
+  exchangeGoogleAuthCode, getConnections, getGoogleAuthUrl, getTickets,
   guardarIdentidad, loadConfig,
   type Connection, type PortalConfig, type Ticket,
 } from "../lib/agent";
@@ -87,15 +88,8 @@ function DialogoGoogle({ cfg, conexion, onCerrar, onConectada }: {
 
   useEffect(() => {
     let vivo = true;
-    fetch(cfg.adapter + "/portal/connections/google/auth-url", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${cfg.key}` },
-    })
-      .then(async (r) => {
-        const d = await r.json();
-        if (!r.ok) throw new Error(d?.error || `Error ${r.status}`);
-        if (vivo) setAuthUrl(d.auth_url);
-      })
+    getGoogleAuthUrl(cfg)
+      .then((d) => { if (vivo) setAuthUrl(d.auth_url); })
       .catch((e) => { if (vivo) setErr(e instanceof Error ? e.message : String(e)); });
     return () => { vivo = false; };
   }, [cfg]);
@@ -104,13 +98,8 @@ function DialogoGoogle({ cfg, conexion, onCerrar, onConectada }: {
     setCanjeando(true);
     setErr(null);
     try {
-      const r = await fetch(cfg.adapter + "/portal/connections/google/auth-code", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ code: pegado }),
-      });
-      const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(d?.error || `Error ${r.status}`);
+      const d = await exchangeGoogleAuthCode(cfg, pegado);
+      if (!d.ok) throw new Error("No se pudo conectar Google.");
       setListo(true);
       onConectada();
     } catch (e) {
@@ -204,13 +193,8 @@ function TelegramLista({ c, cfg, onActivada }: {
     setActivando(true);
     setErr(null);
     try {
-      const r = await fetch(cfg.adapter + "/portal/connections/telegram/pairing", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ code: codigo }),
-      });
-      const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(d?.error || `Error ${r.status}`);
+      const d = await activateTelegramPairing(cfg, codigo);
+      if (!d.ok) throw new Error("No se pudo activar Telegram.");
       setListo(true);
       // Ya hay por dónde avisarle: que el manifiesto lo sepa y la franja de
       // "todavía no tengo canal" deje de aparecer. El alta lo anota cuando el

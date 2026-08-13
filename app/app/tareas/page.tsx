@@ -12,7 +12,8 @@
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Clock, Eye, Pause, Play, TriangleAlert, X, Zap } from "lucide-react";
 import {
-  loadConfig, getFlujos, getJobs, jobAction, type Flujo, type PortalConfig,
+  loadConfig, getCronDetail, getFlujos, getJobs, jobAction,
+  type CronDetail, type Flujo, type PortalConfig,
 } from "../lib/agent";
 import { aprenderHuso, estadoDeProgramada, fechaYHora, momento } from "../lib/palabras";
 import {
@@ -45,75 +46,10 @@ type Job = {
 
 type Action = "pause" | "resume" | "run";
 
-// Detalle: shape real de {adapter}/portal/crons/{id} (adapter 0.8.0, verificado
-// contra el agente). El job del detalle es más chico que el del listado —no trae
-// el objeto `schedule`, solo `schedule_display`—, así que la cadencia se sigue
-// calculando con el Job de la lista y esto sólo agrega lo que la lista no tiene.
-type CronRun = {
-  id: string;
-  status?: string | null; // completed | failed | running | claimed | unknown
-  claimed_at?: string | null;
-  started_at?: string | null;
-  finished_at?: string | null;
-  error?: string | null;
-};
-
-type CronDetailJob = {
-  id: string;
-  name: string;
-  prompt?: string | null; // "" cuando la tarea es un script
-  script?: string | null; // "" cuando la tarea es un prompt
-  schedule_display?: string | null;
-  enabled?: boolean;
-  state?: string | null;
-  model?: string | null; // "" cuando no corre modelo (script)
-  deliver?: string | null; // telegram | local | origin | ...
-  last_status?: string | null;
-  last_error?: string | null;
-  next_run_at?: string | null;
-};
-
-type CronDetail = { job: CronDetailJob; runs: CronRun[] };
-
-/* ── Lectura del detalle ──────────────────────────────────────────────────────
-   TODO: getCronDetail DEBERÍA GRADUARSE a ../lib/agent.ts, que es el único punto
-   de red del portal. Vive acá porque lib/ la está tocando otro agente en
-   paralelo. Al mover: es el mismo `get()` de la lib contra el adapter, con el
-   status a mano para distinguir el 404 (id inexistente o adapter viejo) de una
-   caída. Contrato (adapter 0.8.0):
-     GET /portal/crons/{id} → {job, runs[]}   ·   404 si el id no existe
-     runs viene ordenado por más reciente primero, hasta 30.
-   ────────────────────────────────────────────────────────────────────────── */
-
-class DetalleError extends Error {
-  status: number; // 0 = ni siquiera salió el request
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = "DetalleError";
-    this.status = status;
-  }
-}
-
-async function getCronDetail(cfg: PortalConfig, id: string): Promise<CronDetail> {
-  let res: Response;
-  try {
-    res = await fetch(`${cfg.adapter}/portal/crons/${encodeURIComponent(id)}`, {
-      headers: { Authorization: `Bearer ${cfg.key}` },
-    });
-  } catch {
-    throw new DetalleError(0, "no hay conexión con tu agente");
-  }
-  if (!res.ok) {
-    if (res.status === 404) throw new DetalleError(404, "tu agente no tiene el detalle de esta tarea");
-    if (res.status === 401 || res.status === 403)
-      throw new DetalleError(res.status, "tu sesión venció: volvé a entrar con tu link");
-    throw new DetalleError(res.status, `error ${res.status}`);
-  }
-  return res.json();
-}
-
 function describirError(e: unknown): string {
-  if (e instanceof DetalleError) return e.message;
+  const status = (e as { status?: number } | null)?.status;
+  if (status === 404) return "tu agente no tiene el detalle de esta tarea";
+  if (status === 401 || status === 403) return "tu sesión venció: volvé a entrar con tu link";
   const msg = e instanceof Error ? e.message : String(e);
   if (msg.includes("Failed to fetch") || msg.includes("NetworkError"))
     return "no hay conexión con tu agente";

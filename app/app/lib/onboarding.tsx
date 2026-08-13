@@ -19,7 +19,7 @@ import { CarruselEjemplos } from "./ejemplosFlujos";
 import ChatOnboarding from "./ChatOnboarding";
 import { urlApuntaADetalle } from "./rutas";
 import {
-  crearPedidoDeConexion, getConnections, guardarIdentidad,
+  activateTelegramPairing, crearPedidoDeConexion, getConnections, guardarIdentidad,
   type Connection, type Manifest, type PortalConfig,
 } from "./agent";
 import {
@@ -290,13 +290,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     setActivando(true);
     setPairErr(null);
     try {
-      const r = await fetch(`${cfg.adapter}/portal/connections/telegram/pairing`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ code: codigo }),
-      });
-      const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(d?.error || `Error ${r.status}`);
+      const d = await activateTelegramPairing(cfg, codigo);
+      if (!d.ok) throw new Error("No se pudo activar Telegram.");
       setPareado(true);
       // El canal se anota EN EL MOMENTO en que empieza a existir, no al final
       // del onboarding: si el cliente cierra acá, ya tiene Telegram andando y

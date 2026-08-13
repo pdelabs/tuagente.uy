@@ -86,25 +86,9 @@ function stripMarks(s: string): string {
     .trim();
 }
 
-// `approve()` de lib/agent.ts postea sin cuerpo, así que la variante con
-// corrección va con un fetch local (mismo Bearer, mismo shape de error que
-// describeError espera: el status en el mensaje). Cuando la lib exponga un
-// approve(cfg, id, {correction}) esto se borra y se usa aquél.
 async function approveWithCorrection(cfg: PortalConfig, id: string, correction: string): Promise<void> {
-  const res = await fetch(`${cfg.adapter}/portal/approvals/${encodeURIComponent(id)}/approve`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ correction }),
-  });
-  if (!res.ok) {
-    // El adapter contesta {error} en 400/409: mostrarlo es más útil que el número.
-    let detail = "";
-    try {
-      const data = await res.json();
-      if (data && typeof data.error === "string") detail = ` (${data.error})`;
-    } catch { /* sin cuerpo JSON */ }
-    throw new Error(`${res.status} al aprobar${detail}`);
-  }
+  const result = await approve(cfg, id, correction);
+  if (!result.ok) throw new Error("No se pudo aprobar con correcciones.");
 }
 
 // Los marcadores que el CLI deja como comentario ("BLOCKED: …") son ruido de

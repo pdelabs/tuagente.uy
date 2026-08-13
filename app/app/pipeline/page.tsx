@@ -28,6 +28,9 @@ import {
 } from "lucide-react";
 import {
   loadConfig,
+  createTicket,
+  commentTicket,
+  setTicketStatus,
   getTickets,
   getTicketDetail,
   esElCliente,
@@ -103,62 +106,10 @@ const rotuloEventoTicket = (kind: string) =>
 
 type EstadoDestino = "done" | "blocked" | "ready" | "archived";
 
-class PortalError extends Error {
-  status: number; // 0 = ni siquiera salió el request
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = "PortalError";
-    this.status = status;
-  }
-}
-
-async function escribir<T>(cfg: PortalConfig, path: string, body: unknown): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(cfg.adapter + path, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch {
-    throw new PortalError(0, "No hay conexión con tu agente.");
-  }
-  let data: unknown = null;
-  try {
-    data = await res.json();
-  } catch {
-    /* el adapter puede contestar sin cuerpo JSON */
-  }
-  if (!res.ok) {
-    const detalle =
-      data && typeof data === "object" && typeof (data as { error?: unknown }).error === "string"
-        ? (data as { error: string }).error
-        : `Error ${res.status}`;
-    throw new PortalError(res.status, detalle);
-  }
-  return data as T;
-}
-
-const crearTicket = (
-  cfg: PortalConfig,
-  input: { title: string; body?: string; tenant?: string },
-) => escribir<{ ok?: boolean; id?: string }>(cfg, "/portal/tickets", input);
-
-const comentarTicket = (cfg: PortalConfig, id: string, body: string) =>
-  escribir<{ ok?: boolean }>(cfg, `/portal/tickets/${encodeURIComponent(id)}/comment`, {
-    body,
-    author: AUTOR_PROPIO,
-  });
-
-const cambiarEstadoTicket = (cfg: PortalConfig, id: string, status: EstadoDestino) =>
-  escribir<{ ok?: boolean }>(cfg, `/portal/tickets/${encodeURIComponent(id)}/status`, { status });
-
 function describirError(e: unknown): string {
-  if (e instanceof PortalError) {
-    if (e.status === 404) return "Tu agente todavía no expone esta acción (falta actualizarlo).";
-    if (e.status === 401 || e.status === 403) return "Tu sesión venció: volvé a entrar con tu link.";
-    return e.message; // el adapter explica los 400 / 409 / 502
-  }
+  const status = (e as { status?: number } | null)?.status;
+  if (status === 404) return "Tu agente todavía no expone esta acción (falta actualizarlo).";
+  if (status === 401 || status === 403) return "Tu sesión venció: volvé a entrar con tu link.";
   const msg = e instanceof Error ? e.message : String(e);
   if (msg.includes("Failed to fetch") || msg.includes("NetworkError"))
     return "No hay conexión con tu agente.";
@@ -561,7 +512,7 @@ export default function PipelinePage() {
     setCreando(true);
     setCrearError(null);
     try {
-      const res = await crearTicket(cfg, {
+      const res = await createTicket(cfg, {
         title,
         ...(body ? { body } : {}),
         ...(tnt ? { tenant: tnt } : {}),
@@ -593,7 +544,7 @@ export default function PipelinePage() {
     setComentarError(null);
     setComentando(true);
     try {
-      await comentarTicket(cfg, id, body);
+      await commentTicket(cfg, id, body, AUTOR_PROPIO);
       // Releo el detalle para quedarme con el comentario tal como lo guardó el
       // agente (timestamp y autor reales). Recién si eso vuelve bien saco el
       // optimista; si la relectura falla, el comentario existe igual y lo dejo.
@@ -614,7 +565,7 @@ export default function PipelinePage() {
     setAccionEnCurso(status);
     setAccionError(null);
     try {
-      await cambiarEstadoTicket(cfg, id, status);
+      await setTicketStatus(cfg, id, status);
       cargar();
       if (status === "archived") cerrar(); // ya no está en el tablero
       else await cargarDetalle(id);

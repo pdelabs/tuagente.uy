@@ -9,7 +9,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "check:boundaries": "node tools/check-portal-boundaries.mjs"
   },
   "dependencies": {
     "@rive-app/react-canvas-lite": "^4.30.1",

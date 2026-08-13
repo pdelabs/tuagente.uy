@@ -10,7 +10,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, TriangleAlert } from "lucide-react";
-import type { Connection, PortalConfig } from "../lib/agent";
+import {
+  getWhatsAppPairQr, getWhatsAppPairStatus, startWhatsAppPairing,
+  type Connection, type PortalConfig,
+} from "../lib/agent";
 import { Btn, Modal, Spinner } from "../lib/ui";
 import { ConexionLogo } from "../lib/ConexionLogo";
 
@@ -43,21 +46,14 @@ export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada, 
   // "no está instalado", no hay nada que reintentar.
   const contesto = useRef(false);
 
-  const pedir = useCallback(async (ruta: string, metodo = "GET") => {
-    const r = await fetch(`${cfg.adapter}/portal/connections/whatsapp/pair${ruta}`, {
-      method: metodo, headers: { Authorization: `Bearer ${cfg.key}` },
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d?.error || `Error ${r.status}`);
-    return d;
-  }, [cfg]);
+  const pedirEstado = useCallback(() => getWhatsAppPairStatus(cfg), [cfg]);
 
   useEffect(() => {
     let vivo = true;
     let reloj: ReturnType<typeof setInterval> | null = null;
     const frenar = () => { if (reloj) { clearInterval(reloj); reloj = null; } };
     const mirar = () => {
-      pedir("")
+      pedirEstado()
         .then(async (d: Estado) => {
           if (!vivo) return;
           contesto.current = true;
@@ -65,11 +61,7 @@ export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada, 
           if (d.paired && !yaAviso.current) { yaAviso.current = true; onConectada(); }
           if (!d.has_qr) { setQrUrl((v) => { if (v) URL.revokeObjectURL(v); return null; }); return; }
           try {
-            const r = await fetch(
-              `${cfg.adapter}/portal/connections/whatsapp/pair/qr.png?t=${Date.now()}`,
-              { headers: { Authorization: `Bearer ${cfg.key}` } });
-            if (!r.ok) return;
-            const url = URL.createObjectURL(await r.blob());
+            const url = URL.createObjectURL(await getWhatsAppPairQr(cfg));
             if (!vivo) { URL.revokeObjectURL(url); return; }
             setQrUrl((v) => { if (v) URL.revokeObjectURL(v); return url; });
           } catch { /* el próximo tick reintenta */ }
@@ -87,7 +79,7 @@ export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada, 
     mirar();
     reloj = setInterval(mirar, 3000);   // el QR rota cada pocos segundos
     return () => { vivo = false; frenar(); };
-  }, [pedir, onConectada, cfg]);
+  }, [pedirEstado, onConectada, cfg]);
 
   // Soltar el último blob al cerrar.
   useEffect(() => () => { if (qrUrl) URL.revokeObjectURL(qrUrl); }, [qrUrl]);
@@ -98,7 +90,7 @@ export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada, 
   const empezar = () => {
     setArrancando(true);
     setErr(null);
-    pedir("/start", "POST")
+    startWhatsAppPairing(cfg)
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
       .finally(() => setArrancando(false));
   };

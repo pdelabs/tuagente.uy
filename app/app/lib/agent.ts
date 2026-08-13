@@ -608,7 +608,24 @@ export const getApprovals = (c: PortalConfig) => get<{ approvals: any[] }>(c.ada
  *  tuyo antes de desbloquear — el ticket original no se modifica. */
 export const approve = (c: PortalConfig, id: string, correction?: string) =>
   post<{ ok: boolean }>(c.adapter, `/portal/approvals/${id}/approve`, c,
-    correction ? { correction } : undefined);
+     correction ? { correction } : undefined);
+export const getGoogleAuthUrl = (c: PortalConfig) =>
+  post<{ auth_url: string }>(c.adapter, "/portal/connections/google/auth-url", c);
+export const exchangeGoogleAuthCode = (c: PortalConfig, code: string) =>
+  post<{ ok: boolean }>(c.adapter, "/portal/connections/google/auth-code", c, { code });
+export const activateTelegramPairing = (c: PortalConfig, code: string) =>
+  post<{ ok: boolean }>(c.adapter, "/portal/connections/telegram/pairing", c, { code });
+export const getWhatsAppPairStatus = (c: PortalConfig) =>
+  get<{ paired: boolean; pairing: boolean; has_qr: boolean }>(c.adapter, "/portal/connections/whatsapp/pair", c);
+export const startWhatsAppPairing = (c: PortalConfig) =>
+  post<{ ok?: boolean }>(c.adapter, "/portal/connections/whatsapp/pair/start", c);
+export const getWhatsAppPairQr = async (c: PortalConfig) => {
+  const res = await fetch(`${c.adapter}/portal/connections/whatsapp/pair/qr.png?t=${Date.now()}`, {
+    headers: headers(c),
+  });
+  if (!res.ok) throw await failure(res, "QR de WhatsApp");
+  return res.blob();
+};
 export type Rechazo = {
   ok: boolean;
   /** En qué estado quedó el ticket: `blocked` con un "no" común (igual que

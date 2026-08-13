@@ -13,7 +13,7 @@ import {
   RefreshCw, Workflow, Zap, type LucideIcon,
 } from "lucide-react";
 import {
-  etiquetaConexion, getFlujoDetalle, getFlujos, getJobs, loadConfig,
+  createTicket, etiquetaConexion, getFlujoDetalle, getFlujos, getJobs, loadConfig,
   type CronJob, type Flujo, type FlujoDetalle, type HttpError, type PortalConfig,
 } from "../../lib/agent";
 import {
@@ -274,19 +274,15 @@ function PedirCambio({ cfg, flujo }: { cfg: PortalConfig; flujo: FlujoDetalle })
     try {
       const alcance =
         `Aplica solo a este flujo: actualizá las instrucciones de flujos/${flujo.slug}/FLUJO.md.`;
-      const res = await fetch(cfg.adapter + "/portal/tickets", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `Ajustar el flujo ${flujo.nombre}`,
-          body:
-            `Pedido del cliente desde la página del flujo "${flujo.nombre}":\n\n` +
-            `"${texto.trim()}"\n\n${alcance}\n` +
-            "Anotá al final del archivo qué cambiaste y cuándo, y cerrá este ticket " +
-            "contando el cambio en una línea, en palabras del cliente.",
-        }),
+      const res = await createTicket(cfg, {
+        title: `Ajustar el flujo ${flujo.nombre}`,
+        body:
+          `Pedido del cliente desde la página del flujo "${flujo.nombre}":\n\n` +
+          `"${texto.trim()}"\n\n${alcance}\n` +
+          "Anotá al final del archivo qué cambiaste y cuándo, y cerrá este ticket " +
+          "contando el cambio en una línea, en palabras del cliente.",
       });
-      if (!res.ok) throw new Error(`Error ${res.status}`);
+      if (!res.ok) throw new Error("No se pudo pedir el cambio.");
       setListo(texto.trim());
       setTexto("");
     } catch (e) {
@@ -329,4 +325,3 @@ function PedirCambio({ cfg, flujo }: { cfg: PortalConfig; flujo: FlujoDetalle })
     </section>
   );
 }
-
