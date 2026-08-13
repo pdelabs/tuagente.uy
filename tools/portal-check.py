@@ -130,6 +130,33 @@ def main():
         or (_ for _ in ()).throw(AssertionError(f"no refleja el origen {O}")),
         "refleja el origen")[1])
 
+    # LAS DOS ESCRITURAS DEL LOOPBACK. Para el browser `http://localhost:8090` y
+    # `http://127.0.0.1:8090` son orígenes DISTINTOS: si la lista trae uno solo,
+    # este chequeo pasa con el que le pasaste y el cliente ve "No pude hablar con
+    # tu agente" al abrir el otro. curl no lo agarra nunca —no manda `Origin`—,
+    # así que es el "anda por curl y no anda en el navegador" clásico.
+    # Solo aplica si el origen es loopback: contra un portal de verdad
+    # (app.tuagente.uy) no hay gemelo que mirar y el chequeo no corre.
+    gemelo = None
+    if "//localhost:" in O:
+        gemelo = O.replace("//localhost:", "//127.0.0.1:")
+    elif "//127.0.0.1:" in O:
+        gemelo = O.replace("//127.0.0.1:", "//localhost:")
+    if gemelo:
+        def _gemelo(url, quien):
+            def fn():
+                got = http(url, K, gemelo)[1].get("Access-Control-Allow-Origin")
+                if got != gemelo:
+                    raise AssertionError(
+                        f"acepta {O} pero no {gemelo} — agregá los DOS a "
+                        f"{quien} en el compose y reiniciá")
+                return f"también refleja {gemelo}"
+            return fn
+        check("CORS del adapter (la otra escritura del loopback)",
+              _gemelo(f"{A}/portal/manifest", "PORTAL_CORS_ORIGINS"))
+        check("CORS del gateway (la otra escritura del loopback)",
+              _gemelo(f"{E}/api/jobs?include_disabled=true", "API_SERVER_CORS_ORIGINS"))
+
     # Cada módulo declarado tiene que responder de verdad.
     def modcheck(nombre, url, valida):
         if not mods.get(nombre):

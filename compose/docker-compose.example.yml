@@ -95,7 +95,14 @@ services:
       # consentimiento no corre, o sea que la puerta queda abierta sin ruido.
       - HERMES_ACCEPT_HOOKS=1
       # Sin esto el browser descarta todas las respuestas del gateway.
-      - API_SERVER_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy,http://localhost:8090
+      #
+      # VAN LAS DOS ESCRITURAS DEL LOOPBACK: `localhost` y `127.0.0.1` son
+      # orígenes DISTINTOS para el browser, y el portal de desarrollo se abre
+      # con cualquiera de las dos (el link mágico que armamos para probar suele
+      # llevar 127.0.0.1). Con una sola, curl anda —no manda `Origin`— y el
+      # browser no: es el "anda por curl y no anda en el navegador" clásico, y
+      # se arreglaba a mano en cada alta, en los dos servicios.
+      - API_SERVER_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy,http://localhost:8090,http://127.0.0.1:8090
     # LOS SECRETOS NO VIVEN EN data/, y es una cadena de escalada, no un gusto:
     # `data/` es del agente, este archivo es el env_file de los DOS servicios, y
     # con una variable como PYTHONPATH el agente ejecuta codigo suyo adentro de
@@ -154,7 +161,11 @@ services:
       - ./data/config.yaml:/opt/data/config.yaml:ro
     environment:
       - TZ=America/Montevideo
-      - PORTAL_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy,http://localhost:8090
+      # Las dos escrituras del loopback, por lo mismo que en el gateway: para el
+      # browser `localhost:8090` y `127.0.0.1:8090` son orígenes distintos, y la
+      # lista de los DOS servicios tiene que decir lo mismo o la mitad del
+      # portal funciona y la otra mitad no.
+      - PORTAL_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy,http://localhost:8090,http://127.0.0.1:8090
       # El nombre que el cliente ve en su portal. Si falta, dice "Agente".
       - AGENT_NAME=${AGENT_NAME}
     # LOS SECRETOS NO VIVEN EN data/, y es una cadena de escalada, no un gusto:
