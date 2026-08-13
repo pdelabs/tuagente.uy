@@ -33,6 +33,8 @@ import {
   type PortalConfig, type Ticket,
 } from "../lib/agent";
 import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
+import { aprenderHuso, horaDe, momentoDe, rotuloArtefacto } from "../lib/palabras";
+import { humanizarCorridas } from "../lib/eventos";
 import { agentDisplayName } from "../lib/onboarding";
 import { AgentitoCargando, loadAgentLook } from "../lib/agentito";
 import type { EstadoAgentito } from "../lib/AgentitoRive";
@@ -120,6 +122,11 @@ const hace = (v: string | number | undefined): string | null => {
   return d ? `hace ${d}` : null;
 };
 
+// EL ÚNICO RELOJ DEL BROWSER QUE QUEDA EN EL PORTAL, y es a propósito: el
+// saludo no habla de un dato del agente sino de la persona que está mirando la
+// pantalla. Si son las once de la noche donde estás vos, es de noche para vos.
+// Todo lo demás —las horas de los eventos, de las corridas, de las tareas— va
+// en el reloj del negocio. Ver `lib/palabras.ts`.
 const saludo = (): string => {
   const h = new Date().getHours();
   if (h < 6) return "Buenas noches";
@@ -128,17 +135,17 @@ const saludo = (): string => {
   return "Buenas noches";
 };
 
-const hora = (d: Date) => d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false });
-
-/** Momento de un evento: hoy sólo la hora; antes, con el día adelante. */
+/** Momento de un evento: hoy sólo la hora; antes, con el día adelante.
+ *
+ *  La corrida que falló a las 02:58 del agente se leía acá como «ayer 23:58» y
+ *  en Flujos y en Actividad como «hoy 02:58»: la misma corrida, dos días
+ *  distintos, porque esta pantalla la formateaba con el reloj del browser. */
 function cuando(ts: string): string {
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return "—";
-  const dia = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const dias = Math.round((dia(new Date()) - dia(d)) / 86_400_000);
-  if (dias === 0) return hora(d);
-  if (dias === 1) return `ayer ${hora(d)}`;
-  return `${d.getDate()}/${d.getMonth() + 1} ${hora(d)}`;
+  const m = momentoDe(ts);
+  if (!m) return "—";
+  if (m.dias === 0) return m.hora;
+  if (m.dias === -1) return `ayer ${m.hora}`;
+  return `${m.diaMes} ${m.hora}`;
 }
 
 /** "30d" → "últimos 30 días"; cualquier otro formato se muestra crudo. */
@@ -156,17 +163,12 @@ function enumerar(xs: string[]): string {
   return `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`;
 }
 
-// Kind de artefacto → rótulo del cliente. Uno desconocido se muestra crudo:
-// mejor eso que esconderlo o inventarle un nombre.
-const KINDS: Record<string, { label: string; tone: "violet" | "green" | "coral" | "amber" }> = {
-  chart: { label: "Gráfico", tone: "violet" },
-  table: { label: "Tabla", tone: "green" },
-  report: { label: "Informe", tone: "amber" },
-  dashboard: { label: "Panel", tone: "coral" },
-  diagram: { label: "Diagrama", tone: "violet" },
-};
-const kindLabel = (k: string) => KINDS[k]?.label ?? k;
-const kindTone = (k: string) => KINDS[k]?.tone ?? "neutral";
+// Kind de artefacto → rótulo del cliente. La tablita estaba acá, otra en
+// Artefactos y otra en el modal, y las tres decían cosas distintas de lo mismo:
+// un `other` era "Otro" allá, "Artefacto" en el modal y acá salía crudo, en
+// inglés. Ahora es una sola, en `lib/palabras.ts`.
+const kindLabel = (k: string) => rotuloArtefacto(k).label;
+const kindTone = (k: string) => rotuloArtefacto(k).tono;
 
 /** Nombre de entregable sin la carpeta ni la fecha con la que suele venir. */
 function nombreEntregable(path: string): string {
@@ -500,8 +502,14 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
             setAprob),
           pedir(on("kanban"), "el tablero",
             () => getTickets(cfg).then((r) => arr<Ticket>(r?.tickets)), setTareas),
+          // La actividad es lo único que llega con huso, así que de acá sale el
+          // reloj del negocio para el resto del portal (`lib/palabras.ts`).
           pedir(on("activity"), "la actividad",
-            () => getActivity(cfg).then((r) => arr<Evento>(r?.events)), setEventos),
+            () => getActivity(cfg).then((r) => {
+              const evs = arr<Evento>(r?.events);
+              aprenderHuso(...evs.map((e) => e.ts));
+              return evs;
+            }), setEventos),
           pedir(on("artifacts"), "los artefactos",
             () => getArtifacts(cfg).then((r) => arr<ArtifactMeta>(r?.artifacts)), setArtefactos),
           pedir(on("files"), "los archivos",
@@ -536,13 +544,21 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
 
   const ultimos = useMemo(() => {
     if (eventos.t !== "listo") return null;
+    // EL SLUG DEL CRON NO ES UN NOMBRE. Acá salían `flujo-vacunas-vencidas-
+    // semanal` y `flujo-avisos-ayuno-cirugias` tal cual, en la PRIMERA pantalla
+    // del producto, mientras Actividad —con el mismo dato— ya mostraba el
+    // nombre que el cliente le puso a su trabajo. Es el mismo humanizador, en
+    // `lib/eventos.ts`.
+    const humanizados = humanizarCorridas(
+      eventos.data, flujos.t === "listo" ? flujos.data : null);
     // Una tarea deja varios eventos seguidos (creada, comentada, frenada) y
     // acá se veían como cinco renglones idénticos: el cliente lee "cuatro
     // veces la misma cosa" y deja de confiar en los números. En el resumen
     // del día alcanza con lo último que le pasó a cada cosa; el detalle
     // completo, con su estado, sigue en Actividad.
     const vistos = new Set<string>();
-    return [...eventos.data]
+    return humanizados
+      .slice()
       .sort((a, b) => toMs(b.ts) - toMs(a.ts))
       .filter((e) => {
         const k = `${e.kind}|${(e.label || "").trim().toLowerCase()}`;
@@ -551,7 +567,7 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
         return true;
       })
       .slice(0, 5);
-  }, [eventos]);
+  }, [eventos, flujos]);
 
   const recientes = useMemo(() => {
     if (artefactos.t !== "listo") return null;
@@ -653,7 +669,7 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
               <>
                 {ultima && (
                   <span className="hidden text-xs tabular-nums text-ink-soft sm:inline">
-                    Actualizado {hora(ultima)}
+                    Actualizado {horaDe(ultima.getTime())}
                   </span>
                 )}
                 <IconBtn label="Actualizar" disabled={cargando} onClick={() => cargar(true)}>

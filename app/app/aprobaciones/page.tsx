@@ -27,6 +27,7 @@ import {
   leerComentario, motivoDeRechazo, rotuloAutor,
   type PortalConfig, type TicketComment, type TicketDetail,
 } from "../lib/agent";
+import { horaDe } from "../lib/palabras";
 import {
   AvisoLinkViejo, Btn, Card, Chip, EmptyState, ErrorState, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
@@ -262,8 +263,12 @@ type Rechazado = {
   contesto?: boolean;
 };
 
-const hhmm = (d: Date) =>
-  d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false });
+// En el reloj del NEGOCIO, igual que el resto del portal. Acá se muestra a qué
+// hora dijiste que sí o que no, y ese "cuándo" llega por dos caminos: el clic
+// que acabás de hacer (la hora de tu máquina) y el mismo "no" leído después del
+// hilo del ticket (la hora del agente). Con el browser en otro huso, la misma
+// tarjeta cambiaba de hora al refrescar la página. Ver `lib/palabras.ts`.
+const hhmm = (d: Date) => horaDe(d.getTime());
 
 /** La confirmación que faltaba. Queda puesta mientras el cliente siga en la
  *  pantalla: qué hizo, a qué hora, qué está pasando ahora, y el link a la tarea

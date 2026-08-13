@@ -161,6 +161,82 @@ export function rotuloEvento(kind: string, nombreAgente = "Tu agente"): string {
   return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
 
+/* ── En qué anda una tarea ───────────────────────────────────────────────── */
+
+/** Los tonos del kit de UI. Van con la palabra: el color también informa. */
+export type Tono = "violet" | "amber" | "green" | "coral" | "neutral";
+
+// EL CHIP DECÍA `done`. En inglés, crudo, en el modal que abre una fila de
+// Actividad — literalmente lo que la clienta que probó el portal a ciegas anotó
+// en su informe. Y no alcanzaba con traducirlo: la MISMA tarea, en el Tablero,
+// ya se llamaba "Completado". Las palabras son las del Tablero, que es donde la
+// tarea vive, y el reparto es el mismo que el de sus columnas (`columnOf`):
+// blocked y done tienen la suya, ready es la cola, y cualquier estado nuevo cae
+// en "En curso" antes que esconderse o salir en inglés.
+const ESTADOS_TAREA: Record<string, { label: string; tono: Tono }> = {
+  ready: { label: "Por hacer", tono: "neutral" },
+  blocked: { label: "Esperando aprobación", tono: "violet" },
+  done: { label: "Completado", tono: "green" },
+  // Archivada no está en ninguna columna —sale del tablero— pero su link sigue
+  // abriendo el detalle, y ahí "En curso" sería mentira.
+  archived: { label: "Archivada", tono: "neutral" },
+};
+
+const EN_CURSO = { label: "En curso", tono: "amber" as const };
+
+/** En qué anda una tarea, con las palabras del Tablero. */
+export function estadoDeTarea(status: string | null | undefined): { label: string; tono: Tono } {
+  const s = (status || "").trim().toLowerCase();
+  return ESTADOS_TAREA[s] ?? EN_CURSO;
+}
+
+/** Cómo está una tarea PROGRAMADA (un cron), en un solo cartel.
+ *
+ *  "ACTIVA" EN VERDE NO ES LA VERDAD SI LA ÚLTIMA FALLÓ. Es el peor bug que
+ *  encontró el QA a ciegas —la veterinaria tenía dos trabajos con el cartel
+ *  verde y los dos habían fallado—, y en /app/tareas seguía vivo con las dos
+ *  mitades pegadas: el chip verde "Activa" al lado del chip coral "falló",
+ *  sobre la misma tarea, contando cada uno una cosa distinta. Mismo criterio
+ *  que el cartel de un flujo (`flujos/corridas.ts`): corriendo → pausada →
+ *  falló → activa. */
+export function estadoDeProgramada(
+  { corriendo, pausada, fallo }: { corriendo: boolean; pausada: boolean; fallo: boolean },
+): { label: string; tono: Tono; cuentaLaFalla: boolean } {
+  // `cuentaLaFalla` es lo que evita las dos mitades: cuando el cartel YA dice
+  // que falló, la pantalla no repite el chip coral al lado; cuando dice otra
+  // cosa (pausada, corriendo), la falla se sigue mostrando aparte y no se
+  // pierde.
+  if (corriendo) return { label: "Corriendo", tono: "violet", cuentaLaFalla: false };
+  // Pausada gana sobre la falla: es lo primero que explica por qué no está
+  // corriendo. Que la última haya fallado se sigue diciendo al lado.
+  if (pausada) return { label: "Pausada", tono: "amber", cuentaLaFalla: false };
+  if (fallo) return { label: "La última vez falló", tono: "coral", cuentaLaFalla: true };
+  return { label: "Activa", tono: "green", cuentaLaFalla: false };
+}
+
+/* ── Qué produjo el agente ───────────────────────────────────────────────── */
+
+// Tres pantallas tenían su propia tablita de esto y no decían lo mismo: un
+// artefacto `other` era "Otro" en Artefactos, "Artefacto" en el modal y salía
+// crudo —"other"— en Inicio.
+const ARTEFACTOS: Record<string, { label: string; tono: Tono }> = {
+  chart: { label: "Gráfico", tono: "violet" },
+  table: { label: "Tabla", tono: "green" },
+  report: { label: "Informe", tono: "amber" },
+  dashboard: { label: "Panel", tono: "coral" },
+  diagram: { label: "Diagrama", tono: "violet" },
+  other: { label: "Otro", tono: "neutral" },
+};
+
+/** Qué clase de entrega es, en una palabra. Una clase nueva del agente no se
+ *  esconde: se muestra humanizada, igual que un evento desconocido. */
+export function rotuloArtefacto(kind: string | null | undefined): { label: string; tono: Tono } {
+  const k = (kind || "").trim().toLowerCase();
+  if (ARTEFACTOS[k]) return ARTEFACTOS[k];
+  const limpio = k.replace(/[_-]+/g, " ").trim();
+  return { label: limpio ? limpio.charAt(0).toUpperCase() + limpio.slice(1) : "Entrega", tono: "neutral" };
+}
+
 /* ── Por qué no pudo ─────────────────────────────────────────────────────── */
 
 /** Una falla contada de forma que el cliente sepa qué pasó y qué hacer.
@@ -279,8 +355,12 @@ export type Momento = {
   diaSemana: string;
   /** "17/08" */
   diaMes: string;
+  /** "17 ago" */
+  fecha: string;
   /** "lun 17 ago" */
   fechaCorta: string;
+  /** El año de allá. Sirve para escribirlo sólo cuando no es el corriente. */
+  anio: number;
   /** Días de calendario contra hoy, contados allá: 0 hoy, -1 ayer, 1 mañana. */
   dias: number;
 };
@@ -323,6 +403,7 @@ const enUTC = (o: Intl.DateTimeFormatOptions) =>
 const F_HORA = enUTC({ hour: "2-digit", minute: "2-digit", hour12: false });
 const F_DIA_SEMANA = enUTC({ weekday: "long" });
 const F_DIA_MES = enUTC({ day: "2-digit", month: "2-digit" });
+const F_FECHA = enUTC({ day: "numeric", month: "short" });
 const F_CORTA = enUTC({ weekday: "short", day: "numeric", month: "short" });
 
 export function momento(iso: string | null | undefined): Momento | null {
@@ -342,9 +423,11 @@ export function momento(iso: string | null | undefined): Momento | null {
     hora: F_HORA.format(d),
     diaSemana: F_DIA_SEMANA.format(d),
     diaMes: F_DIA_MES.format(d),
+    fecha: F_FECHA.format(d).replace(/[.,]/g, "").trim(),
     // es-UY devuelve "lun, 17 ago."; la coma y el punto sobran leyéndolo
     // adentro de una frase ("Próxima lun 17 ago a las 08:30").
     fechaCorta: F_CORTA.format(d).replace(/[.,]/g, "").trim(),
+    anio: d.getUTCFullYear(),
     dias: Math.round((cero(d) - cero(hoy)) / 86_400_000),
   };
 }
@@ -370,6 +453,123 @@ export function cuandoVa(iso: string | null | undefined): string {
   if (m.dias === 1) return `mañana a las ${m.hora}`;
   if (m.dias > 1 && m.dias < 7) return `el ${m.diaSemana} ${m.diaMes} a las ${m.hora}`;
   return `el ${m.diaMes} a las ${m.hora}`;
+}
+
+/* ── El mismo reloj en TODAS las pantallas ───────────────────────────────── */
+
+// `momento()` alcanza mientras la fecha traiga su huso ("…-03:00"). El problema
+// es todo lo demás: los `created_at` de los tickets y de los artefactos, los
+// `mtime` de los archivos y las sesiones son epoch pelado. Formateando eso con
+// `new Date().toLocaleString()` —o sea, con el reloj de quien mira— el MISMO
+// ticket decía «11:50» en la fila de Actividad y «13 ago, 08:50» en el modal que
+// abre esa misma fila: tres horas de diferencia a un click, medido con la
+// máquina en -06 y el agente en -03.
+//
+// Así que el huso del negocio se APRENDE una vez, de cualquier fecha del motor
+// que sí lo traiga (la actividad, las corridas, las tareas programadas), y queda
+// guardado para las pantallas que sólo reciben epoch. Mientras no haya aprendido
+// ninguno se cae al reloj del browser, que es lo único que se puede suponer —y
+// es exactamente lo que hacían todas antes.
+//
+// PENDIENTE: lo correcto sería que el manifiesto publique el huso del agente y
+// no tener que deducirlo. Está anotado en `docs/PENDIENTES.md`.
+
+const HUSO_KEY = "tuagente_huso";
+/** undefined = todavía no lo buscamos; null = no hay ninguno aprendido. */
+let husoAprendido: number | null | undefined;
+
+function leerHusoGuardado(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    // OJO con el atajo: `Number(null)` es 0, o sea que "todavía no aprendí
+    // ninguno" se leería como "el agente vive en UTC" y le correría la hora a
+    // todo el portal. Sin guardar, null.
+    const crudo = localStorage.getItem(HUSO_KEY);
+    if (crudo === null || crudo.trim() === "") return null;
+    const v = Number(crudo);
+    return Number.isFinite(v) && Math.abs(v) <= 900 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** En qué reloj vive el negocio, en minutos de offset. */
+export function husoDelNegocio(): number {
+  if (husoAprendido === undefined) husoAprendido = leerHusoGuardado();
+  return husoAprendido ?? -new Date().getTimezoneOffset();
+}
+
+/** Aprende el huso de la primera fecha que lo traiga. Lo llaman las pantallas
+ *  que piden datos con huso (Inicio, Actividad, Tareas); las demás lo usan. */
+export function aprenderHuso(...fechas: (string | null | undefined)[]): number {
+  for (const f of fechas) {
+    const o = husoDe(f);
+    if (o === null) continue;
+    if (o !== husoAprendido) {
+      husoAprendido = o;
+      try { localStorage.setItem(HUSO_KEY, String(o)); } catch { /* modo privado */ }
+    }
+    break;
+  }
+  return husoDelNegocio();
+}
+
+/** Cualquier fecha del agente —epoch en segundos o en ms, string numérica, o
+ *  ISO con o sin huso— leída en el reloj del negocio. Es la puerta única: lo
+ *  que ya trae huso lo conserva (y de paso nos lo enseña). */
+export function momentoDe(valor: string | number | null | undefined): Momento | null {
+  if (valor === null || valor === undefined || valor === "") return null;
+  if (typeof valor === "string") {
+    const texto = valor.trim();
+    if (texto && !/^\d+(\.\d+)?$/.test(texto)) {
+      if (husoDe(texto) !== null) { aprenderHuso(texto); return momento(texto); }
+      // Sin huso no hay nada que deducir del texto: se lee como instante y se
+      // pinta en el reloj del negocio.
+      const t = new Date(texto).getTime();
+      return Number.isNaN(t) ? null : momento(isoConHuso(t, husoDelNegocio()));
+    }
+  }
+  const n = typeof valor === "number" ? valor : Number(valor);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return momento(isoConHuso(n > 1e12 ? n : n * 1000, husoDelNegocio()));
+}
+
+/** "hoy" + "11:50", "ayer" + "09:12", "jue 13 ago" + "11:50". Partido en dos
+ *  porque la hora se alinea aparte (tabular-nums) en varias pantallas. */
+export function fechaYHora(valor: string | number | null | undefined):
+{ fecha: string; hora: string } | null {
+  const m = momentoDe(valor);
+  if (!m) return null;
+  return {
+    fecha: m.dias === 0 ? "hoy" : m.dias === -1 ? "ayer" : m.fechaCorta,
+    hora: m.hora,
+  };
+}
+
+/** Lo mismo, en una línea: "hoy 11:50". "" si no hay fecha. */
+export function fechaHora(valor: string | number | null | undefined): string {
+  const p = fechaYHora(valor);
+  return p ? `${p.fecha} ${p.hora}` : "";
+}
+
+/** Sólo la hora de pared del negocio: "11:50". */
+export const horaDe = (valor: string | number | null | undefined): string =>
+  momentoDe(valor)?.hora ?? "";
+
+/** ¿Entra en los últimos N días CONTANDO COMO CUENTA EL NEGOCIO? (1 = hoy.)
+ *
+ *  El filtro "Hoy" de Actividad calculaba la medianoche con `new Date()` del
+ *  browser mientras los títulos de las secciones contaban los días allá: desde
+ *  México, apretar "Hoy" cortaba la lista a las 03:00 hora del agente, dejaba el
+ *  contador "Con error" en 0 y hacía desaparecer la corrida que había fallado a
+ *  las 02:58 — con la sección todavía titulada "HOY". El día es uno solo: el del
+ *  negocio. */
+export function esDeLosUltimosDias(
+  valor: string | number | null | undefined, dias: number,
+): boolean {
+  const m = momentoDe(valor);
+  if (!m) return true; // sin fecha no se esconde nada
+  return m.dias > -dias;
 }
 
 /* ── Por dónde le hablaron al agente ─────────────────────────────────────── */

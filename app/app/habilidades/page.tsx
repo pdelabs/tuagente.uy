@@ -25,6 +25,7 @@ import {
 import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner,
 } from "../lib/ui";
+import { horaDe } from "../lib/palabras";
 import {
   CopiarLink, PARAM, abrirEnRuta, cerrarEnRuta, traerALaVista, useParamRuta,
 } from "../lib/rutas";
@@ -527,10 +528,13 @@ export default function CapacidadesPage() {
         subtitle="Lo que tu agente sabe hacer — y cómo lo hace"
         actions={
           <>
+            {/* Un solo reloj en todo el portal: el del negocio. Es la misma
+                hora que muestran Inicio, Actividad y Artefactos en este mismo
+                sello — que dos pestañas contesten distinto a "¿de cuándo es
+                esto?" es exactamente lo que estamos sacando. */}
             {ultima && (
               <span className="hidden text-xs tabular-nums text-ink-soft sm:inline">
-                Actualizado{" "}
-                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                Actualizado {horaDe(ultima.getTime())}
               </span>
             )}
             <IconBtn label="Actualizar" disabled={cargando} onClick={() => load(true)}>

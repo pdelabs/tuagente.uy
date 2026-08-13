@@ -31,6 +31,7 @@ import {
   getTicketDetail,
   esElCliente,
   esElSistema,
+  esPedidoDelCliente,
   leerComentario,
   rotuloAutor,
   type PortalConfig,
@@ -40,7 +41,9 @@ import {
   type TicketOutcome,
 } from "../lib/agent";
 import { loadAgentName } from "../lib/onboarding";
-import { esEventoDeMaquina, rotuloEvento } from "../lib/palabras";
+import {
+  esEventoDeMaquina, estadoDeTarea, horaDe, momentoDe, rotuloEvento, type Tono,
+} from "../lib/palabras";
 import { AgentitoAvatar, loadAgentLook } from "../lib/agentito";
 import { CopiarLink, PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
 import {
@@ -161,31 +164,73 @@ function describirError(e: unknown): string {
 
 /* ── Tablero ─────────────────────────────────────────────────────────────── */
 
-type ColKey = "todo" | "blocked" | "active" | "done";
+type ColKey = "todo" | "blocked" | "pedido" | "active" | "done";
 
-const COLUMNS: {
-  key: ColKey;
-  label: string;
-  chip: string;
-  tone: "violet" | "amber" | "green" | "neutral";
-  dot: string;
-}[] = [
-  // "Por hacer" = ready: creado y todavía nadie lo agarró. Antes vivía
-  // escondido en "En curso", mezclando la cola con lo que se trabaja de verdad.
-  { key: "todo", label: "Por hacer", chip: "Por hacer", tone: "neutral", dot: "bg-ink-soft/50" },
-  { key: "active", label: "En curso", chip: "En curso", tone: "amber", dot: "bg-c-amber-ink" },
-  { key: "blocked", label: "Esperando aprobación", chip: "Esperando aprobación", tone: "violet", dot: "bg-primary" },
-  { key: "done", label: "Completados", chip: "Completado", tone: "green", dot: "bg-c-green-ink" },
+// De qué color es el puntito de cada columna. Esto sí lo decide la pantalla:
+// es pintura, no palabra.
+const PUNTO: Record<Tono, string> = {
+  neutral: "bg-ink-soft/50",
+  amber: "bg-c-amber-ink",
+  violet: "bg-primary",
+  green: "bg-c-green-ink",
+  coral: "bg-c-coral-ink",
+};
+
+/** LO QUE ESPERA AL CLIENTE Y LO QUE NOS ESPERA A NOSOTROS SON DOS COSAS.
+ *
+ *  En `blocked` caen las dos: el agente pidiendo permiso, y el pedido que hizo
+ *  el propio cliente desde el portal ("Conectar WhatsApp"), que ahora además
+ *  NACE bloqueado. Con una sola columna, su propio pedido le decía "Esperando
+ *  aprobación" —esperando la de él— mientras la tarjeta de ese mismo pedido, en
+ *  Aprobaciones, le dice "Lo estamos viendo… no tenés que hacer nada". Dos
+ *  pantallas, dos respuestas, sobre un ticket que además es suyo.
+ *
+ *  `estadoDeTarea` no puede resolverlo: sólo ve el `status`, y los dos son
+ *  `blocked`. El discriminante es de quién es el pedido (`esPedidoDelCliente`,
+ *  la definición única de `lib/agent.ts`). Por eso ésta es la única palabra que
+ *  el Tablero pone de su bolsillo — y no es nueva: es la que el cliente ya lee
+ *  en Aprobaciones sobre ese mismo ticket. */
+const NUESTRO: { label: string; tono: Tono } = { label: "Lo estamos viendo", tono: "amber" };
+
+// CÓMO SE LLAMA UN ESTADO LO DICE `palabras.ts`. Acá vivía una copia de las
+// cuatro palabras y de sus cuatro tonos. Hoy dicen exactamente lo mismo que
+// `estadoDeTarea` —se comprobó estado por estado—, pero era una copia: dos
+// lectores del mismo dato con criterios propios se separan solos con el tiempo,
+// y la primera vez que alguien corrija una de las dos, el Tablero y el resto del
+// portal van a llamar distinto a la misma tarea. Es la misma clase de bug que
+// estamos sacando de las fechas, con palabras en vez de horas.
+//
+// "Por hacer" = ready: creado y todavía nadie lo agarró. Vivía escondido en
+// "En curso", mezclando la cola con lo que se trabaja de verdad.
+const rotuloCol = (e: { label: string; tono: Tono }) => ({ label: e.label, dot: PUNTO[e.tono] });
+
+const COLUMNS: { key: ColKey; label: string; dot: string }[] = [
+  { key: "todo", ...rotuloCol(estadoDeTarea("ready")) },
+  { key: "active", ...rotuloCol(estadoDeTarea("running")) },
+  { key: "blocked", ...rotuloCol(estadoDeTarea("blocked")) },
+  { key: "pedido", ...rotuloCol(NUESTRO) },
+  { key: "done", ...rotuloCol(estadoDeTarea("done")) },
 ];
 
-// blocked y done tienen columna propia; ready, running y cualquier estado
-// desconocido caen en "En curso" (no ocultamos tickets por un estado nuevo).
-function columnOf(status: string): ColKey {
-  if (status === "ready") return "todo";
-  if (status === "blocked") return "blocked";
-  if (status === "done") return "done";
+// blocked, done y los pedidos del cliente tienen columna propia; ready, running
+// y cualquier estado desconocido caen en "En curso" (no ocultamos tickets por un
+// estado nuevo).
+//
+// La marca del pedido sólo desvía a los frenados: un pedido en curso o
+// terminado ya está en la columna que le corresponde, y ahí ninguna palabra
+// miente.
+function columnOf(t: { status: string; body?: string | null }): ColKey {
+  if (t.status === "ready") return "todo";
+  if (t.status === "blocked") return esPedidoDelCliente(t.body) ? "pedido" : "blocked";
+  if (t.status === "done") return "done";
   return "active";
 }
+
+/** El cartel de un ticket: el estado, salvo cuando el que espera somos
+ *  nosotros. Es lo que muestran la columna y el chip del detalle, para que el
+ *  link a la tarea no diga otra cosa que el tablero. */
+const estadoDeTicket = (t: { status: string; body?: string | null }) =>
+  columnOf(t) === "pedido" ? NUESTRO : estadoDeTarea(t.status);
 
 // Transiciones que tienen sentido desde el estado actual. Archivar va aparte:
 // se ofrece siempre y con confirmación.
@@ -203,29 +248,29 @@ function transicionesDe(status: string): Transicion[] {
   return [{ status: "done", label: "Marcar completado", enCurso: "Completando…", icon: Check }];
 }
 
-// created_at llega del adapter como epoch en SEGUNDOS (int), aunque a veces la
-// lib lo tipa string. Acepto número, string numérico o fecha parseable.
-function toDate(v: string | number): Date | null {
-  const n = typeof v === "number" ? v : Number(v);
-  if (Number.isFinite(n) && String(v).trim() !== "") return new Date(n > 1e12 ? n : n * 1000);
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
+// `created_at` llega del adapter como epoch en SEGUNDOS (int), aunque a veces
+// la lib lo tipa string. Quien lo lee es `momentoDe`, la puerta única del
+// portal: acepta las dos formas y devuelve el instante (`ms`, para ordenar) ya
+// leído en el reloj del negocio.
+const msDe = (v: string | number): number => momentoDe(v)?.ms ?? 0;
 
 // Fecha relativa compacta; pasada una semana, fecha corta absoluta.
+// Lo relativo ("hace 3 h") se puede contar desde cualquier reloj; la fecha de
+// las viejas, no: se escribe en el del negocio, como el resto del portal.
 function fmtRelativa(v: string | number): string {
-  const d = toDate(v);
-  if (!d) return "";
-  const min = Math.round((Date.now() - d.getTime()) / 60_000);
+  const m = momentoDe(v);
+  if (!m) return "";
+  const min = Math.round((Date.now() - m.ms) / 60_000);
   if (min < 1) return "recién";
   if (min < 60) return `hace ${min} min`;
   const h = Math.round(min / 60);
   if (h < 24) return `hace ${h} h`;
   const dias = Math.round(h / 24);
   if (dias < 7) return dias === 1 ? "hace 1 día" : `hace ${dias} días`;
-  const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
-  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
-  return d.toLocaleDateString("es-UY", opts);
+  // El año también es el de allá: el 31/12 a las 23:30 del agente, mirado desde
+  // el norte, no puede quedar fechado en el año que viene.
+  const esteAnio = momentoDe(Date.now())?.anio;
+  return m.anio === esteAnio ? m.fecha : `${m.fecha} ${m.anio}`;
 }
 
 // Búsqueda insensible a mayúsculas y tildes.
@@ -499,15 +544,22 @@ export default function PipelinePage() {
   }, [tickets, tenant, busqueda]);
 
   const porColumna = useMemo(() => {
-    const m: Record<ColKey, Ticket[]> = { todo: [], blocked: [], active: [], done: [] };
-    for (const t of visibles) m[columnOf(t.status)].push(t);
+    const m: Record<ColKey, Ticket[]> = { todo: [], blocked: [], pedido: [], active: [], done: [] };
+    for (const t of visibles) m[columnOf(t)].push(t);
     for (const k of Object.keys(m) as ColKey[]) {
-      m[k].sort(
-        (a, b) => (toDate(b.created_at)?.getTime() ?? 0) - (toDate(a.created_at)?.getTime() ?? 0),
-      );
+      m[k].sort((a, b) => msDe(b.created_at) - msDe(a.created_at));
     }
     return m;
   }, [visibles]);
+
+  // La columna de los pedidos existe sólo si el cliente pidió algo alguna vez:
+  // en un agente recién instalado sería una quinta columna vacía para siempre.
+  // Se mira la lista COMPLETA y no la filtrada — si dependiera de la búsqueda,
+  // el tablero cambiaría de forma mientras el cliente escribe.
+  const hayPedidos = useMemo(
+    () => (tickets ?? []).some((t) => columnOf(t) === "pedido"),
+    [tickets],
+  );
 
   // El detalle manda (trae el estado recién cambiado); si todavía no llegó,
   // uso la card del tablero para pintar el modal sin esperar.
@@ -599,18 +651,16 @@ export default function PipelinePage() {
     return <div className={wrap}><ErrorState message={error} onRetry={cargar} /></div>;
   if (tickets === null) return <div className={wrap}><Spinner /></div>;
 
-  const colDe = (t: Ticket) => COLUMNS.find((c) => c.key === columnOf(t.status))!;
   // Historial más reciente primero, pase como pase del adapter.
   const eventos = detalle
-    ? [...detalle.events].sort(
-        (a, b) => (toDate(b.created_at)?.getTime() ?? 0) - (toDate(a.created_at)?.getTime() ?? 0),
-      )
+    ? [...detalle.events].sort((a, b) => msDe(b.created_at) - msDe(a.created_at))
     : [];
   const comentarios: (TicketComment & { local?: number })[] = [
     ...(detalle?.comments ?? []),
     ...pendientes,
   ];
   const tenantsLibres = tenants.filter((t) => t !== SIN_TENANT);
+  const columnas = COLUMNS.filter((c) => c.key !== "pedido" || hayPedidos);
 
   return (
     <div className={wrap}>
@@ -619,10 +669,13 @@ export default function PipelinePage() {
         subtitle="Lo que tu agente tiene entre manos."
         actions={
           <>
+            {/* La hora del negocio, igual que el resto del portal: este sello
+                se lee CONTRA los datos de abajo ("actualizado 11:50" / "creada
+                hace 5 min"), así que en el reloj del que mira sería el único
+                número de la pantalla midiendo con otra vara. */}
             {ultima && (
-              <span className="hidden text-xs text-ink-soft sm:inline">
-                Actualizado{" "}
-                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false })}
+              <span className="hidden text-xs tabular-nums text-ink-soft sm:inline">
+                Actualizado {horaDe(ultima.getTime())}
               </span>
             )}
             <div className="relative w-56">
@@ -683,8 +736,12 @@ export default function PipelinePage() {
               hint="Probá con otra búsqueda o sacá el filtro."
             />
           ) : (
-            <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {COLUMNS.map((col) => (
+            <div
+              className={`grid items-start gap-4 md:grid-cols-2 ${
+                columnas.length === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4"
+              }`}
+            >
+              {columnas.map((col) => (
                 <section key={col.key} className="rounded-xl bg-black/[0.02] p-2">
                   <div className="flex items-center gap-2 px-2 pb-2 pt-1.5">
                     <span className={`h-1.5 w-1.5 rounded-full ${col.dot}`} />
@@ -813,7 +870,14 @@ export default function PipelinePage() {
                 <>
                   <h2 className="text-base font-bold leading-snug text-ink">{abierto.title}</h2>
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    <Chip tone={colDe(abierto).tone}>{colDe(abierto).chip}</Chip>
+                    {/* El chip lo pone el mismo criterio que arma las columnas
+                        —incluidos los pedidos del cliente—, más lo que
+                        `estadoDeTarea` sabe de estados que no tienen columna:
+                        una archivada sale del tablero pero el link a su detalle
+                        sigue abriendo, y decía "En curso", que era mentira. */}
+                    <Chip tone={estadoDeTicket(abierto).tono}>
+                      {estadoDeTicket(abierto).label}
+                    </Chip>
                     {abierto.tenant && <Chip tone="neutral">{abierto.tenant}</Chip>}
                     <span className="text-[11px] text-ink-soft">
                       {fmtRelativa(abierto.created_at)}

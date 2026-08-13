@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 import { BarChart3, RefreshCw } from "lucide-react";
 import { loadConfig, getUsage, type HttpError, type PortalConfig } from "../lib/agent";
 import { Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
-import { rotuloCanal } from "../lib/palabras";
+import { horaDe, husoDelNegocio, isoConHuso, momentoDe, rotuloCanal } from "../lib/palabras";
 
 type DailyUsage = {
   date?: string;
@@ -86,6 +86,15 @@ type Day = {
 
 // Últimos CHART_DAYS días calendario (terminando hoy), con los datos de
 // "daily" mapeados por fecha; días sin datos quedan en cero.
+//
+// EL DÍA ES EL DEL NEGOCIO, NO EL DEL BROWSER. El agente agrupa su consumo por
+// día suyo (`date(started_at,'unixepoch','localtime')` en el adapter: "2026-08-13"
+// es un día del agente). Armando la ventana con el calendario de quien mira,
+// los dos calendarios se separan todas las noches: con el agente en -03 y el
+// portal abierto desde México, a las 22:30 de allá acá ya es el día siguiente
+// —el balde de HOY del agente no entra en los catorce que se dibujan y el gasto
+// de hoy desaparece del gráfico, en la pantalla de la plata. Y las etiquetas
+// ("lun", "martes 12 ago") quedaban corridas un día contra los datos.
 function buildDays(daily: DailyUsage[]): { days: Day[]; hasData: boolean } {
   const byDate = new Map<string, { input: number; output: number; cost: number }>();
   for (const d of daily) {
@@ -97,15 +106,21 @@ function buildDays(daily: DailyUsage[]): { days: Day[]; hasData: boolean } {
     });
   }
   const days: Day[] = [];
-  const now = new Date();
+  const huso = husoDelNegocio();
+  const ahora = Date.now();
   for (let i = CHART_DAYS - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    // Restar 24 h corre el día de pared de allá sin tocar la hora: el huso del
+    // negocio es un desfasaje fijo, así que cada paso cae en el día anterior.
+    const ms = ahora - i * 86_400_000;
+    const key = isoConHuso(ms, huso).slice(0, 10); // "2026-08-13", la clave del agente
+    const m = momentoDe(ms);
     const v = byDate.get(key);
     days.push({
       key,
-      label: d.toLocaleDateString("es-UY", { weekday: "short" }),
-      title: d.toLocaleDateString("es-UY", { weekday: "long", day: "numeric", month: "long" }),
+      // "lun": la primera palabra de `fechaCorta` ("lun 17 ago"), ya en
+      // castellano y en el huso del negocio.
+      label: m ? m.fechaCorta.split(" ")[0] : "",
+      title: m ? `${m.diaSemana} ${m.fecha}` : key,
       input: v?.input ?? 0,
       output: v?.output ?? 0,
       cost: v?.cost ?? 0,
@@ -389,10 +404,12 @@ export default function UsoPage() {
         subtitle={period ? `Cuánto te sale tu agente · ${period}` : "Cuánto te sale tu agente"}
         actions={
           <>
+            {/* La hora del negocio: el sello se lee contra el gráfico de abajo,
+                que está en días del agente. En el reloj del que mira sería el
+                único número de la pantalla midiendo con otra vara. */}
             {ultima && (
               <span className="hidden text-xs tabular-nums text-ink-soft sm:inline">
-                Actualizado{" "}
-                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                Actualizado {horaDe(ultima.getTime())}
               </span>
             )}
             <IconBtn label="Actualizar" disabled={cargando} onClick={() => load(true)}>

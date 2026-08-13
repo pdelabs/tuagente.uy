@@ -47,23 +47,19 @@ import {
 } from "../lib/agent";
 import { EntityProvider } from "../lib/EntityViewer";
 import { useOpenEntity } from "../lib/entities";
+import { loadAgentName } from "../lib/onboarding";
 import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, SOPORTE, Spinner, inputCls,
 } from "../lib/ui";
 import {
-  esEventoDeMaquina, husoDe, isoConHuso, leerFalla, momento, rotuloCanal, rotuloEvento,
+  aprenderHuso, esDeLosUltimosDias, esEventoDeMaquina, horaDe, husoDe, isoConHuso,
+  momentoDe, rotuloCanal, rotuloEvento,
 } from "../lib/palabras";
+import {
+  esConversacionHumana, humanizarCorridas, type EventoAgente,
+} from "../lib/eventos";
 
-type ActivityEvent = {
-  ts: string;
-  kind: string;
-  label: string;
-  status: string;
-  /** Adónde lleva la fila (un flujo, un archivo). Los tickets van por `ticketId`. */
-  href?: string;
-  /** Por qué no pudo, en criollo. Solo en las corridas que fallaron. */
-  porQue?: string;
-};
+type ActivityEvent = EventoAgente;
 /** Los status crudos del adapter son muchos; para filtrar alcanzan tres. */
 type Grupo = "ok" | "error" | "curso";
 type RangoKey = "hoy" | "7d" | "30d" | "todo";
@@ -83,8 +79,10 @@ const KIND_LABEL: Record<string, string> = {
 
 // El estado viene crudo del motor y en inglés. Ahora sale del diccionario
 // único del portal (`lib/palabras.ts`), el mismo que usan el historial del
-// ticket y el chat: una sola palabra por cosa en todo el producto.
-const estadoLabel = (s: string) => rotuloEvento(s);
+// ticket y el chat: una sola palabra por cosa en todo el producto. Y con el
+// nombre que el cliente le puso al agente: "Tu agente la agarró" es de cuando
+// todavía no lo había bautizado.
+const estadoLabel = (s: string, nombreAgente: string) => rotuloEvento(s, nombreAgente);
 
 const GRUPOS: { key: Grupo; label: string; dot: [string, string] }[] = [
   // dot: [inactivo, activo] — sobre el chip activo (fondo ink) va el tono claro.
@@ -136,28 +134,34 @@ function creadoMs(value: string | number): number {
   return Number.isNaN(d) ? 0 : d;
 }
 
-/** Desde cuándo mostrar: "7 días" son 7 días calendario contando hoy. */
-function desdeRango(key: RangoKey): number | null {
+/** ¿Entra en el rango elegido? "7 días" son 7 días calendario contando hoy, y
+ *  los días los cuenta el negocio.
+ *
+ *  ESTE FILTRO LE ESCONDÍA LA FALLA A LA CLIENTA. Calculaba la medianoche con
+ *  `new Date()` del browser mientras los títulos de las secciones ya contaban
+ *  los días allá: desde México, apretar "Hoy" cortaba la lista en las 03:00 del
+ *  agente, dejaba el contador "Con error" en 0 y hacía desaparecer la corrida
+ *  que había fallado a las 02:58 — con la sección todavía titulada "HOY". */
+function entraEnRango(ts: string, key: RangoKey): boolean {
   const dias = RANGOS.find((r) => r.key === key)?.dias;
-  if (!dias) return null;
-  const hoy = new Date();
-  return new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - (dias - 1)).getTime();
+  if (!dias) return true;
+  return esDeLosUltimosDias(ts, dias);
 }
 
 // La hora y el día son los del NEGOCIO, no los del browser: la corrida de las
 // 02:37 en Montevideo no puede aparecer bajo "Ayer 23:37" porque quien mira
 // abrió el portal desde otro huso. Ver la nota larga en `lib/palabras.ts`.
 function hourLabel(ts: string): string {
-  return momento(ts)?.hora ?? "—";
+  return horaDe(ts) || "—";
 }
 
 function dayKey(ts: string): string {
-  const m = momento(ts);
+  const m = momentoDe(ts);
   return m ? String(m.dias) : "—";
 }
 
 function dayLabel(ts: string): string {
-  const m = momento(ts);
+  const m = momentoDe(ts);
   if (!m) return "Sin fecha";
   if (m.dias === 0) return "Hoy";
   if (m.dias === -1) return "Ayer";
@@ -202,34 +206,30 @@ function eventosDeArchivos(
 
 type SesionCruda = {
   id?: string; source?: string; started_at?: number; last_active?: number;
-  message_count?: number; preview?: string;
+  message_count?: number; title?: string | null; preview?: string;
 };
 
-// UNA CONVERSACIÓN ES ALGUIEN HABLANDO. El motor abre una "sesión" también para
-// correr un cron y para que el agente trabaje un ticket solo; esas no son
-// conversaciones de nadie y ya tienen su propia fila (la corrida del flujo, el
-// evento del tablero). Listarlas acá ponía «Hablaron por Tareas programadas:
-// "[IMPORTANT: You are running as a scheduled cron job…"» en la pantalla de una
-// veterinaria: el prompt interno, en inglés, presentado como una charla suya.
-const CANALES_HUMANOS = new Set([
-  "api_server", "portal", "api", "telegram", "whatsapp", "discord", "signal",
-]);
-
 /** Cada conversación, una línea. Una sesión de 128 mensajes es UN hecho para el
- *  cliente ("hablamos el martes"), no ciento veintiocho. */
+ *  cliente ("hablamos el martes"), no ciento veintiocho.
+ *
+ *  QUÉ CUENTA COMO CONVERSACIÓN lo decide `lib/eventos.ts`, el mismo criterio
+ *  que usa el Chat. Acá había una copia que sólo miraba el canal: la sesión de
+ *  los avisos internos del portal ("cliente comentó en el ticket t_…") entraba
+ *  como «Conversación por Portal» y su link caía en una conversación vacía,
+ *  porque el Chat —con el criterio bueno— la esconde. Actividad contaba 5
+ *  conversaciones y el Chat 4. */
 function eventosDeSesiones(sesiones: SesionCruda[] | null, huso: number): ActivityEvent[] {
   if (!sesiones) return [];
   return sesiones
     .filter((s) =>
       (s.message_count ?? 0) > 0
       && (s.started_at || s.last_active)
-      && CANALES_HUMANOS.has((s.source ?? "").trim().toLowerCase()))
+      && esConversacionHumana(s))
     .slice(0, 40)
     .map((s) => {
-      // Los avisos que el portal le inyecta al agente empiezan con un rótulo
-      // entre corchetes («[Aviso del portal] … ticket t_b2dd6735») y traen ids
-      // que el cliente no puede buscar en ningún lado. No son lo que él
-      // escribió: el renglón se queda sin cita antes que con esa.
+      // La cita es lo que escribió el cliente. Lo que arranca con un rótulo
+      // entre corchetes es un prompt de máquina con ids que él no puede buscar
+      // en ningún lado: el renglón se queda sin cita antes que con esa.
       const p = (s.preview ?? "").trim();
       const cita = p && !p.startsWith("[") ? `: «${p.slice(0, 70)}…»` : "";
       return {
@@ -240,38 +240,6 @@ function eventosDeSesiones(sesiones: SesionCruda[] | null, huso: number): Activi
         href: s.id ? `/app/chat?sesion=${encodeURIComponent(s.id)}` : undefined,
       };
     });
-}
-
-/** Las corridas de los flujos, con el nombre que les puso el cliente.
- *
- *  «flujo-vacunas-vencidas-semanal · No pudo» era la línea que a la veterinaria
- *  le reveló la falla, y también la única que no podía abrir para ver por qué.
- *  Ahora dice el nombre del flujo, cuenta el motivo en criollo y lleva a la
- *  pantalla donde se puede pausar o volver a probar. */
-function humanizarCorridas(
-  evs: ActivityEvent[], flujos: Flujo[] | null, jobs: CronJob[] | null,
-): ActivityEvent[] {
-  if (!flujos?.length) return evs;
-  const porNombreDeJob = new Map<string, Flujo>();
-  for (const f of flujos) porNombreDeJob.set(`flujo-${f.slug}`, f);
-  return evs.map((ev) => {
-    if (ev.kind !== "job_run") return ev;
-    const f = porNombreDeJob.get((ev.label || "").trim());
-    if (!f) return ev;
-    const job = jobs?.find((j) => (j.name || "").trim() === `flujo-${f.slug}`);
-    // El error del motor es el de la ÚLTIMA corrida: solo se le puede atribuir
-    // a esta fila si esta fila ES la última. Colgárselo a una vieja sería
-    // inventar.
-    const esLaUltima = Boolean(
-      job?.last_run_at && ev.ts && Math.abs(msDe(job.last_run_at) - msDe(ev.ts)) < 120_000);
-    const fallo = /(fail|error|timeout|cancel)/i.test(ev.status || "");
-    return {
-      ...ev,
-      label: f.nombre,
-      href: `/app/flujos/${encodeURIComponent(f.slug)}`,
-      porQue: fallo && esLaUltima ? leerFalla(job?.last_error).que : undefined,
-    };
-  });
 }
 
 function FiltroChip({ activo, onClick, count, children }: {
@@ -309,8 +277,8 @@ function Caption({ children }: { children: ReactNode }) {
 }
 
 /** Una línea del historial. Con ticketId o con href, toda la fila abre algo. */
-function Fila({ ev, ticketId, veces = 1 }: {
-  ev: ActivityEvent; ticketId?: string; veces?: number;
+function Fila({ ev, ticketId, veces = 1, nombreAgente }: {
+  ev: ActivityEvent; ticketId?: string; veces?: number; nombreAgente: string;
 }) {
   const open = useOpenEntity();
   const cuerpo = (
@@ -331,7 +299,7 @@ function Fila({ ev, ticketId, veces = 1 }: {
         <Chip>{KIND_LABEL[ev.kind] ?? ev.kind}</Chip>
         {ev.status && (
           <span className="text-[11px] text-ink-soft">
-            {estadoLabel(ev.status)}
+            {estadoLabel(ev.status, nombreAgente)}
             {veces > 1 && <span className="ml-1 tabular-nums text-ink-soft/70">×{veces}</span>}
           </span>
         )}
@@ -478,11 +446,13 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
   // nada". Los pasos de máquina quedan detrás de un interruptor.
   // En qué reloj vive el agente. Lo dicen sus propias fechas (vienen con huso);
   // los `mtime` de los archivos y las sesiones, no, así que se lo prestamos.
+  // Y de paso queda aprendido para las pantallas que sólo reciben epoch —el
+  // modal de una tarea, las aprobaciones—: ver `lib/palabras.ts`.
   const huso = useMemo(() => {
-    for (const e of events ?? []) { const o = husoDe(e.ts); if (o !== null) return o; }
+    for (const e of events ?? []) { const o = husoDe(e.ts); if (o !== null) return aprenderHuso(e.ts); }
     for (const j of jobs ?? []) {
       const o = husoDe(j.next_run_at) ?? husoDe(j.last_run_at);
-      if (o !== null) return o;
+      if (o !== null) return aprenderHuso(j.next_run_at, j.last_run_at);
     }
     return -new Date().getTimezoneOffset();
   }, [events, jobs]);
@@ -517,10 +487,9 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
 
   // Fecha + búsqueda primero: sobre esa base contamos los chips.
   const base = useMemo(() => {
-    const desde = desdeRango(rango);
     const q = norm(busqueda);
     return ordenados.filter((e) => {
-      if (desde !== null && msDe(e.ts) < desde) return false;
+      if (!entraEnRango(e.ts, rango)) return false;
       if (q && !norm(e.label || "").includes(q)) return false;
       return true;
     });
@@ -571,6 +540,11 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
   const idDe = (ev: ActivityEvent) =>
     ev.kind === "ticket" ? ticketIds.get(norm(ev.label || "")) : undefined;
 
+  // Cómo se llama el agente para este cliente: lo bautizó él. «Tu agente la
+  // agarró» era el rótulo genérico en la pantalla de alguien que ya le puso
+  // nombre.
+  const nombreAgente = loadAgentName() || "Tu agente";
+
   if (err && is404(err)) {
     return (
       <div className={WRAP}>
@@ -604,9 +578,11 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
         actions={
           <>
             {ultima && (
+              // También en el reloj del negocio: si no, "Actualizado 09:15"
+              // convive con una fila de las 11:52 y parece que el portal está
+              // mostrando el futuro.
               <span className="hidden text-xs text-ink-soft sm:inline">
-                Actualizado{" "}
-                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                Actualizado {horaDe(ultima.getTime())}
               </span>
             )}
             <IconBtn label="Actualizar" disabled={cargando} onClick={refrescar}>
@@ -757,6 +733,7 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
                             ev={ev}
                             veces={veces}
                             ticketId={idDe(ev)}
+                            nombreAgente={nombreAgente}
                           />
                         ))}
                       </ul>

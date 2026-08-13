@@ -20,6 +20,7 @@ import { loadConfig, type PortalConfig } from "../lib/agent";
 import { CopiarLink, PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
 import EntregablesPorFlujo from "../lib/EntregablesPorFlujo";
 import ArtifactView from "../lib/Artifact";
+import { horaDe, momentoDe, rotuloArtefacto } from "../lib/palabras";
 import {
   AvisoLinkViejo, Btn, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
@@ -30,44 +31,26 @@ import {
 
 const REFRESH_MS = 60_000;
 
-type Tono = "violet" | "green" | "coral" | "amber" | "neutral";
+// Cómo se llama cada clase de entrega lo dice `lib/palabras.ts`: esta tablita
+// estaba también en Inicio y en el modal, y las tres decían cosas distintas de
+// lo mismo.
+const kindLabel = (k: string) => rotuloArtefacto(k).label;
+const kindTone = (k: string) => rotuloArtefacto(k).tono;
 
-// Kinds que el portal entiende. Uno desconocido no se oculta ni se renombra:
-// se muestra tal cual lo mandó el agente.
-const KINDS: Record<string, { label: string; tone: Tono }> = {
-  chart: { label: "Gráfico", tone: "violet" },
-  table: { label: "Tabla", tone: "green" },
-  report: { label: "Informe", tone: "amber" },
-  dashboard: { label: "Panel", tone: "coral" },
-  diagram: { label: "Diagrama", tone: "violet" },
-  other: { label: "Otro", tone: "neutral" },
-};
-
-const kindLabel = (k: string) => KINDS[k]?.label ?? k;
-const kindTone = (k: string): Tono => KINDS[k]?.tone ?? "neutral";
-
-// created_at llega como epoch en SEGUNDOS; tolero ms, string numérico y fechas.
-function toDate(v: string | number): Date | null {
-  const n = typeof v === "number" ? v : Number(v);
-  if (Number.isFinite(n) && String(v).trim() !== "" && n > 0)
-    return new Date(n > 1e12 ? n : n * 1000);
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
+// `created_at` llega como epoch en SEGUNDOS y sin huso. Lo relativo ("hace 3 h")
+// se puede contar desde cualquier reloj; la fecha de las viejas, no: se escribe
+// en el del negocio, como el resto del portal.
 function fmtRelativa(v: string | number): string {
-  const d = toDate(v);
-  if (!d) return "";
-  const min = Math.round((Date.now() - d.getTime()) / 60_000);
+  const m = momentoDe(v);
+  if (!m) return "";
+  const min = Math.round((Date.now() - m.ms) / 60_000);
   if (min < 1) return "recién";
   if (min < 60) return `hace ${min} min`;
   const h = Math.round(min / 60);
   if (h < 24) return `hace ${h} h`;
   const dias = Math.round(h / 24);
   if (dias < 7) return dias === 1 ? "hace 1 día" : `hace ${dias} días`;
-  const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
-  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
-  return d.toLocaleDateString("es-UY", opts);
+  return m.anio === new Date().getFullYear() ? m.fecha : `${m.fecha} ${m.anio}`;
 }
 
 function fmtBytes(n: number | null): string {
@@ -229,7 +212,7 @@ export default function ArtefactosPage() {
     try {
       const lista = await listArtifacts(cfg);
       lista.sort((a, b) =>
-        (toDate(b.created_at)?.getTime() ?? 0) - (toDate(a.created_at)?.getTime() ?? 0));
+        (momentoDe(b.created_at)?.ms ?? 0) - (momentoDe(a.created_at)?.ms ?? 0));
       setItems(lista);
       setErr(null);
       setUltima(new Date());
@@ -399,8 +382,7 @@ export default function ArtefactosPage() {
           <>
             {ultima && (
               <span className="hidden text-xs text-ink-soft sm:inline">
-                Actualizado{" "}
-                {ultima.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                Actualizado {horaDe(ultima.getTime())}
               </span>
             )}
             <div className="relative w-56">

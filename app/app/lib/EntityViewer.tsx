@@ -11,6 +11,7 @@ import {
   type ArtifactMeta, type PortalConfig, type TicketDetail,
 } from "./agent";
 import { EntityContext, esImagen, type Entity } from "./entities";
+import { estadoDeTarea, fechaHora, rotuloArtefacto } from "./palabras";
 import Spreadsheet, { CsvPreview } from "./Spreadsheet";
 import { Btn } from "./ui";
 import { loadAgentName } from "./onboarding";
@@ -38,22 +39,11 @@ export function EntityProvider({ cfg, children }: { cfg: PortalConfig; children:
   );
 }
 
-function fmtDate(value: number | string): string {
-  const n = typeof value === "number" ? value : Number(value);
-  const d = new Date(Number.isFinite(n) ? (n > 1e12 ? n : n * 1000) : String(value));
-  return Number.isNaN(d.getTime())
-    ? ""
-    : d.toLocaleString("es-UY", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
-}
-
-const STATUS_TONE: Record<string, "violet" | "amber" | "green" | "neutral"> = {
-  blocked: "violet", ready: "amber", running: "amber", done: "green",
-};
-
-export const KIND_LABEL: Record<string, string> = {
-  chart: "Gráfico", table: "Tabla", report: "Informe",
-  dashboard: "Panel", diagram: "Diagrama", other: "Artefacto",
-};
+// LA MISMA HORA, CON TRES HORAS DE DIFERENCIA, A UN CLICK. La fila de Actividad
+// decía «11:50» y este modal —que abre esa misma fila— «13 ago., 08:50», porque
+// acá los `created_at` (epoch pelado, sin huso) se formateaban con el reloj de
+// quien mira. Ahora los lee el reloj del negocio, como el resto del portal.
+const fmtDate = (value: number | string) => fechaHora(value);
 
 const CODE_EXT: Record<string, string> = {
   py: "python", ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx",
@@ -227,9 +217,16 @@ function EntityViewer({ cfg, entity, onClose }: {
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {entity.kind === "ticket" ? (
               <>
-                <Chip tone={STATUS_TONE[ticket?.ticket.status ?? ""] ?? "neutral"}>
-                  {ticket?.ticket.status ?? "ticket"}
-                </Chip>
+                {/* EL CHIP DECÍA `done`. En inglés y crudo, a un click de
+                    Actividad. Ahora dice lo mismo que el Tablero —"Completado",
+                    "Esperando aprobación"— porque sale del mismo diccionario. */}
+                {ticket && (
+                  <Chip tone={estadoDeTarea(ticket.ticket.status).tono}>
+                    {estadoDeTarea(ticket.ticket.status).label}
+                  </Chip>
+                )}
+                {/* El tenant es el tablero donde vive la tarea, y ese nombre lo
+                    puso el cliente ("ventas", "cobranzas"): va tal cual. */}
                 {ticket?.ticket.tenant && <Chip>{ticket.ticket.tenant}</Chip>}
                 {ticket && (
                   <span className="text-[11px] text-ink-soft">
@@ -239,15 +236,19 @@ function EntityViewer({ cfg, entity, onClose }: {
               </>
             ) : entity.kind === "artifact" ? (
               <>
-                <Chip tone="violet">{KIND_LABEL[artifact?.kind ?? ""] ?? "Artefacto"}</Chip>
                 {artifact && (
-                  <span className="text-[11px] text-ink-soft">
-                    {fmtDate(artifact.created_at)}
-                  </span>
+                  <>
+                    <Chip tone={rotuloArtefacto(artifact.kind).tono}>
+                      {rotuloArtefacto(artifact.kind).label}
+                    </Chip>
+                    <span className="text-[11px] text-ink-soft">
+                      {fmtDate(artifact.created_at)}
+                    </span>
+                  </>
                 )}
               </>
             ) : (
-              <Chip>archivo</Chip>
+              <Chip>Archivo</Chip>
             )}
           </div>
         </div>

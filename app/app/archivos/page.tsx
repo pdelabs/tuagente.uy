@@ -17,6 +17,9 @@ import {
   Search, X, type LucideIcon,
 } from "lucide-react";
 import { loadConfig, getFiles, getFileText, getFileBytes, type PortalConfig } from "../lib/agent";
+import {
+  fechaHora, husoDe, husoDelNegocio, isoConHuso, momento, momentoDe, type Momento,
+} from "../lib/palabras";
 import { CopiarLink, PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
 import {
   AvisoLinkViejo, Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader,
@@ -74,29 +77,16 @@ function fileIcon(name: string): LucideIcon {
   return File;
 }
 
-function toMs(mtime?: string | number): number {
-  if (mtime == null) return 0;
-  if (typeof mtime === "number") return mtime > 1e12 ? mtime : mtime * 1000; // epoch s vs ms
-  const t = Date.parse(mtime);
-  return Number.isNaN(t) ? 0 : t;
-}
+// El `mtime` llega como epoch en segundos y sin huso. Quien lo lee es
+// `momentoDe`, la puerta única del portal: devuelve el instante (para ordenar)
+// ya leído en el reloj del negocio (para mostrar).
+const msDe = (mtime?: string | number): number => momentoDe(mtime)?.ms ?? 0;
 
 function fmtSize(n?: number): string {
   if (typeof n !== "number" || !Number.isFinite(n)) return "";
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function relTime(ms: number): string {
-  if (!ms) return "";
-  const min = Math.floor((Date.now() - ms) / 60_000);
-  if (min < 1) return "recién";
-  if (min < 60) return `hace ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `hace ${h} h`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? "hace 1 día" : `hace ${d} días`;
 }
 
 // ── Front-matter ───────────────────────────────────────────────────────────
@@ -160,13 +150,35 @@ function parseFrontMatter(path: string, text: string): { fm: FrontMatter | null;
   }
 }
 
+/** Una fecha SIN huso leída como hora de pared del negocio: los dígitos que
+ *  escribió el agente son los suyos, y son los que se muestran mire quien mire.
+ *  (Se leen como si fueran UTC y se corren al huso del negocio: es la única
+ *  forma de pintar un huso ajeno con lo que exporta `palabras.ts`.) */
+function paredDelNegocio(iso: string): Momento | null {
+  const ms = Date.parse(`${iso}Z`);
+  if (Number.isNaN(ms)) return null;
+  const off = husoDelNegocio();
+  return momento(isoConHuso(ms - off * 60_000, off));
+}
+
+/** La `fecha` del front-matter, en el reloj del negocio.
+ *
+ *  La escribe la skill `entregable` y hoy viene sin huso ("fecha: 2026-08-13
+ *  07:03"): esas son las 07:03 DE ALLÁ. Con `new Date()` a secas los dígitos
+ *  volvían intactos de pura casualidad —el mismo reloj del browser parseaba y
+ *  formateaba— y esa casualidad se rompe sola de dos maneras: el día que la
+ *  skill le agregue el huso ("…-03:00"), y ya hoy con una fecha sin hora, que
+ *  `new Date()` lee a medianoche UTC y en cualquier huso al oeste retrocede al
+ *  día anterior. */
 function fmtFecha(value: string): string {
-  const d = new Date(value.trim().replace(" ", "T"));
-  return Number.isNaN(d.getTime())
-    ? value
-    : d.toLocaleString("es-UY", {
-      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false,
-    });
+  const v = value.trim();
+  const soloDia = /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const m = husoDe(v) !== null
+    ? momentoDe(v)                              // ya trae su huso: se respeta
+    : paredDelNegocio(soloDia ? `${v}T12:00:00` : v.replace(" ", "T"));
+  if (!m) return value; // lo que no se entiende se muestra tal cual
+  // Sin hora escrita no se inventa una: "13 ago" y listo.
+  return soloDia ? m.fecha : `${m.fecha} ${m.hora}`;
 }
 
 // ── Listado ────────────────────────────────────────────────────────────────
@@ -197,7 +209,7 @@ function entriesFor(files: FileEntry[], dir: string) {
       }
       return a.name.localeCompare(b.name, "es");
     });
-  inDir.sort((a, b) => toMs(b.mtime) - toMs(a.mtime) || a.path.localeCompare(b.path, "es"));
+  inDir.sort((a, b) => msDe(b.mtime) - msDe(a.mtime) || a.path.localeCompare(b.path, "es"));
   return { folderList, inDir };
 }
 
@@ -484,7 +496,14 @@ export default function ArchivosPage() {
               // Se puede ver ADENTRO del portal: texto plano o planilla.
               const verEnPortal = texty || esPlanilla(name) || esFoto(name);
               const Icon = fileIcon(name);
-              const meta = [fmtSize(f.size), relTime(toMs(f.mtime))].filter(Boolean).join(" · ");
+              // CUÁNDO LO ESCRIBIÓ, EN LA HORA DEL AGENTE. Acá decía "hace 3 h"
+              // mientras Actividad —que lista EXACTAMENTE estos archivos, con
+              // este mismo `mtime`— dice "Hoy · 00:57": sobre el mismo archivo,
+              // dos pantallas contestando distinto a la misma pregunta. Y "hace
+              // 3 h" no se cruza con nada: el cliente que quiere saber si el
+              // informe es el de la mañana tenía que hacer la cuenta él, con SU
+              // reloj, que es justamente el que acá no manda.
+              const meta = [fmtSize(f.size), fechaHora(f.mtime)].filter(Boolean).join(" · ");
               return (
                 <li key={`f-${f.path}`} className="group relative">
                   <div className="flex w-full items-center gap-3 px-4 py-2.5 transition hover:bg-black/[0.02]">
@@ -566,6 +585,8 @@ export default function ArchivosPage() {
   const viewerMeta = viewer
     ? files?.find((f) => clean(f.path) === viewer.path)
     : undefined;
+  // La misma hora que la fila de la lista y que Actividad: una sola verdad.
+  const viewerCuando = fechaHora(viewerMeta?.mtime);
   const hasMeta = !!fm && (!!fm.tipo || !!fm.fecha || fm.tags.length > 0);
 
   return (
@@ -592,7 +613,7 @@ export default function ArchivosPage() {
               <p className="truncate text-[11px] text-ink-soft">
                 {viewer.path}
                 {viewerMeta?.size != null ? ` · ${fmtSize(viewerMeta.size)}` : ""}
-                {toMs(viewerMeta?.mtime) ? ` · ${relTime(toMs(viewerMeta?.mtime))}` : ""}
+                {viewerCuando ? ` · ${viewerCuando}` : ""}
               </p>
               {hasMeta && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

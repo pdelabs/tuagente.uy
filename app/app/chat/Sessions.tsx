@@ -12,6 +12,7 @@ import {
 import {
   deleteSession, renameSession, type PortalConfig,
 } from "../lib/agent";
+import { esConversacionHumana } from "../lib/eventos";
 import { ErrorState, Spinner, inputCls } from "../lib/ui";
 
 export type SessionSummary = {
@@ -24,19 +25,13 @@ export type SessionSummary = {
   last_active: number;
 };
 
-const HUMAN_SOURCES = new Set(["api_server", "telegram", "whatsapp", "discord"]);
 const PINNED_KEY = "tuagente_chat_pinned";
 
-// Conversaciones que un cliente reconoce como suyas: las humanas, sin las
-// internas del sistema (crons, workers del kanban, generación de títulos).
-export function isHumanSession(s: SessionSummary): boolean {
-  if (!HUMAN_SOURCES.has(s.source)) return false;
-  const t = (s.title ?? s.preview ?? "").trimStart();
-  // "### Task": las que Hermes usa para titular/etiquetar.
-  // "[Aviso del portal]": la sesión donde el adapter le avisa al agente que
-  // comentaste un ticket. Es maquinaria nuestra, no una conversación tuya.
-  return !t.startsWith("### Task") && !t.startsWith("[Aviso del portal]");
-}
+// Cuáles son conversaciones del cliente y cuáles maquinaria del motor lo decide
+// `lib/eventos.ts` y nadie más: este criterio vivía acá y Actividad tenía el
+// suyo —sólo por canal—, así que la misma sesión de avisos internos era una
+// conversación de más en una pantalla y no existía en la otra.
+const isHumanSession = (s: SessionSummary) => esConversacionHumana(s);
 
 export function sessionTitle(s: SessionSummary): string {
   return s.title?.trim() || s.preview?.trim() || "Conversación";
@@ -208,7 +203,7 @@ export default function Sessions({
           <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">
             {sessionTitle(s)}
           </span>
-          {!HUMAN_SOURCES.has(s.source) && (
+          {!isHumanSession(s) && (
             <span className="shrink-0 text-[10px] text-ink-soft/70">{s.source}</span>
           )}
         </button>

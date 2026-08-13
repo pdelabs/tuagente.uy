@@ -14,7 +14,7 @@ import { Clock, Eye, Pause, Play, TriangleAlert, X, Zap } from "lucide-react";
 import {
   loadConfig, getFlujos, getJobs, jobAction, type Flujo, type PortalConfig,
 } from "../lib/agent";
-import { momento } from "../lib/palabras";
+import { aprenderHuso, estadoDeProgramada, fechaYHora, momento } from "../lib/palabras";
 import {
   AvisoLinkViejo, Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner,
 } from "../lib/ui";
@@ -258,15 +258,12 @@ function proximaLegible(iso: string | null | undefined): string | null {
   return `${m.fechaCorta} a las ${m.hora}`;
 }
 
-// Fecha + hora de una corrida: "hoy 09:56", "ayer 04:07", "1 ago 23:10".
+// Fecha + hora de una corrida: "hoy 09:56", "ayer 04:07", "vie 1 ago 23:10".
 // También en el reloj del negocio: el historial y la próxima corrida se leen
-// uno debajo del otro y no pueden estar en husos distintos.
-function fechaHoraCorrida(iso: string | null | undefined): { fecha: string; hora: string } | null {
-  const m = momento(iso);
-  if (!m) return null;
-  const fecha = m.dias === 0 ? "hoy" : m.dias === -1 ? "ayer" : m.fechaCorta;
-  return { fecha, hora: m.hora };
-}
+// uno debajo del otro y no pueden estar en husos distintos. La partición vive
+// en `lib/palabras.ts` porque el modal de una tarea y el de un ticket muestran
+// la misma clase de fecha y llegaron a mostrarla distinto.
+const fechaHoraCorrida = fechaYHora;
 
 // Cuánto tardó una corrida. null si todavía no terminó (o si las fechas no
 // parsean): el chip de estado ya cuenta que sigue en curso.
@@ -330,10 +327,17 @@ function Shell({ children }: { children: ReactNode }) {
   return <div className="mx-auto max-w-4xl px-6 py-6 md:px-8">{children}</div>;
 }
 
-// Mismo chip de estado en la fila y en el detalle: una sola verdad.
-function EstadoChip({ estado, activa }: { estado?: string | null; activa: boolean }) {
-  if (estado === "running") return <Chip tone="violet">Corriendo</Chip>;
-  return activa ? <Chip tone="green">Activa</Chip> : <Chip tone="amber">Pausada</Chip>;
+// Mismo chip de estado en la fila y en el detalle: una sola verdad. Qué dice
+// —incluido que "Activa" en verde no puede convivir con "falló"— lo decide
+// `estadoDeProgramada` en `lib/palabras.ts`.
+const comoEsta = (estado: string | null | undefined, activa: boolean, fallo: boolean) =>
+  estadoDeProgramada({ corriendo: estado === "running", pausada: !activa, fallo });
+
+function EstadoChip({ estado, activa, fallo }: {
+  estado?: string | null; activa: boolean; fallo?: boolean;
+}) {
+  const { label, tono } = comoEsta(estado, activa, Boolean(fallo));
+  return <Chip tone={tono}>{label}</Chip>;
 }
 
 function Rotulo({ children }: { children: ReactNode }) {
@@ -352,8 +356,9 @@ function Dato({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** Detalle de una tarea: qué hace y cómo le fue las últimas veces. */
-function DetalleTarea({ job, detalle, error, onRetry, onClose }: {
+function DetalleTarea({ job, flujos, detalle, error, onRetry, onClose }: {
   job: Job; // el de la lista: es el único que trae el objeto `schedule` completo
+  flujos: Flujo[] | null; // para titular con el nombre del cliente, no con el slug
   detalle: CronDetail | null;
   error: string | null;
   onRetry: () => void;
@@ -378,10 +383,20 @@ function DetalleTarea({ job, detalle, error, onRetry, onClose }: {
     <Modal wide onClose={onClose}>
       <div className="flex items-start justify-between gap-4 border-b border-black/[0.07] px-5 py-4">
         <div className="min-w-0">
-          <h2 className="text-base font-bold leading-snug text-ink">{job.name}</h2>
+          {/* El título del detalle mostraba el slug del motor
+              («flujo-vacunas-vencidas-semanal») mientras la fila que lo abre ya
+              decía el nombre del cliente. Es el mismo nombre en las dos. */}
+          <h2 className="text-base font-bold leading-snug text-ink">
+            {nombreDeTarea(job.name, flujos)}
+          </h2>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <EstadoChip estado={estado} activa={activa} />
-            {fallo && (
+            <span title={fallo ? ultimoError ?? undefined : undefined}>
+              <EstadoChip estado={estado} activa={activa} fallo={fallo} />
+            </span>
+            {/* Pausada (o corriendo) Y rota: el chip de arriba cuenta lo
+                primero, esto lo segundo. Una tarea en pausa sobre una corrida
+                rota es justo la que hay que mirar antes de reanudarla. */}
+            {fallo && !comoEsta(estado, activa, fallo).cuentaLaFalla && (
               <span title={ultimoError ?? undefined}>
                 <Chip tone="coral">la última falló</Chip>
               </span>
@@ -525,7 +540,11 @@ export default function TareasPage() {
   const refresh = useCallback((c: PortalConfig) => {
     getJobs(c)
       .then((d) => {
-        setJobs(ordenar(d?.jobs ?? []));
+        const lista = ordenar(d?.jobs ?? []);
+        // Las corridas vienen con su huso: de acá sale el reloj del negocio para
+        // las pantallas que sólo reciben epoch (ver `lib/palabras.ts`).
+        aprenderHuso(...lista.flatMap((j) => [j.next_run_at, j.last_run_at]));
+        setJobs(lista);
         setError(null);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "sin detalle"));
@@ -718,14 +737,24 @@ export default function TareasPage() {
 
                 {/* Centro: estado + última corrida */}
                 <div className="order-3 col-span-2 flex flex-wrap items-center gap-2 md:order-none md:col-span-1">
-                  <EstadoChip estado={job.state} activa={job.enabled} />
+                  {/* El error crudo del motor sigue viajando en el `title`: es
+                      para nosotros, no para la pantalla. */}
+                  <span title={fallo ? job.last_error ?? undefined : undefined}>
+                    <EstadoChip estado={job.state} activa={job.enabled} fallo={fallo} />
+                  </span>
                   {ultima ? (
                     fallo ? (
                       <>
                         <span className="text-[12px] text-ink-soft">{ultima}</span>
-                        <span title={job.last_error ?? undefined}>
-                          <Chip tone="coral">falló</Chip>
-                        </span>
+                        {/* El "falló" suelto sólo hace falta cuando el chip de
+                            estado está contando otra cosa (pausada, corriendo):
+                            así no hay dos chips discutiendo ni información que
+                            se pierda. */}
+                        {!comoEsta(job.state, job.enabled, fallo).cuentaLaFalla && (
+                          <span title={job.last_error ?? undefined}>
+                            <Chip tone="coral">falló</Chip>
+                          </span>
+                        )}
                       </>
                     ) : (
                       <span className="text-[12px] text-ink-soft">{ultima} · ok</span>
@@ -798,6 +827,7 @@ export default function TareasPage() {
       {abierto && (
         <DetalleTarea
           job={abierto}
+          flujos={flujos}
           detalle={detalle}
           error={detalleErr}
           onRetry={() => cargarDetalle(abierto.id)}
