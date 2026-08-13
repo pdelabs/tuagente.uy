@@ -74,8 +74,20 @@ POLITICA="$AGENTE/politica"
 # no como root: verificado en el lab, portal-check 14/14 y escribiendo
 # politica.json y pedidos.jsonl igual.
 KIT_ADAPTER="$AGENTE/kit-adapter"
+# EL ADAPTER DEJO DE SER UN ARCHIVO, y una lista a mano no se entera. Desde que
+# se partio en workspace/kanban/flows, `portal_adapter.py` los IMPORTA: subir
+# solo el archivo grande deja un adapter que no arranca —ImportError en el
+# import de flows— y con el se van tablero, aprobaciones, artefactos, archivos,
+# actividad y uso. O sea el producto, y sin ruido: el kit "instala bien".
+# Se arma desde el directorio, como los hooks, asi el dia que aparezca un cuarto
+# modulo viaja solo. Los `test_*.py` se quedan en el kit.
+ADAPTER_PY=()
+while IFS= read -r f; do
+  ADAPTER_PY+=("$(basename "$f")")
+done < <(find "$KIT/adapter" -maxdepth 1 -type f -name "*.py" ! -name "test_*" | sort)
+[[ ${#ADAPTER_PY[@]} -gt 0 ]] || { echo "adapter/: no hay ningun .py que instalar" >&2; exit 1; }
+
 ARCHIVOS=(
-  "adapter/portal_adapter.py:$KIT_ADAPTER/portal_adapter.py"
   "connections/catalogo.json:$DATA/connections/catalogo.json"
   # EL CATALOGO DE CAPACIDADES VA A politica/, NO A data/. Es el texto de la
   # tarjeta que ve el cliente: en data/ el agente —que corre como root— podia
@@ -92,6 +104,9 @@ ARCHIVOS=(
   # configurada en config.yaml apunta a un archivo que no existe.
   "mcp-guardia/guardia.py:$POLITICA/guardia.py"
 )
+for m in "${ADAPTER_PY[@]}"; do
+  ARCHIVOS+=("adapter/$m:$KIT_ADAPTER/$m")
+done
 # LA RUTA VIEJA SE SIGUE INSTALANDO MIENTRAS EL COMPOSE LA USE. Si sacaramos
 # `data/scripts/portal_adapter.py` con el compose todavia apuntando ahi, el
 # proceso vivo sigue andando (tiene el archivo abierto) pero un `docker restart`
@@ -102,7 +117,12 @@ ARCHIVOS=(
 # instalarse, pasa a ser obsoleta y recien ahi se va sola.
 COMPOSE_AGENTE="$AGENTE/docker-compose.yml"
 if [[ -f "$COMPOSE_AGENTE" ]] && grep -q '/opt/data/scripts/portal_adapter.py' "$COMPOSE_AGENTE"; then
-  ARCHIVOS+=("adapter/portal_adapter.py:$DATA/scripts/portal_adapter.py")
+  # Los modulos van TAMBIEN por la ruta vieja: el import es relativo al archivo
+  # que se ejecuta, asi que un agente sin migrar que reciba solo el grande queda
+  # igual de roto que uno nuevo.
+  for m in "${ADAPTER_PY[@]}"; do
+    ARCHIVOS+=("adapter/$m:$DATA/scripts/$m")
+  done
 fi
 
 # Los hooks se ARMAN desde el directorio, como las skills: el día que haya un
