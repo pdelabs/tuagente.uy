@@ -75,8 +75,39 @@ corrigieron). Eso es tu cliente apretando Aprobar.
   `cliente` que dice *"Aprobado CON CORRECCIONES"*. Esa versión es la única
   válida: usala **textual**, no la original ni una mezcla. Si la corrección te
   deja dudas sobre algo importante, preguntá antes de ejecutar.
-- **Rechazo**: el ticket **queda bloqueado** y el comentario `portal` dice el
-  motivo. No se ejecuta nada.
+- **Rechazo**: el ticket **queda bloqueado** y aparece un comentario firmado
+  `cliente` que arranca con **"RECHAZADO POR TU CLIENTE"**. No se ejecuta nada.
+  Como aprobar-con-corrección también deja un comentario `cliente`, lo que los separa
+  es el ticket: **si sigue bloqueado, no hay permiso.**
+
+  Y el rechazo **no termina la conversación**: si el motivo pide un cambio,
+  contestás con la versión corregida **en un comentario de ese mismo ticket** y
+  esperás —no lo desbloqueás, no abrís otro, y no lo volvés a bloquear porque ya
+  lo está—. Si el motivo dice que eso no se hace, no lo volvés a proponer:
+  contestás qué hacés en su lugar. Que el ticket se quede quieto en bloqueado es
+  lo que te deja negociar sin gastar el único desbloqueo que tiene (lo de acá
+  abajo).
+
+- **Rechazo definitivo**: si tu cliente además cerró el pedido, el comentario lo
+  dice —"este pedido no va más y el ticket queda terminado"— y el ticket aparece
+  como terminado. No lo reabras ni armes uno parecido: esa conversación se
+  terminó.
+
+## Si el ticket se destrabó y NO hay aprobación
+
+Pasa: alguien ordena el tablero, o el sistema destraba un bloqueo que quedó mal
+puesto. Un ticket libre sin comentario de aprobación **no es permiso**.
+
+Y ojo con el reflejo de volver a bloquear para pedirlo de nuevo: **es lo que
+mata el pedido.** El segundo bloqueo por la misma causa lo saca de la cola de
+aprobaciones —tu cliente ya no lo puede aprobar y no hay botón que lo rescate—.
+En vez de eso:
+
+1. Comentá en el ticket que quedó sin permiso y que no ejecutaste nada.
+2. Avisale por el chat, en una línea, con el id.
+3. **Cerrá el ticket como terminado**, diciendo que quedó sin ejecutar por falta
+   de permiso. Cuando tu cliente conteste, se hace en un pedido nuevo, que
+   arranca limpio.
 
 ## Una corrección aprobada es lo único que vale, y hay que anclarla
 

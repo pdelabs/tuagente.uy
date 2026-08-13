@@ -1497,6 +1497,81 @@ def task_status(task_id):
     return row["status"] if row else None
 
 
+def _ultimo_comentario_id(task_id):
+    conn = ro(KANBAN_DB)
+    try:
+        row = conn.execute(
+            "SELECT MAX(id) AS ultimo FROM task_comments WHERE task_id = ?",
+            (task_id,)).fetchone()
+    finally:
+        conn.close()
+    return (row["ultimo"] if row else None) or 0
+
+
+def _normalizado(texto):
+    return re.sub(r"\s+", " ", str(texto or "")).strip().lower()
+
+
+def _ya_esta_dicho(task_id, desde, respuesta):
+    """¿Esta misma respuesta ya está publicada en el ticket, después de `desde`?
+
+    Se compara el TEXTO, no el autor. La primera versión miraba la firma —"si
+    comentó alguien que no es `cliente` ni `portal`, es el agente"— y eso es
+    falso: el endpoint de comentarios acepta cualquier autor y el portal ya
+    modela a otras personas. Medido: con un tercero comentando mientras el
+    agente contestaba un rechazo, la respuesta del agente NO se publicaba y el
+    cliente quedaba esperando con el ticket bloqueado, sin error y con
+    `avisado: true`. **Perder la respuesta es peor que duplicarla**, así que
+    esto suprime solo cuando lo que está por publicarse ya está ahí.
+    """
+    if desde is None or not respuesta:
+        return False
+    nueva = _normalizado(respuesta)
+    if len(nueva) < 15:                  # "ok", "listo": no se dedupean
+        return False
+    conn = ro(KANBAN_DB)
+    try:
+        # Solo contra comentarios que NO son del portal: los del agente. Los del
+        # cliente no se comparan ni por casualidad.
+        filas = conn.execute(
+            "SELECT body FROM task_comments WHERE task_id = ? AND id > ? "
+            "AND author NOT IN (?, ?)",
+            (task_id, desde, AUTHOR_HUMAN, AUTHOR_AUDIT)).fetchall()
+    except sqlite3.Error:
+        return False
+    finally:
+        conn.close()
+    for fila in filas:
+        vieja = _normalizado(fila["body"])
+        if not vieja:
+            continue
+        # IGUAL, O UNO ADENTRO DEL OTRO. Nada de "parecido": con un umbral de
+        # 0.85 —y hasta con 0.95— "se borran los 12 archivos" y "se borran los
+        # 11 archivos" dan 0.98 y la corrección se perdía en silencio. Es la
+        # familia de las 8 bisagras entrando por otra puerta.
+        if nueva == vieja:
+            return True
+        corto, largo = sorted((nueva, vieja), key=len)
+        if len(corto) >= 0.6 * len(largo) and corto in largo:
+            return True
+    return False
+
+
+def _block_recurrences(task_id):
+    """Cuántas veces se re-bloqueó por la misma causa. A las 2 el motor lo manda
+    a `triage` y el pedido deja de poder aprobarse: es el contador que la
+    negociación NO tiene que hacer subir. Columna vieja en agentes viejos."""
+    conn = ro(KANBAN_DB)
+    try:
+        row = conn.execute(
+            "SELECT block_recurrences FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    return row["block_recurrences"] if row else None
+
+
 def _ws_relative(path):
     """/opt/data/workspace/entregables/x.md -> entregables/x.md (como los sirve
     el modulo de archivos). Lo de afuera del workspace se descarta."""
@@ -1751,6 +1826,21 @@ def comment_ticket(task_id, body, author):
 # nunca desde los comentarios que deja el propio agente: sin eso habria loop.
 NOTIFY_ON_COMMENT = os.environ.get("NOTIFY_AGENT_ON_COMMENT", "1") != "0"
 NOTIFY_SESSION_FILE = DATA / ".portal_notify_session"
+# Cuánto se espera, ya con la respuesta del agente en la mano, antes de
+# publicarla en el ticket: le da tiempo a que aparezca el comentario que el
+# agente pueda haber dejado por su cuenta (ver la republicación). Corre en un
+# hilo de fondo, no lo espera nadie.
+GRACIA_ANTES_DE_PUBLICAR = int(os.environ.get("PORTAL_GRACIA_COMENTARIO", "20"))
+# UN AVISO POR VEZ. Todos los avisos van a la MISMA sesión de chat (a propósito:
+# una sesión por comentario le llenaría la lista de conversaciones al cliente).
+# Pero dos mensajes que entran juntos a una sesión se contestan JUNTOS, en un
+# solo turno: medido con dos rechazos separados por 2 segundos en tickets
+# distintos, salió una respuesta combinada y el adapter la publicó en un ticket
+# con el id del otro adentro. Con un cliente despachando su cola de aprobaciones
+# eso pasa siempre. El candado serializa los turnos: cada aviso espera al
+# anterior, y la respuesta que leemos es la del mensaje que mandamos. Corre en
+# hilos de fondo, así que la espera no la paga nadie.
+_AVISO_LOCK = threading.Lock()
 
 
 def notify_session_id():
@@ -1833,9 +1923,40 @@ def _texto_final_sse(raw):
     return (ultimo or "".join(partes)).strip()
 
 
+AVISO_EN_CURSO = POLITICA_DIR / "avisos" / "en-curso.json"
+# Techo del contexto: si el aviso se cuelga, la puerta no se queda cerrada para
+# siempre. 15 minutos es mas de lo que tarda cualquier turno que hayamos visto.
+AVISO_TTL = 900
+
+
+def _marcar_aviso(task_id):
+    """Deja (o borra) el ticket del aviso en curso, para que lo lea la puerta."""
+    try:
+        if task_id is None:
+            AVISO_EN_CURSO.unlink(missing_ok=True)
+            return
+        AVISO_EN_CURSO.parent.mkdir(parents=True, exist_ok=True)
+        tmp = AVISO_EN_CURSO.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"task_id": task_id,
+                                   "hasta": time.time() + AVISO_TTL}),
+                       encoding="utf-8")
+        tmp.replace(AVISO_EN_CURSO)      # atomico: la puerta nunca lee a medias
+    except OSError:
+        # Si politica/ no es escribible desde el adapter, la puerta pierde la
+        # capa fina y le queda la tosca (¿hay algún pedido bloqueado?). Se
+        # degrada hacia el lado seguro, asi que no se rompe nada acá.
+        pass
+
+
 def notify_agent_of_comment(task_id, body, author):
+    """Le avisa al agente por el chat. Devuelve si el aviso quedó ENCOLADO.
+
+    Encolado, no entregado: la conversación con el agente puede tardar minutos y
+    el cliente no espera. Quien lee ese valor no puede decir "el agente se
+    enteró" — solo "salió de acá".
+    """
     if not NOTIFY_ON_COMMENT:
-        return
+        return False
     # El contexto va ADENTRO del aviso. El agente no tiene herramienta nativa de
     # kanban y el binario esta vetado desde el gateway, asi que si le decimos
     # "leelo vos" se va media docena de tool calls peleando con el terminal
@@ -1877,15 +1998,40 @@ def notify_agent_of_comment(task_id, body, author):
         f"[Aviso del portal] {author} comentó en el ticket {task_id}:\n\n"
         f"{body}\n{ficha}\n\n"
         "Con esto ya tenés todo el contexto.\n\n"
-        "**Tu respuesta se publica como comentario en ese mismo ticket**, así que "
-        "escribila dirigida a quien comentó: corta, concreta y sin repetir lo que "
-        "ya está en el ticket. Si el comentario pide algo, hacelo y contá qué "
+        "**Tu respuesta se publica sola como comentario en ese mismo ticket**, así "
+        "que escribila dirigida a quien comentó: corta, concreta y sin repetir lo "
+        "que ya está en el ticket. **NO comentes vos el ticket** —ni con la tool ni "
+        "por terminal—: si lo hacés, tu cliente lee lo mismo dos veces en la "
+        "pantalla donde decide. Si el comentario pide algo, hacelo y contá qué "
         "hiciste; si es una pregunta, respondela; si no pide nada, alcanza con una "
         "línea. No cambies el estado del ticket salvo que te lo pidan, y no te "
         "desvíes a otra cosa: esto es solo un aviso de comentario."
     )
 
+    # Cuántos comentarios había ANTES de avisarle. Es lo que después distingue
+    # "el agente ya contestó en el ticket" de "el agente contestó solo en el
+    # chat": ver la republicación de abajo.
+    try:
+        antes = _ultimo_comentario_id(task_id)
+    except sqlite3.Error:
+        antes = None
+
     def _enviar():
+        with _AVISO_LOCK:
+            # A QUE TICKET LE ESTAMOS AVISANDO. Lo lee la puerta (el hook) para
+            # saber que un borrado pedido en esta sesion de chat pertenece a un
+            # pedido que sigue bloqueado. Es la unica forma: medido sobre
+            # payloads reales, una sesion de chat NO tiene `HERMES_KANBAN_TASK`
+            # ni nada que la ate a un ticket, y por ahi entro el borrado que la
+            # clienta habia rechazado. Se escribe en politica/, que el agente
+            # monta :ro: puede leerlo, no puede tocarlo.
+            _marcar_aviso(task_id)
+            try:
+                _enviar_serializado()
+            finally:
+                _marcar_aviso(None)
+
+    def _enviar_serializado():
         try:
             sid = notify_session_id()
             if sid:
@@ -1922,6 +2068,24 @@ def notify_agent_of_comment(task_id, body, author):
             # con la firma del agente: mejor no comentar nada.
             if re.match(r"^HTTP \d{3}\b", respuesta) or "is not a valid model" in respuesta:
                 respuesta = ""
+            # SI ESTO YA ESTA DICHO EN EL TICKET, NO SE REPUBLICA. El aviso le
+            # pide al agente que conteste, y el agente —que tiene la tool
+            # `kanban_comment` a mano— a veces comenta EL MISMO texto por su
+            # cuenta antes de terminar de responder. Resultado: el hilo mostraba
+            # cada respuesta dos veces, firmada distinto (`worker` y el nombre
+            # del agente), en la pantalla donde el cliente decide. Se compara
+            # contra el TEXTO que esta por publicarse, no contra la firma: un
+            # tercero comentando en el medio no puede hacernos perder la
+            # respuesta del agente.
+            # La espera no es paja: el agente suele llamar a `kanban_comment`
+            # DESPUES de cerrar su respuesta, asi que mirar el ticket justo al
+            # terminar se pierde el comentario por segundos y publica igual.
+            # Nadie espera este hilo —el cliente ya tiene su 200— y el ticket no
+            # se mueve mientras tanto.
+            if respuesta:
+                time.sleep(GRACIA_ANTES_DE_PUBLICAR)
+            if _ya_esta_dicho(task_id, antes, respuesta):
+                respuesta = ""
             if respuesta and "[SILENT]" not in respuesta:
                 # Firmado con el nombre del agente, distinto de `cliente` y de
                 # `portal`: en el detalle se lee de un vistazo quien dijo que.
@@ -1931,6 +2095,7 @@ def notify_agent_of_comment(task_id, body, author):
 
     # En hilo aparte: el cliente no espera a que el agente piense.
     threading.Thread(target=_enviar, daemon=True).start()
+    return True
 
 
 def set_ticket_status(task_id, status):
@@ -2764,9 +2929,13 @@ class Handler(BaseHTTPRequestHandler):
             # devolverle al cliente el nombre de un estado interno.
             if status == "triage":
                 return self._send(409, {
-                    "error": "Este pedido quedó trabado y el sistema lo sacó de la "
-                             "cola de aprobaciones. Pedíselo de nuevo al agente por "
-                             "el chat y te lo vuelve a presentar para aprobar.",
+                    "error": ("Este pedido quedó trabado y el sistema lo sacó de la "
+                              "cola de aprobaciones. Decíselo al agente por el chat "
+                              "—que no lo haga— y pedile que lo empiece de nuevo."
+                              if action == "reject" else
+                              "Este pedido quedó trabado y el sistema lo sacó de la "
+                              "cola de aprobaciones. Pedíselo de nuevo al agente por "
+                              "el chat y te lo vuelve a presentar para aprobar."),
                     "estado": status,
                 })
             return self._send(409, {"error": f"ticket is not blocked (status={status})"})
@@ -2798,15 +2967,137 @@ class Handler(BaseHTTPRequestHandler):
                                task_id, "Aprobado desde el portal")
                 hermes_cli("unblock", "--", task_id)
             else:
-                reason = str(body.get("reason") or "").strip()
+                # Tope y saneo ANTES de que el motivo llegue al argv del CLI:
+                # 4000 es el mismo tope con el que publicamos la respuesta del
+                # agente, y el \x00 no sobrevive a un argumento de proceso.
+                reason = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", " ",
+                                str(body.get("reason") or "")).strip()[:4000].strip()
                 if not reason:
                     return self._send(400, {"error": "reason is required"})
-                hermes_cli("comment", f"--author={AUTHOR_AUDIT}", "--",
-                           task_id, f"Rechazado desde el portal: {reason}")
-                # Reject NO desbloquea: el ticket queda blocked a la espera.
+                # `is True` y no `bool(...)`: este campo CIERRA el pedido. Con
+                # `bool()`, el string "false" —que es lo que manda cualquier
+                # formulario que serialice una casilla— cerraba todos los
+                # rechazos. Un campo destructivo se acepta solo escrito con
+                # todas las letras; cualquier otra cosa es un rechazo normal.
+                return self._rechazar(task_id, reason,
+                                      definitivo=body.get("definitivo") is True)
         except (RuntimeError, subprocess.TimeoutExpired) as exc:
             return self._send(502, {"error": str(exc)})
-        return self._send(200, {"ok": True})
+        # Aprobar SI desbloquea: es el final de la negociación, y el único
+        # `unblock` que el ticket puede gastar sin arriesgar el triage.
+        # Misma forma que la respuesta de rechazo, para que el portal no tenga
+        # dos parsers. `avisado` es false y no es un olvido: aprobar no manda
+        # ningún aviso —lo que despierta al agente es el desbloqueo, que el
+        # dispatcher ve solo.
+        try:
+            estado = task_status(task_id)
+            recurrencias = _block_recurrences(task_id)
+        except sqlite3.Error:
+            estado, recurrencias = None, None
+        return self._send(200, {"ok": True, "estado": estado,
+                                "desbloqueado": True, "cerrado": False,
+                                "en_aprobaciones": False, "avisado": False,
+                                "block_recurrences": recurrencias})
+
+    def _rechazar(self, task_id, motivo, definitivo=False):
+        """Rechazar = UN comentario firmado `cliente`. El ticket no se toca.
+
+        POR QUE NO SE DESBLOQUEA, que es lo contrario de lo que parece obvio.
+        Un ticket tiene UN solo `unblock` util antes de que el motor lo declare
+        un loop: `block_recurrences` sube cada vez que se re-bloquea por la
+        misma causa despues de un desbloqueo, y a las dos (BLOCK_RECURRENCE_LIMIT,
+        hardcodeado en kanban_db.py) el ticket se va a `triage`, donde aprobar
+        devuelve 409 y ningun verbo del CLI lo trae de vuelta. Si rechazar
+        desbloqueara, la secuencia normal de una negociacion —pido, me dicen que
+        no, corrijo, vuelvo a pedir— gastaria ese unico unblock en el primer
+        "no": el agente re-bloquea, salta el limite y el pedido MUERE. Peor
+        todavia con el auto-decomposer prendido, que parte el ticket usando el
+        CUERPO VIEJO y le deja al cliente una tarea que dice "usá el pedido
+        preparado de 8 bisagras" cuando ya habia pedido 20. Es el bug critico
+        del QA, reproducido por el portal por otro camino.
+        Con el ticket quieto en `blocked`, la negociacion entera no gasta nada:
+        `block_recurrences` se queda en 1 —el valor que deja el PRIMER bloqueo,
+        porque el motor cuenta desde 1— y nunca llega a 2, que es donde el
+        ticket se va a triage. No hay triage, no hay decomposer, y el pedido no
+        desaparece de Aprobaciones mientras se discute.
+
+        `definitivo` es la otra mitad, y es del cliente, no nuestra: "no, y no
+        me lo vuelvas a proponer" CIERRA el pedido (`complete`). Sin eso el
+        ticket se quedaba bloqueado para siempre con el boton Aprobar vivo —un
+        control que no controla nada: apretarlo no resucita la accion, la
+        tarjeta desaparece y un cambio de opinion genuino se perdia en silencio.
+
+        Lo que despierta al agente es el COMENTARIO, no el cambio de estado
+        (`notify_agent_of_comment`): el "no" del cliente ya no cae en un pozo.
+
+        UNA LLAMADA, Y EL ORDEN IMPORTA. Antes esto eran tres llamadas
+        repartidas entre el portal y el adapter, y si la ultima fallaba quedaba
+        el comentario puesto y la pantalla diciendo "no se pudo". Un rechazo
+        normal es UNA escritura: o hay comentario y 200, o no hay nada y un
+        error. Un rechazo `definitivo` son DOS —el comentario y el cierre— y por
+        eso van en ese orden: si el cierre fallara, el rechazo ya quedo escrito,
+        que es lo que no se puede perder; el ticket quedaria bloqueado, que es
+        el estado del rechazo normal, y el error dice que paso. El aviso al
+        agente va despues y es best-effort, pero se informa en `avisado`.
+        """
+        # El texto es la mitad del contrato: el agente lo lee en el aviso y en
+        # la ficha del ticket. Tiene que ser IMPOSIBLE de confundir con un
+        # permiso, porque aprobar-con-correccion tambien deja un comentario
+        # firmado `cliente`. Lo que los separa es el desbloqueo (que aca no
+        # pasa) y este encabezado.
+        cierre = (
+            "Tu cliente lo cerró: este pedido no va más y el ticket queda "
+            "terminado. No lo vuelvas a proponer, ni acá ni en otro ticket."
+            if definitivo else
+            "Esto NO es permiso: el ticket sigue bloqueado y sigue siendo tuyo. "
+            "Si el motivo pide un cambio, contestá en un comentario de ESTE "
+            "mismo ticket con la versión corregida y esperá la respuesta. Si el "
+            "motivo dice que eso no se hace, no vuelvas a proponerlo: contestá "
+            "qué hacés en su lugar. No lo desbloquees, no abras otro ticket y no "
+            "lo vuelvas a bloquear —ya está bloqueado."
+        )
+        cuerpo = (
+            "RECHAZADO POR TU CLIENTE. No hagas lo que pediste aprobar, ni una "
+            "versión parecida.\n\n"
+            f"Motivo, con sus palabras: «{motivo}»\n\n" + cierre
+        )
+        try:
+            comment_ticket(task_id, cuerpo, AUTHOR_HUMAN)
+            if definitivo:
+                # Cerrar DESPUES de comentar: si el complete fallara, el
+                # rechazo ya quedo escrito, que es lo que no se puede perder.
+                set_ticket_status(task_id, "done")
+        except (RuntimeError, subprocess.TimeoutExpired, OSError, ValueError) as exc:
+            # OSError y ValueError NO son teoricos: un motivo enorme revienta
+            # con "Argument list too long" al armar el argv del CLI, y un byte
+            # nulo con "embedded null byte". Las dos cerraban la conexion sin
+            # respuesta HTTP —el cliente veia un error de red— aunque el efecto
+            # fuera el correcto (no se escribio nada).
+            return self._send(502, {"error": f"no pude registrar el rechazo: {exc}"})
+        avisado = False
+        try:
+            avisado = bool(notify_agent_of_comment(task_id, cuerpo, AUTHOR_HUMAN))
+        except Exception:
+            avisado = False
+        try:
+            estado = task_status(task_id)
+            recurrencias = _block_recurrences(task_id)
+        except sqlite3.Error:
+            estado, recurrencias = None, None
+        # Todo lo que el portal necesita para redibujar sin adivinar: el pedido
+        # SIGUE en la pestaña salvo que se haya cerrado (por eso
+        # `en_aprobaciones`), no se desbloqueó nada, y `block_recurrences` es la
+        # cuenta que no queremos que suba. `avisado` dice que el aviso salió de
+        # acá, NO que el agente ya lo leyó: la respuesta puede tardar minutos.
+        return self._send(200, {
+            "ok": True,
+            "estado": estado,
+            "desbloqueado": False,
+            "cerrado": bool(definitivo),
+            "en_aprobaciones": estado == "blocked",
+            "avisado": avisado,
+            "block_recurrences": recurrencias,
+        })
 
     def log_message(self, *a):
         pass

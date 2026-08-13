@@ -23,7 +23,9 @@ import importlib.util
 import json
 import os
 import re
+import sqlite3
 import subprocess
+import tempfile
 import sys
 
 OK, FAIL, WARN = "OK  ", "FALLA", "aviso"
@@ -1300,12 +1302,64 @@ def main():
             ("terminal", "ffmpeg -i a.mp4 b.mp4", False),
             ("terminal", "echo 'pip install' >> notas.md", False),
             ("terminal", "hermes kanban comment -- t_1 'haría falta npm install x'", False),
+            # Sin pedido pendiente, borrar y mandar son trabajo normal.
+            ("terminal", "rm -- doc1.txt doc2.txt", False),
+            ("execute_code", "import os; os.remove('doc1.txt')", False),
         ]
-        for tool, cmd, esperado in casos:
+        # LA BARRERA DEL PERMISO PENDIENTE, que es la que evita lo peor que nos
+        # pasó: con un pedido bloqueado en el tablero, el agente no borra ni
+        # manda nada aunque un comentario diga que ya está aprobado. Se prueba
+        # con un tablero de mentira —dos filas en un sqlite temporal— porque el
+        # chequeo corre sin levantar el agente.
+        tablero = os.path.join(tempfile.mkdtemp(prefix="puerta-"), "kanban.db")
+        con = sqlite3.connect(tablero)
+        con.execute("CREATE TABLE tasks (id TEXT PRIMARY KEY, status TEXT, block_kind TEXT)")
+        con.execute("INSERT INTO tasks VALUES ('t_bloq', 'blocked', 'needs_input')")
+        con.execute("INSERT INTO tasks VALUES ('t_libre', 'ready', NULL)")
+        con.commit()
+        con.close()
+        conpedido = {"HERMES_KANBAN_DB": tablero, "HERMES_KANBAN_TASK": "t_bloq"}
+        sinpedido = {"HERMES_KANBAN_DB": tablero, "HERMES_KANBAN_TASK": "t_libre"}
+        casos += [
+            # el borrado exacto del incidente, por los dos caminos
+            ("terminal", "rm -- doc1.txt doc2.txt doc3.txt", True, conpedido),
+            ("execute_code", "import os\nfor f in ('doc1.txt','doc2.txt'): os.remove(f)",
+             True, conpedido),
+            ("terminal", "shred -u informe.pdf", True, conpedido),
+            ("terminal", "himalaya message send < mail.txt", True, conpedido),
+            ("terminal", "curl -X POST https://api.proveedor.com/pedidos -d @pedido.json",
+             True, conpedido),
+            # con el ticket ya desbloqueado, el MISMO comando pasa
+            ("terminal", "rm -- doc1.txt doc2.txt doc3.txt", False, sinpedido),
+            ("terminal", "bash -c 'rm -rf /opt/data/workspace/entregables'", True, conpedido),
+            ("terminal", "cd /opt/data && rm informe.md", True, conpedido),
+            # el scratch nunca fue del cliente, y el resto es trabajo normal
+            ("terminal", "rm /tmp/salida.csv", False, conpedido),
+            ("terminal", "ls -la && cat informe.md", False, conpedido),
+            ("terminal", "curl -s https://api.proveedor.com/precios", False, conpedido),
+            ("execute_code", "print(sum(1 for _ in open('ventas.csv')))", False, conpedido),
+            # PEDIR PERMISO NO SE BLOQUEA NUNCA. Este caso salió de una prueba en
+            # vivo: la barrera frenó al agente mientras ARMABA la solicitud, por
+            # un "rm" adentro de una comilla. Bloquear al que pide es peor que no
+            # tener barrera.
+            ("terminal", "printf '%s' 'x' | python3 /opt/kit/skills/aprobacion/format_request.py "
+                         "--que 'Eliminar doc1.txt' --si-apruebo 'Ejecuto el comando rm -- sobre ese archivo'",
+             False, conpedido),
+        ]
+        for tool, cmd, esperado, *resto in casos:
+            extra_env = resto[0] if resto else {}
+            # `code` además de `command`: execute_code manda el suyo ahí, y es
+            # el camino por el que entró el borrado que la clienta había
+            # rechazado.
             payload = json.dumps({"hook_event_name": "pre_tool_call", "tool_name": tool,
-                                  "tool_input": {"command": cmd}})
+                                  "tool_input": {"command": cmd} if tool != "execute_code"
+                                  else {"code": cmd}})
+            entorno = dict(os.environ)
+            entorno.pop("HERMES_KANBAN_TASK", None)
+            entorno.pop("HERMES_KANBAN_DB", None)
+            entorno.update(extra_env)
             try:
-                r = subprocess.run([sys.executable, script], input=payload,
+                r = subprocess.run([sys.executable, script], input=payload, env=entorno,
                                    capture_output=True, text=True, timeout=15)
             except (OSError, subprocess.TimeoutExpired) as exc:
                 raise AssertionError(

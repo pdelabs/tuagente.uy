@@ -166,6 +166,12 @@ hooks:
     - matcher: "terminal"
       command: "/opt/politica/hooks/puerta.py"
       timeout: 10
+    # execute_code NO estaba, y por ahi entro el borrado que la clienta habia
+    # rechazado: el agente no uso la terminal, uso este. Es el mismo poder con
+    # otro nombre (corre Python adentro del volumen), asi que va la misma puerta.
+    - matcher: "execute_code"
+      command: "/opt/politica/hooks/puerta.py"
+      timeout: 10
     - matcher: "kanban_unblock"
       command: "/opt/politica/hooks/puerta.py"
       timeout: 10
