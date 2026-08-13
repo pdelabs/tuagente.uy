@@ -12,29 +12,44 @@ con fecha vieja no es un problema; una fila que dice algo que ya no es cierto s�
 
 | Agente | Host | SOUL | Motor | Último check |
 |---|---|---|---|---|
-| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v4** (verificado byte a byte contra `soul/versiones/v4.md` el 12/8; el kit ya va por **v11**) | `v2026.7.30` (por el compose remoto) | TODO — nunca se corrió |
+| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v11** (13/8: el bloque del host tiene el mismo sha256 que `soul/versiones/v11.md`) | `v2026.7.30` (verificado con `docker ps`, no solo con el compose) | 13/8: **25 ok · 1 aviso · 1 falla** — la falla es `SOUL: identidad`, y es real: quedó **sin identidad artesanal** (ver abajo) |
 | East Comunicación | `east` → `/opt/agentes/east` | TODO | TODO | TODO |
 
-**Quedan atrás con v11** (bloque del 13/8/2026: las frases que no se pueden
+**Mr.Wobble quedó en cero y al día el 13/8/2026** — reset TOTAL por decisión de
+Luis, así que se fue también el SOUL y con él el bautizo. Tiene v11, la guardia
+de las promesas (probada contra el agente vivo, no solo instalada), la puerta en
+código, el adapter fuera de `data/`, los secretos en `secretos.env` y el
+`config.yaml` con las cuatro perillas. **Lo único que le falta para servir es la
+identidad**, que es lo que `agente-check.py` reporta: el SOUL no dice quién es ni
+para quién trabaja, así que hoy contesta como el asistente genérico del motor.
+Se cierra de una de dos formas: que el cliente lo bautice en el portal (escribe
+el bloque `portal:identidad`) o que una persona escriba `00-identidad.md`. Hasta
+entonces la fila dice 1 falla a propósito: no se tapa con un texto de relleno.
+
+**Queda atrás con v11 East** (bloque del 13/8/2026: las frases que no se pueden
 escribir sin haberlo hecho — "queda definido", "queda armado", "todos los
 viernes a las 9:30 te dejo X"; y desde v10, rechazo que no desbloquea y
-vocabulario). Los dos de la tabla: Mr.Wobble está en v4 —siete versiones
-atrás— y de East no sabemos ni la versión, que es peor. Ninguno de los dos
-entiende todavía qué es un rechazo, así que en los dos **rechazar desde el
-portal deja el ticket bloqueado y el agente no sabe qué hacer con eso**.
-Migrarlos es una corrida de `tools/reemplazar-bloque.py` con
-`soul/versiones/v11.md` por agente, mirando antes el diff de lo que esté
-escrito a mano. Sin agentes locales de cliente hoy: cualquiera creado con
-`nuevo-agente.sh` nace en v11.
+vocabulario). De East no sabemos ni la versión, que es peor que saberla vieja:
+no entiende todavía qué es un rechazo, así que **rechazar desde el portal le deja
+el ticket bloqueado y el agente no sabe qué hacer con eso**. Migrarlo es una
+corrida de `tools/reemplazar-bloque.py` con `soul/versiones/v11.md`, mirando
+antes el diff de lo que esté escrito a mano. Sin agentes locales de cliente hoy:
+cualquiera creado con `nuevo-agente.sh` nace en v11.
 
-**Y les falta la guardia de las promesas** (`politica/plugins/promesas/`, del
-13/8/2026), que es lo único que impide que un agente diga "queda definido:
+**Y a East le falta la guardia de las promesas** (`politica/plugins/promesas/`,
+del 13/8/2026), que es lo único que impide que un agente diga "queda definido:
 viernes a las 9:30" sin haber creado nada. Son tres cosas y van juntas:
 `install.sh` deja el plugin, el compose lo monta
 (`./politica/plugins:/opt/data/plugins:ro`) y el config lo prende
 (`plugins.enabled: [promesas]`); después, `docker compose up -d hermes` —un
 `restart` no alcanza, es un montaje nuevo—. `agente-check.py` falla si falta
 cualquiera de las tres.
+
+En Mr.Wobble las tres están, y la tercera **no la pone el despliegue**:
+`desplegar-remoto.sh` no pisa un `config.yaml` que ya existe, así que
+`plugins.enabled` —y con él `hooks`, `hooks_auto_accept` y `kanban.auto_decompose`—
+hubo que escribirlos a mano en el config del agente. Es el paso que se olvida al
+actualizar un cliente viejo, porque el despliegue termina sin decir nada.
 
 **Bajas.** Un agente dado de baja sale de la tabla —la tabla dice qué corre
 dónde— pero no del registro:
@@ -75,33 +90,50 @@ grep image: <ruta>/docker-compose.yml
 python3 tools/agente-check.py <ruta>/data
 ```
 
-## Estado al 2026-08-12
+## Estado al 2026-08-13
 
-**Mr.Wobble** — desplegado y en uso. Leyendo su SOUL real el 12/8: tiene el
-bloque **v2** (15.648 bytes) y el `portal:identidad` del bautizo, con el nombre
-que le puso su cliente. Le falta subir a **v3** —el bloque nuevo trae la línea
-que evita el `kanban_show` sin id que hoy se come el primer turno de cada
-conversación— con `tools/instalar-soul.sh --reemplazar tuagente`, y le falta la
-identidad artesanal (`00-identidad.md`), que necesita datos del cliente.
+**Mr.Wobble** — reseteado a cero y actualizado al kit del día. Lo que se hizo,
+en orden, y todo con herramientas del kit: `tools/resetear-agente.sh` en modo
+COMPLETO (se va la huella del cliente **y** el SOUL), `desplegar-remoto.sh`
+—que sube el kit, cambia el compose, mueve las claves a `secretos.env` e
+instala el SOUL—, las cuatro perillas que faltaban a mano en el `config.yaml`,
+y `docker compose up -d hermes portal-adapter`, que es lo que toma el montaje
+nuevo de `politica/plugins`. Sale con 0 fallas de `portal-check.py`, en cero
+verificado con `--entrega`, y 1 falla de `agente-check.py`: la identidad.
 
-De su despliegue salieron además tres arreglos que ya están en el kit: el
-verificador de mutaciones apagado, el browser apagado, y el `chown` de `data/`
-en `desplegar-remoto.sh` — sin ese último el agente arrancó **sin una sola
-skill** (140 "Permission denied" al sembrar, índice vacío, ningún error visible).
+Dos cosas de este agente que valen para cualquier otro que corra en un host
+compartido con más servicios nuestros:
+
+- **`desplegar-remoto.sh` reescribe el `.env` del compose entero**, con las
+  cinco variables que él conoce. Mr.Wobble tenía una sexta, `MODELO_DEL_AGENTE`,
+  que lee el colector de `docker-compose.observabilidad.yml`: se perdió en las
+  dos corridas y hubo que reponerla. Es silencioso —el colector cae a
+  `desconocido` y las trazas salen igual, sin modelo—, así que **antes de
+  desplegar hay que mirar qué más tiene ese `.env`**.
+- **`migrar-secretos.sh` mueve `data/.env` a `secretos.env`, y el compose de
+  observabilidad todavía nombraba el viejo.** Los servicios de al lado siguen
+  andando porque nadie los recreó, pero el próximo `up -d` con los dos `-f`
+  fallaba con "env file not found". Se arregla subiendo también
+  `compose/docker-compose.observabilidad.yml`, que en el kit ya dice
+  `./secretos.env`. Las dos cosas van juntas o el stack de al lado queda con una
+  bomba de tiempo.
 
 **East Comunicación** — primera alta con `desplegar-remoto.sh` (ver
 `notas/modelos-auxiliares.md`). Del repo no se puede deducir en qué quedó: si se
 desplegó antes del 11/8, salió sin SOUL, porque el despliegue remoto no lo
 instalaba.
 
-## Perillas del motor: nadie las tiene aplicadas todavía
+## Perillas del motor: Mr.Wobble sí, East no
 
 La tanda C1 dejó en el kit las skills del motor apagadas, el preámbulo del
 portal reemplazado y las skills del kit montadas `:ro`. **Eso viaja solo a los
-agentes nuevos**: los dos de la tabla son anteriores y siguen con las 70 skills
-del motor prendidas. `agente-check.py` lo reporta como falla en cada uno hasta
-que se aplique. El runbook (es un redeploy, y el `config.yaml` está `:ro`) está
-en `notas/perillas-aplicadas.md`.
+agentes nuevos.** Mr.Wobble las tiene desde el 13/8 (las de skills ya venían del
+12/8; el 13 se le sumaron la puerta, la guardia de las promesas y
+`kanban.auto_decompose`, que el despliegue no pone porque no pisa un
+`config.yaml` que ya existe). East es anterior y sigue con las 70 skills del
+motor prendidas; `agente-check.py` lo reporta como falla hasta que se aplique.
+El runbook (es un redeploy, y el `config.yaml` está `:ro`) está en
+`notas/perillas-aplicadas.md`.
 
 ## Antes de actualizarle el bloque a alguien
 
@@ -116,8 +148,9 @@ lo chequee todavía — es a mano y hay que acordarse.
 
 ## Lo que falta confirmar (necesita ssh, no sale del repo)
 
-- Si Mr.Wobble y East siguen levantados, y en qué tag de motor están de verdad
-  (la tabla dice lo que fija el compose del kit, no lo que corre el docker de
-  cada VPS).
+- **Mr.Wobble: contestado el 13/8.** Está levantado y corre `v2026.7.30` de
+  verdad, leído del `docker ps` del host y no del compose.
+- Si East sigue levantado, y en qué tag de motor está de verdad (su fila dice lo
+  que fija el compose del kit, no lo que corre el docker de esa VPS).
 - Si East llegó a tener SOUL, y con qué marcador.
 - Si hay algún agente más que no dejó rastro en este repo.
