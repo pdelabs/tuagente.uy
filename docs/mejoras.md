@@ -153,6 +153,14 @@ Sin interpretación, tal como salió:
 Vive en `docs/PENDIENTES.md` y en `hermes-kit/notas/`. Lo que hay que tener
 presente al retomar:
 
+- **La puerta de aprobación tiene tres agujeros abiertos y escritos** (ver el
+  commit `16a9460` del kit): se apaga sola cuando el contexto nombra un
+  ticket ya resuelto —justo en el turno del rechazo definitivo—; detecta por
+  forma y no por efecto, así que `os.system("rm -f x")` pasa mientras el
+  texto que *describe* un borrado bloquea; y sigue frenando al agente cuando
+  redacta el pedido de aprobación desde `execute_code`. **Es lo primero que
+  hay que cerrar**: el incidente que la motivó fue el agente ejecutando un
+  borrado rechazado.
 - **La propuesta vigente se adivina por la forma del texto.** Si el agente
   re-propone en prosa en vez de tabla, el portal no puede saber cuál es la
   versión buena. El arreglo de fondo es del kit: que la propuesta venga
