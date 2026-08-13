@@ -39,6 +39,9 @@ export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada, 
   // código de pareo no puede quedar abierto a cualquiera.
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const yaAviso = useRef(false);
+  // ¿El agente llegó a contestar alguna vez? Si nunca contestó y el error es
+  // "no está instalado", no hay nada que reintentar.
+  const contesto = useRef(false);
 
   const pedir = useCallback(async (ruta: string, metodo = "GET") => {
     const r = await fetch(`${cfg.adapter}/portal/connections/whatsapp/pair${ruta}`, {
@@ -51,10 +54,13 @@ export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada, 
 
   useEffect(() => {
     let vivo = true;
+    let reloj: ReturnType<typeof setInterval> | null = null;
+    const frenar = () => { if (reloj) { clearInterval(reloj); reloj = null; } };
     const mirar = () => {
       pedir("")
         .then(async (d: Estado) => {
           if (!vivo) return;
+          contesto.current = true;
           setEstado(d);
           if (d.paired && !yaAviso.current) { yaAviso.current = true; onConectada(); }
           if (!d.has_qr) { setQrUrl((v) => { if (v) URL.revokeObjectURL(v); return null; }); return; }
@@ -68,11 +74,19 @@ export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada, 
             setQrUrl((v) => { if (v) URL.revokeObjectURL(v); return url; });
           } catch { /* el próximo tick reintenta */ }
         })
-        .catch((e) => { if (vivo) setErr(e instanceof Error ? e.message : String(e)); });
+        .catch((e) => {
+          if (!vivo) return;
+          const msg = e instanceof Error ? e.message : String(e);
+          setErr(msg);
+          // El puente no está instalado: eso no cambia mientras el diálogo esté
+          // abierto, así que seguir pegándole cada 3 segundos es pura carga
+          // sobre el agente del cliente para volver a leer el mismo 503.
+          if (!contesto.current && NO_ESTA.test(msg)) frenar();
+        });
     };
     mirar();
-    const t = setInterval(mirar, 3000);   // el QR rota cada pocos segundos
-    return () => { vivo = false; clearInterval(t); };
+    reloj = setInterval(mirar, 3000);   // el QR rota cada pocos segundos
+    return () => { vivo = false; frenar(); };
   }, [pedir, onConectada, cfg]);
 
   // Soltar el último blob al cerrar.
@@ -96,7 +110,17 @@ export default function DialogoWhatsApp({ cfg, conexion, onCerrar, onConectada, 
           <ConexionLogo id={conexion.id} />
           <div>
             <p className="text-sm font-bold text-ink">Conectar WhatsApp</p>
-            <p className="text-[12px] text-ink-soft">Escaneando un código, como WhatsApp Web.</p>
+            {/* El subtítulo anunciaba "Escaneando un código, como WhatsApp Web"
+                justo arriba del texto que dice que esa vía no está instalada.
+                Se dice recién cuando se sabe: mientras no se sabe, no se
+                promete nada. */}
+            {sinPuente ? (
+              <p className="text-[12px] text-ink-soft">Lo tramitamos nosotros.</p>
+            ) : estado?.paired ? (
+              <p className="text-[12px] text-ink-soft">Ya está vinculado.</p>
+            ) : estado ? (
+              <p className="text-[12px] text-ink-soft">Escaneando un código, como WhatsApp Web.</p>
+            ) : null}
           </div>
         </div>
 

@@ -95,15 +95,28 @@ export function olvidarAgente() {
   }
 }
 
-export function loadConfig(): PortalConfig | null {
+/** La credencial que trae la URL en el hash, LEÍDA y nada más: no guarda, no
+ *  borra, no olvida al agente anterior. Eso es trabajo de `loadConfig`.
+ *
+ *  Existe aparte porque el layout necesita darse cuenta de que pegaron un magic
+ *  link nuevo sin recargar la página, y para eso tiene que poder mirar el hash
+ *  sin efectos. Es la MISMA lectura que hace `loadConfig` —una sola— para que
+ *  las dos no se separen. */
+export function credencialEnLaURL(): Partial<PortalConfig> | null {
   if (typeof window === "undefined") return null;
   const h = window.location.hash;
   const get = (k: string) => h.match(new RegExp(`${k}=([^&]+)`))?.[1];
-  const fromHash = {
+  if (!get("key")) return null;
+  return {
     endpoint: get("endpoint") ? decodeURIComponent(get("endpoint")!) : undefined,
     adapter: get("adapter") ? decodeURIComponent(get("adapter")!) : undefined,
     key: get("key"),
   };
+}
+
+export function loadConfig(): PortalConfig | null {
+  if (typeof window === "undefined") return null;
+  const fromHash = credencialEnLaURL() ?? {};
   const stored = configGuardada();
   const cfg = {
     endpoint: fromHash.endpoint || stored?.endpoint || DEFAULTS.endpoint,
@@ -674,6 +687,36 @@ export const commentTicket = (c: PortalConfig, id: string, body: string, author?
 export type TicketStatus = "done" | "blocked" | "ready" | "archived";
 export const setTicketStatus = (c: PortalConfig, id: string, status: TicketStatus) =>
   post<{ ok: boolean }>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}/status`, c, { status });
+
+/** UN SOLO LUGAR CREA LOS PEDIDOS DE CONEXIÓN. Los armaban Conexiones y el alta
+ *  por separado, con cuerpos distintos y con un fetch suelto de un lado.
+ *
+ *  Y NACEN BLOQUEADOS, que es la parte que importa. `POST /portal/tickets` los
+ *  crea `ready` y ya asignados, así que el dispatcher los levanta a los pocos
+ *  segundos aunque el cuerpo diga "no hagas nada por tu cuenta": el agente
+ *  termina su corrida diciendo que espera algo, el motor lee eso como
+ *  `dependency_wait` —que no es un bloqueo pegajoso—, lo devuelve a `ready` y lo
+ *  vuelve a levantar. Medido el 13/8 contra un agente del lab: 8 corridas en
+ *  t_dd0c0fa1 y 10 en otro, ~US$0,007 cada una, hasta que el modelo por
+ *  casualidad usó el bloqueo tipado. Con el ticket bloqueado de entrada
+ *  (`hermes kanban block`, que sí emite el evento pegajoso) el worker no lo
+ *  toca: verificado t_276ddb2b, cero `claimed` en 4 minutos contra un control
+ *  sin bloquear que salió corriendo a los 6 segundos.
+ *
+ *  Bloquear es además donde el cliente espera verlo: la cola de aprobaciones
+ *  son los tickets bloqueados, y ahí sale bajo "Lo que pediste". */
+export async function crearPedidoDeConexion(
+  c: PortalConfig, pedido: { title: string; cuerpo: string },
+) {
+  const r = await createTicket(c, {
+    title: pedido.title,
+    body: `${PREFIJO_PEDIDO} ${MARCA_PEDIDO}\n\n${pedido.cuerpo}`,
+  });
+  // Si no se pudo bloquear, el pedido igual quedó anotado: lo peor que pasa es
+  // que el agente lo levante, que es exactamente lo de antes.
+  if (r?.id) await setTicketStatus(c, r.id, "blocked").catch(() => {});
+  return r;
+}
 
 export type CronRun = {
   id: string; status: string; claimed_at: string;

@@ -19,7 +19,7 @@ import { CarruselEjemplos } from "./ejemplosFlujos";
 import ChatOnboarding from "./ChatOnboarding";
 import { urlApuntaADetalle } from "./rutas";
 import {
-  createTicket, getConnections, guardarIdentidad, MARCA_PEDIDO, PREFIJO_PEDIDO,
+  crearPedidoDeConexion, getConnections, guardarIdentidad,
   type Connection, type Manifest, type PortalConfig,
 } from "./agent";
 import {
@@ -187,9 +187,10 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   const [mail, setMail] = useState("");
   const [tel, setTel] = useState("");
   // Elegir "Telegram" sin activarlo dejaria al agente sin donde escribir, asi
-  // que se activa acá mismo. Traemos la conexion para tener el link del bot y
-  // su estado real.
-  const [tg, setTg] = useState<Connection | null>(null);
+  // que se activa acá mismo. Y el catálogo entero, no solo Telegram: es de
+  // donde sale qué puede hacer ESTE agente (si tiene bot, si su correo ya está
+  // enchufado) y con qué nombre se llama cada conexión.
+  const [conexiones, setConexiones] = useState<Connection[] | null>(null);
   const [codigo, setCodigo] = useState("");
   const [activando, setActivando] = useState(false);
   const [pairErr, setPairErr] = useState<string | null>(null);
@@ -220,12 +221,16 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     if (paso !== "presentacion" && paso !== "aviso") return;
     getConnections(cfg)
       .then((r) => {
-        const t = (r.conexiones ?? []).find((c) => c.id === "telegram") ?? null;
-        setTg(t);
-        if (t?.estado === "conectado") setPareado(true);
+        setConexiones(r.conexiones ?? []);
+        if ((r.conexiones ?? []).some((c) => c.id === "telegram" && c.estado === "conectado")) {
+          setPareado(true);
+        }
       })
-      .catch(() => { /* sin catalogo seguimos: el mail alcanza para pasar */ });
+      .catch(() => { /* sin catalogo seguimos: se ofrece lo que se pueda probar */ });
   }, [paso, cfg]);
+
+  const conexionDe = (id: string) => conexiones?.find((c) => c.id === id) ?? null;
+  const tg = conexionDe("telegram");
 
   // Dos fuentes para el mismo dato, porque el paso NO se puede completar sin
   // él: el manifiesto (adapter 0.35+, siempre presente) y la conexión (que
@@ -234,6 +239,19 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     || tg?.link?.replace(/^https:\/\/t\.me\//, "")
     || null;
   const enlaceBot = handleBot ? `https://t.me/${handleBot}` : null;
+  // ¿ESTE agente tiene Telegram? PRINCIPIO CERO: el portal sirve a cualquier
+  // agente y el bot se lo instalamos nosotros, uno por cliente. Sin
+  // `TELEGRAM_BOT_TOKEN` no hay bot, la conexión queda `sin_conectar` y el
+  // manifiesto trae `telegram_bot: null` — o sea que no hay a quién escribirle
+  // y el paso del código es imposible de terminar. (Medido el 13/8 en los tres
+  // agentes del lab: los tres sin bot.) Si el catálogo no llegó, se asume que
+  // no hay: el error de prometer de más lo paga el cliente esperando un mensaje
+  // que no va a llegar nunca.
+  const hayTelegram = Boolean(manifest.telegram_bot)
+    || tg?.estado === "lista" || tg?.estado === "conectado";
+  // El mail solo sirve como canal si la casilla de la empresa YA está
+  // enchufada: si no, el agente no tiene desde dónde escribir.
+  const correoConectado = conexionDe("correo")?.estado === "conectado";
 
   const activarTelegram = async () => {
     if (!codigo.trim()) return;
@@ -248,6 +266,11 @@ export default function Onboarding({ manifest, cfg, onDone }: {
       const d = await r.json();
       if (!r.ok || !d.ok) throw new Error(d?.error || `Error ${r.status}`);
       setPareado(true);
+      // El canal se anota EN EL MOMENTO en que empieza a existir, no al final
+      // del onboarding: si el cliente cierra acá, ya tiene Telegram andando y
+      // el portal no puede seguir recordándole que le falta un canal.
+      guardarIdentidad(cfg, { contacto: { canal: "telegram", valor: "portal" } })
+        .catch(() => { /* adapter viejo o caído: se reintenta al continuar */ });
     } catch (e) {
       setPairErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -284,17 +307,26 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   // sino un trámite trucho. Lo único que se pide es CONTESTAR la pregunta:
   // "Ahora no" es una respuesta y está al lado de las otras.
   const contestoAlgo = canal !== "";
-  // Qué canal queda de verdad. Elegir Telegram y no activarlo NO es un canal:
-  // el agente escribiría a un chat que no existe. Se cuenta como "todavía no",
-  // se dice, y se ofrece de nuevo adentro del portal.
+  // UN SOLO CRITERIO: ¿el agente puede escribirle HOY por acá? Es la única
+  // pregunta, y se contesta igual para las cuatro respuestas.
+  //
+  // Telegram cuenta solo si quedó pareado (si no, el agente escribiría a un
+  // chat que no existe). El correo cuenta solo si la casilla de la empresa ya
+  // está conectada — que es lo que esta misma pantalla le dice al cliente dos
+  // renglones más abajo. WhatsApp no cuenta nunca todavía. Todo lo demás es
+  // "no hay canal", y eso se GUARDA (ver `seguirDesdeAviso`): un canal que no
+  // existe y un cliente que nunca contestó no pueden ser el mismo dato.
   const canalReal = canal === "telegram" && pareado ? "telegram"
-    : canal === "correo" && mailOk ? "correo"
+    : canal === "correo" && mailOk && correoConectado ? "correo"
       : null;
   // Lo que se tramita a mano: acá no hay nada que el cliente pueda enchufar
-  // solo, así que queda un pedido nuestro con su dato al lado.
+  // solo, así que queda un pedido nuestro con su dato al lado. Telegram entra
+  // en esta lista cuando el agente no tiene bot: el atajo no existe, y en vez
+  // de mandarlo a una pantalla donde tampoco va a poder, se lo pedimos.
   const pedidoDeConexion = canal === "whatsapp" && telOk ? "whatsapp"
-    : canal === "correo" && mailOk ? "correo"
-      : null;
+    : canal === "correo" && mailOk && !correoConectado ? "correo"
+      : canal === "telegram" && !hayTelegram ? "telegram"
+        : null;
   // Contador de festejos: cada bautismo dispara el trigger del personaje.
   const [festejos, setFestejos] = useState(0);
   const [look, setLook] = useState<AgentitoLook>(
@@ -343,23 +375,33 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     setPaso("presentacion");
   };
 
-  /** El mismo pedido que deja la pestaña Conexiones: un ticket marcado como
-   *  "esto lo pidió el cliente" para que no vuelva por Aprobaciones como si
-   *  tuviera que aprobar su propia solicitud. */
-  const pedirConexion = (id: "whatsapp" | "correo") => {
-    const wa = id === "whatsapp";
-    createTicket(cfg, {
-      title: wa ? "Conectar WhatsApp" : "Conectar el correo de la empresa",
-      body:
-        `${PREFIJO_PEDIDO} ${MARCA_PEDIDO}\n\n` +
+  /** El mismo pedido que deja la pestaña Conexiones —mismo helper, mismo
+   *  ticket bloqueado de entrada— con el dato que el cliente acaba de dar.
+   *
+   *  EL TÍTULO SALE DEL CATÁLOGO, igual que allá (`Conectar ${label}`), y no de
+   *  una constante escrita acá. Es lo único con lo que Conexiones reconoce que
+   *  ya lo pediste: comparaba su label contra el título del ticket, y como el
+   *  alta escribía "Conectar el correo de la empresa" y el catálogo dice
+   *  "Correo de la empresa", no matcheaba — la clienta que lo pedía en el alta
+   *  entraba a Conexiones, veía "Sin conectar" y lo volvía a pedir. */
+  const pedirConexion = (id: "whatsapp" | "correo" | "telegram") => {
+    const label = conexionDe(id)?.label
+      ?? (id === "whatsapp" ? "WhatsApp" : id === "correo" ? "Correo de la empresa" : "Telegram");
+    const detalle = id === "whatsapp"
+      ? `Número: ${tel.trim()}\n\n` +
+        `Vía oficial (Cloud API): pide verificación de la empresa ante Meta y ` +
+        `la tramitamos nosotros.`
+      : id === "correo"
+        ? `Casilla: ${mail.trim()}\n\n` +
+          `Hay que conectar la casilla de la empresa (IMAP/SMTP) para que el ` +
+          `agente pueda escribir desde ahí.`
+        : `Todavía no tiene un bot de Telegram propio: hay que crearlo y pasarle ` +
+          `el link para que le mande el primer mensaje.`;
+    crearPedidoDeConexion(cfg, {
+      title: `Conectar ${label}`,
+      cuerpo:
         `Lo pidió en el alta del portal, cuando eligió por dónde quiere que le avise.\n` +
-        (wa
-          ? `Número: ${tel.trim()}\n\n` +
-            `Vía oficial (Cloud API): pide verificación de la empresa ante Meta y ` +
-            `la tramitamos nosotros.`
-          : `Casilla: ${mail.trim()}\n\n` +
-            `Hay que conectar la casilla de la empresa (IMAP/SMTP) para que el ` +
-            `agente pueda escribir desde ahí.`) +
+        detalle +
         `\n\nNo hagas nada por tu cuenta con esto: avisale al equipo de tuagente ` +
         `que hay que conectarlo y dejá el ticket esperando.`,
     }).catch(() => { /* si no se pudo anotar, el alta no se traba por eso */ });
@@ -375,23 +417,31 @@ export default function Onboarding({ manifest, cfg, onDone }: {
    *  Lo que NO se manda: `whatsapp` como canal de aviso. El adapter solo acepta
    *  telegram/correo/ninguno (`CANALES_AVISO`), y mandarle otra cosa hace
    *  fallar la llamada entera. Mientras el kit no lo agregue, WhatsApp vive
-   *  como pedido —un ticket, igual que en Conexiones— y no como canal. */
+   *  como pedido —un ticket, igual que en Conexiones— y no como canal.
+   *
+   *  Y SIEMPRE SE GUARDA ALGO. Antes solo se anotaba el "ninguno" de dos de las
+   *  cuatro respuestas: elegir WhatsApp, o correo con un mail inválido, no
+   *  escribía nada, así que el manifiesto quedaba en `aviso: null` —
+   *  indistinguible de un cliente que nunca llegó a contestar— y la franja que
+   *  le recuerda que le falta un canal no le aparecía nunca. Justo a la que
+   *  eligió WhatsApp, que es la que más tiempo va a estar sin canal. */
   const seguirDesdeAviso = () => {
     const contacto = canalReal === "telegram"
       ? { canal: "telegram" as const, valor: "portal" }
       : canalReal === "correo"
         ? { canal: "correo" as const, valor: mail.trim() }
-        // "Ahora no" se guarda EXPLÍCITO. Es el dato que le permite al portal
-        // volver a ofrecerlo adentro (y al agente saber que no tiene dónde
-        // escribir); si no se guardara nada, sería indistinguible de un
-        // cliente viejo que nunca contestó la pregunta.
-        : canal === "ninguno" || (canal === "telegram" && !pareado)
-          ? { canal: "ninguno" as const }
-          : undefined;
-    if (contacto) {
+        // No quedó ningún canal que funcione, sin importar cuál eligió: se
+        // guarda EXPLÍCITO. Es el dato que le permite al portal volver a
+        // ofrecerlo adentro y al agente saber que no tiene dónde escribir.
+        : { canal: "ninguno" as const };
+    if (contestoAlgo) {
       guardarIdentidad(cfg, { contacto })
         .catch(() => { /* adapter viejo o caído: el portal sigue */ });
     }
+    // Qué quedó en trámite, para que la franja de adentro no le hable como si
+    // no hubiera dicho nada. Es solo el TEXTO: quién muestra la franja lo
+    // decide el manifiesto, que es de donde sale la verdad.
+    recordarTramite(pedidoDeConexion);
     if (pedidoDeConexion) pedirConexion(pedidoDeConexion);
     setPaso("automatizaciones");
   };
@@ -670,10 +720,20 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                 ))}
               </div>
 
-              {/* Telegram se activa ACA. Elegirlo sin activarlo seria elegir un
-                  buzon que no existe: son dos toques y se hace ahora o no se
-                  hace nunca. */}
-              {canal === "telegram" && (
+              {/* Telegram se activa ACA, pero SOLO si este agente tiene bot.
+                  Sin bot no hay a quién escribirle: la caja del código quedaba
+                  ahí pidiendo algo que nunca iba a llegar. */}
+              {canal === "telegram" && !hayTelegram && (
+                <div className="mt-3">
+                  <p className="text-[12.5px] leading-relaxed text-ink-soft">
+                    Todavía no tengo un Telegram propio: el bot te lo creamos
+                    nosotros y no lo puedo prender yo desde acá. Es rápido —
+                    cuando esté, te pasamos el link para que le mandes un hola y
+                    listo.
+                  </p>
+                </div>
+              )}
+              {canal === "telegram" && hayTelegram && (
                 pareado ? (
                   <p className="mt-3 text-[13px] font-semibold text-c-green-ink">
                     Listo, ya nos hablamos por ahí.
@@ -743,10 +803,15 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                     aria-label="Tu número de WhatsApp"
                     className={`${inputCls} mt-2`}
                   />
-                  <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
-                    Mientras tanto, si querés que te avise desde hoy, Telegram se
-                    activa acá en dos toques.
-                  </p>
+                  {/* El atajo se ofrece SOLO si existe en este agente. Ofrecer
+                      "Telegram en dos toques" a un agente sin bot es mandarla a
+                      una pantalla donde tampoco va a poder. */}
+                  {hayTelegram && (
+                    <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
+                      Mientras tanto, si querés que te avise desde hoy, Telegram se
+                      activa acá en dos toques.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -760,13 +825,16 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                     aria-label="Tu mail"
                     className={inputCls}
                   />
-                  {/* Honestidad: por mail NO te escribo todavia. El correo lo
+                  {/* Honestidad: por mail NO te escribo todavia, SALVO que la
+                      casilla de la empresa ya esté conectada. El correo lo
                       conectamos nosotros (necesita las claves de la casilla),
-                      asi que esto queda como pedido, no como promesa. */}
+                      asi que sin eso es un pedido y no una promesa. */}
                   <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
-                    Para escribirte por mail necesitamos conectar la casilla de la empresa,
-                    y eso lo hacemos nosotros. Dejanos tu dirección y te contactamos para
-                    dejarlo andando.
+                    {correoConectado
+                      ? "La casilla de tu empresa ya está conectada: te escribo desde ahí."
+                      : "Para escribirte por mail necesitamos conectar la casilla de la empresa, "
+                        + "y eso lo hacemos nosotros. Dejanos tu dirección y te contactamos para "
+                        + "dejarlo andando."}
                   </p>
                 </div>
               )}
@@ -781,7 +849,9 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                     cambia es que te enterás cuando venís, en vez de que te avise yo.
                   </p>
                   <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-soft">
-                    Cuando quieras prenderlo, está en Conexiones y son dos minutos.
+                    {hayTelegram
+                      ? "Cuando quieras prenderlo, está en Conexiones y son dos minutos."
+                      : "Cuando quieras, entrá a Conexiones y pedilo desde ahí: lo dejamos andando nosotros y te avisamos."}
                   </p>
                 </div>
               )}
@@ -799,17 +869,21 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                   ? "Elegí una, o tocá «Ahora no» si preferís verlo más adelante."
                   : canalReal === "telegram"
                     ? "Listo: te escribo por Telegram."
-                    : canal === "telegram"
-                      ? "Todavía no lo activaste: entrás sin avisos y lo terminás cuando quieras desde Conexiones."
-                      : canal === "whatsapp"
-                        ? telOk
-                          ? "Queda pedido: te escribimos para conectarlo."
-                          : "Dejanos el número, o seguí y lo vemos más adelante."
-                        : canal === "correo"
-                          ? mailOk
-                            ? "Queda pedido: te escribimos para conectar la casilla."
-                            : "Escribí tu dirección, o seguí y lo vemos más adelante."
-                          : "Seguís sin avisos. Lo prendés cuando quieras desde Conexiones."}
+                    : canalReal === "correo"
+                      ? "Listo: te escribo a esa dirección."
+                      : canal === "telegram"
+                        ? hayTelegram
+                          ? "Todavía no lo activaste: entrás sin avisos y lo terminás cuando quieras desde Conexiones."
+                          : "Queda pedido: te lo dejamos andando y te avisamos. Mientras tanto entrás sin avisos."
+                        : canal === "whatsapp"
+                          ? telOk
+                            ? "Queda pedido: te escribimos para conectarlo. Mientras tanto entrás sin avisos."
+                            : "Dejanos el número, o seguí y lo vemos más adelante."
+                          : canal === "correo"
+                            ? mailOk
+                              ? "Queda pedido: te escribimos para conectar la casilla. Mientras tanto entrás sin avisos."
+                              : "Escribí tu dirección, o seguí y lo vemos más adelante."
+                            : "Seguís sin avisos. Lo vemos cuando quieras desde Conexiones."}
                 {url.trim() && (
                   <> Mientras tanto sigo leyendo tu web: lo que saque queda en Entregas.</>
                 )}
@@ -858,6 +932,25 @@ export default function Onboarding({ manifest, cfg, onDone }: {
 /* ── La otra mitad de dejar saltear el canal ─────────────────────────────── */
 
 const AVISO_CANAL_KEY = "tuagente_canal_pospuesto";
+// Qué canal quedó EN TRÁMITE nuestro, para que la franja no le hable como si
+// no hubiera contestado nada. Es solo el texto: quién ve la franja lo decide el
+// manifiesto. Vive bajo el prefijo `tuagente_`, así que se borra al cambiar de
+// agente como todo lo demás.
+const AVISO_TRAMITE_KEY = "tuagente_canal_en_tramite";
+
+/** Qué le pedimos que conecte, si es que pidió algo. */
+export function recordarTramite(canal: "whatsapp" | "correo" | "telegram" | null) {
+  try {
+    if (canal) localStorage.setItem(AVISO_TRAMITE_KEY, canal);
+    else localStorage.removeItem(AVISO_TRAMITE_KEY);
+  } catch { /* modo privado: la franja cae al texto genérico, que es correcto igual */ }
+}
+
+const EN_TRAMITE: Record<string, string> = {
+  whatsapp: "Estamos conectando tu WhatsApp; hasta que esté, lo que haga te espera acá.",
+  correo: "Estamos conectando la casilla de tu empresa; hasta que esté, lo que haga te espera acá.",
+  telegram: "Te estamos prendiendo el Telegram; hasta que esté, lo que haga te espera acá.",
+};
 
 /** El recordatorio de que todavía no hay por dónde avisarle.
  *
@@ -866,16 +959,18 @@ const AVISO_CANAL_KEY = "tuagente_canal_pospuesto";
  *  le avisa — que es exactamente lo que las dos clientas de prueba dijeron que
  *  las haría no pagar.
  *
- *  Aparece SOLO cuando el cliente contestó "ahora no" (el manifiesto lo
- *  guarda como `aviso: "ninguno"`). Con adapters viejos el campo no viene y no
- *  se muestra nada: es preferible no recordar nada a recordarle algo a alguien
- *  que ya tiene su canal puesto. Se puede cerrar, y cerrarlo dura: el camino
- *  no se pierde porque Conexiones sigue estando siempre. */
+ *  Aparece cuando NO QUEDÓ NINGÚN CANAL QUE FUNCIONE, que el alta guarda como
+ *  `aviso: "ninguno"` sin importar cuál eligió el cliente. Con adapters viejos
+ *  el campo no viene y no se muestra nada: es preferible no recordar nada a
+ *  recordarle algo a alguien que ya tiene su canal puesto. Se puede cerrar, y
+ *  cerrarlo dura: el camino no se pierde porque Conexiones sigue estando. */
 export function AvisoSinCanal({ manifest }: { manifest: Manifest }) {
   const [cerrado, setCerrado] = useState(true);
+  const [tramite, setTramite] = useState<string | null>(null);
   useEffect(() => {
     try {
       setCerrado(localStorage.getItem(AVISO_CANAL_KEY) === "1");
+      setTramite(localStorage.getItem(AVISO_TRAMITE_KEY));
     } catch {
       setCerrado(false);
     }
@@ -887,17 +982,28 @@ export function AvisoSinCanal({ manifest }: { manifest: Manifest }) {
       localStorage.setItem(AVISO_CANAL_KEY, "1");
     } catch { /* modo privado: vale para esta sesión */ }
   };
+  // A dónde lleva: a lo que dejó pedido, si dejó algo; si no, al atajo de
+  // Telegram SOLO cuando este agente tiene bot; y si tampoco, a la pantalla
+  // entera, donde el camino real es pedirlo. Y el link no dice "elegir un
+  // canal": es la única vez que al cliente le aparecería la palabra que todo el
+  // flujo evitó a propósito.
+  const destino = tramite && EN_TRAMITE[tramite]
+    ? `/app/conexiones?conexion=${tramite}`
+    : manifest.telegram_bot
+      ? "/app/conexiones?conexion=telegram"
+      : "/app/conexiones";
   return (
     <div className="border-b border-black/[0.07] bg-c-amber/25 px-6 py-2.5 md:px-8">
       <div className="mx-auto flex max-w-5xl items-center gap-3">
         <BellOff className="h-4 w-4 shrink-0 text-c-amber-ink" />
         <p className="min-w-0 flex-1 text-[13px] leading-snug text-c-amber-ink">
-          Todavía no tengo por dónde avisarte: lo que haga te espera acá hasta que entres.{" "}
+          {(tramite && EN_TRAMITE[tramite])
+            || "Todavía no tengo por dónde avisarte: lo que haga te espera acá hasta que entres."}{" "}
           <Link
-            href="/app/conexiones?conexion=telegram"
+            href={destino}
             className="font-semibold underline underline-offset-2"
           >
-            Elegir un canal
+            {tramite && EN_TRAMITE[tramite] ? "Ver cómo va" : "Decime por dónde te aviso"}
           </Link>
         </p>
         <button

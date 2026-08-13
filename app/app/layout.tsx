@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest, getApprovals, EVENTO_APROBACIONES,
-  esPedidoDelCliente, CLAVE_CONFIG, configGuardada, mismaSesion,
+  esPedidoDelCliente, CLAVE_CONFIG, configGuardada, credencialEnLaURL, mismaSesion,
   type PortalConfig, type Manifest,
 } from "./lib/agent";
 import { Btn, SOPORTE, Soporte, Spinner, inputCls } from "./lib/ui";
@@ -169,6 +169,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const t = setTimeout(limpiarCredencialDeLaURL, 0);
     return () => clearTimeout(t);
   }, []);
+
+  // PEGAR UN SEGUNDO MAGIC LINK ESTANDO YA ADENTRO. Si la ruta es la misma que
+  // la abierta, el browser lo trata como una navegación de FRAGMENTO: no
+  // recarga nada, `loadConfig()` —que corre una vez al cargar el JS— ya pasó, y
+  // la credencial nueva queda decorando la barra de direcciones sin efecto
+  // hasta que el cliente refresque a mano. Es la forma más natural de cambiar
+  // de agente (o de volver a entrar con la clave rotada) y fallaba en silencio:
+  // el portal seguía mostrando al agente anterior como si el link no sirviera.
+  //
+  // Recargamos y listo: en el arranque `loadConfig()` la guarda, olvida lo del
+  // agente anterior y el portal entra derecho al nuevo. Si el link es el que ya
+  // está puesto, no se recarga nada — solo se limpia la clave de la barra.
+  // (`replaceState` no dispara `hashchange`, así que esto no se llama solo.)
+  useEffect(() => {
+    if (!cfg) return;
+    const alPegarOtroLink = () => {
+      const nueva = credencialEnLaURL();
+      if (!nueva?.key) return;
+      const efectiva = {
+        endpoint: nueva.endpoint ?? cfg.endpoint,
+        adapter: nueva.adapter ?? cfg.adapter,
+        key: nueva.key,
+      };
+      if (mismaSesion(efectiva, cfg)) { limpiarCredencialDeLaURL(); return; }
+      window.location.reload();
+    };
+    window.addEventListener("hashchange", alPegarOtroLink);
+    return () => window.removeEventListener("hashchange", alPegarOtroLink);
+  }, [cfg]);
 
   // Un `<Link>` de Next hacia la pestaña donde ya estás no dispara popstate, así
   // que las pantallas no se enterarían de que la URL cambió.

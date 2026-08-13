@@ -27,8 +27,8 @@ import {
   ArrowRight, Check, Clock, ExternalLink, Link2, Plug, RefreshCw, TriangleAlert,
 } from "lucide-react";
 import {
-  esPedidoDelCliente, getConnections, getTickets, loadConfig,
-  MARCA_PEDIDO, PREFIJO_PEDIDO,
+  crearPedidoDeConexion, esPedidoDelCliente, getConnections, getTickets,
+  guardarIdentidad, loadConfig,
   type Connection, type PortalConfig, type Ticket,
 } from "../lib/agent";
 import { ConexionLogo } from "../lib/ConexionLogo";
@@ -57,6 +57,21 @@ const QUIEN: Record<string, string> = {
   asistido: "Lo hacemos juntos, en una llamada corta",
   nosotros: "Lo tramitamos nosotros",
 };
+
+/** Quién la conecta, SEGÚN LO QUE ESTA TARJETA OFRECE de verdad.
+ *
+ *  El catálogo dice de quién es el trabajo cuando todo está en su lugar; el
+ *  estado dice si acá y ahora hay algo que el cliente pueda apretar. Telegram
+ *  viene marcado `cliente_solo` —"Lo podés hacer vos"— y en un agente sin bot
+ *  el único botón de la tarjeta es "Pedir que la conecten": el renglón le
+ *  echaba encima un trabajo que el portal no le deja hacer. Si no hay camino
+ *  self-service, tampoco se afirma que lo tenga. */
+function quienDeVerdad(c: Connection): string | undefined {
+  const puedeSolo = Boolean(c.flujo) || Boolean(c.link) || c.estado === "lista";
+  const quien = c.quien === "cliente_solo" && !puedeSolo && c.estado !== "conectado"
+    ? "nosotros" : c.quien;
+  return quien && QUIEN[quien] ? quien : undefined;
+}
 
 
 /** Diálogo de conexión Google: pasos explícitos, sin nadie de tuagente en el
@@ -197,6 +212,13 @@ function TelegramLista({ c, cfg, onActivada }: {
       const d = await r.json();
       if (!r.ok || !d.ok) throw new Error(d?.error || `Error ${r.status}`);
       setListo(true);
+      // Ya hay por dónde avisarle: que el manifiesto lo sepa y la franja de
+      // "todavía no tengo canal" deje de aparecer. El alta lo anota cuando el
+      // pareo pasa ahí; acá pasa lo mismo y nadie lo anotaba, así que el
+      // cliente que lo prendía desde esta pantalla se quedaba con el
+      // recordatorio puesto para siempre.
+      guardarIdentidad(cfg, { contacto: { canal: "telegram", valor: "portal" } })
+        .catch(() => { /* adapter viejo o caído: Telegram quedó igual */ });
       onActivada();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -357,26 +379,20 @@ export default function ConexionesPage() {
     return () => clearInterval(t);
   }, [cfg, cargar]);
 
-  /** Pedir una conexión = crear un ticket. Mismo camino que todo lo demás. */
+  /** Pedir una conexión = crear un ticket. Mismo camino —y mismo helper— que
+   *  el pedido del alta: nace bloqueado para que el worker no lo levante. */
   const pedir = async (c: Connection) => {
     if (!cfg) return;
     setPidiendo(c.id);
     try {
-      const res = await fetch(cfg.adapter + "/portal/tickets", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `Conectar ${c.label}`,
-          body:
-            `${PREFIJO_PEDIDO} ${MARCA_PEDIDO}\n\n` +
-            `Para qué sirve: ${c.para_que}\n` +
-            `Cómo se conecta: ${c.como}\n\n` +
-            `No hagas nada por tu cuenta con esto: avisale al equipo de tuagente ` +
-            `que hay que conectarlo y dejá el ticket esperando.`,
-        }),
+      const data = await crearPedidoDeConexion(cfg, {
+        title: `Conectar ${c.label}`,
+        cuerpo:
+          `Para qué sirve: ${c.para_que}\n` +
+          `Cómo se conecta: ${c.como}\n\n` +
+          `No hagas nada por tu cuenta con esto: avisale al equipo de tuagente ` +
+          `que hay que conectarlo y dejá el ticket esperando.`,
       });
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      const data = await res.json();
       setPedidas((p) => ({ ...p, [c.id]: data.id ?? "ok" }));
       cargar(); // que el estado "Pedido" pase a salir del tablero, no de acá
     } catch (e) {
@@ -458,10 +474,10 @@ export default function ConexionesPage() {
 
       <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-ink-soft">
         {c.esfuerzo && ESFUERZO[c.esfuerzo] && <span>{ESFUERZO[c.esfuerzo]}</span>}
-        {c.quien && QUIEN[c.quien] && (
+        {quienDeVerdad(c) && (
           <>
             <span aria-hidden>·</span>
-            <span>{QUIEN[c.quien]}</span>
+            <span>{QUIEN[quienDeVerdad(c)!]}</span>
           </>
         )}
       </div>
