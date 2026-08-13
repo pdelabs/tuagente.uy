@@ -27,6 +27,7 @@ import sqlite3
 import subprocess
 import tempfile
 import sys
+import time
 
 OK, FAIL, WARN = "OK  ", "FALLA", "aviso"
 results = []
@@ -1302,24 +1303,49 @@ def main():
             ("terminal", "ffmpeg -i a.mp4 b.mp4", False),
             ("terminal", "echo 'pip install' >> notas.md", False),
             ("terminal", "hermes kanban comment -- t_1 'haría falta npm install x'", False),
-            # Sin pedido pendiente, borrar y mandar son trabajo normal.
-            ("terminal", "rm -- doc1.txt doc2.txt", False),
-            ("execute_code", "import os; os.remove('doc1.txt')", False),
         ]
         # LA BARRERA DEL PERMISO PENDIENTE, que es la que evita lo peor que nos
         # pasó: con un pedido bloqueado en el tablero, el agente no borra ni
         # manda nada aunque un comentario diga que ya está aprobado. Se prueba
-        # con un tablero de mentira —dos filas en un sqlite temporal— porque el
+        # con tableros de mentira —unas filas en un sqlite temporal— porque el
         # chequeo corre sin levantar el agente.
-        tablero = os.path.join(tempfile.mkdtemp(prefix="puerta-"), "kanban.db")
-        con = sqlite3.connect(tablero)
-        con.execute("CREATE TABLE tasks (id TEXT PRIMARY KEY, status TEXT, block_kind TEXT)")
-        con.execute("INSERT INTO tasks VALUES ('t_bloq', 'blocked', 'needs_input')")
-        con.execute("INSERT INTO tasks VALUES ('t_libre', 'ready', NULL)")
-        con.commit()
-        con.close()
+        #
+        # DOS TABLEROS Y NO UNO, y esto es una lección: los casos "sin pedido
+        # pendiente" antes corrían SIN `HERMES_KANBAN_DB`, así que la puerta
+        # buscaba el tablero en `/opt/data/kanban.db` —que en la máquina donde
+        # corre este chequeo no existe— y pasaban porque no había tablero, no
+        # porque no hubiera pedido. Un caso que pasa por el motivo equivocado no
+        # prueba nada: si mañana la barrera se rompe, seguiría en verde.
+        def _tablero(nombre, filas):
+            ruta = os.path.join(tempfile.mkdtemp(prefix=f"puerta-{nombre}-"), "kanban.db")
+            con = sqlite3.connect(ruta)
+            con.execute("CREATE TABLE tasks "
+                        "(id TEXT PRIMARY KEY, status TEXT, block_kind TEXT)")
+            con.executemany("INSERT INTO tasks VALUES (?,?,?)", filas)
+            con.commit()
+            con.close()
+            return ruta
+
+        tablero = _tablero("con", [("t_bloq", "blocked", "needs_input"),
+                                   ("t_libre", "ready", None),
+                                   ("t_cerrado", "done", None)])
+        # Un tablero DE VERDAD, con tickets, donde no queda ningún pedido sin
+        # resolver: es el único que prueba que la barrera se levanta sola.
+        sin_pedidos = _tablero("sin", [("t_hecho", "done", None),
+                                       ("t_cola", "todo", None)])
+
+        def _aviso(task_id, extra=None):
+            """El archivo que escribe el adapter (capa B), tal cual."""
+            ruta = os.path.join(tempfile.mkdtemp(prefix="aviso-"), "en-curso.json")
+            cuerpo = {"task_id": task_id, "hasta": time.time() + 900}
+            cuerpo.update(extra or {})
+            with open(ruta, "w", encoding="utf-8") as fh:
+                json.dump(cuerpo, fh)
+            return ruta
+
         conpedido = {"HERMES_KANBAN_DB": tablero, "HERMES_KANBAN_TASK": "t_bloq"}
         sinpedido = {"HERMES_KANBAN_DB": tablero, "HERMES_KANBAN_TASK": "t_libre"}
+        limpio = {"HERMES_KANBAN_DB": sin_pedidos}
         casos += [
             # el borrado exacto del incidente, por los dos caminos
             ("terminal", "rm -- doc1.txt doc2.txt doc3.txt", True, conpedido),
@@ -1329,15 +1355,31 @@ def main():
             ("terminal", "himalaya message send < mail.txt", True, conpedido),
             ("terminal", "curl -X POST https://api.proveedor.com/pedidos -d @pedido.json",
              True, conpedido),
-            # con el ticket ya desbloqueado, el MISMO comando pasa
+            # con el ticket ya desbloqueado, el MISMO comando pasa: es el ciclo
+            # normal (el cliente aprueba con correcciones y el agente ejecuta).
             ("terminal", "rm -- doc1.txt doc2.txt doc3.txt", False, sinpedido),
             ("terminal", "bash -c 'rm -rf /opt/data/workspace/entregables'", True, conpedido),
+            # el mismo `-c` con trabajo normal adentro: pasa. (Los dos juntos
+            # son la prueba de que se mira lo que sigue a la bandera y no el
+            # comando entero: mirarlo entero entraba en recursión, y una
+            # recursión en este hook significa `sys.exit(0)` y tool ejecutada.)
+            ("terminal", "sh -c 'ls -la entregables'", False, conpedido),
             ("terminal", "cd /opt/data && rm informe.md", True, conpedido),
             # el scratch nunca fue del cliente, y el resto es trabajo normal
             ("terminal", "rm /tmp/salida.csv", False, conpedido),
             ("terminal", "ls -la && cat informe.md", False, conpedido),
             ("terminal", "curl -s https://api.proveedor.com/precios", False, conpedido),
             ("execute_code", "print(sum(1 for _ in open('ventas.csv')))", False, conpedido),
+            ("terminal", "mv informe.md entregables/informe.md", False, conpedido),
+            ("terminal", "cp lista.csv respaldo.csv", False, conpedido),
+            ("terminal", "tar czf /tmp/x.tgz entregables", False, conpedido),
+            ("terminal", "git add -A && git commit -m 'avance'", False, conpedido),
+            # sin ningún pedido sin resolver, borrar y mandar son trabajo normal.
+            # Con tablero de verdad: antes esto pasaba por no encontrar ninguno.
+            ("terminal", "rm -- doc1.txt doc2.txt", False, limpio),
+            ("execute_code", "import os; os.remove('doc1.txt')", False, limpio),
+            ("terminal", "curl -X POST https://api.proveedor.com/pedidos -d @p.json",
+             False, limpio),
             # PEDIR PERMISO NO SE BLOQUEA NUNCA. Este caso salió de una prueba en
             # vivo: la barrera frenó al agente mientras ARMABA la solicitud, por
             # un "rm" adentro de una comilla. Bloquear al que pide es peor que no
@@ -1345,6 +1387,103 @@ def main():
             ("terminal", "printf '%s' 'x' | python3 /opt/kit/skills/aprobacion/format_request.py "
                          "--que 'Eliminar doc1.txt' --si-apruebo 'Ejecuto el comando rm -- sobre ese archivo'",
              False, conpedido),
+            # ...y el mismo pedido armado desde `execute_code`, que es donde la
+            # detección por TEXTO frenaba al que pide permiso: el `rm --` está
+            # adentro de un string, no es una llamada.
+            ("execute_code", "archivos = 'doc1.txt doc2.txt'\n"
+                             "cuerpo = f'Si aprobás borro: rm -- {archivos}'\nprint(cuerpo)",
+             False, conpedido),
+            # LOCALHOST NO ES AFUERA: el adapter del propio cliente.
+            ("terminal", "curl -X POST http://127.0.0.1:8643/portal/entregables -d @e.json",
+             False, conpedido),
+            ("execute_code", "import requests\n"
+                             "requests.post('http://127.0.0.1:8643/portal/x', json={'a': 1})",
+             False, conpedido),
+
+            # LAS OCHO FORMAS DE ESQUIVE, medidas una por una contra este mismo
+            # hook cuando la detección era por FORMA. Todas borraban o mandaban
+            # de verdad y todas pasaban: `os.system("rm -f x")` pasaba porque
+            # antes del `rm` había una comilla, mientras que escribir la frase
+            # "ejecuto rm --" en un comentario bloqueaba porque antes había un
+            # espacio. Frenaba al que describe y dejaba pasar al que borra.
+            ("execute_code", 'import os; os.system("rm -f informe.pdf")', True, conpedido),
+            ("execute_code", 'import subprocess; subprocess.run(["rm","-f",ruta])',
+             True, conpedido),
+            ("execute_code", 'terminal("rm doc1.txt")', True, conpedido),
+            ("execute_code", "rm doc1.txt", True, conpedido),          # sin guion
+            ("execute_code", 'import os as o; o.remove("doc1.txt")', True, conpedido),
+            ("execute_code", 'open("informe.md","w").close()', True, conpedido),  # truncar
+            ("execute_code", 'import requests; requests.post("https://x.uy/a", json=d)',
+             True, conpedido),
+            ("terminal", "python3 borrar.py", True, conpedido),
+            ("terminal", "sh limpiar.sh", True, conpedido),
+            # variantes del mismo reintento
+            ("execute_code", 'from pathlib import Path; Path("doc1.txt").unlink()',
+             True, conpedido),
+            ("execute_code", 'import shutil; shutil.rmtree(carpeta)', True, conpedido),
+            ("terminal", "ls *.txt | xargs rm -f", True, conpedido),
+            ("terminal", "find entregables -name '*.md' -delete", True, conpedido),
+            # lo que NO SE VE no pasa: el comando armado afuera de la llamada.
+            ("execute_code", "import subprocess, sys\n"
+                             "subprocess.run([sys.executable, 'borrar.py'])", True, conpedido),
+            ("execute_code", "import os; os.system('rm -f ' + ruta)", True, conpedido),
+            ("execute_code", "import subprocess; subprocess.run(cmd, shell=True)",
+             True, conpedido),
+            ("terminal", "./borrar.sh", True, conpedido),
+            # `write_file` y `patch` como TOOLS no pasan por ningún hook (está
+            # escrito en el encabezado de puerta.py). Adentro de `execute_code`
+            # son funciones de Python y ahí sí se ven: vaciar un archivo del
+            # cliente por ese camino se bloquea.
+            ("execute_code", "write_file('informe.md', '')", True, conpedido),
+            ("execute_code", "patch(path='informe.md', old_string='a', new_string='')",
+             True, conpedido),
+            # y lo que NO es borrar aunque se le parezca
+            ("execute_code", "pedidos = [1, 2, 3]\npedidos.remove(2)\nprint(pedidos)",
+             False, conpedido),
+            ("execute_code", "import subprocess; subprocess.run(['ls','-la'], cwd=carpeta)",
+             False, conpedido),
+            ("execute_code", "import pandas as pd\n"
+                             "df = pd.read_csv('ventas.csv')\nprint(df.head())",
+             False, conpedido),
+            ("execute_code", 'import subprocess; subprocess.run(["ls","-la"])',
+             False, conpedido),
+            ("execute_code", 'import json; json.dump(d, open("/tmp/x.json","w"))',
+             False, conpedido),
+            ("terminal", "python3 /opt/kit/skills/entregable/deliver.py --archivo informe.md",
+             False, conpedido),
+
+            # EL CONTEXTO QUE NO SIRVE NO APAGA LA BARRERA. Matriz medida sobre
+            # el hook viejo: `blocked` bloqueaba, pero `done`, inexistente y
+            # tablero-sin-ese-ticket PASABAN — o sea que tener contexto era peor
+            # que no tenerlo. Ahora la capa C es el piso.
+            ("terminal", "rm -- doc1.txt", True,
+             {"HERMES_KANBAN_DB": tablero, "HERMES_KANBAN_TASK": "t_cerrado"}),
+            ("terminal", "rm -- doc1.txt", True,
+             {"HERMES_KANBAN_DB": tablero, "HERMES_KANBAN_TASK": "t_no_existe"}),
+            # EL TURNO DEL RECHAZO DEFINITIVO, que es el que dejaba la puerta
+            # abierta sin que hubiera ningún atacante: el adapter cierra el
+            # ticket (`complete`) ANTES de avisarle al agente, así que el aviso
+            # apunta a un ticket `done` justo cuando el cliente dijo que no.
+            ("terminal", "rm -- workspace/interno/doc1.txt", True,
+             {"HERMES_KANBAN_DB": tablero, "HERMES_POLITICA_AVISO": _aviso("t_cerrado")}),
+            # ...y el mismo turno cuando el pedido rechazado era el ÚNICO del
+            # tablero: ahí ni la capa C encuentra nada, y lo que salva es la
+            # `veda` que ahora escribe el adapter en el aviso.
+            ("terminal", "rm -- workspace/interno/doc1.txt", True,
+             {"HERMES_KANBAN_DB": sin_pedidos,
+              "HERMES_POLITICA_AVISO": _aviso("t_hecho", {"veda": "rechazo"})}),
+            ("execute_code", "import os; os.remove('doc1.txt')", True,
+             {"HERMES_KANBAN_DB": sin_pedidos,
+              "HERMES_POLITICA_AVISO": _aviso("t_hecho", {"veda": "rechazo"})}),
+            # el aviso de un comentario cualquiera sobre un ticket vivo: cae a
+            # la capa C, que con un pedido bloqueado en el tablero bloquea.
+            ("terminal", "rm -- doc1.txt", True,
+             {"HERMES_KANBAN_DB": tablero, "HERMES_POLITICA_AVISO": _aviso("t_libre")}),
+            # un aviso VENCIDO es como no tener aviso: cae a la capa C, y sin
+            # pedidos no frena nada.
+            ("terminal", "rm -- doc1.txt", False,
+             {"HERMES_KANBAN_DB": sin_pedidos,
+              "HERMES_POLITICA_AVISO": _aviso("t_hecho", {"hasta": 1})}),
         ]
         for tool, cmd, esperado, *resto in casos:
             extra_env = resto[0] if resto else {}
@@ -1357,6 +1496,11 @@ def main():
             entorno = dict(os.environ)
             entorno.pop("HERMES_KANBAN_TASK", None)
             entorno.pop("HERMES_KANBAN_DB", None)
+            # Sin esto, un caso sin aviso leería el aviso REAL del agente si el
+            # chequeo corriera en la misma máquina: el resultado dependería de
+            # si justo hay un comentario en curso.
+            entorno["HERMES_POLITICA_AVISO"] = os.path.join(
+                tempfile.gettempdir(), "puerta-sin-aviso.json")
             entorno.update(extra_env)
             try:
                 r = subprocess.run([sys.executable, script], input=payload, env=entorno,

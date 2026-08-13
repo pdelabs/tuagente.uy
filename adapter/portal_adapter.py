@@ -1929,17 +1929,29 @@ AVISO_EN_CURSO = POLITICA_DIR / "avisos" / "en-curso.json"
 AVISO_TTL = 900
 
 
-def _marcar_aviso(task_id):
-    """Deja (o borra) el ticket del aviso en curso, para que lo lea la puerta."""
+def _marcar_aviso(task_id, veda=None):
+    """Deja (o borra) el ticket del aviso en curso, para que lo lea la puerta.
+
+    `veda` es lo que le falta al ticket para poder decidir solo. La puerta mira
+    el estado del ticket del aviso, y hay UN turno en el que ese estado miente:
+    el del rechazo definitivo, porque cerramos el pedido (`complete`) ANTES de
+    avisarle al agente. En ese turno el aviso apunta a un ticket `done` — o sea
+    "no hay nada pendiente"— justo cuando el cliente acaba de decir que no.
+    Medido en vivo: con ese aviso puesto, el `rm` sobre los documentos del
+    cliente pasaba. Con `veda` el turno queda marcado por lo que ES —la
+    respuesta a un rechazo— y no por el estado que le quedo al ticket, que es lo
+    unico que funciona cuando el pedido rechazado era el unico del tablero.
+    """
     try:
         if task_id is None:
             AVISO_EN_CURSO.unlink(missing_ok=True)
             return
         AVISO_EN_CURSO.parent.mkdir(parents=True, exist_ok=True)
         tmp = AVISO_EN_CURSO.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"task_id": task_id,
-                                   "hasta": time.time() + AVISO_TTL}),
-                       encoding="utf-8")
+        cuerpo = {"task_id": task_id, "hasta": time.time() + AVISO_TTL}
+        if veda:
+            cuerpo["veda"] = str(veda)
+        tmp.write_text(json.dumps(cuerpo), encoding="utf-8")
         tmp.replace(AVISO_EN_CURSO)      # atomico: la puerta nunca lee a medias
     except OSError:
         # Si politica/ no es escribible desde el adapter, la puerta pierde la
@@ -1948,7 +1960,7 @@ def _marcar_aviso(task_id):
         pass
 
 
-def notify_agent_of_comment(task_id, body, author):
+def notify_agent_of_comment(task_id, body, author, veda=None):
     """Le avisa al agente por el chat. Devuelve si el aviso quedó ENCOLADO.
 
     Encolado, no entregado: la conversación con el agente puede tardar minutos y
@@ -2025,7 +2037,7 @@ def notify_agent_of_comment(task_id, body, author):
             # ni nada que la ate a un ticket, y por ahi entro el borrado que la
             # clienta habia rechazado. Se escribe en politica/, que el agente
             # monta :ro: puede leerlo, no puede tocarlo.
-            _marcar_aviso(task_id)
+            _marcar_aviso(task_id, veda)
             try:
                 _enviar_serializado()
             finally:
@@ -3076,7 +3088,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(502, {"error": f"no pude registrar el rechazo: {exc}"})
         avisado = False
         try:
-            avisado = bool(notify_agent_of_comment(task_id, cuerpo, AUTHOR_HUMAN))
+            # `veda`: este turno del agente es la respuesta a un "no". La puerta
+            # no ejecuta nada sensible mientras dure, y no le pregunta al
+            # tablero — con `definitivo` el ticket ya quedó cerrado dos líneas
+            # más arriba, así que el tablero diría que no hay nada pendiente.
+            avisado = bool(notify_agent_of_comment(task_id, cuerpo, AUTHOR_HUMAN,
+                                                   veda="rechazo"))
         except Exception:
             avisado = False
         try:
