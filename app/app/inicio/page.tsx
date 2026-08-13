@@ -21,19 +21,25 @@ import {
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
-  Activity, ArrowRight, BarChart3, CheckCircle2, ChevronRight, Columns3,
+  Activity, ArrowRight, BarChart3, CheckCircle2, ChevronRight, Clock, Columns3,
   FolderOpen, Hand, LayoutDashboard, MessageSquare, Plug, Plus, RefreshCw, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
   esPedidoDelCliente,
-  getActivity, getApprovals, getArtifacts, getConnections, getFiles, getFlujos, getManifest,
-  getTickets, getUsage, loadConfig,
-  type ArtifactMeta, type Connection, type Flujo, type HttpError, type Manifest,
-  type PortalConfig, type Ticket,
+  getActivity, getApprovals, getArtifacts, getConnections, getFiles, getFlujos, getJobs,
+  getManifest, getSessions, getTickets, getUsage, loadConfig,
+  type ArtifactMeta, type Connection, type CronJob, type Flujo, type HttpError,
+  type Manifest, type PortalConfig, type Ticket,
 } from "../lib/agent";
+// El MISMO cruce flujo ↔ tarea programada que usa Flujos: si cada pantalla
+// eligiera la suya, volveríamos a tener dos respuestas para "¿cuándo corre?".
+import { cruzarTarea } from "../flujos/corridas";
 import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
-import { aprenderHuso, horaDe, momentoDe, rotuloArtefacto } from "../lib/palabras";
+import {
+  COLUMNAS_TABLERO, aprenderHuso, cadenciaDeCron, columnaDeTarea, cuandoVa, horaDe,
+  momentoDe, rotuloArtefacto, saludoDelDia, type ColumnaTarea, type Tono,
+} from "../lib/palabras";
 import { humanizarCorridas } from "../lib/eventos";
 import { agentDisplayName } from "../lib/onboarding";
 import { AgentitoCargando, loadAgentLook } from "../lib/agentito";
@@ -122,18 +128,14 @@ const hace = (v: string | number | undefined): string | null => {
   return d ? `hace ${d}` : null;
 };
 
-// EL ÚNICO RELOJ DEL BROWSER QUE QUEDA EN EL PORTAL, y es a propósito: el
-// saludo no habla de un dato del agente sino de la persona que está mirando la
-// pantalla. Si son las once de la noche donde estás vos, es de noche para vos.
-// Todo lo demás —las horas de los eventos, de las corridas, de las tareas— va
-// en el reloj del negocio. Ver `lib/palabras.ts`.
-const saludo = (): string => {
-  const h = new Date().getHours();
-  if (h < 6) return "Buenas noches";
-  if (h < 13) return "Buen día";
-  if (h < 20) return "Buenas tardes";
-  return "Buenas noches";
-};
+// EL ÚLTIMO RELOJ DEL BROWSER DEL PORTAL ERA ÉSTE, y estaba a propósito: el
+// saludo no habla de un dato del agente sino de la persona que mira la pantalla.
+// La prueba a ciegas del 13/8 lo leyó como un error del producto —«son las tres
+// de la tarde y la pantalla me saluda con "Buen día"»— y tenía razón: con el
+// browser en otro huso que el agente, el saludo era el único renglón de esta
+// pantalla midiendo con otra vara. Ahora va en el reloj del negocio, como todo
+// lo demás; el por qué, largo, está en `saludoDelDia` (`lib/palabras.ts`).
+const saludo = saludoDelDia;
 
 /** Momento de un evento: hoy sólo la hora; antes, con el día adelante.
  *
@@ -186,18 +188,25 @@ function dotCls(kind: string, status: string): string {
   return kind === "ticket" ? "bg-c-violet-ink" : "bg-ink-soft/50";
 }
 
-// blocked y done son propios; ready, running y cualquier estado nuevo caen en
-// "en curso" (no escondemos tareas por un estado que todavía no conocemos).
-function columna(status: string): "porHacer" | "curso" | "esperando" | "hechas" {
-  const s = (status || "").toLowerCase();
-  // Las mismas cuatro columnas que el Tablero, en el mismo orden. Antes acá
-  // eran tres y "ready" caía dentro de "En curso": el cliente veía "0 en
-  // curso" en el Tablero y otro número en Inicio para las mismas tareas.
-  if (s === "ready") return "porHacer";
-  if (s === "blocked") return "esperando";
-  if (s === "done") return "hechas";
-  return "curso";
-}
+// EL REPARTO Y LOS NOMBRES SON LOS DEL TABLERO, leídos de `lib/palabras.ts`.
+// Acá vivía una copia con CUATRO columnas contra las cinco del Tablero: los dos
+// bloqueos —el que espera tu ok y el pedido que hiciste vos, que nos espera a
+// nosotros— caían juntos en una métrica llamada "Frenadas", una palabra que no
+// existía en ninguna otra pantalla. La prueba a ciegas lo anotó así: «En Inicio
+// la columna se llama "Frenadas", en el Tablero "Lo estamos viendo", adentro de
+// la tarjeta "Frenada — espera tu respuesta"». Mismo reparto, mismas palabras,
+// y así los números de las dos pantallas se pueden verificar uno contra otro.
+const columna = (t: Ticket): ColumnaTarea =>
+  columnaDeTarea(t.status, esPedidoDelCliente(t.body));
+
+// El tono del kit → el fondo de la métrica. Es pintura, no palabra.
+const FONDO: Record<Tono, string> = {
+  violet: "bg-c-violet/50",
+  amber: "bg-c-amber/50",
+  green: "bg-c-green/50",
+  coral: "bg-c-coral/50",
+  neutral: "bg-black/[0.04]",
+};
 
 // ── piezas ────────────────────────────────────────────────────────────────
 
@@ -271,19 +280,9 @@ function Vacio({ children }: { children: ReactNode }) {
   return <p className="text-[13px] text-ink-soft">{children}</p>;
 }
 
-function Metrica({ valor, label, tone }: {
-  valor: number;
-  label: string;
-  tone: "violet" | "amber" | "green" | "neutral";
-}) {
-  const tones = {
-    violet: "bg-c-violet/50",
-    amber: "bg-c-amber/50",
-    green: "bg-c-green/50",
-    neutral: "bg-black/[0.04]",
-  };
+function Metrica({ valor, label, tone }: { valor: number; label: string; tone: Tono }) {
   return (
-    <div className={`rounded-lg px-3 py-2.5 ${tones[tone]}`}>
+    <div className={`rounded-lg px-3 py-2.5 ${FONDO[tone]}`}>
       <p className="text-2xl font-bold leading-none tabular-nums text-ink">{nf.format(valor)}</p>
       <p className="mt-1.5 text-[11px] font-medium leading-tight text-ink-soft">{label}</p>
     </div>
@@ -382,9 +381,69 @@ function Atencion({ pendientes }: { pendientes: Approval[] }) {
   );
 }
 
+/* ── Cuándo corre un trabajo: lo que CORRE, no lo que está escrito ───────────
+   LA PORTADA Y FLUJOS DECÍAN DOS DÍAS DISTINTOS DEL MISMO TRABAJO. Textual, de
+   la prueba a ciegas del 13/8: «Ahora Flujos dice "Todos los jueves a las 8:30 ·
+   Próxima vez: el 20/8 a las 08:30", pero Inicio sigue diciendo "Control semanal
+   de contratos — Todos los viernes a las 9:30". ¿A cuál le creo?».
+
+   Son dos fuentes: el texto que el agente declaró en su FLUJO.md
+   (`para_cliente`, que es lo que se muestra acá) y la tarea que el motor tiene
+   AGENDADA (`/api/jobs`). Cuando el cliente pide cambiar el horario, lo que
+   cambia seguro es el cron; el texto se actualiza si el agente se acuerda.
+
+   Regla: la portada NO repite nunca la cadencia declarada. O dice la agendada —
+   que es la que va a pasar de verdad— o no dice ninguna. La frase del flujo se
+   sigue mostrando entera menos su cláusula de horario, que es la única parte que
+   puede mentir. Reproducido y medido con las funciones reales; ver el informe.
+
+   Un flujo sin cron ("cuando me lo pidas", una entrega a Drive) no tiene con qué
+   contradecirse: ése se muestra tal cual estaba. */
+
+// La cláusula de horario con la que arrancan estas frases: "Todos los viernes a
+// las 9:30 …", "Los lunes y miércoles a las 18:00 …", "El primer día de cada mes
+// a las 9:00 …". El corte es la hora; lo que sigue es lo que el trabajo HACE.
+const CADENCIA_DECLARADA =
+  /^\s*(?:todos los|todas las|los|las|cada|el|una vez (?:por|al)|de)\b[^.;:]{0,60}?\ba las?\s+\d{1,2}(?::\d{2})?(?:\s*(?:h|hs|horas))?\b[,.]?\s*/i;
+// La misma cláusula cuando no lleva hora ("Una vez por mes te dejo…"): lista
+// corta y cerrada, para no comerse el principio de una frase que no es cadencia.
+const FRECUENCIA_SOLA =
+  /^\s*(?:una vez (?:por|al) (?:mes|semana|d[ií]a)|todos los d[ií]as|todas las semanas|cada (?:semana|mes|d[ií]a))\b[,.]?\s*/i;
+
+/** La frase del flujo sin su cláusula de horario. Si al sacarla no queda una
+ *  frase de verdad, se devuelve la original: preferimos repetir a mutilar. */
+function sinCadencia(texto: string): string {
+  const s = (texto || "").trim();
+  const corto = s.replace(CADENCIA_DECLARADA, "").replace(FRECUENCIA_SOLA, "").trim();
+  if (corto.length < 15) return s;
+  return corto.charAt(0).toUpperCase() + corto.slice(1);
+}
+
+/** Cuándo corre este trabajo SEGÚN EL MOTOR. `null` = no se puede afirmar nada
+ *  (no pudimos leer las tareas programadas, o el flujo no es de horario). */
+function cuandoCorre(f: Flujo, jobs: CronJob[] | null): string | null {
+  if (f.gatillo_tipo !== "horario" || !jobs) return null;
+  // El mismo cruce que hace Flujos, para que las dos pantallas miren la MISMA
+  // tarea programada y no puedan elegir distinto.
+  const cruce = cruzarTarea(f, jobs);
+  if (cruce.tipo !== "tarea") {
+    // Dice que corre a una hora y no hay ninguna tarea agendada que lo dispare.
+    // Es el mismo hecho que Flujos pone en su cartel "No está programado".
+    return "Hoy no está agendado: no va a correr solo.";
+  }
+  const job = cruce.job;
+  if (job.enabled === false || job.state === "paused") return "En pausa.";
+  const cadencia = cadenciaDeCron(job.schedule?.expr ?? job.schedule_display);
+  if (cadencia) return `${cadencia}.`;
+  // Cron raro que no sabemos poner en palabras: la próxima corrida siempre es
+  // cierta, y es la misma frase que usa Flujos.
+  const proxima = cuandoVa(job.next_run_at);
+  return proxima ? `Próxima vez: ${proxima}.` : null;
+}
+
 /** "¿Qué hace este señor por mí?" — la pregunta que el portal no contestaba en
  *  ninguna pantalla. Se arma con los flujos del cliente y su propio texto. */
-function QueHace({ flujos }: { flujos: Flujo[] }) {
+function QueHace({ flujos, jobs }: { flujos: Flujo[]; jobs: CronJob[] | null }) {
   const activos = flujos.filter((f) => f.estado !== "pausado").slice(0, 4);
   if (activos.length === 0) {
     return (
@@ -402,15 +461,34 @@ function QueHace({ flujos }: { flujos: Flujo[] }) {
   return (
     <Seccion titulo="Qué hace por vos" icon={Workflow} href="/app/flujos" ver="Ver todos">
       <ul className="flex flex-col gap-2">
-        {activos.map((f) => (
-          <li key={f.slug} className="flex gap-2">
-            <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
-            <p className="min-w-0 text-[13px] leading-relaxed text-ink-soft">
-              <span className="font-semibold text-ink">{f.nombre}</span>
-              {f.para_cliente ? ` — ${f.para_cliente}` : ""}
-            </p>
-          </li>
-        ))}
+        {activos.map((f) => {
+          const corre = cuandoCorre(f, jobs);
+          // A un trabajo de horario se le saca SIEMPRE la cadencia declarada,
+          // también cuando no pudimos leer las tareas programadas: que no se
+          // pueda verificar no la hace más cierta, y ahí la pantalla se queda
+          // sin decir cuándo (el pie ya avisa qué no se pudo traer). Un flujo a
+          // pedido no se toca: no tiene con qué contradecirse.
+          const texto = f.gatillo_tipo === "horario"
+            ? sinCadencia(f.para_cliente)
+            : f.para_cliente;
+          return (
+            <li key={f.slug} className="flex gap-2">
+              <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
+              <div className="min-w-0">
+                <p className="text-[13px] leading-relaxed text-ink-soft">
+                  <span className="font-semibold text-ink">{f.nombre}</span>
+                  {texto ? ` — ${texto}` : ""}
+                </p>
+                {corre && (
+                  <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-ink-soft/85">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    {corre}
+                  </p>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </Seccion>
   );
@@ -443,6 +521,12 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
   const [archivos, setArchivos] = useState<Slot<Archivo[]>>({ t: "cargando" });
   const [uso, setUso] = useState<Slot<Uso>>({ t: "cargando" });
   const [flujos, setFlujos] = useState<Slot<Flujo[]>>({ t: "cargando" });
+  // Las tareas programadas del motor: son las únicas que saben cuándo corre de
+  // verdad cada trabajo. Ver `cuandoCorre`.
+  const [jobs, setJobs] = useState<Slot<CronJob[]>>({ t: "cargando" });
+  // Y las conversaciones: sin esto, "última actividad" no cuenta el mensaje que
+  // el cliente acaba de escribir. Ver `ultimaSenal`.
+  const [charlas, setCharlas] = useState<Slot<number>>({ t: "cargando" });
 
   const cargar = useCallback((silencioso = false) => {
     if (!silencioso) {
@@ -455,6 +539,8 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
       setArchivos({ t: "cargando" });
       setUso({ t: "cargando" });
       setFlujos({ t: "cargando" });
+      setJobs({ t: "cargando" });
+      setCharlas({ t: "cargando" });
     }
     setCargando(true);
 
@@ -518,6 +604,25 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
             () => getUsage(cfg).then((r) => (r ?? {}) as Uso), setUso),
           pedir(on("flujos"), "tus trabajos",
             () => getFlujos(cfg).then((r) => arr<Flujo>(r?.flujos)), setFlujos),
+          // Cuándo corre cada trabajo. Es del gateway nativo, no del adapter:
+          // no depende de ningún módulo del manifiesto, pero sin flujos no hay
+          // a qué cruzarlo.
+          pedir(on("flujos"), "cuándo corren tus trabajos",
+            () => getJobs(cfg).then((r) => arr<CronJob>(r?.jobs)), setJobs),
+          // LA ÚLTIMA SEÑAL DE VIDA TAMBIÉN SON LAS CHARLAS. `/portal/activity`
+          // es el tablero y los crons y nada más (verificado endpoint por
+          // endpoint: sólo emite `ticket` y `job_run`), así que un mensaje del
+          // cliente de hace un minuto no contaba. Medido el 13/8 contra el
+          // agente Zaguán: la actividad más nueva era de hace 23 minutos y la
+          // conversación, de hace 0.
+          pedir(true, "las conversaciones",
+            () => getSessions(cfg).then((r) => {
+              const ses = arr<{ last_active?: number; started_at?: number }>(r?.data);
+              const ms = ses.map((s) => toMs(s.last_active ?? s.started_at ?? 0));
+              // 0 sesiones es un dato válido —el agente recién instalado—, no
+              // una falla: devuelve 0 y la señal se queda con la actividad.
+              return ms.length ? Math.max(...ms) : 0;
+            }), setCharlas),
         ]);
       })
       .then(() => { setCaidas(caidos); setUltima(new Date()); })
@@ -537,9 +642,14 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
   // ── derivados ──
   const tablero = useMemo(() => {
     if (tareas.t !== "listo") return null;
-    const c = { porHacer: 0, curso: 0, esperando: 0, hechas: 0 };
-    for (const t of tareas.data) c[columna(t.status)]++;
-    return { ...c, total: tareas.data.length };
+    const cuenta: Record<ColumnaTarea, number> =
+      { porHacer: 0, curso: 0, espera: 0, nuestro: 0, hechas: 0 };
+    for (const t of tareas.data) cuenta[columna(t)]++;
+    // La columna de los pedidos aparece sólo si el cliente pidió algo alguna
+    // vez, igual que en el Tablero: en un agente recién instalado sería una
+    // quinta métrica en cero para siempre.
+    const columnas = COLUMNAS_TABLERO.filter((c) => c.clave !== "nuestro" || cuenta.nuestro > 0);
+    return { cuenta, columnas, total: tareas.data.length };
   }, [tareas]);
 
   const ultimos = useMemo(() => {
@@ -591,7 +701,22 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
     return { costo: c, sesiones: num(uso.data.sessions), periodo: periodo(uso.data.period) };
   }, [uso]);
 
-  const ultimaSenal = ultimos && ultimos.length > 0 ? hace(ultimos[0].ts) : null;
+  /** "última actividad hace 5 min", contando TODO lo que el agente hizo: el
+   *  tablero, las corridas y las conversaciones.
+   *
+   *  Y SÓLO SI SE PUEDE AFIRMAR. Con una de las dos fuentes caída el número
+   *  quedaría corto —justo el error que encontró la prueba a ciegas, «dice
+   *  "hace 24 min" cuando le acababa de escribir»—, y un "hace 24 min" que
+   *  miente es peor que no decir nada. Una fuente apagada en el manifiesto sí
+   *  cuenta como respondida: ahí lo que hay es todo lo que existe. */
+  const ultimaSenal = useMemo(() => {
+    const contesto = (s: Slot<unknown>) => s.t === "listo" || s.t === "off";
+    if (!contesto(eventos) || !contesto(charlas)) return null;
+    const deEventos = ultimos && ultimos.length > 0 ? toMs(ultimos[0].ts) : 0;
+    const deCharlas = charlas.t === "listo" ? charlas.data : 0;
+    const ms = Math.max(deEventos, deCharlas);
+    return ms > 0 ? hace(ms) : null;
+  }, [eventos, charlas, ultimos]);
 
   // ── El agentito como indicador de estado ──
   // Lazy y no en un efecto: si no, el primer frame lo pinta con el look por
@@ -633,7 +758,9 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
   if (!manifest) return <div className={WRAP}><Spinner /></div>;
 
   const slots = [aprob, tareas, eventos, artefactos, archivos, uso, flujos];
-  const esperando = slots.some((s) => s.t === "cargando");
+  // Las charlas no arman bloque propio, pero la señal de vida las espera: sin
+  // esto la línea se queda muda un instante en vez de decir que está buscando.
+  const esperando = slots.some((s) => s.t === "cargando") || charlas.t === "cargando";
   const nada = slots.every((s) => s.t === "off" || s.t === "falla");
 
   // Línea de estado: dice lo que sabemos y nada más.
@@ -706,7 +833,9 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
               No lo inventamos: son sus flujos, con el texto que ya está
               escrito para él. Si todavía no tiene ninguno, lo decimos y le
               mostramos por dónde se pide. */}
-          {flujos.t === "listo" && <QueHace flujos={flujos.data} />}
+          {flujos.t === "listo" && (
+            <QueHace flujos={flujos.data} jobs={jobs.t === "listo" ? jobs.data : null} />
+          )}
 
           {/* 2 · Cómo viene el tablero */}
           {tareas.t === "cargando" && <Esqueleto filas={1} />}
@@ -715,16 +844,19 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
               {tablero.total === 0 ? (
                 <Vacio>Todavía no hay tareas en el tablero.</Vacio>
               ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <Metrica valor={tablero.porHacer} label="Por hacer" tone="neutral" />
-                  <Metrica valor={tablero.curso} label="En curso" tone="amber" />
-                  {/* "Esperando tu ok" NO: esta cuenta son las tareas frenadas
-                      del tablero, y ahí adentro también están las que pediste
-                      vos (una conexión) — esas nos esperan a NOSOTROS. Con ese
-                      rótulo, la misma pantalla decía "Hay 2 cosas esperando tu
-                      ok" arriba y "3" acá abajo. Frenada es cierto siempre. */}
-                  <Metrica valor={tablero.esperando} label="Frenadas" tone="violet" />
-                  <Metrica valor={tablero.hechas} label="Completadas" tone="green" />
+                <div
+                  className={`grid grid-cols-2 gap-2 ${
+                    tablero.columnas.length === 5 ? "sm:grid-cols-5" : "sm:grid-cols-4"
+                  }`}
+                >
+                  {tablero.columnas.map((c) => (
+                    <Metrica
+                      key={c.clave}
+                      valor={tablero.cuenta[c.clave]}
+                      label={c.label}
+                      tone={c.tono}
+                    />
+                  ))}
                 </div>
               )}
             </Seccion>

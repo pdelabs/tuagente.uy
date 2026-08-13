@@ -320,6 +320,68 @@ export function esPedidoDelCliente(body: string | null | undefined): boolean {
   return b.includes(MARCA_PEDIDO) || b.trimStart().startsWith(PREFIJO_PEDIDO);
 }
 
+/* ── Un freno NO es una aprobación ────────────────────────────────────────────
+   TERCERA COSA EN LA MISMA COLA, Y ES LA CONTRARIA DE UNA APROBACIÓN. En
+   `blocked` no hay dos clases sino tres. Las dos conocidas: el agente pide
+   permiso (tuyo) y el cliente pidió algo (nuestro, `esPedidoDelCliente`). La
+   tercera la encontró la prueba a ciegas del 13/8: el agente frenó porque le
+   FALTA algo que nosotros tenemos que conectar. Textual:
+
+     «Me apareció "Control semanal de contratos — falta acceso a Google" con
+      botones Rechazar / Corregir y aprobar / Aprobar. ¿Aprobar qué? No hizo
+      nada, se trabó. Eso no es un permiso que yo tengo que dar, es un problema
+      que me tienen que resolver.»
+
+   Y "se trabó" es literal, no una impresión: aprobar es `unblock`, y un ticket
+   tiene UN solo desbloqueo útil antes de que el motor lo declare un loop
+   (BLOCK_RECURRENCE_LIMIT = 2 → `triage`, donde ya no se puede aprobar). Como la
+   causa sigue ahí, el agente lo vuelve a bloquear enseguida: apretar Aprobar
+   sobre uno de estos no adelanta nada y gasta el único desbloqueo del pedido.
+
+   EL MOTOR NO LOS SEPARA: verificado en los dos labs, los pedidos de permiso y
+   este freno tienen el mismo `block_kind = needs_input` (y `/portal/approvals`
+   ni siquiera lo publica). Lo que sí los separa es lo que el agente ESCRIBE: el
+   SOUL le manda poner `conexion:<id>` sola en una línea cuando le falta una
+   conexión (`soul/04-lenguaje.md`), que es la marca que el portal ya convierte
+   en tarjeta. Medido sobre los 13 pedidos bloqueados de Tero y Zaguán: la marca
+   aparece en 1 —justo ése— y en ninguno de los 10 pedidos de permiso reales.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+// Misma expresión que el chip de `lib/entities.tsx`, sin el ancla de línea: acá
+// se busca DENTRO del cuerpo.
+const CONEXION_EN_TEXTO = /\bconexi[oó]n:([a-z0-9][a-z0-9-]*)/gi;
+
+/** La forma que la skill `aprobacion` le da a un pedido: un cuadro markdown
+ *  ("si aprobás / si rechazás / por qué"). Es lo que separa una PROPUESTA de
+ *  cualquier otro texto del agente. */
+export const pareceUnaPropuesta = (s: string | null | undefined) =>
+  /^\s*\|.*\|\s*$/m.test(s || "");
+
+/** Las conexiones que el ticket nombra como faltantes, por id del catálogo. */
+export function conexionesQueFaltan(texto: string | null | undefined): string[] {
+  const vistas = new Set<string>();
+  // `exec` en bucle y no `matchAll`: el target de este proyecto es ES5 y el
+  // iterador no compila. La regex es global, así que `lastIndex` avanza sola —
+  // y se reinicia acá para que dos llamadas seguidas no se pisen.
+  CONEXION_EN_TEXTO.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = CONEXION_EN_TEXTO.exec(texto ?? "")) !== null) vistas.add(m[1].toLowerCase());
+  return Array.from(vistas);
+}
+
+/** ¿Este pedido bloqueado está esperando que se CONECTE algo, en vez de una
+ *  decisión del cliente? Ahí no hay nada que aprobar.
+ *
+ *  ANTE LA DUDA, ES UNA APROBACIÓN. Si el cuerpo trae el cuadro de la skill,
+ *  gana la propuesta aunque mencione una conexión: sacarle los botones a un
+ *  pedido de permiso real es peor que dejárselos a un freno — el cliente se
+ *  queda sin poder autorizar lo que sí quiere. */
+export function esFrenoPorConexion(body: string | null | undefined): boolean {
+  if (esPedidoDelCliente(body)) return false;
+  if (pareceUnaPropuesta(body)) return false;
+  return conexionesQueFaltan(body).length > 0;
+}
+
 /* ── Lo que el cliente "dijo" según la máquina ────────────────────────────────
    Aprobar-con-corrección y rechazar dejan en el ticket un comentario firmado
    `cliente` que NO escribió el cliente: es una instrucción para el agente, con

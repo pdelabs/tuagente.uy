@@ -9,6 +9,7 @@
 // del chat, con HTML sanitizado. Las cards del tablero quedan en texto plano.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import {
   Archive,
   Check,
@@ -31,6 +32,7 @@ import {
   getTicketDetail,
   esElCliente,
   esElSistema,
+  esFrenoPorConexion,
   esPedidoDelCliente,
   leerComentario,
   rotuloAutor,
@@ -42,7 +44,8 @@ import {
 } from "../lib/agent";
 import { loadAgentName } from "../lib/onboarding";
 import {
-  esEventoDeMaquina, estadoDeTarea, horaDe, momentoDe, rotuloEvento, type Tono,
+  COLUMNAS_TABLERO, columnaDeTarea, esEventoDeMaquina, estadoDeTarea, horaDe,
+  momentoDe, rotuloEvento, type ColumnaTarea, type Tono,
 } from "../lib/palabras";
 import { AgentitoAvatar, loadAgentLook } from "../lib/agentito";
 import { CopiarLink, PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
@@ -164,7 +167,7 @@ function describirError(e: unknown): string {
 
 /* ── Tablero ─────────────────────────────────────────────────────────────── */
 
-type ColKey = "todo" | "blocked" | "pedido" | "active" | "done";
+type ColKey = ColumnaTarea;
 
 // De qué color es el puntito de cada columna. Esto sí lo decide la pantalla:
 // es pintura, no palabra.
@@ -176,74 +179,53 @@ const PUNTO: Record<Tono, string> = {
   coral: "bg-c-coral-ink",
 };
 
-/** LO QUE ESPERA AL CLIENTE Y LO QUE NOS ESPERA A NOSOTROS SON DOS COSAS.
- *
- *  En `blocked` caen las dos: el agente pidiendo permiso, y el pedido que hizo
- *  el propio cliente desde el portal ("Conectar WhatsApp"), que ahora además
- *  NACE bloqueado. Con una sola columna, su propio pedido le decía "Esperando
- *  aprobación" —esperando la de él— mientras la tarjeta de ese mismo pedido, en
- *  Aprobaciones, le dice "Lo estamos viendo… no tenés que hacer nada". Dos
- *  pantallas, dos respuestas, sobre un ticket que además es suyo.
- *
- *  `estadoDeTarea` no puede resolverlo: sólo ve el `status`, y los dos son
- *  `blocked`. El discriminante es de quién es el pedido (`esPedidoDelCliente`,
- *  la definición única de `lib/agent.ts`). Por eso ésta es la única palabra que
- *  el Tablero pone de su bolsillo — y no es nueva: es la que el cliente ya lee
- *  en Aprobaciones sobre ese mismo ticket. */
-const NUESTRO: { label: string; tono: Tono } = { label: "Lo estamos viendo", tono: "amber" };
+// CÓMO SE LLAMA UN ESTADO —Y CUÁLES SON LAS COLUMNAS— LO DICE `palabras.ts`.
+// Acá vivían las cinco palabras y el reparto, y de las cinco una era propia del
+// Tablero ("Lo estamos viendo"): Inicio contaba con otro reparto y con otro
+// nombre ("Frenadas", las dos clases juntas), y la prueba a ciegas leyó tres
+// nombres distintos para el mismo estado en tres pantallas. Ahora las cinco
+// salen de `COLUMNAS_TABLERO` y el reparto de `columnaDeTarea`, así que Inicio,
+// el Tablero, el chip del detalle y el visor de entidades no se pueden separar.
+const COLUMNS: { key: ColKey; label: string; dot: string }[] =
+  COLUMNAS_TABLERO.map((c) => ({ key: c.clave, label: c.label, dot: PUNTO[c.tono] }));
 
-// CÓMO SE LLAMA UN ESTADO LO DICE `palabras.ts`. Acá vivía una copia de las
-// cuatro palabras y de sus cuatro tonos. Hoy dicen exactamente lo mismo que
-// `estadoDeTarea` —se comprobó estado por estado—, pero era una copia: dos
-// lectores del mismo dato con criterios propios se separan solos con el tiempo,
-// y la primera vez que alguien corrija una de las dos, el Tablero y el resto del
-// portal van a llamar distinto a la misma tarea. Es la misma clase de bug que
-// estamos sacando de las fechas, con palabras en vez de horas.
-//
-// "Por hacer" = ready: creado y todavía nadie lo agarró. Vivía escondido en
-// "En curso", mezclando la cola con lo que se trabaja de verdad.
-const rotuloCol = (e: { label: string; tono: Tono }) => ({ label: e.label, dot: PUNTO[e.tono] });
-
-const COLUMNS: { key: ColKey; label: string; dot: string }[] = [
-  { key: "todo", ...rotuloCol(estadoDeTarea("ready")) },
-  { key: "active", ...rotuloCol(estadoDeTarea("running")) },
-  { key: "blocked", ...rotuloCol(estadoDeTarea("blocked")) },
-  { key: "pedido", ...rotuloCol(NUESTRO) },
-  { key: "done", ...rotuloCol(estadoDeTarea("done")) },
-];
-
-// blocked, done y los pedidos del cliente tienen columna propia; ready, running
-// y cualquier estado desconocido caen en "En curso" (no ocultamos tickets por un
-// estado nuevo).
-//
 // La marca del pedido sólo desvía a los frenados: un pedido en curso o
 // terminado ya está en la columna que le corresponde, y ahí ninguna palabra
 // miente.
-function columnOf(t: { status: string; body?: string | null }): ColKey {
-  if (t.status === "ready") return "todo";
-  if (t.status === "blocked") return esPedidoDelCliente(t.body) ? "pedido" : "blocked";
-  if (t.status === "done") return "done";
-  return "active";
-}
+const columnOf = (t: { status: string; body?: string | null }): ColKey =>
+  columnaDeTarea(t.status, esPedidoDelCliente(t.body));
 
 /** El cartel de un ticket: el estado, salvo cuando el que espera somos
  *  nosotros. Es lo que muestran la columna y el chip del detalle, para que el
  *  link a la tarea no diga otra cosa que el tablero. */
 const estadoDeTicket = (t: { status: string; body?: string | null }) =>
-  columnOf(t) === "pedido" ? NUESTRO : estadoDeTarea(t.status);
+  estadoDeTarea(t.status, esPedidoDelCliente(t.body));
 
 // Transiciones que tienen sentido desde el estado actual. Archivar va aparte:
 // se ofrece siempre y con confirmación.
 type Transicion = { status: EstadoDestino; label: string; enCurso: string; icon: LucideIcon };
 
-function transicionesDe(status: string): Transicion[] {
-  if (status === "blocked")
+// APROBAR NO ES LA ACCIÓN DE TODO LO QUE ESTÁ FRENADO, y ofrecerla igual no es
+// gratis: aprobar es `unblock`, y un ticket tiene UN solo desbloqueo útil antes
+// de que el motor lo declare un loop y lo mande a `triage`, donde ya no se puede
+// aprobar nada. Sobre un pedido del propio cliente ("Conectar WhatsApp") además
+// larga al worker sobre un ticket cuyo cuerpo dice "no hagas nada por tu cuenta
+// con esto"; sobre un freno por una conexión que falta, la causa sigue ahí y el
+// agente lo vuelve a bloquear enseguida. Los dos casos van sin transición y con
+// una línea que dice dónde se resuelven. Ver `esFrenoPorConexion`.
+const sinAprobacion = (t: { status: string; body?: string | null }) =>
+  t.status === "blocked" && (esPedidoDelCliente(t.body) || esFrenoPorConexion(t.body));
+
+function transicionesDe(t: { status: string; body?: string | null }): Transicion[] {
+  if (t.status === "blocked") {
+    if (sinAprobacion(t)) return [];
     // "Aprobar", igual que en la pestaña de Aprobaciones. Antes esta misma
     // acción se llamaba "Desbloquear" acá, "Aprobar" allá y "se destraba" en
     // la explicación: tres palabras para lo mismo, y el cliente sin saber si
     // eran tres cosas distintas.
     return [{ status: "ready", label: "Aprobar", enCurso: "Aprobando…", icon: Unlock }];
-  if (status === "done")
+  }
+  if (t.status === "done")
     return [{ status: "ready", label: "Reabrir", enCurso: "Reabriendo…", icon: RotateCcw }];
   return [{ status: "done", label: "Marcar completado", enCurso: "Completando…", icon: Check }];
 }
@@ -544,7 +526,7 @@ export default function PipelinePage() {
   }, [tickets, tenant, busqueda]);
 
   const porColumna = useMemo(() => {
-    const m: Record<ColKey, Ticket[]> = { todo: [], blocked: [], pedido: [], active: [], done: [] };
+    const m: Record<ColKey, Ticket[]> = { porHacer: [], curso: [], espera: [], nuestro: [], hechas: [] };
     for (const t of visibles) m[columnOf(t)].push(t);
     for (const k of Object.keys(m) as ColKey[]) {
       m[k].sort((a, b) => msDe(b.created_at) - msDe(a.created_at));
@@ -557,7 +539,7 @@ export default function PipelinePage() {
   // Se mira la lista COMPLETA y no la filtrada — si dependiera de la búsqueda,
   // el tablero cambiaría de forma mientras el cliente escribe.
   const hayPedidos = useMemo(
-    () => (tickets ?? []).some((t) => columnOf(t) === "pedido"),
+    () => (tickets ?? []).some((t) => columnOf(t) === "nuestro"),
     [tickets],
   );
 
@@ -660,7 +642,7 @@ export default function PipelinePage() {
     ...pendientes,
   ];
   const tenantsLibres = tenants.filter((t) => t !== SIN_TENANT);
-  const columnas = COLUMNS.filter((c) => c.key !== "pedido" || hayPedidos);
+  const columnas = COLUMNS.filter((c) => c.key !== "nuestro" || hayPedidos);
 
   return (
     <div className={wrap}>
@@ -1120,6 +1102,24 @@ export default function PipelinePage() {
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center justify-end gap-2">
+                  {/* Sin botón de aprobar, la tarea no puede quedar sin salida:
+                      se dice quién la destraba y —cuando hay algo que hacer—
+                      dónde está el botón que sí sirve. */}
+                  {sinAprobacion(abierto) && (
+                    <p className="mr-auto max-w-[26rem] text-[12px] leading-snug text-ink-soft">
+                      {esPedidoDelCliente(abierto.body)
+                        ? "Esto lo pediste vos y lo estamos viendo nosotros: no hay nada que aprobar acá. Te escribimos cuando esté."
+                        : "Está frenada hasta que se conecte lo que le falta. "}
+                      {!esPedidoDelCliente(abierto.body) && (
+                        <Link
+                          href={`/app/aprobaciones?pedido=${encodeURIComponent(abierto.id)}`}
+                          className="font-semibold text-primary transition hover:text-primary-dark"
+                        >
+                          Verlo en Aprobaciones
+                        </Link>
+                      )}
+                    </p>
+                  )}
                   <Btn
                     kind="ghost"
                     size="sm"
@@ -1129,7 +1129,7 @@ export default function PipelinePage() {
                     <Archive className="h-4 w-4" />
                     Archivar
                   </Btn>
-                  {transicionesDe(abierto.status).map((t) => (
+                  {transicionesDe(abierto).map((t) => (
                     <Btn
                       key={t.status}
                       kind={t.status === "done" ? "primary" : "secondary"}

@@ -107,7 +107,16 @@ const EVENTOS: Record<string, string | ((n: string) => string)> = {
   in_progress: (n) => `${n} está trabajando`,
   comment: "Comentario",
   commented: "Comentario",
-  blocked: "Frenada — espera tu respuesta",
+  // NO "espera tu respuesta". El evento `blocked` lo emiten los DOS bloqueos y
+  // el evento no sabe cuál es: el agente pidiendo permiso, y el pedido que hizo
+  // el propio cliente desde el portal —que nace bloqueado a propósito y nos
+  // espera a NOSOTROS—. La prueba a ciegas leyó, en la tarjeta de su propio
+  // pedido de conexión, «Frenada — espera tu respuesta» mientras la columna del
+  // Tablero decía "Lo estamos viendo": el mismo ticket mandándola a hacer algo y
+  // diciéndole que no hiciera nada. El evento cuenta el HECHO (se frenó); quién
+  // espera a quién lo dice el estado, que sí lo sabe (`estadoDeTarea`). Va en
+  // par con `unblocked`, que ya estaba redactado con este mismo criterio.
+  blocked: "Se frenó y quedó esperando",
   // NUNCA "Le diste el visto bueno", que es lo que decía. El evento lo emite
   // el `unblock` del motor y no trae autor: el portal no puede saber quién lo
   // destrabó ni por qué. Cuando rechazar todavía movía el ticket a `ready`,
@@ -170,24 +179,82 @@ export type Tono = "violet" | "amber" | "green" | "coral" | "neutral";
 // Actividad — literalmente lo que la clienta que probó el portal a ciegas anotó
 // en su informe. Y no alcanzaba con traducirlo: la MISMA tarea, en el Tablero,
 // ya se llamaba "Completado". Las palabras son las del Tablero, que es donde la
-// tarea vive, y el reparto es el mismo que el de sus columnas (`columnOf`):
-// blocked y done tienen la suya, ready es la cola, y cualquier estado nuevo cae
-// en "En curso" antes que esconderse o salir en inglés.
-const ESTADOS_TAREA: Record<string, { label: string; tono: Tono }> = {
-  ready: { label: "Por hacer", tono: "neutral" },
-  blocked: { label: "Esperando aprobación", tono: "violet" },
-  done: { label: "Completado", tono: "green" },
-  // Archivada no está en ninguna columna —sale del tablero— pero su link sigue
-  // abriendo el detalle, y ahí "En curso" sería mentira.
-  archived: { label: "Archivada", tono: "neutral" },
+// tarea vive, y el reparto es el mismo que el de sus columnas: cada columna
+// tiene su nombre, y cualquier estado nuevo cae en "En curso" antes que
+// esconderse o salir en inglés.
+//
+// LA SEGUNDA PRUEBA A CIEGAS ENCONTRÓ QUE UN MISMO ESTADO TENÍA TRES NOMBRES.
+// Textual: «En Inicio la columna se llama "Frenadas", en el Tablero "Lo estamos
+// viendo", adentro de la tarjeta "Frenada — espera tu respuesta"». Eran tres
+// lugares con su propia tablita: Inicio contaba blocked entero bajo "Frenadas",
+// el Tablero tenía la palabra buena pero de su bolsillo, y el evento hablaba por
+// los dos. Ahora las columnas —su nombre, su tono y a cuál va cada tarea— viven
+// UNA sola vez, acá, y las cuatro pantallas las leen de este mismo lugar.
+
+/** Las columnas del Tablero. Es también el reparto que usa Inicio para contar:
+ *  con dos repartos distintos, los números de las dos pantallas no cerraban. */
+export type ColumnaTarea = "porHacer" | "curso" | "espera" | "nuestro" | "hechas";
+
+const POR_HACER = { label: "Por hacer", tono: "neutral" as const };
+const EN_CURSO = { label: "En curso", tono: "amber" as const };
+/** El agente frenó la tarea para pedirte permiso: la pelota es TUYA. Es la
+ *  palabra que ya enseñan las bienvenidas del Tablero y de Aprobaciones. */
+const ESPERA_TU_OK = { label: "Esperando aprobación", tono: "violet" as const };
+/** LO QUE ESPERA AL CLIENTE Y LO QUE NOS ESPERA A NOSOTROS SON DOS COSAS.
+ *
+ *  En `blocked` caen las dos: el agente pidiendo permiso, y el pedido que hizo
+ *  el propio cliente desde el portal ("Conectar WhatsApp"), que además NACE
+ *  bloqueado. Con un solo nombre, su propio pedido le decía "Esperando
+ *  aprobación" —esperando la de él—. El discriminante no está en el `status`
+ *  (los dos son `blocked`) sino en de quién es el pedido: lo contesta
+ *  `esPedidoDelCliente` en `lib/agent.ts` y entra por parámetro, porque
+ *  `agent.ts` importa este módulo y no puede haber ciclo. */
+const NUESTRO = { label: "Lo estamos viendo", tono: "amber" as const };
+const HECHAS = { label: "Completado", tono: "green" as const };
+
+/** Cómo se llama cada columna. Lo leen el Tablero, Inicio, Aprobaciones y el
+ *  visor de entidades: es LA lista de nombres, no una de varias. */
+export const ETIQUETA_COLUMNA: Record<ColumnaTarea, { label: string; tono: Tono }> = {
+  porHacer: POR_HACER, curso: EN_CURSO, espera: ESPERA_TU_OK,
+  nuestro: NUESTRO, hechas: HECHAS,
 };
 
-const EN_CURSO = { label: "En curso", tono: "amber" as const };
+/** Las cinco columnas, en el orden en que se leen. */
+export const COLUMNAS_TABLERO: { clave: ColumnaTarea; label: string; tono: Tono }[] =
+  (["porHacer", "curso", "espera", "nuestro", "hechas"] as ColumnaTarea[])
+    .map((clave) => ({ clave, ...ETIQUETA_COLUMNA[clave] }));
 
-/** En qué anda una tarea, con las palabras del Tablero. */
-export function estadoDeTarea(status: string | null | undefined): { label: string; tono: Tono } {
+/** En qué columna del Tablero va una tarea.
+ *
+ *  `todo` ES EL ESTADO REAL DE UNA TAREA RECIÉN CREADA. El portal solo conocía
+ *  `ready` —que es el nombre del verbo con el que ESCRIBE (`unblock`)—, así que
+ *  las tareas nuevas caían en "En curso" y la columna "Por hacer" estaba vacía
+ *  siempre. Medido contra el agente del lab el 13/8: 3 de sus 28 tareas están en
+ *  `todo` y las tres se mostraban como si el agente ya las estuviera trabajando. */
+export function columnaDeTarea(
+  status: string | null | undefined, esPedidoDelCliente = false,
+): ColumnaTarea {
   const s = (status || "").trim().toLowerCase();
-  return ESTADOS_TAREA[s] ?? EN_CURSO;
+  if (s === "ready" || s === "todo") return "porHacer";
+  if (s === "blocked") return esPedidoDelCliente ? "nuestro" : "espera";
+  if (s === "done") return "hechas";
+  return "curso";
+}
+
+// Archivada no está en ninguna columna —sale del tablero— pero su link sigue
+// abriendo el detalle, y ahí "En curso" sería mentira.
+const ARCHIVADA = { label: "Archivada", tono: "neutral" as const };
+
+/** En qué anda una tarea, con las palabras del Tablero. `esPedidoDelCliente`
+ *  (de `lib/agent.ts`) es lo único que separa "espera algo tuyo" de "lo
+ *  esperamos nosotros": sin él, el pedido del cliente dice esperar su propia
+ *  aprobación. */
+export function estadoDeTarea(
+  status: string | null | undefined, esPedidoDelCliente = false,
+): { label: string; tono: Tono } {
+  const s = (status || "").trim().toLowerCase();
+  if (s === "archived") return ARCHIVADA;
+  return ETIQUETA_COLUMNA[columnaDeTarea(s, esPedidoDelCliente)];
 }
 
 /** Cómo está una tarea PROGRAMADA (un cron), en un solo cartel.
@@ -625,6 +692,91 @@ export function esDeLosUltimosDias(
   const m = momentoDe(valor);
   if (!m) return true; // sin fecha no se esconde nada
   return m.dias > -dias;
+}
+
+/** La hora de pared del negocio, 0–23. */
+const horaDelNegocio = (ms = Date.now()): number =>
+  new Date(ms + husoDelNegocio() * 60_000).getUTCHours();
+
+/** "Buenas tardes". EL SALUDO VA EN EL RELOJ DEL NEGOCIO, como todo el resto.
+ *
+ *  Estaba a propósito en el reloj del BROWSER, con el argumento de que el
+ *  saludo habla de quien mira y no del agente. El argumento es lindo y el
+ *  resultado es falso: la prueba a ciegas del 13/8 anotó «son las tres de la
+ *  tarde y la pantalla me saluda con "Buen día"». Reproducido acá con las
+ *  funciones reales: agente en Montevideo (-03) a las 15:04, browser en
+ *  `America/Mexico_City` (-06) → "Buen día"; browser en `Europe/Madrid` (+02) →
+ *  "Buenas noches".
+ *
+ *  Por qué el del negocio y no el del browser:
+ *   · La clienta ES el negocio. Su agente vive en su ciudad y su portal habla de
+ *     lo suyo; el huso del negocio es su hora en cualquier caso realista, y es
+ *     el único que el portal puede verificar (lo aprende de las fechas del
+ *     propio agente — la zona del browser puede estar mal puesta, que es
+ *     exactamente el caso medido).
+ *   · Y sobre todo: es la ÚNICA hora que se lee en esta pantalla. Abajo del
+ *     saludo dice "Actualizado 15:04" y "corrió hoy a las 14:35", las dos en el
+ *     reloj del negocio. Un saludo con otra vara no se lee como una atención
+ *     hacia quien mira: se lee como que el producto no sabe qué hora es. */
+export function saludoDelDia(ms = Date.now()): string {
+  const h = horaDelNegocio(ms);
+  if (h < 6) return "Buenas noches";
+  if (h < 13) return "Buen día";
+  if (h < 20) return "Buenas tardes";
+  return "Buenas noches";
+}
+
+/* ── Cada cuánto corre una tarea programada ──────────────────────────────── */
+
+// LO QUE CORRE LE GANA A LO QUE ESTÁ ESCRITO. La cadencia de un flujo se
+// declara en su FLUJO.md (`gatillo`, `para_cliente`) Y se agenda en un cron, y
+// las dos se pueden separar: cuando el cliente pide cambiar el horario, lo que
+// cambia seguro es el cron. La prueba a ciegas del 13/8: Flujos decía "Todos los
+// jueves a las 8:30 · Próxima vez: el 20/8 a las 08:30" —el cron— y la portada
+// seguía diciendo "Todos los viernes a las 9:30" —el texto—. Textual: «Dos
+// pantallas del mismo programa me dicen dos días distintos. ¿A cuál le creo?».
+// A la que corre. Esta función es la que la pone en palabras.
+//
+// (Hay una copia más vieja y privada en `app/app/tareas/page.tsx::cronLegible`,
+// que es de otro dueño hoy. TODO: que se gradúe a ésta y quede una sola.)
+
+const DIAS_PLURAL = ["domingos", "lunes", "martes", "miércoles", "jueves", "viernes", "sábados"];
+const dos = (n: number) => String(n).padStart(2, "0");
+
+function diasDeCron(dow: string): string | null {
+  if (dow === "1-5") return "De lunes a viernes";
+  if (dow === "0,6" || dow === "6,0") return "Los sábados y domingos";
+  if (/^[0-6]$/.test(dow)) return `Todos los ${DIAS_PLURAL[Number(dow)]}`;
+  if (/^[0-6](,[0-6])+$/.test(dow)) {
+    const dias = Array.from(new Set(dow.split(",").map(Number))).sort()
+      .map((d) => DIAS_PLURAL[d]);
+    const ultimo = dias.pop()!;
+    return `Los ${dias.join(", ")} y ${ultimo}`;
+  }
+  return null;
+}
+
+/** "Todos los jueves a las 08:30" a partir del cron que el motor tiene
+ *  agendado. `null` cuando el patrón no se reconoce: ahí no se inventa nada y
+ *  la pantalla se queda con la próxima corrida, que siempre es cierta. */
+export function cadenciaDeCron(expr: string | null | undefined): string | null {
+  const p = (expr ?? "").trim().split(/\s+/);
+  if (p.length !== 5) return null;
+  const [min, hour, dom, mon, dow] = p;
+  if (mon !== "*") return null;
+  if (!/^\d+$/.test(min) || !/^\d+$/.test(hour)) return null;
+  const hora = `${dos(Number(hour))}:${dos(Number(min))}`;
+  if (dom === "*") {
+    if (dow === "*") return `Todos los días a las ${hora}`;
+    const dias = diasDeCron(dow);
+    return dias ? `${dias} a las ${hora}` : null;
+  }
+  if (/^\d+$/.test(dom) && dow === "*") {
+    return Number(dom) === 1
+      ? `El primer día de cada mes a las ${hora}`
+      : `El día ${Number(dom)} de cada mes a las ${hora}`;
+  }
+  return null;
 }
 
 /* ── Por dónde le hablaron al agente ─────────────────────────────────────── */

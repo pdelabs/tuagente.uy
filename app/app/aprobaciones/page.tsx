@@ -19,15 +19,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight, Ban, CheckCircle2, ChevronDown, Clock, Hand, PencilLine, MessageSquareReply,
+  Plug, RotateCcw,
 } from "lucide-react";
 import { loadAgentName } from "../lib/onboarding";
 import {
-  loadConfig, getApprovals, getTicketDetail, approve, reject,
-  avisarAprobacionesCambiaron, esElCliente, esPedidoDelCliente, esRechazoDelCliente,
-  leerComentario, motivoDeRechazo, rotuloAutor,
-  type PortalConfig, type TicketComment, type TicketDetail,
+  loadConfig, getApprovals, getConnections, getTicketDetail, approve, reject,
+  avisarAprobacionesCambiaron, conexionesQueFaltan, esElCliente, esFrenoPorConexion,
+  esPedidoDelCliente, esRechazoDelCliente, etiquetaConexion, leerComentario,
+  motivoDeRechazo, pareceUnaPropuesta, rotuloAutor,
+  type Connection, type PortalConfig, type TicketComment, type TicketDetail,
 } from "../lib/agent";
-import { horaDe } from "../lib/palabras";
+import { ETIQUETA_COLUMNA, horaDe } from "../lib/palabras";
 import {
   AvisoLinkViejo, Btn, Card, Chip, EmptyState, ErrorState, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
@@ -113,10 +115,10 @@ const esMarcador = (s: string) => /^\s*(BLOCKED|UNBLOCKED|BLOQUEADO)\s*:/i.test(
 // decidir qué se muestra y qué no. Dos copias de esa regla es una de más.
 const esDelCliente = esElCliente;
 
-/** La forma que la skill `aprobacion` le da a un pedido: un cuadro markdown
- *  ("si aprobás / si rechazás / por qué"). Es lo que separa una PROPUESTA de un
- *  comentario cualquiera del agente. */
-const pareceUnaPropuesta = (s: string) => /^\s*\|.*\|\s*$/m.test(s || "");
+// `pareceUnaPropuesta` —el cuadro markdown de la skill `aprobacion`— vivía acá.
+// Ahora es de `lib/agent.ts`: además de elegir qué comentario mostrar, es media
+// definición de qué ES una aprobación, y eso no puede tener dos versiones (ver
+// `esFrenoPorConexion`).
 
 /** Qué le estamos pidiendo que apruebe. La skill `aprobacion` deja el pedido
  *  formateado COMO COMENTARIO del ticket, no en su descripción — por eso esta
@@ -242,7 +244,7 @@ function separarPropuesta(md: string): { ficha: string; texto: string } {
 type Resuelto = {
   id: string;
   titulo: string;
-  accion: "aprobado" | "corregido" | "cerrado";
+  accion: "aprobado" | "corregido" | "cerrado" | "reintento";
   cuando: Date;
 };
 
@@ -277,12 +279,17 @@ function TarjetaResuelta({ r, nombreAgente }: { r: Resuelto; nombreAgente: strin
   const cerrado = r.accion === "cerrado";
   const titulo = cerrado
     ? "Cerraste el pedido"
-    : r.accion === "aprobado" ? "Lo aprobaste" : "Lo aprobaste con tu corrección";
+    : r.accion === "aprobado" ? "Lo aprobaste"
+    : r.accion === "reintento" ? "Le dijiste que lo vuelva a intentar"
+    : "Lo aprobaste con tu corrección";
   const detalle =
     r.accion === "aprobado"
       ? `${nombreAgente} ya lo sabe y está siguiendo con eso. Lo ves avanzar en el Tablero.`
       : r.accion === "corregido"
       ? `${nombreAgente} tiene que usar tu versión, no la original. Lo ves avanzar en el Tablero.`
+      : r.accion === "reintento"
+      ? `${nombreAgente} retoma esta tarea con la conexión ya puesta. Si algo sigue faltando, `
+        + "te lo va a decir ahí mismo. Lo ves avanzar en el Tablero."
       : `${nombreAgente} no lo va a volver a proponer. Quedó anotado por qué, en el Tablero. `
         + "Si algún día cambiás de idea, pediselo por el chat.";
   const Icono = cerrado ? Ban : CheckCircle2;
@@ -342,6 +349,172 @@ function AvisoRechazado({ r, nombreAgente }: { r: Rechazado; nombreAgente: strin
   );
 }
 
+/** UN FRENO NO ES UNA APROBACIÓN, Y ESTA ES SU TARJETA.
+ *
+ *  El agente frenó porque le falta una conexión. La prueba a ciegas del 13/8 vio
+ *  este pedido con los tres botones de siempre: «¿Aprobar qué? No hizo nada, se
+ *  trabó. Eso no es un permiso que yo tengo que dar, es un problema que me tienen
+ *  que resolver». Y "se trabó" es literal: aprobar es `unblock`, la causa sigue
+ *  ahí, el agente lo vuelve a bloquear y a la segunda el motor lo manda a
+ *  `triage`, donde el pedido ya no se puede aprobar nunca más.
+ *
+ *  LAS TRES SALIDAS, y ninguna es "Aprobar":
+ *   · Conectar lo que falta — es lo único que destraba esto de verdad.
+ *   · Que lo vuelva a intentar — el mismo desbloqueo, pero ofrecido SÓLO cuando
+ *     el catálogo dice que la conexión ya está puesta: ahí sí adelanta, y es el
+ *     único momento en que gastar el desbloqueo no lo tira a la basura.
+ *   · Ya no lo necesito — cierra el pedido de verdad (`reject` definitivo, la
+ *     misma escritura que ya usa el "no, y no me lo propongas más"). Es la
+ *     alternativa a Archivar, que sólo lo esconde del tablero y deja al agente
+ *     creyendo que la tarea sigue viva.
+ *
+ *  Se descartó "Preguntar cómo va": el que puede resolverlo somos nosotros, no
+ *  el agente, así que sería un mensaje a la nada — otro botón que no hace nada,
+ *  que es exactamente de lo que se quejó la prueba. */
+function TarjetaFrenada({
+  a, conexiones, nombreAgente, espera, expanded, onToggle,
+  pidiendoMotivo, reason, setReason, rechazando, error,
+  onAbrirMotivo, onCancelarMotivo, onConfirmarCierre, onReintentar,
+}: {
+  a: Approval;
+  conexiones: Connection[] | null;
+  nombreAgente: string;
+  espera: string;
+  expanded: boolean;
+  onToggle: () => void;
+  pidiendoMotivo: boolean;
+  reason: string;
+  setReason: (s: string) => void;
+  rechazando: boolean;
+  error?: string;
+  onAbrirMotivo: () => void;
+  onCancelarMotivo: () => void;
+  onConfirmarCierre: () => void;
+  onReintentar: () => void;
+}) {
+  const ids = conexionesQueFaltan(a.body);
+  const nombres = ids.map((id) => etiquetaConexion(id, conexiones));
+  const estados = ids.map((id) => conexiones?.find((c) => c.id === id) ?? null);
+  // Sin catálogo no se afirma que esté conectada: se ofrece conectarla, que es
+  // lo que no puede salir mal.
+  const puestas = conexiones !== null && estados.every((c) => c?.estado === "conectado");
+  const esNuestro = estados.some((c) => c?.estado === "bloqueado");
+  const primeraSinPoner = ids.find((id, i) => estados[i]?.estado !== "conectado") ?? ids[0];
+  const varias = nombres.length > 1;
+  const lista = varias
+    ? `${nombres.slice(0, -1).join(", ")} y ${nombres[nombres.length - 1]}`
+    : nombres[0] ?? "una conexión";
+
+  return (
+    <Card className={expanded ? "pedido-abierto scroll-mt-6" : ""}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold text-ink">{a.title}</h3>
+          {a.summary && (
+            <p className="mt-0.5 text-sm text-ink-soft line-clamp-2">{stripMarks(a.summary)}</p>
+          )}
+        </div>
+        {espera && (
+          <span className="shrink-0 whitespace-nowrap pt-0.5 text-[12px] text-ink-soft">
+            frenado {espera}
+          </span>
+        )}
+      </div>
+
+      <p className="mt-2 text-[13px] leading-snug text-ink">
+        {puestas
+          ? `${lista} ${varias ? "ya están conectados" : "ya está conectado"}: `
+            + `${nombreAgente} puede retomarlo.`
+          : esNuestro
+            ? `Para conectar ${lista} falta un paso nuestro. Lo estamos viendo y te escribimos cuando esté.`
+            : `${nombreAgente} no puede seguir con esto hasta que ${lista} `
+              + `${varias ? "estén conectados" : "esté conectado"}.`}
+      </p>
+
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={onToggle}
+        className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-semibold text-primary"
+      >
+        {expanded ? "Ocultar el detalle" : "Ver qué le falta"}
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </button>
+
+      {/* El cuerpo trae la mención `conexion:<id>` que el portal convierte en la
+          tarjeta de la conexión, con su estado real y su propio botón: es la
+          misma que ve en el chat, no una copia. */}
+      {expanded && a.body && (
+        <div className="mt-3 max-h-96 overflow-auto overscroll-contain rounded-lg bg-black/[0.03] p-3 [&>div]:text-[13px]">
+          <Markdown>{a.body}</Markdown>
+        </div>
+      )}
+
+      {error && (
+        <p className="mt-3 rounded-lg border border-c-coral bg-c-coral/40 px-3 py-2 text-[13px] text-c-coral-ink">
+          {error}
+        </p>
+      )}
+
+      {pidiendoMotivo ? (
+        <div className="mt-3">
+          <p className="mb-1.5 text-[12.5px] leading-snug text-ink-soft">
+            Se cierra la tarea y {nombreAgente} deja de intentarla. Contale por qué, para que
+            quede anotado: si más adelante lo necesitás, se lo pedís por el chat.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              autoFocus
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && onConfirmarCierre()}
+              placeholder="Ya no me hace falta porque…"
+              className={inputCls + " flex-1"}
+            />
+            <div className="flex shrink-0 justify-end gap-2">
+              <Btn kind="ghost" size="sm" disabled={rechazando} onClick={onCancelarMotivo}>
+                Cancelar
+              </Btn>
+              <Btn
+                kind="danger"
+                size="sm"
+                disabled={!reason.trim() || rechazando}
+                onClick={onConfirmarCierre}
+              >
+                {rechazando ? "Cerrando…" : "Cerrar la tarea"}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+          <span className="mr-auto">
+            <CopiarLink titulo="Copiar el link de este pedido" />
+          </span>
+          <Btn kind="ghost" size="sm" onClick={onAbrirMotivo}>
+            Ya no lo necesito
+          </Btn>
+          {puestas ? (
+            <Btn kind="primary" size="sm" onClick={onReintentar}>
+              <RotateCcw className="h-3.5 w-3.5" />
+              Que lo vuelva a intentar
+            </Btn>
+          ) : (
+            <Link
+              href={`/app/conexiones?conexion=${encodeURIComponent(primeraSinPoner ?? "")}`}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[13px] font-semibold text-white transition hover:bg-primary-dark"
+            >
+              <Plug className="h-3.5 w-3.5" />
+              {esNuestro ? "Ver cómo va" : `Conectar ${nombres[0] ?? "lo que falta"}`}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function AprobacionesPage() {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [approvals, setApprovals] = useState<Approval[] | null>(null);
@@ -370,6 +543,10 @@ export default function AprobacionesPage() {
   // Detalle del ticket por id: es donde vive de verdad lo que hay que aprobar
   // (la skill lo deja como comentario). Se trae al desplegar, una sola vez.
   const [detalles, setDetalles] = useState<Record<string, TicketDetail | "cargando" | "falla">>({});
+  // El catálogo de conexiones: sólo para los frenos, que necesitan saber si lo
+  // que falta ya está puesto (y cómo se llama en criollo). Si no viene, la
+  // tarjeta no afirma que esté conectado y ofrece conectarlo, que es lo seguro.
+  const [conexiones, setConexiones] = useState<Connection[] | null>(null);
 
   useEffect(() => {
     setCfg(loadConfig()); // si es null, el layout muestra el login
@@ -401,6 +578,18 @@ export default function AprobacionesPage() {
     return () => clearInterval(t);
   }, [cfg, load]);
 
+  // Las conexiones se releen con la misma frecuencia: el cliente sale a
+  // conectar Google y vuelve, y la tarjeta tiene que enterarse sola.
+  useEffect(() => {
+    if (!cfg) return;
+    const traer = () => getConnections(cfg)
+      .then((r) => setConexiones(r?.conexiones ?? []))
+      .catch(() => { /* sin catálogo la tarjeta igual ofrece conectar */ });
+    traer();
+    const t = setInterval(traer, REFRESH_MS);
+    return () => clearInterval(t);
+  }, [cfg]);
+
   const setCardError = (id: string, msg: string | null) =>
     setCardErrors((errs) => {
       const next = { ...errs };
@@ -427,15 +616,21 @@ export default function AprobacionesPage() {
   const olvidarResuelto = (id: string) =>
     setResueltos((prev) => prev.filter((x) => x.id !== id));
 
-  const doApprove = (a: Approval) => {
+  /** Aprobar y "que lo vuelva a intentar" son la MISMA escritura (`unblock`) y
+   *  dos cosas distintas para el cliente: una autoriza algo, la otra sólo
+   *  retoma un trabajo que estaba frenado por una conexión que ya se puso. Lo
+   *  que cambia es la confirmación, que es lo que él lee después. */
+  const doApprove = (a: Approval, accion: "aprobado" | "reintento" = "aprobado") => {
     if (!cfg) return;
     setCardError(a.id, null);
     hide(a.id); // sale de la lista ya; el refresh confirma
-    marcarResuelto({ id: a.id, titulo: a.title, accion: "aprobado", cuando: new Date() });
+    marcarResuelto({ id: a.id, titulo: a.title, accion, cuando: new Date() });
     approve(cfg, a.id).catch((e) => {
       unhide(a.id);
       olvidarResuelto(a.id);
-      setCardError(a.id, `No se pudo aprobar: ${describeError(e)}`);
+      setCardError(a.id, accion === "reintento"
+        ? `No se pudo retomar: ${describeError(e)}`
+        : `No se pudo aprobar: ${describeError(e)}`);
     });
   };
 
@@ -484,7 +679,10 @@ export default function AprobacionesPage() {
     if (!cfg) return;
     const motivo = reason.trim();
     if (!motivo) return;
-    const definitivo = cerrarPedido;
+    // En un freno el "no" es siempre definitivo: no hay otra versión que pedir
+    // —lo que falta es una conexión, no una propuesta—, así que "Ya no lo
+    // necesito" cierra la tarea en la misma escritura.
+    const definitivo = cerrarPedido || esFrenoPorConexion(a.body);
     setCardError(a.id, null);
     setRechazando(a.id);
     try {
@@ -564,11 +762,15 @@ export default function AprobacionesPage() {
   };
 
   const visible = approvals ? approvals.filter((a) => !hidden.has(a.id)) : null;
-  // Dos listas distintas: lo que el agente te pide permiso para hacer, y lo
-  // que vos pediste y está en nuestra cancha. Mezclarlas ponía los mismos
-  // botones abajo de "mandá este mail a un desconocido" y de "conectame el
-  // correo", que para el cliente son cosas muy distintas.
-  const pendientes = visible?.filter((a) => !esPedidoDelCliente(a.body)) ?? null;
+  // TRES listas distintas, y no dos. Lo que el agente te pide permiso para
+  // hacer; lo que él no puede hacer hasta que se conecte algo; y lo que
+  // pediste vos, que está en nuestra cancha. Mezclarlas ponía los mismos
+  // botones abajo de "mandá este mail a un desconocido", de "falta acceso a
+  // Google" y de "conectame el correo", que para el cliente son tres cosas muy
+  // distintas — y en la del medio, Aprobar además rompe el pedido.
+  const frenos = visible?.filter((a) => esFrenoPorConexion(a.body)) ?? null;
+  const pendientes = visible?.filter(
+    (a) => !esPedidoDelCliente(a.body) && !esFrenoPorConexion(a.body)) ?? null;
   const pedidos = visible?.filter((a) => esPedidoDelCliente(a.body)) ?? null;
 
   const nombreAgente = loadAgentName() || "Tu agente";
@@ -597,7 +799,7 @@ export default function AprobacionesPage() {
     <div className="mx-auto max-w-3xl px-6 py-6 md:px-8">
       <PageHeader
         title="Aprobaciones"
-        subtitle="Lo que tu agente frenó para preguntarte. Abrí cada uno: adentro está el texto completo de lo que quiere hacer."
+        subtitle="Lo que tu agente frenó y no puede seguir solo. Abrí cada uno: adentro está el texto completo, y abajo lo que hace falta para destrabarlo."
       />
 
       {/* Lo que acabás de resolver, arriba de todo y con su hora. Va antes de
@@ -1043,6 +1245,39 @@ export default function AprobacionesPage() {
             );
           })}
 
+          {/* Frenado por algo que falta. No lleva Aprobar: no hay nada que
+              aprobar, y apretarlo gasta el único desbloqueo del pedido sin
+              mover nada. Ver `TarjetaFrenada`. */}
+          {frenos !== null && frenos.length > 0 && (
+            <section className="mt-4">
+              <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
+                Frenado hasta que se conecte algo
+              </h2>
+              <div className="flex flex-col gap-2">
+                {frenos.map((f) => (
+                  <TarjetaFrenada
+                    key={f.id}
+                    a={f}
+                    conexiones={conexiones}
+                    nombreAgente={nombreAgente}
+                    espera={timeAgo(f.created_at)}
+                    expanded={expandedId === f.id}
+                    onToggle={() => toggle(f.id)}
+                    pidiendoMotivo={rejectingId === f.id}
+                    reason={reason}
+                    setReason={setReason}
+                    rechazando={rechazando === f.id}
+                    error={cardErrors[f.id]}
+                    onAbrirMotivo={() => { setRejectingId(f.id); setReason(""); }}
+                    onCancelarMotivo={() => { setRejectingId(null); setReason(""); }}
+                    onConfirmarCierre={() => doReject(f)}
+                    onReintentar={() => doApprove(f, "reintento")}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Lo que pediste vos. No lleva Aprobar/Rechazar: no tenés que
               autorizarte a vos misma — está esperándonos a nosotros. */}
           {pedidos !== null && pedidos.length > 0 && (
@@ -1054,8 +1289,12 @@ export default function AprobacionesPage() {
                 {pedidos.map((p) => (
                   <Card key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                     <span className="min-w-0 flex-1 text-sm font-semibold text-ink">{p.title}</span>
-                    <Chip tone="amber">
-                      <Clock className="h-3 w-3" /> Lo estamos viendo
+                    {/* La palabra sale del diccionario, no de acá: es la misma
+                        que el Tablero le pone a la columna de estos mismos
+                        tickets. Escrita a mano en las dos pantallas ya se había
+                        separado una vez. */}
+                    <Chip tone={ETIQUETA_COLUMNA.nuestro.tono}>
+                      <Clock className="h-3 w-3" /> {ETIQUETA_COLUMNA.nuestro.label}
                     </Chip>
                     <span className="w-full text-[12px] text-ink-soft">
                       Lo pediste {timeAgo(p.created_at)}. Te escribimos cuando esté; no tenés

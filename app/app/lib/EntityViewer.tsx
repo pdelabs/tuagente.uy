@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Download, File as FileIcon, X } from "lucide-react";
 import {
-  getTicketDetail, getFileBytes, getFileText, getArtifact, rotuloAutor,
+  esPedidoDelCliente, getTicketDetail, getFileBytes, getFileText, getArtifact, rotuloAutor,
   type ArtifactMeta, type PortalConfig, type TicketDetail,
 } from "./agent";
 import { EntityContext, esImagen, type Entity } from "./entities";
@@ -27,6 +27,11 @@ import CodeBlock from "./CodeBlock";
 // Aprobaciones: `rotuloAutor` de `lib/agent.ts`.
 const rotuloAutorViewer = (author: string) =>
   rotuloAutor(author, loadAgentName() || "Tu agente");
+
+/** El mismo cartel que el Tablero le pone a esta tarea, en una línea, para que
+ *  las dos pantallas no puedan decir cosas distintas del mismo ticket. */
+const estadoDeTicket = (t: { status: string; body?: string | null }) =>
+  estadoDeTarea(t.status, esPedidoDelCliente(t.body));
 import Artifact from "./Artifact";
 
 export function EntityProvider({ cfg, children }: { cfg: PortalConfig; children: ReactNode }) {
@@ -219,10 +224,14 @@ function EntityViewer({ cfg, entity, onClose }: {
               <>
                 {/* EL CHIP DECÍA `done`. En inglés y crudo, a un click de
                     Actividad. Ahora dice lo mismo que el Tablero —"Completado",
-                    "Esperando aprobación"— porque sale del mismo diccionario. */}
+                    "Esperando aprobación"— porque sale del mismo diccionario.
+                    Y CON EL CUERPO: sin él, el pedido que hizo el propio cliente
+                    (bloqueado, como nace) salía acá "Esperando aprobación" —la
+                    de él— mientras el Tablero, sobre ese mismo ticket, decía "Lo
+                    estamos viendo". El discriminante es `esPedidoDelCliente`. */}
                 {ticket && (
-                  <Chip tone={estadoDeTarea(ticket.ticket.status).tono}>
-                    {estadoDeTarea(ticket.ticket.status).label}
+                  <Chip tone={estadoDeTicket(ticket.ticket).tono}>
+                    {estadoDeTicket(ticket.ticket).label}
                   </Chip>
                 )}
                 {/* El tenant es el tablero donde vive la tarea, y ese nombre lo
