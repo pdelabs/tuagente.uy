@@ -1,6 +1,14 @@
 "use client";
 
-// Uso: cuánto te sale el agente. El costo manda; los tokens son el detalle.
+// Uso: cuánto te sale el agente. ACÁ SE HABLA DE PLATA Y NADA MÁS.
+//
+// El motor mide en tokens y esta pantalla los mostraba: "Tokens 1,24 M" arriba,
+// "Tokens de entrada / de salida" en las minis, el gráfico en tokens cuando no
+// venía el costo, y los tokens del día en el globito de cada barra. Una clienta
+// de prueba —dueña de una inmobiliaria— lo cerró en una línea: "no sé qué es un
+// token y no me importa; US$ 0,10 es lo único que quiero saber". Un número que
+// no se puede traducir a plata no se muestra crudo: se esconde.
+//
 // Contrato (adapter v0.7): GET {adapter}/portal/usage →
 //   { available, sessions, input_tokens, output_tokens, total_tokens, cost_usd,
 //     period: "30d",
@@ -8,6 +16,7 @@
 //     by_channel: [{ name, sessions, cost_usd }],
 //     by_model:   [{ name, sessions, cost_usd }] }
 //   o { available: false } si el agente no reporta métricas.
+// Los `*_tokens` se siguen recibiendo (son el contrato) y no se dibujan.
 // Todo campo es opcional a propósito: "daily" puede traer menos días que el
 // período (un agente nuevo trae dos) y los desgloses pueden no venir. Nada de
 // eso rompe la pantalla: la sección sin datos no se dibuja.
@@ -79,8 +88,6 @@ type Day = {
   key: string;
   label: string;
   title: string;
-  input: number;
-  output: number;
   cost: number;
 };
 
@@ -96,14 +103,10 @@ type Day = {
 // de hoy desaparece del gráfico, en la pantalla de la plata. Y las etiquetas
 // ("lun", "martes 12 ago") quedaban corridas un día contra los datos.
 function buildDays(daily: DailyUsage[]): { days: Day[]; hasData: boolean } {
-  const byDate = new Map<string, { input: number; output: number; cost: number }>();
+  const byDate = new Map<string, number>();
   for (const d of daily) {
     if (!d || typeof d.date !== "string") continue;
-    byDate.set(d.date, {
-      input: num(d.input_tokens) ?? 0,
-      output: num(d.output_tokens) ?? 0,
-      cost: num(d.cost_usd) ?? 0,
-    });
+    byDate.set(d.date, num(d.cost_usd) ?? 0);
   }
   const days: Day[] = [];
   const huso = husoDelNegocio();
@@ -114,19 +117,17 @@ function buildDays(daily: DailyUsage[]): { days: Day[]; hasData: boolean } {
     const ms = ahora - i * 86_400_000;
     const key = isoConHuso(ms, huso).slice(0, 10); // "2026-08-13", la clave del agente
     const m = momentoDe(ms);
-    const v = byDate.get(key);
     days.push({
       key,
       // "lun": la primera palabra de `fechaCorta` ("lun 17 ago"), ya en
       // castellano y en el huso del negocio.
       label: m ? m.fechaCorta.split(" ")[0] : "",
       title: m ? `${m.diaSemana} ${m.fecha}` : key,
-      input: v?.input ?? 0,
-      output: v?.output ?? 0,
-      cost: v?.cost ?? 0,
+      cost: byDate.get(key) ?? 0,
     });
   }
-  return { days, hasData: byDate.size > 0 };
+  // "Hay días" es "hay días con gasto": una fila de ceros no es un gráfico.
+  return { days, hasData: days.some((d) => d.cost > 0) };
 }
 
 type Fila = { key: string; label: string; meta: string | null; cost: number };
@@ -236,72 +237,50 @@ export default function UsoPage() {
 
     const cost = num(usage.cost_usd);
     const sess = num(usage.sessions);
-    const input = num(usage.input_tokens);
-    const output = num(usage.output_tokens);
-    const total =
-      num(usage.total_tokens) ??
-      (input != null || output != null ? (input ?? 0) + (output ?? 0) : null);
 
-    if (usage.available === false || (cost == null && total == null && sess == null)) {
+    // SIN PLATA NO HAY PANTALLA. Antes, cuando el motor no reportaba costo, el
+    // titular caía en los tokens del período: un número gigante que no se puede
+    // cruzar con nada ("TOKENS 1,24 M"). Esconderlo es la respuesta honesta —
+    // "todavía no sé cuánto te salió" se entiende; 1,24 M no.
+    if (usage.available === false || cost == null) {
       return (
         <EmptyState
           icon={BarChart3}
-          title="Tu agente todavía no reporta métricas de uso"
-          hint="Cuando empiece a reportarlas, vas a ver acá cuánto te está saliendo."
+          title="Tu agente todavía no reporta cuánto te sale"
+          hint="Cuando el motor empiece a informarlo, vas a ver acá lo que costó cada período."
         />
       );
     }
 
-    // El titular es la plata. Si el motor no la reporta, caemos a los tokens
-    // antes que dejar la pantalla muda.
-    const conCosto = cost != null;
-    const tokensHint =
-      input != null && output != null
-        ? `${nf.format(input)} entrada · ${nf.format(output)} salida`
-        : null;
-
     const minis: { label: string; value: string; hint?: string | null }[] = [];
     if (sess != null) minis.push({ label: "Sesiones", value: nf.format(sess) });
-    // "Tokens 1,24 M" ocupaba el mismo lugar que "Sesiones" y no significaba
-    // nada para el cliente ("¿fichas? ¿como las del ómnibus?"). Cuando hay
-    // costo, la plata alcanza: los tokens quedan en el detalle del gráfico.
-    void total; void tokensHint;
-    if (!conCosto) {
-      if (input != null) minis.push({ label: "Tokens de entrada", value: nf.format(input) });
-      if (output != null) minis.push({ label: "Tokens de salida", value: nf.format(output) });
-    }
-    if (cost != null && sess != null && sess > 0) {
+    if (sess != null && sess > 0) {
       minis.push({ label: "Promedio por sesión", value: usd(cost / sess) });
     }
 
     const { days, hasData } = buildDays(Array.isArray(usage.daily) ? usage.daily : []);
-    // Si el motor no manda costo por día, el gráfico sigue sirviendo en tokens.
-    const porCosto = days.some((d) => d.cost > 0);
-    const valor = (d: Day) => (porCosto ? d.cost : d.input + d.output);
-    const max = Math.max(...days.map(valor), 0);
+    const max = Math.max(...days.map((d) => d.cost), 0);
 
     const canales = filas(usage.by_channel, rotuloCanal, true);
     const modelos = filas(usage.by_model, (n) => n, false);
-    
+
     return (
       <>
         <Card>
           <div className="flex items-center gap-2">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-              {conCosto ? "Costo del período" : "Tokens del período"}
+              Costo del período
             </p>
-            {conCosto && <Chip tone="neutral">estimado</Chip>}
+            <Chip tone="neutral">estimado</Chip>
           </div>
           <p className="mt-1.5 text-[38px] font-extrabold leading-none tabular-nums text-ink">
-            {cost != null ? usd(cost) : nf.format(total ?? 0)}
+            {usd(cost)}
           </p>
-          {conCosto && (
-            <p className="mt-2 text-[11px] leading-snug text-ink-soft">
-              Es lo que costó el trabajo de tu agente este período, estimado por el motor.
-              No incluye tu abono mensual y no es un cobro: lo mostramos para que veas
-              cuánto se usa.
-            </p>
-          )}
+          <p className="mt-2 text-[11px] leading-snug text-ink-soft">
+            Es lo que costó el trabajo de tu agente este período, estimado por el motor.
+            No incluye tu abono mensual y no es un cobro: lo mostramos para que veas
+            cuánto se usa.
+          </p>
 
           {minis.length > 0 && (
             <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-black/[0.07] pt-3.5 sm:grid-cols-3">
@@ -326,28 +305,23 @@ export default function UsoPage() {
           <Card className="mt-3">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-                {porCosto ? "Costo por día" : "Tokens por día"} · últimos {CHART_DAYS} días
+                Costo por día · últimos {CHART_DAYS} días
               </p>
               {max > 0 && (
-                <p className="text-[11px] tabular-nums text-ink-soft">
-                  máximo {porCosto ? usd(max) : nf.format(max)}
-                </p>
+                <p className="text-[11px] tabular-nums text-ink-soft">máximo {usd(max)}</p>
               )}
             </div>
             <div className="mt-4 flex h-40 items-end gap-1.5">
               {days.map((d) => {
-                const v = valor(d);
+                const v = d.cost;
                 const pct = max > 0 ? Math.max(Math.round((v / max) * 100), v > 0 ? 2 : 0) : 0;
-                const tokens = d.input + d.output;
                 return (
                   <div
                     key={d.key}
-                    title={
-                      tokens > 0 || d.cost > 0
-                        ? `${d.title}: ${usd(d.cost)} · ${nf.format(tokens)} tokens ` +
-                          `(${nf.format(d.input)} entrada · ${nf.format(d.output)} salida)`
-                        : `${d.title}: sin actividad`
-                    }
+                    // El globito también hablaba en tokens ("1.176 entrada ·
+                    // 165.562 salida"): en la pantalla de la plata, la barra
+                    // dice cuánto costó ese día y se terminó.
+                    title={v > 0 ? `${d.title}: ${usd(d.cost)}` : `${d.title}: sin actividad`}
                     className="group flex h-full flex-1 flex-col justify-end"
                   >
                     {v > 0 ? (

@@ -1,22 +1,41 @@
 "use client";
 
-// Archivos: workspace del agente, solo lectura (sin subir, sin borrar).
-// Contrato (adapter v0.3):
-//   GET {adapter}/portal/files        → { files: [{ path, size, mtime }] }
-//   GET {adapter}/portal/files/{path} → text/plain
+// Archivos: los papeles del agente y los del cliente, en el mismo lugar.
+// Contrato (adapter v0.3, subida ≥0.14):
+//   GET  {adapter}/portal/files        → { files: [{ path, size, mtime }] }
+//   GET  {adapter}/portal/files/{path} → text/plain
+//   POST {adapter}/portal/upload       → { ok, path: "workspace/entrada/…", bytes }
 // Lista navegable por carpetas (derivadas de los paths) + viewer en Modal.
 //
 // Convenciones del lado del agente que este módulo respeta:
 //   entregables/ → lo que el agente produce PARA el cliente (front-matter YAML
 //                  puesto por la skill `entregable`). Va primero en la raíz.
+//   entrada/     → el buzón: ahí caen los archivos que sube el cliente.
 //   interno/     → scripts, pruebas, andamiaje. Oculto salvo que se pida verlo.
+//
+// ESTA PANTALLA ERA DE SOLO LECTURA, y esa decisión no sobrevivió al primer
+// cliente. Una dueña de inmobiliaria, sin ninguna pista de qué es esto, lo
+// escribió así: "falta una pantalla que no existe: dónde meto YO mis papeles.
+// Si quiero darle mi planilla tengo que encontrar el clipcito del chat. Eso
+// debería ser lo primero que me pida". La subida ya existía —el adapter la
+// expone y el chat la usa— y estaba escondida en un ícono adentro de una
+// conversación. Ahora está donde la fue a buscar.
+//
+// PERO SÓLO SI EL AGENTE LA DECLARA. El portal sirve a cualquier agente Hermes:
+// si su manifiesto no trae `modules.upload`, acá no hay subida y la pantalla
+// vuelve a ser de lectura. Ofrecer un botón que el otro lado no tiene es la
+// forma más rápida de que el cliente crea que se rompió algo suyo.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Check, Code2, Download, Eye, File, FileCode, FileJson, FileText, Folder, FolderOpen,
-  Search, X, type LucideIcon,
+  Inbox, Search, Upload, X, type LucideIcon,
 } from "lucide-react";
-import { loadConfig, getFiles, getFileText, getFileBytes, type PortalConfig } from "../lib/agent";
+import {
+  loadConfig, getFiles, getFileText, getFileBytes, getManifest, uploadFile,
+  type Manifest, type PortalConfig,
+} from "../lib/agent";
 import {
   fechaHora, husoDe, husoDelNegocio, isoConHuso, momento, momentoDe, type Momento,
 } from "../lib/palabras";
@@ -26,6 +45,7 @@ import {
   Spinner, inputCls,
 } from "../lib/ui";
 import { FileBody, ImagenDelAgente } from "../lib/EntityViewer";
+import { nombreLegibleDeArchivo, tipoDeArchivo } from "../lib/nombres";
 import Spreadsheet, { CsvPreview } from "../lib/Spreadsheet";
 
 type FileEntry = { path: string; size?: number; mtime?: string | number };
@@ -47,6 +67,7 @@ const TEXT_EXT =
 
 const INTERNAL = "interno";     // andamiaje del agente: no es para el cliente
 const DELIVERABLES = "entregables"; // lo que el agente entrega al cliente
+const INBOX = "entrada";        // el buzón: lo que el cliente le deja al agente
 
 const is404 = (msg: string) => /^404\b/.test(msg);
 
@@ -60,10 +81,14 @@ const clean = (p: string) => (p || "").replace(/^\/+/, "");
 // aparte". Se siguen pudiendo ver con el interruptor de abajo.
 const SCRIPT_EXT = /\.(py|sh|bash|zsh|rb|pl|js|mjs|cjs|ts|tsx|jsx|ipynb)$/i;
 
+// LO QUE SUBE EL CLIENTE NUNCA ES ANDAMIAJE. La regla del script mira la
+// extensión venga de donde venga, así que un `.py` o un `.js` subido por el
+// cliente al buzón desaparecía de la lista — con el "listo, se lo dejaste a tu
+// agente" todavía arriba y la carpeta diciendo "todavía no le dejaste nada".
 const isInternal = (path: string) =>
   path === INTERNAL ||
   path.startsWith(`${INTERNAL}/`) ||
-  SCRIPT_EXT.test(path.split("/").pop() || "");
+  (!path.startsWith(`${INBOX}/`) && SCRIPT_EXT.test(path.split("/").pop() || ""));
 
 // Comparación insensible a tildes y mayúsculas (búsqueda y títulos duplicados).
 const norm = (s: string) =>
@@ -202,9 +227,10 @@ function entriesFor(files: FileEntry[], dir: string) {
   const folderList = Array.from(folders.entries())
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => {
-      // En la raíz, lo que es para el cliente va arriba de todo.
+      // En la raíz, lo que es para el cliente va arriba de todo: primero lo que
+      // el agente le entregó, después el buzón donde él le deja lo suyo.
       if (!dir) {
-        const rank = (n: string) => (n === DELIVERABLES ? 0 : 1);
+        const rank = (n: string) => (n === DELIVERABLES ? 0 : n === INBOX ? 1 : 2);
         if (rank(a.name) !== rank(b.name)) return rank(a.name) - rank(b.name);
       }
       return a.name.localeCompare(b.name, "es");
@@ -227,6 +253,7 @@ const carpetaDe = (path: string) => {
 export default function ArchivosPage() {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [files, setFiles] = useState<FileEntry[] | null>(null);
+  const [manifest, setManifest] = useState<Manifest | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // Dónde está parado el cliente lo dice la URL: `?carpeta=entregables` y
   // `?archivo=entregables/informe.md`. Así el agente puede mandar el link de un
@@ -265,6 +292,17 @@ export default function ArchivosPage() {
   }, [cfg]);
 
   useEffect(() => { load(); }, [load]);
+
+  // El manifiesto es el que dice si este agente acepta que le suban algo. Si no
+  // contesta, no se ofrece: ante la duda, la pantalla queda como estaba.
+  useEffect(() => {
+    if (!cfg) return;
+    let vivo = true;
+    getManifest(cfg).then((m) => { if (vivo) setManifest(m); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [cfg]);
+
+  const sePuedeSubir = manifest?.modules?.upload === true;
 
   // Entrar a una carpeta es navegar: cada una tiene su link y "atrás" sube.
   const goTo = (next: string) => {
@@ -332,7 +370,10 @@ export default function ArchivosPage() {
     cargarArchivo(abiertoPath);
   }, [abiertoPath, cargarArchivo]);
 
-  const viewerName = viewer ? viewer.path.split("/").pop() || viewer.path : "";
+  // El título del visor: el que puso el agente en el front-matter si lo hay, y
+  // si no el nombre en criollo. El nombre del archivo tal cual sigue abajo, con
+  // la ruta: es el dato que hace falta para reconocer lo que se baja.
+  const viewerName = viewer ? nombreLegibleDeArchivo(viewer.path) : "";
 
   // El archivo baja tal cual está en el workspace, byte por byte: se piden los
   // bytes de nuevo en vez de reusar el texto ya cargado, porque un binario que
@@ -375,6 +416,62 @@ export default function ArchivosPage() {
     }
   };
 
+  /* ── Dejarle algo al agente ─────────────────────────────────────────────── */
+
+  const inputSubida = useRef<HTMLInputElement | null>(null);
+  const [subiendo, setSubiendo] = useState(false);
+  const [errSubida, setErrSubida] = useState<string | null>(null);
+  const [reciensubidos, setRecienSubidos] = useState<string[]>([]);
+  const [arrastrando, setArrastrando] = useState(false);
+
+  // El acuse de recibo vive en la carpeta donde cayó lo que subiste: apenas te
+  // vas a otra, ya no está diciendo nada de lo que estás mirando.
+  useEffect(() => { if (dir !== INBOX) setRecienSubidos([]); }, [dir]);
+
+  /** Refresca la lista SIN vaciarla: después de subir, parpadear la pantalla
+   *  entera para agregar un renglón es perder de vista lo que acabás de dejar. */
+  const recargar = useCallback(() => {
+    if (!cfg) return;
+    getFiles(cfg)
+      .then((r) => setFiles(Array.isArray(r.files) ? r.files : []))
+      .catch(() => { /* la lista que hay sigue sirviendo */ });
+  }, [cfg]);
+
+  /** Sube lo que el cliente eligió (o soltó). Va todo al buzón `entrada/`: lo
+   *  decide el adapter, no nosotros, y por eso al terminar se abre esa carpeta
+   *  — que el archivo aparezca en algún lado que el cliente no está mirando es
+   *  lo mismo que no haberlo subido. */
+  const subir = async (lista: FileList | File[] | null) => {
+    const elegidos = Array.from(lista ?? []);
+    if (!cfg || elegidos.length === 0 || subiendo) return;
+    setSubiendo(true);
+    setErrSubida(null);
+    const nombres: string[] = [];
+    try {
+      for (const f of elegidos) {
+        const r = await uploadFile(cfg, f);
+        // El adapter devuelve "workspace/entrada/x.csv"; adentro del portal las
+        // rutas viven sin ese prefijo (es la raíz de todo lo que sirve).
+        const ruta = quitarPrefijo(r.path) ?? `${INBOX}/${f.name}`;
+        nombres.push(ruta);
+      }
+      setRecienSubidos(nombres);
+      recargar();
+      goTo(INBOX);
+    } catch (e) {
+      setErrSubida(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSubiendo(false);
+      if (inputSubida.current) inputSubida.current.value = "";
+    }
+  };
+
+  const soltar = (e: React.DragEvent) => {
+    e.preventDefault();
+    setArrastrando(false);
+    if (sePuedeSubir) subir(e.dataTransfer?.files ?? null);
+  };
+
   const { fm, fmBody } = useMemo(() => {
     if (!viewer || viewer.text === null) return { fm: null, fmBody: "" };
     const r = parseFrontMatter(viewer.path, viewer.text);
@@ -398,11 +495,23 @@ export default function ArchivosPage() {
     if (!files) return <Spinner />;
     if (files.length === 0) {
       return (
-        <EmptyState
-          icon={FolderOpen}
-          title="Todavía no hay archivos"
-          hint="Cuando tu agente genere reportes o documentos, van a aparecer acá."
-        />
+        <>
+          <EmptyState
+            icon={FolderOpen}
+            title="Todavía no hay archivos"
+            hint={sePuedeSubir
+              ? "Acá van a aparecer los informes y documentos que escriba tu agente. Y si querés que trabaje con algo tuyo —una planilla, un listado, un PDF—, dejáselo acá."
+              : "Cuando tu agente genere reportes o documentos, van a aparecer acá."}
+          />
+          {sePuedeSubir && (
+            <div className="flex justify-center">
+              <Btn onClick={() => inputSubida.current?.click()} disabled={subiendo}>
+                <Upload className="h-4 w-4" />
+                {subiendo ? "Subiendo…" : "Subir un archivo"}
+              </Btn>
+            </div>
+          )}
+        </>
       );
     }
 
@@ -418,8 +527,14 @@ export default function ArchivosPage() {
     const all = entriesFor(listed, dir);
     const needle = norm(q.trim());
     const folderList = needle ? all.folderList.filter((f) => norm(f.name).includes(needle)) : all.folderList;
+    // Se busca por las dos: el cliente escribe "hoja de ruta" (lo que ve) y el
+    // archivo se llama `2026-08-13-hoja-de-ruta-…` (lo que hay).
     const inDir = needle
-      ? all.inDir.filter((f) => norm(f.path.split("/").pop() || f.path).includes(needle))
+      ? all.inDir.filter((f) => {
+        const archivo = f.path.split("/").pop() || f.path;
+        return norm(archivo).includes(needle)
+          || norm(nombreLegibleDeArchivo(f.path)).includes(needle);
+      })
       : all.inDir;
     const hasEntries = all.folderList.length > 0 || all.inDir.length > 0;
     const crumbs = dir ? dir.split("/") : [];
@@ -480,9 +595,12 @@ export default function ArchivosPage() {
                   onClick={() => goTo(dir ? `${dir}/${f.name}` : f.name)}
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-black/[0.02]"
                 >
-                  <Folder className="h-4 w-4 shrink-0 text-ink-soft" />
+                  {!dir && f.name === INBOX
+                    ? <Inbox className="h-4 w-4 shrink-0 text-ink-soft" />
+                    : <Folder className="h-4 w-4 shrink-0 text-ink-soft" />}
                   <span className="min-w-0 truncate text-sm font-medium text-ink">{f.name}</span>
                   {!dir && f.name === DELIVERABLES && <Chip tone="violet">para vos</Chip>}
+                  {!dir && f.name === INBOX && <Chip tone="green">lo que le dejás</Chip>}
                   <span className="flex-1" />
                   <span className="shrink-0 text-[12px] tabular-nums text-ink-soft">
                     {f.count === 1 ? "1 archivo" : `${f.count} archivos`}
@@ -492,6 +610,14 @@ export default function ArchivosPage() {
             ))}
             {inDir.map((f) => {
               const name = f.path.split("/").pop() || f.path;
+              // EL NOMBRE DEL ARCHIVO NO ES UN NOMBRE. La skill `entregable` lo
+              // arma con la fecha adelante, todo en slug, y encima lo corta a
+              // los 56 caracteres: la clienta de prueba leyó
+              // `prueba-del-control-semanal-de-contratos-13-de-agosto-de-.md` y
+              // anotó "cortado a la mitad y con esas letras raras al final".
+              // Acá se muestra el nombre; el archivo, con su nombre real, es lo
+              // que se baja (y sigue a la vista en el visor y en el hover).
+              const titulo = nombreLegibleDeArchivo(f.path);
               const texty = TEXT_EXT.test(name);
               // Se puede ver ADENTRO del portal: texto plano o planilla.
               const verEnPortal = texty || esPlanilla(name) || esFoto(name);
@@ -503,9 +629,13 @@ export default function ArchivosPage() {
               // 3 h" no se cruza con nada: el cliente que quiere saber si el
               // informe es el de la mañana tenía que hacer la cuenta él, con SU
               // reloj, que es justamente el que acá no manda.
-              const meta = [fmtSize(f.size), fechaHora(f.mtime)].filter(Boolean).join(" · ");
+              // Con el nombre en criollo, el tipo deja de estar en el título:
+              // "XLSX" es lo que le dice al cliente que eso se abre con Excel.
+              const meta = [tipoDeArchivo(f.path), fmtSize(f.size), fechaHora(f.mtime)]
+                .filter(Boolean).join(" · ");
+              const recien = reciensubidos.includes(f.path);
               return (
-                <li key={`f-${f.path}`} className="group relative">
+                <li key={`f-${f.path}`} className={`group relative ${recien ? "bg-c-green/30" : ""}`}>
                   <div className="flex w-full items-center gap-3 px-4 py-2.5 transition hover:bg-black/[0.02]">
                     <Icon className="h-4 w-4 shrink-0 text-ink-soft" />
                     {/* El nombre abre lo que se puede ver —incluidas las
@@ -513,9 +643,9 @@ export default function ArchivosPage() {
                     <button
                       onClick={() => (verEnPortal ? openFile(f.path) : descargarRuta(f.path))}
                       className="min-w-0 flex-1 truncate text-left text-sm text-ink hover:underline"
-                      title={verEnPortal ? "Ver" : "Descargar"}
+                      title={name}
                     >
-                      {name}
+                      {titulo}
                     </button>
                     <span className="shrink-0 text-[12px] tabular-nums text-ink-soft group-hover:opacity-0 group-focus-within:opacity-0">
                       {meta}
@@ -551,7 +681,10 @@ export default function ArchivosPage() {
             })}
             {folderList.length === 0 && inDir.length === 0 && (
               <li className="px-4 py-6 text-center text-sm text-ink-soft">
-                {q ? "Ningún archivo coincide." : "Esta carpeta está vacía."}
+                {q ? "Ningún archivo coincide."
+                  : dir === INBOX && sePuedeSubir
+                    ? "Todavía no le dejaste nada. Subí una planilla, un listado o un PDF y tu agente lo va a tener acá."
+                    : "Esta carpeta está vacía."}
               </li>
             )}
           </ul>
@@ -590,12 +723,49 @@ export default function ArchivosPage() {
   const hasMeta = !!fm && (!!fm.tipo || !!fm.fecha || fm.tags.length > 0);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-6 md:px-8">
+    <div
+      className="relative mx-auto max-w-4xl px-6 py-6 md:px-8"
+      onDragOver={(e) => {
+        if (!sePuedeSubir) return;
+        e.preventDefault();
+        setArrastrando(true);
+      }}
+      onDragLeave={(e) => {
+        // Sólo cuando el puntero se va DE VERDAD: entrar a un hijo dispara
+        // dragleave del padre y el cartel titilaba con el mouse quieto.
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        setArrastrando(false);
+      }}
+      onDrop={soltar}
+    >
       <PageHeader
         title="Archivos"
-        subtitle="Todos los archivos que tu agente fue escribiendo"
-        actions={(dir || abiertoPath) ? <CopiarLink titulo="Copiar el link de esta carpeta" /> : undefined}
+        subtitle={sePuedeSubir
+          ? "Lo que tu agente fue escribiendo, y lo que vos le dejás"
+          : "Todos los archivos que tu agente fue escribiendo"}
+        actions={
+          <>
+            {(dir || abiertoPath) && <CopiarLink titulo="Copiar el link de esta carpeta" />}
+            {sePuedeSubir && files !== null && files.length > 0 && (
+              <Btn onClick={() => inputSubida.current?.click()} disabled={subiendo}>
+                <Upload className="h-4 w-4" />
+                {subiendo ? "Subiendo…" : "Subir un archivo"}
+              </Btn>
+            )}
+          </>
+        }
       />
+      {/* Uno solo, escondido, para el botón y para el vacío. `multiple` porque
+          nadie manda "la planilla" sin mandar también el listado de al lado. */}
+      {sePuedeSubir && (
+        <input
+          ref={inputSubida}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => subir(e.target.files)}
+        />
+      )}
       {/* El link apunta a un archivo que ya no está: se dice y queda la lista. */}
       {abiertoPath && files !== null
         && !files.some((f) => clean(f.path) === abiertoPath) && (
@@ -604,7 +774,37 @@ export default function ArchivosPage() {
           Abajo está todo lo que tenés hoy.
         </AvisoLinkViejo>
       )}
+      {errSubida && (
+        <p className="mb-4 rounded-lg border border-c-coral bg-c-coral/40 px-3 py-2 text-[12px] font-medium text-c-coral-ink">
+          No pude subir el archivo ({errSubida}).
+        </p>
+      )}
+      {/* SUBIRLO NO ES PEDIRLE NADA. El archivo queda en su buzón y el agente lo
+          va a encontrar ahí, pero nadie le avisó: prometer que "ya lo está
+          mirando" sería la clase de promesa que después no se cumple. Se dice
+          qué pasó y dónde se sigue. */}
+      {reciensubidos.length > 0 && (
+        <div className="mb-4 rounded-lg border border-c-green bg-c-green/30 px-3 py-2 text-[13px] leading-snug text-c-green-ink">
+          {reciensubidos.length === 1
+            ? "Listo, se lo dejaste a tu agente en Entrada."
+            : `Listo, le dejaste ${reciensubidos.length} archivos en Entrada.`}{" "}
+          Para que trabaje con {reciensubidos.length === 1 ? "esto" : "esos"},{" "}
+          <Link href="/app/chat" className="font-semibold underline underline-offset-2">
+            pedíselo por el chat
+          </Link>.
+        </div>
+      )}
       {body()}
+      {/* Soltar en cualquier parte de la pantalla, no en un rectángulo chiquito:
+          el cliente arrastra el archivo hacia "Archivos", no hacia un target. */}
+      {arrastrando && sePuedeSubir && (
+        <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-ink/10">
+          <div className="flex items-center gap-2 rounded-xl border border-primary bg-white px-4 py-3 text-sm font-semibold text-primary">
+            <Upload className="h-4 w-4" />
+            Soltalo acá y se lo dejo a tu agente
+          </div>
+        </div>
+      )}
       {viewer && !(viewer.err && /^404/.test(viewer.err)) && (
         <Modal wide onClose={cerrarVisor}>
           <div className="flex items-start justify-between gap-3 border-b border-black/[0.07] px-4 py-3">

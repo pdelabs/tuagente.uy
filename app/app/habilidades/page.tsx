@@ -83,6 +83,43 @@ function resumir(raw?: string): string | null {
   return cortado ? `${s}…` : s;
 }
 
+// Palabras funcionales inglesas que no existen en castellano rioplatense. Dos
+// juntas no salen de un texto escrito en Montevideo.
+const PALABRAS_INGLESAS =
+  /\b(the|and|or|when|with|from|your|you|use|used|using|create|creates|read|edit|write|writes|extract|convert|merge|split|fill|secure|into|file|files|document|documents|template|templates|spreadsheet|spreadsheets|scan|scans|text|image|images|tool|tools)\b/gi;
+
+/** ¿Este resumen está escrito para el CLIENTE, o es la ficha del motor?
+ *
+ *  Una skill tiene dos audiencias y un solo archivo: `description` le dice AL
+ *  AGENTE cuándo usarla (en inglés, en imperativo, nombrando librerías) y
+ *  `para_cliente` le dice AL CLIENTE qué consigue. El adapter arma el `summary`
+ *  con el segundo y CAE AL PRIMERO cuando no está
+ *  (`hermes-kit/adapter/portal_adapter.py:429`). Así llegaban a esta pantalla
+ *  —medido contra el agente del lab, 16 habilidades— cosas como "Create, read,
+ *  edit Word .docx documents and templates." o "Extract text from PDFs/scans
+ *  (pymupdf, marker-pdf)": la vitrina de lo que el agente sabe hacer, escrita
+ *  para el que lo programó.
+ *
+ *  Se decide con dos señales del propio dato, ninguna inventada acá:
+ *
+ *  1. `label` es el `titulo` del frontmatter, el nombre en criollo. Se escribe
+ *     junto con `para_cliente` —son los dos campos nuestros de la misma ficha—,
+ *     así que su ausencia dice que el resumen es el `description` del motor.
+ *     Vale sólo si el adapter conoce los títulos (≥0.23): contra uno viejo, que
+ *     no manda ninguno, esta señal apagaría TODOS los resúmenes.
+ *  2. el inglés, por si alguna skill trae `titulo` y no `para_cliente`.
+ *
+ *  Traducir acá a mano sería inventar un diccionario que se desincroniza con el
+ *  kit en el primer cambio. Lo que falta del lado del agente va como pedido al
+ *  kit; mientras tanto, la tarjeta muestra el nombre y se calla. */
+function escritoParaElCliente(
+  s: { resumen: string | null; label: string }, adapterConTitulos: boolean,
+): boolean {
+  if (!s.resumen) return false;
+  if (adapterConTitulos && !s.label) return false;
+  return (s.resumen.match(PALABRAS_INGLESAS) ?? []).length < 2;
+}
+
 type Skill = {
   name: string;       // crudo: es la clave del endpoint de edición
   nombre: string;     // legible
@@ -234,12 +271,28 @@ export default function CapacidadesPage() {
 
   const skills = useMemo<Skill[]>(() => {
     const crudas = Array.isArray(data?.skills) ? data!.skills : [];
-    return crudas
-      .filter((s): s is Capability => Boolean(s) && typeof s?.name === "string" && s.name.trim() !== "")
-      .map((s) => ({
+    const limpias = crudas.filter(
+      (s): s is Capability => Boolean(s) && typeof s?.name === "string" && s.name.trim() !== "");
+    // ¿El adapter conoce los títulos en criollo? (≥0.23). Si no manda ninguno
+    // es viejo, no que las skills no tengan ficha: ver `escritoParaElCliente`.
+    const adapterConTitulos = limpias.some((s) => (s.label || "").trim() !== "");
+    return limpias
+      // LAS `sin-…` NO SON HABILIDADES: SON LA FALTA DE UNA. `sin-busqueda-web`
+      // y `sin-imagenes` son el instructivo que lee el agente cuando le piden
+      // algo que no puede hacer ("qué entregar, cómo decirlo sin maquillarlo").
+      // En la vitrina de lo que sabe hacer salían como "Cuando no podés buscar
+      // en internet", que fue textual lo que la clienta de prueba señaló como
+      // escrito para el que lo programó. Lo que SÍ le sirve saber —que se puede
+      // prender la búsqueda web— es el catálogo de capacidades, que tiene su
+      // propia tarjeta y su propio texto.
+      .filter((s) => !(norm(String(s.origen ?? "")) === "tuagente" && /^sin-/.test(s.name)))
+      .map((s) => {
+        const label = (s.label || "").trim();
+        const resumen = resumir(s.summary);
+        return {
         name: s.name,
-        nombre: (s.label || "").trim() || legible(s.name),
-        resumen: resumir(s.summary),
+        nombre: label || legible(s.name),
+        resumen: escritoParaElCliente({ resumen, label }, adapterConTitulos) ? resumen : null,
         // SOLO un `editable: true` explícito. Antes, si el campo faltaba, se
         // deducía de `origen === "propia"` — y hay habilidades propias que el
         // adapter NO puede editar: las que viven adentro de una carpeta de
@@ -254,7 +307,8 @@ export default function CapacidadesPage() {
         editable: s.editable === true,
         origen: norm(String(s.origen ?? "")),
         cat: typeof s.categoria === "string" ? s.categoria.trim() : "",
-      }))
+        };
+      })
       .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   }, [data]);
 
