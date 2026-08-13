@@ -36,10 +36,48 @@ KIT_SKILLS="$AGENTE/kit-skills"
 # kit (transcribir, entrada-drive) y el primer agente nuevo salió sin ellas —
 # con el SOUL prometiendo transcripciones que el agente no podía hacer.
 # El destino de cada par es una ruta absoluta: no todo va al mismo lado.
+#
+# POLITICA/ VA ACA TAMBIEN, y hasta hoy no venía: `desplegar-remoto.sh` subía la
+# guardia, los tools.json, el parche del pairing y el cont-init, y un agente
+# LOCAL no recibía nada de eso. El síntoma no era un error sino un cliente
+# perdido: sin el parche, el primer mensaje del bot de Telegram sale en inglés
+# pidiéndole que corra `hermes pairing approve …` en una terminal, justo cuando
+# el portal le está diciendo "pegá el código acá". Dos instaladores para la
+# misma carpeta es la forma de que uno quede atrás; ahora los dos ponen lo
+# mismo y `--diff` lo controla.
+POLITICA="$AGENTE/politica"
 ARCHIVOS=(
   "adapter/portal_adapter.py:$DATA/scripts/portal_adapter.py"
   "connections/catalogo.json:$DATA/connections/catalogo.json"
+  # EL CATALOGO DE CAPACIDADES VA A politica/, NO A data/. Es el texto de la
+  # tarjeta que ve el cliente: en data/ el agente —que corre como root— podia
+  # reescribir lo que su cliente lee sobre lo que el agente puede hacer, y
+  # borrar el registro de pedidos. El markdown que el agente LEE ya estaba :ro
+  # en kit-skills/, o sea que podia mentirle al cliente pero no a si mismo.
+  "capacidades/catalogo.json:$POLITICA/capacidades/catalogo.json"
+  # El parche del mensaje de pairing y el cont-init que lo dispara. El .sh se
+  # monta como /etc/cont-init.d/03-parches y s6 lo corre en cada arranque,
+  # antes del gateway; el .py es lo que ese script ejecuta.
+  "tools/parche-pairing.py:$POLITICA/parche-pairing.py"
+  "tools/cont-init-parches.sh:$POLITICA/cont-init-parches.sh"
+  # La guardia de los MCP y el permiso de cada conexión: sin esto, una conexión
+  # configurada en config.yaml apunta a un archivo que no existe.
+  "mcp-guardia/guardia.py:$POLITICA/guardia.py"
 )
+# Los hooks se ARMAN desde el directorio, como las skills: el día que haya un
+# segundo hook, una lista a mano lo deja afuera y la puerta queda a medias.
+while IFS= read -r f; do
+  ARCHIVOS+=("politica/hooks/$(basename "$f"):$POLITICA/hooks/$(basename "$f")")
+done < <(find "$KIT/politica/hooks" -type f -name "*.py" ! -path "*/__pycache__/*" | sort)
+for c in "$KIT"/connections/*/tools.json; do
+  [[ -f "$c" ]] || continue
+  ARCHIVOS+=("connections/$(basename "$(dirname "$c")")/tools.json:$POLITICA/tools/$(basename "$(dirname "$c")").json")
+done
+while IFS= read -r f; do
+  rel="${f#"$KIT"/connections/}"           # mercadopago/mcp/servidor.py
+  conexion="${rel%%/*}"
+  ARCHIVOS+=("connections/$rel:$POLITICA/mcp/$conexion/${rel#"$conexion"/mcp/}")
+done < <(find "$KIT"/connections/*/mcp -type f ! -path "*/__pycache__/*" 2>/dev/null | sort)
 while IFS= read -r f; do
   rel="${f#"$KIT"/}"                       # skills/entregable/SKILL.md
   ARCHIVOS+=("$rel:$KIT_SKILLS/${rel#skills/}")
@@ -119,6 +157,31 @@ done
 for carpeta in workspace/entregables workspace/artifacts workspace/entrada workspace/interno; do
   mkdir -p "$DATA/$carpeta"
 done
+
+# LO EJECUTABLE DE politica/. Los hooks los corre el motor con su intérprete,
+# pero `cont-init-parches.sh` lo corre s6 por ruta: sin el bit de ejecución no
+# se aplica el parche y —como el cont-init es lo único que lo dispara— el
+# cliente recibe el mensaje de pairing en inglés sin un solo error en el log.
+chmod +x "$POLITICA"/hooks/*.py "$POLITICA/cont-init-parches.sh"
+
+# La política de la guardia. Se crea VACIA si no está, nunca se pisa: acá se
+# anota lo que cada cliente habilitó, y es del agente, no del kit.
+[[ -s "$POLITICA/politica.json" ]] || { echo '{}' > "$POLITICA/politica.json"; echo "creado politica/politica.json"; }
+
+# MIGRACION del catalogo de capacidades, que antes se instalaba en data/. Se
+# borra solo si es IDENTICO al del kit —o sea, nuestro y sin tocar—: un archivo
+# viejo en la ruta que el adapter ya no lee es una trampa para el que venga a
+# depurar. Si alguien lo edito, se avisa y se deja: borrar el trabajo de otro no
+# es idempotente.
+VIEJO="$DATA/capacidades/catalogo.json"
+if [[ -f "$VIEJO" ]]; then
+  if diff -q "$KIT/capacidades/catalogo.json" "$VIEJO" >/dev/null 2>&1; then
+    rm -f "$VIEJO"; rmdir "$DATA/capacidades" 2>/dev/null || true
+    echo "quitado data/capacidades/catalogo.json (ahora vive en politica/, de solo lectura)"
+  else
+    echo "OJO: data/capacidades/catalogo.json está editado y ya no se lee (el bueno es politica/capacidades/catalogo.json)"
+  fi
+fi
 
 # Manifiesto de QUÉ skills son del kit. El adapter lo usa para distinguir las
 # "del producto tuagente" (comunes a todos, sostienen pantallas del portal, no

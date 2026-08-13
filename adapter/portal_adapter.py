@@ -86,8 +86,20 @@ def ro(db):
     La garantia de no escribir la da `PRAGMA query_only`, que hace que SQLite
     rechace cualquier INSERT/UPDATE/DELETE a nivel motor. Asi el `-shm` nace
     con permisos normales y nosotros seguimos sin poder tocar nada.
+
+    TODA base del agente se abre POR ACA. No agregues un `sqlite3.connect(...
+    mode=ro)` suelto: hasta el 12/8/2026 habia dos —state.db en `_canal_usado`
+    y cron/executions.db en `_ultima_corrida`—, que es exactamente lo que este
+    helper existe para no hacer, y una de las dos era sobre la MISMA base que
+    empezo a devolver 500 en `/api/sessions`.
+
+    Y desde AFUERA del contenedor no se abre ninguna, ni de lectura: ver la
+    nota del README del kit ("Mirar las bases de un agente").
     """
-    conn = sqlite3.connect(f"file:{db}", uri=True)
+    # `timeout` es el busy timeout: si el motor esta escribiendo, esperamos en
+    # vez de devolverle un error al portal. Es el default de Python, explicito
+    # porque es una decision y no un descuido.
+    conn = sqlite3.connect(f"file:{db}", uri=True, timeout=5.0)
     conn.execute("PRAGMA query_only = ON")
     conn.row_factory = sqlite3.Row
     return conn
@@ -348,6 +360,10 @@ def manifest():
             "crons": CRON_JOBS.exists(),
             # La pestaña de conexiones solo si el kit dejo su catalogo.
             "connections": CONNECTIONS_CATALOG.is_file(),
+            # Igual que conexiones: la tarjeta `capacidad:<id>` solo si el kit
+            # dejo su catalogo. Sin esto el portal no puede condicionar nada y
+            # tiene que adivinar si el mecanismo existe en este agente.
+            "capacidades": CAPACIDADES_CATALOG.is_file(),
             # SIEMPRE encendida, aunque no haya ninguno todavía. Los flujos son
             # el producto: si para charlar el cliente tiene ChatGPT, lo que
             # justifica esto es que el agente HAGA cosas solo. La pestaña estaba
@@ -626,6 +642,23 @@ REQUERIDAS = DATA / "connections" / "requeridas.json"
 POLITICA_DIR = Path(os.environ.get("PORTAL_POLITICA_DIR", "/opt/politica"))
 POLITICA = POLITICA_DIR / "politica.json"
 
+# LAS CAPACIDADES VIVEN ACA POR LA MISMA RAZON, y antes vivian en DATA. El
+# catalogo es el texto de la tarjeta que ve el cliente: si esta en el volumen
+# del agente —que ademas corre como root— el agente puede reescribir lo que su
+# cliente lee sobre lo que el agente puede hacer, y borrar el registro de lo que
+# se pidio. El markdown que el agente LEE ya estaba :ro en kit-skills/, o sea
+# que podia mentirle al cliente pero no a si mismo: al reves de lo que hace
+# falta. En politica/ el contenedor del agente monta :ro y el del adapter rw,
+# asi que `pedidos.jsonl` lo escribe el adapter —otro proceso, otro montaje— y
+# el agente no lo puede tocar.
+CAPACIDADES_DIR = POLITICA_DIR / "capacidades"
+CAPACIDADES_CATALOG = CAPACIDADES_DIR / "catalogo.json"
+CAPACIDADES_PEDIDOS = CAPACIDADES_DIR / "pedidos.jsonl"
+# La mencion tal cual la pide el contrato: SOLA EN UNA LINEA. Anclada asi a
+# proposito — el `capacidad:imagenes` que aparece como ejemplo adentro de la
+# skill, o citado en medio de una frase, no es un pedido.
+MENCION_CAPACIDAD = re.compile(r"^\s*capacidad:([a-z0-9][a-z0-9-]{1,40})\s*$", re.M)
+
 # ---------- conexion Google self-service (flujo "google-oauth") ----------
 # El cliente toca "Conectar" en el portal, entra a Google, acepta y pega la
 # direccion final. El adapter genera la URL (PKCE) y canjea el codigo: el
@@ -789,7 +822,7 @@ def _ultima_corrida(job_id):
     if not job_id or not CRON_EXEC_DB.exists():
         return None
     try:
-        db = sqlite3.connect(f"file:{CRON_EXEC_DB}?mode=ro", uri=True)
+        db = ro(CRON_EXEC_DB)
         row = db.execute(
             "SELECT finished_at, status FROM executions WHERE job_id = ? "
             "ORDER BY rowid DESC LIMIT 1", (job_id,)).fetchone()
@@ -959,7 +992,7 @@ def _canal_usado(source):
     if not STATE_DB.exists():
         return True  # sin datos no acusamos "falta tu parte" en falso
     try:
-        db = sqlite3.connect(f"file:{STATE_DB}?mode=ro", uri=True)
+        db = ro(STATE_DB)
         row = db.execute("SELECT 1 FROM sessions WHERE source = ? LIMIT 1",
                          (source,)).fetchone()
         db.close()
@@ -1072,6 +1105,210 @@ def guardar_politica(conexion_id, cambios):
     tmp.write_text(json.dumps(actual, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(POLITICA)   # atomico: nunca un archivo a medio escribir
     return politica_de(conexion_id)
+
+
+def capacidades():
+    """Lo que el portal necesita para dibujar la tarjeta `capacidad:<id>`.
+
+    CONTRATO CON EL PORTAL (lo implementa la pestaña, no el agente):
+      GET  /portal/capacidades          -> {disponible, capacidades:[...]}
+      POST /portal/capacidades/pedido   -> {"texto": "...", "id": "<id>|null"}
+
+    Cada capacidad trae `activa`, que se calcula igual que las conexiones: por
+    PRESENCIA, nunca por valores. `activa` sale de `detecta`:
+      {"tool": "image_generate"}  -> la tool esta en el indice vivo del agente
+      {"kit_skill": "formato-redes"} -> la skill esta montada en kit-skills/
+
+    Lo que NO sale de aca: `instala`, `verifica` y `nota_interna`. Son nuestras
+    y hablan de maquina; el cliente ve `para_que`, `como` y `costo`.
+    """
+    try:
+        catalogo = json.loads(CAPACIDADES_CATALOG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"disponible": False, "capacidades": []}
+
+    tools = _tools_del_motor()
+    toolsets = _toolsets_del_agente()
+    del_kit = _kit_names()
+    salida = []
+    for c in catalogo.get("capacidades", []):
+        detecta = c.get("detecta") or {}
+        if detecta.get("tool"):
+            if tools is not None:
+                # La cuenta buena: la tool esta o no esta en el indice vivo.
+                activa = detecta["tool"] in tools
+            else:
+                # Sin el motor a mano solo se puede afirmar la AUSENCIA.
+                ts = (c.get("verifica") or {}).get("toolset")
+                activa = False if (toolsets is not None and ts and ts not in toolsets) else None
+        elif detecta.get("kit_skill"):
+            activa = detecta["kit_skill"] in del_kit
+        else:
+            activa = None
+        salida.append({
+            "id": c.get("id"),
+            "label": c.get("label"),
+            "grupo": c.get("grupo", "otras"),
+            "para_que": c.get("para_que", ""),
+            "como": c.get("como", ""),
+            "costo": c.get("costo", ""),
+            "esfuerzo": c.get("esfuerzo"),
+            "quien": c.get("quien"),
+            "activa": activa,
+        })
+    return {"disponible": True, "capacidades": salida}
+
+
+_TOOLS_CACHE = {"cuando": 0.0, "nombres": None}
+
+
+def _tools_del_motor():
+    """Las tools que el agente REALMENTE tiene, o None si no se pudo saber.
+
+    `/v1/toolsets` no sirve para esto: contesta el catalogo ESTATICO de cada
+    toolset. Dice `web_search` en `web` y `image_generate` en `image_gen` esten
+    disponibles o no — los dos casos verificados en el lab. Con eso, `activa`
+    nunca podia dar True para las dos capacidades que importan.
+
+    La cuenta buena la hace el motor con `get_tool_definitions()`, que aplica
+    los `check_fn` (es lo que decide, por ejemplo, que `image_generate` aparezca
+    recien cuando hay `image_gen.provider`). No hay endpoint que la exponga,
+    pero el adapter corre SOBRE LA MISMA IMAGEN que el motor: se importa y se
+    llama igual que en `agent_init.py:1390`, con las dos listas.
+
+    Es la unica parte del adapter que toca las internas del motor, asi que esta
+    envuelta entera: si la version nueva mueve el modulo o cambia la firma, esto
+    devuelve None y las capacidades vuelven a "no se sabe" — que es lo que se
+    mostraba antes. Se cachea 60 s: se llama una vez por pestaña abierta y la
+    respuesta solo cambia cuando alguien edita el config y reinicia el agente.
+    """
+    if _TOOLS_CACHE["nombres"] is not None and time.time() - _TOOLS_CACHE["cuando"] < 60:
+        return _TOOLS_CACHE["nombres"]
+    try:
+        import sys
+        import yaml
+        if "/opt/hermes" not in sys.path:
+            sys.path.insert(0, "/opt/hermes")
+        from model_tools import get_tool_definitions
+        with open(DATA / "config.yaml", encoding="utf-8") as fh:
+            cfg = yaml.safe_load(fh) or {}
+        definiciones = get_tool_definitions(
+            enabled_toolsets=(cfg.get("platform_toolsets") or {}).get("api_server"),
+            disabled_toolsets=(cfg.get("agent") or {}).get("disabled_toolsets") or [],
+        )
+        nombres = {(d.get("function") or d).get("name") for d in definiciones}
+    except Exception as exc:
+        # Se dice UNA vez y en el log del adapter, no en la respuesta: degradar
+        # en silencio es como se pierden estas cosas — este mismo bloque tapó un
+        # `NameError` mío por un import que faltaba, y desde afuera se veía
+        # igual que "el motor cambió".
+        if not _TOOLS_CACHE.get("avisado"):
+            _TOOLS_CACHE["avisado"] = True
+            print(f"[capacidades] sin lista real de tools ({type(exc).__name__}: {exc}); "
+                  "las capacidades por tool quedan en 'no se sabe'", file=__import__("sys").stderr, flush=True)
+        return None
+    if not nombres:
+        return None                      # algo salio mal: mejor "no se sabe"
+    _TOOLS_CACHE.update(cuando=time.time(), nombres=nombres)
+    return nombres
+
+
+def _toolsets_del_agente():
+    """Los toolsets que el gateway declara para esta plataforma, o None.
+
+    OJO CON LO QUE ESTO **NO** DICE. `/v1/toolsets` contesta `enabled` a nivel
+    TOOLSET; que un toolset este prendido no significa que sus tools existan:
+    `image_gen` figura enabled+configured y aun asi `image_generate` NO esta en
+    las tools del agente porque su check_fn da False sin proveedor. Verificado
+    en el laboratorio el 12/8.
+
+    Por eso esto sirve para decir que NO — si el toolset no esta, la capacidad
+    seguro falta — y nunca para decir que si. Lo demas queda en "no se sabe".
+
+    (La cuenta exacta la hace el motor con get_tool_definitions() ya filtrado por
+    check_fn, y no hay endpoint que la exponga. Se puede calcular importando el
+    motor desde el adapter —corre sobre la misma imagen—, pero eso ata el
+    adapter a las internas del motor; queda para cuando la tarjeta lo necesite.)
+    """
+    try:
+        req = urllib.request.Request(
+            f"{AGENT_BASE}/v1/toolsets",
+            headers={"Authorization": f"Bearer {TOKEN}"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            datos = json.loads(r.read())
+    except Exception:
+        return None
+    # Sin `or None` al final: un conjunto VACIO es una respuesta —el gateway
+    # contesto y no hay ningun toolset prendido— y colapsarlo en None lo hacia
+    # indistinguible de "no pude preguntar". Con esa confusion, un agente sin
+    # toolsets mostraba "no se sabe" en vez de "no la tiene".
+    return {ts.get("name") for ts in datos.get("data", []) if ts.get("enabled")}
+
+
+def _ids_del_catalogo():
+    try:
+        catalogo = json.loads(CAPACIDADES_CATALOG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    return {c.get("id") for c in catalogo.get("capacidades", []) if c.get("id")}
+
+
+def pedido_de_capacidad(texto, cap_id=None, origen="cliente"):
+    """Anota lo que se pidio y no estaba. Una linea JSON, append, sin llaves.
+
+    Es la pieza que hace que el costo marginal tienda a cero: el primer cliente
+    que pide algo cuesta trabajo nuestro; el segundo lo encuentra en el catalogo
+    y cuesta un clic. Y nos dice que falta MEDIDO, en vez de adivinar.
+
+    POR ESO SE VALIDA, y no es burocracia: este archivo se lee para decidir que
+    construimos. Una auditoria le metio un dict como `id`, 300 caracteres de
+    basura, filas repetidas y una fila entera vacia, y todo entro tal cual. Un
+    registro que acepta cualquier cosa deja de ser una medicion.
+
+      - `id` solo si esta en el catalogo; cualquier otra cosa entra como null y
+        el texto libre queda igual (que el cliente pida algo que no existe es
+        justamente el dato mas valioso);
+      - sin texto y sin id no hay pedido: eso es una fila fantasma;
+      - `origen` distingue quien lo pidio: el cliente apretando el boton, o la
+        mencion que escribio el agente. Son eventos distintos y mezclarlos
+        borraba la unica conversion que importa (cuantas ofertas terminan en
+        pedido);
+      - repetido exacto y seguido, no se anota dos veces: el doble clic del
+        portal contaba dos.
+    """
+    ident = str(cap_id).strip() if isinstance(cap_id, str) else ""
+    if ident not in _ids_del_catalogo():
+        ident = None
+    limpio = re.sub(r"\s+", " ", str(texto or "")).strip()[:500]
+    if not limpio and not ident:
+        return {"ok": False, "error": "hace falta un texto o un id del catálogo"}
+    fila = {
+        "fecha": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "agente": agent_name(),          # la flota escribe en archivos separados,
+        "origen": origen,                # pero el analisis los junta
+        "id": ident,
+        "texto": limpio,
+    }
+    CAPACIDADES_PEDIDOS.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        ultima = ""
+        if CAPACIDADES_PEDIDOS.is_file():
+            with CAPACIDADES_PEDIDOS.open(encoding="utf-8") as fh:
+                for ultima in fh:
+                    pass
+        previa = json.loads(ultima) if ultima.strip() else {}
+        if all(previa.get(k) == fila[k] for k in ("origen", "id", "texto")):
+            return {"ok": True, "repetido": True}
+    except (OSError, ValueError):
+        pass                              # el dedupe nunca puede impedir anotar
+    try:
+        with CAPACIDADES_PEDIDOS.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(fila, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        # Pasa si politica/ quedo montado :ro tambien para el adapter. Se dice,
+        # no se rompe: el cliente ya apreto el boton y no tiene la culpa.
+        return {"ok": False, "error": f"no pude anotar el pedido: {exc}"}
+    return {"ok": True}
 
 
 def connections():
@@ -2080,6 +2317,8 @@ class Handler(BaseHTTPRequestHandler):
                                         "content": ruta.read_text(encoding="utf-8")})
             if path == "/portal/connections":
                 return self._send(200, connections())
+            if path == "/portal/capacidades":
+                return self._send(200, capacidades())
             if path == "/portal/flujos":
                 return self._send(200, flujos())
             m = re.match(r"^/portal/flujos/([^/]+)$", path)
@@ -2181,14 +2420,43 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
+        # De paso, sin frenar el stream: si el agente escribio `capacidad:<id>`,
+        # queda anotado como pedido de origen "mencion". Es lo que hace REAL la
+        # medicion de demanda: el agente no corre ningun comando para dejar el
+        # registro —no puede, politica/ es :ro para el, y pedirle que lo haga
+        # seria una promesa mas que se le puede olvidar—, lo anota el adapter
+        # cuando el texto pasa por acá. El agente nunca promete que esto existe:
+        # su skill le dice que diga lo que no puede y nada mas.
+        # Solo se mira `assistant.completed`, que trae la respuesta ENTERA y ya
+        # terminada. Ni los deltas (parten la mención por la mitad), ni los
+        # resultados de tools: un `skill_view` de la skill `capacidad` devuelve
+        # el catálogo con `capacidad:imagenes` de ejemplo, y contarlo habría
+        # inventado demanda en cada lectura — justo la medición que queremos
+        # limpia.
+        menciones, evento = [], ""
         try:
             for line in upstream:
                 self.wfile.write(line)
                 self.wfile.flush()
+                texto = line.decode("utf-8", "replace")
+                if texto.startswith("event:"):
+                    evento = texto[6:].strip()
+                elif texto.startswith("data:") and evento == "assistant.completed":
+                    try:
+                        menciones += MENCION_CAPACIDAD.findall(
+                            json.loads(texto[5:]).get("content") or "")
+                    except (ValueError, AttributeError):
+                        pass
         except (BrokenPipeError, ConnectionResetError):
             pass  # el cliente corto el stream (boton detener): normal
         finally:
             upstream.close()
+        for ident in dict.fromkeys(menciones):  # después de cerrar: no le roba tiempo al chat
+            try:
+                pedido_de_capacidad("mención del agente en el chat", ident,
+                                    origen="mencion")
+            except Exception:
+                pass                            # anotar nunca puede romper una respuesta
 
     def _guardar_skill(self, nombre, body):
         """Escribe el SKILL.md de una habilidad NUESTRA desde el portal.
@@ -2351,6 +2619,15 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return self._send(400, {"error": "invalid JSON body"})
             return self._upload(body)
+        if path == "/portal/capacidades/pedido":
+            # Lo pide el PORTAL cuando el cliente toca "Pedirla", o cuando lo que
+            # hace falta no esta en el catalogo. El agente nunca llama a esto:
+            # el solo escribe `capacidad:<id>` en el chat.
+            cuerpo = self._read_json_body()
+            if cuerpo is None:
+                return self._send(400, {"error": "invalid JSON body"})
+            r = pedido_de_capacidad(cuerpo.get("texto"), cuerpo.get("id"))
+            return self._send(200 if r.get("ok") else 400, r)
         if path == "/portal/identity":
             body = self._read_json_body()
             if body is None:

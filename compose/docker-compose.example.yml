@@ -20,7 +20,10 @@ services:
       # Solo loopback: el portal llega por el adapter o por un túnel, nunca
       # exponiendo el gateway a internet.
       - "127.0.0.1:8642:8642"   # API server
-      - "127.0.0.1:9119:9119"   # dashboard (interno, no es para el cliente)
+      # El dashboard (9119) NO se publica: va apagado (ver HERMES_DASHBOARD más
+      # abajo). Si alguna vez hace falta mirarlo, se prende, se publica esta
+      # línea y se entra por un túnel SSH — nunca es para el cliente.
+      # - "127.0.0.1:9119:9119"
     volumes:
       - ./data:/opt/data
       # SOLO LECTURA, y es el punto entero: acá vive qué puede hacer el agente
@@ -34,17 +37,55 @@ services:
       # —que archiva a los 90 dias sin uso lo que toma por "creado por el
       # agente"— no las toca: una skill externa nunca es elegible.
       - ./kit-skills:/opt/kit/skills:ro
+      # s6 corre esto antes del gateway, en cada arranque. Hoy traduce al
+      # español el mensaje de pairing de Telegram, que viene hardcodeado en
+      # run.py y le pide al cliente que corra un comando de terminal —
+      # contradiciendo al portal, que le dice "pegá el código acá".
+      #
+      # EL ARCHIVO TIENE QUE EXISTIR ANTES DEL PRIMER `up`: Docker, al montar
+      # algo que no está, crea un DIRECTORIO con ese nombre, y un directorio en
+      # /etc/cont-init.d/ hace que s6 no levante nada. Lo pone `install.sh`, que
+      # corre antes — esta línea y esa copia van juntas o no van.
+      #
+      # Al ACTUALIZARLO en un agente que ya corre: `install.sh` lo copia con
+      # `cp`, que conserva el inodo, así que el contenedor ve el archivo nuevo y
+      # alcanza con reiniciarlo. Si lo pasás con rsync o con mv —que reemplazan
+      # el archivo— el montaje se queda con el viejo: ahí hace falta
+      # `docker compose up -d --force-recreate`.
+      - ./politica/cont-init-parches.sh:/etc/cont-init.d/03-parches:ro
       # La misma idea, y nos faltaba: config.yaml vive dentro de ./data y es
       # PROPIEDAD del agente. Verificado el 9/8/2026 — lo escribe. Ahí están
       # `disabled_toolsets` (donde apagamos cronjob a propósito) y el registro
       # de MCP: podía devolverse cronjob y saltearse la guardia esperando un
       # reinicio.
-      # En el PRIMER arranque Hermes lo escribe y lo migra: levantar una vez
-      # sin esta línea y agregarla después. Igual al subir de versión.
+      # Se creía que en el PRIMER arranque había que levantar SIN esta línea
+      # (Hermes escribe y migra el config) y agregarla después. Con v2026.7.30
+      # no hace falta: verificado el 12/8/2026 sobre un agente creado de cero,
+      # que arrancó bien con el archivo :ro desde el primer arranque. Al SUBIR
+      # DE VERSIÓN del motor la precaución sigue valiendo: si la nueva migra el
+      # config, se saca la línea, se arranca una vez y se vuelve a poner.
       - ./data/config.yaml:/opt/data/config.yaml:ro
     environment:
       - TZ=America/Montevideo
-      - HERMES_DASHBOARD=1
+      # DASHBOARD APAGADO. Con =1 el motor intenta bindear el dashboard en
+      # 0.0.0.0:9119, se niega porque no hay proveedor de auth configurado, s6
+      # lo reinicia, y vuelve a empezar. Medido en un agente local recién
+      # levantado (12/8/2026, Docker Desktop en macOS): 27 reinicios y 216
+      # líneas de log POR MINUTO, de un bloque de seis líneas que se repite.
+      #
+      # No rompe el agente: rompe `docker compose logs`, que en un alta es la
+      # única herramienta de diagnóstico que hay. Un ERROR de verdad tapado por
+      # 216 líneas de ruido es un ERROR que nadie ve.
+      #
+      # (Durante un tiempo esto decía =1 acá y =0 en el compose remoto, con un
+      # comentario que decía que "en la Mac no se nota porque igual queda detrás
+      # de 127.0.0.1". Es falso: el 127.0.0.1 es el mapeo del HOST, y adentro
+      # del contenedor el dashboard igual intenta 0.0.0.0. El loop es idéntico.)
+      - HERMES_DASHBOARD=0
+      # El consentimiento de los hooks va ACA y no en el allowlist de data/:
+      # ese vive en el volumen del agente, que lo puede borrar — y un hook sin
+      # consentimiento no corre, o sea que la puerta queda abierta sin ruido.
+      - HERMES_ACCEPT_HOOKS=1
       # Sin esto el browser descarta todas las respuestas del gateway.
       - API_SERVER_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy,http://localhost:8090
     env_file:

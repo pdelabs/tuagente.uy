@@ -59,19 +59,34 @@ printf 'data/.env\ndata/*.db*\ndata/cache/\ndata/logs/\n__pycache__/\n.DS_Store\
 # generados: mantenerlo en dos lados era garantia de que uno quedara viejo.
 cp "$KIT/compose/config.base.yaml" data/config.yaml
 
-# Borrador del SOUL: los bloques pegados, con los placeholders intactos.
-# La identidad va PRIMERO y AFUERA de los marcadores: es la parte que se escribe
-# cliente por cliente. Lo genérico va adentro de `kit:base`, con su versión —es
-# lo que después dice qué reglas corre este agente sin leerle el prompt entero,
-# y lo que le da sentido al bloque de precedencia que cierra la lista.
+# Borrador del SOUL: la identidad con los placeholders intactos, y abajo el
+# bloque del kit. La identidad va PRIMERO y AFUERA de los marcadores: es la
+# parte que se escribe cliente por cliente —incluidas las acciones sensibles
+# propias de la empresa— y es la que el reemplazo de version conserva palabra
+# por palabra. Lo generico va adentro de `kit:base`, con su version: es lo que
+# despues dice que reglas corre este agente sin leerle el prompt entero.
+#
+# El bloque sale del CONGELADO (soul/versiones/vN.md), no de pegar los .md acá:
+# tiene que ser byte a byte el mismo que instala `instalar-soul.sh` y contra el
+# que `reemplazar-bloque.py` va a comparar el dia que este agente suba de
+# version. Con dos composiciones distintas —esta no resolvia <RESPONSABLE>—, el
+# primer reemplazo veia esa diferencia como texto escrito por el cliente.
 # ($SOUL_VERSION se validó arriba, antes de crear nada.)
+BLOQUE="$KIT/soul/versiones/$SOUL_VERSION.md"
+[[ -f "$BLOQUE" ]] || {
+  echo "falta $BLOQUE: este kit nunca congeló el bloque $SOUL_VERSION." >&2
+  echo "   ./tools/instalar-soul.sh --bloque > soul/versiones/$SOUL_VERSION.md" >&2
+  exit 2
+}
+if ! "$KIT/tools/instalar-soul.sh" --bloque | diff -q "$BLOQUE" - >/dev/null; then
+  echo "los bloques de soul/ ya no componen lo que dice $BLOQUE." >&2
+  echo "Subí soul/VERSION y congelá la nueva, o volvé a congelar esta:" >&2
+  echo "   ./tools/instalar-soul.sh --bloque > soul/versiones/$SOUL_VERSION.md" >&2
+  exit 2
+fi
 {
   cat "$KIT/soul/00-identidad.md"; echo
-  echo "<!-- kit:base $SOUL_VERSION -->"; echo
-  for bloque in 01-aprobaciones 02-entrega 03-canales 04-lenguaje 05-precedencia; do
-    cat "$KIT/soul/$bloque.md"; echo
-  done
-  echo "<!-- /kit:base -->"
+  cat "$BLOQUE"
 } > data/SOUL.md
 
 cat > README.md <<README

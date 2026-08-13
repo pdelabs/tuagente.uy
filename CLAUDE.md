@@ -67,6 +67,26 @@ que el agente escribió para ese cliente. Las del kit ya no viven ahí: van en
 El porqué de cada perilla y el runbook para aplicarlo a un agente que ya existe:
 `notas/perillas-aplicadas.md`.
 
+## Capacidades: se piden, no se instalan
+
+Cuando al agente le falta con qué (generar una imagen, buscar en la web), no
+improvisa en silencio ni se instala nada: lo dice, y ofrece la capacidad con
+`capacidad:<id>` — el portal la dibuja como tarjeta con el texto de
+`capacidades/catalogo.json`, que es **cerrado** (lo que ya viene en la imagen
+del motor + lo que escribimos nosotros; sin hub) y que se instala en
+`politica/capacidades/`, no en `data/`: es texto que lee el cliente, y en el
+volumen del agente el agente lo podía reescribir. El registro de pedidos
+(`pedidos.jsonl`) vive al lado y lo escribe **el adapter**, que monta esa
+carpeta rw mientras el agente la tiene `:ro`. El disparador no depende de
+que el modelo se acuerde: las skills sombra (`sin-imagenes`,
+`sin-busqueda-web`) aparecen en su índice **solo cuando le falta la tool** y se
+retiran solas cuando está, con `metadata.hermes.fallback_for_tools`. Y la
+puerta —instalar software, poner una firma que no es la suya (`--author`,
+`--created-by`, `HERMES_PROFILE=`), desbloquearse solo— la cierra un hook en
+`politica/hooks/`, no la prosa. Bloquea la **familia**, no el comando, y el
+mensaje redirige a `capacidad` diciendo que no hay variante que pase: eso es lo
+que evita que el agente siga probando. Detalle: `notas/perillas-aplicadas.md`.
+
 ## Las tools de kanban se habilitan con DOS claves
 
 No hay plugin: Hermes ya las trae. Pero hace falta `toolsets: [kanban]` **y**

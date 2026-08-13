@@ -57,6 +57,12 @@ EXTERNAL_DIR = "/opt/kit/skills"
 MARCA_INICIO = "# <<< generado por tools/perilla-skills.py — no editar a mano"
 MARCA_FIN = "# >>> fin del bloque generado"
 
+# La línea de procedencia del bloque generado: de dónde salió ESTA lista. Se
+# escribe en el archivo (es lo que queda para el que audita) y se EXCLUYE de la
+# comparación que decide si el bloque cambió: si no, alternar --imagen/--agente
+# con la lista idéntica marcaba el bloque como "reemplazado".
+FUENTE = re.compile(r"^#   fuente: .*$", re.M)
+
 # Fallback si el archivo no está (una copia suelta del script). La fuente es
 # el archivo; esto evita que el script mienta por silencio.
 # OJO: tools/agente-check.py tiene el MISMO respaldo. Si tocás uno, tocá el
@@ -199,12 +205,22 @@ def desde_agente(data):
         return {l.split(":", 1)[0].strip() for l in fh if l.strip()}
 
 
-def bloque(nombres, fuente, permitidas_set):  # noqa: ARG001 — `fuente` se informa por stdout
+def bloque(nombres, fuente, permitidas_set):
     """El bloque `skills:` entero, listo para pegar en config.yaml.
 
     Sale la clave COMPLETA —`disabled` y `external_dirs`— a propósito: si el
     config tuviera dos `skills:`, YAML se queda con el último y el otro
     desaparece sin ruido.
+
+    `fuente` se ESCRIBE en el bloque. Un rato vivió solo en stdout —para que
+    alternar `--imagen` y `--agente` no marcara el bloque como cambiado con la
+    lista idéntica— y el remedio salió peor que la enfermedad: correr el
+    comando que el propio config documenta
+    (`--imagen <tag> --aplicar compose/config.base.yaml`) pisaba
+    `fuente: imagen nousresearch/hermes-agent:v2026.7.30` por un texto genérico.
+    O sea que el archivo que se lee para auditar perdía justo el dato por el que
+    se lo lee, y encima al subir de tag, que es cuando importa. Lo de comparar
+    sin la procedencia se resuelve al comparar, no al escribir: ver `que_cambio`.
     """
     apagadas = sorted(nombres - permitidas_set)
     quedan = sorted(nombres & permitidas_set)
@@ -212,7 +228,7 @@ def bloque(nombres, fuente, permitidas_set):  # noqa: ARG001 — `fuente` se inf
 
     lineas = [
         MARCA_INICIO,
-        "#   fuente: las skills que el motor trae instaladas",
+        f"#   fuente: {fuente}",
         f"#   apagadas: {len(apagadas)} · prendidas: {', '.join(quedan) or 'ninguna'}",
         "#",
         "# Regenerar al subir de tag el motor:",
@@ -237,6 +253,14 @@ def bloque(nombres, fuente, permitidas_set):  # noqa: ARG001 — `fuente` se inf
             "esta versión del motor no la trae."
         )
     lineas += [
+        "  # AUTO-MEJORA cada 25 turnos, no cada 10. El fork que escribe skills se",
+        "  # dispara por VOLUMEN de trabajo, no por calidad (turn_finalizer.py:633),",
+        "  # asi que cuanto mas sufre el agente sin la herramienta correcta, mas",
+        "  # probable es que canonice el sufrimiento. No se apaga —es la unica",
+        "  # senal de que le falta algo a un agente en produccion—: se acota y se",
+        "  # cosecha. Sin default declarado en config_defaults.py: vive como el",
+        "  # .get(..., 10) de agent_init.py:1706-1710.",
+        "  creation_nudge_interval: 25",
         "  # Las skills del kit, montadas de solo lectura desde el compose. Viven",
         "  # afuera de data/skills/ para que el agente no pueda reescribirlas y para",
         "  # que el curator no las archive a los 90 dias sin uso.",
@@ -245,6 +269,27 @@ def bloque(nombres, fuente, permitidas_set):  # noqa: ARG001 — `fuente` se inf
         MARCA_FIN,
     ]
     return "\n".join(lineas)
+
+
+def sin_fuente(bloque_texto):
+    """El bloque sin su línea de procedencia: lo que hay que comparar.
+
+    Lo que decide si un agente cambia de configuración es LA LISTA, no de dónde
+    la leímos. Dos corridas —una contra la imagen, otra contra el
+    `.bundled_manifest` de ese mismo agente— dan la misma lista y tienen que
+    informar "ya estaba igual", aunque la procedencia que quede escrita sea
+    distinta.
+    """
+    return FUENTE.sub("", bloque_texto).strip()
+
+
+def que_cambio(viejo, nuevo):
+    """Qué informar del bloque de skills: la lista, y aparte la procedencia."""
+    if viejo.strip() == nuevo.strip():
+        return "ya estaba igual"
+    if sin_fuente(viejo) == sin_fuente(nuevo):
+        return "misma lista, fuente al día"
+    return "reemplazado"
 
 
 def bloque_de_primer_nivel(texto, clave):
@@ -494,8 +539,7 @@ def aplicar(texto_bloque, ruta):
         ini, fin = texto.index(MARCA_INICIO), texto.index(MARCA_FIN) + len(MARCA_FIN)
         viejo = texto[ini:fin]
         texto = texto[:ini] + texto_bloque + texto[fin:]
-        acciones.append(("skills", "ya estaba igual" if viejo.strip() == texto_bloque.strip()
-                         else "reemplazado"))
+        acciones.append(("skills", que_cambio(viejo, texto_bloque)))
     else:
         if re.search(r"^skills:", texto, re.M):
             raise SystemExit(
@@ -592,9 +636,8 @@ def main():
         raise SystemExit(f"no encontré ninguna skill del motor en {fuente}")
     texto = bloque(nombres, fuente, permitidas())
     if args.aplicar:
-        # La procedencia se informa acá y no en el archivo: escrita adentro,
-        # cambiaba segun si corriste --imagen o --agente y el bloque figuraba
-        # como "reemplazado" con la lista idéntica.
+        # La procedencia se informa por pantalla Y queda escrita en el bloque:
+        # lo que nadie guarda es la pantalla.
         print(f"lista de skills leída de: {fuente}")
         aplicar(texto, args.aplicar)
     else:

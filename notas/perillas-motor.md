@@ -15,10 +15,14 @@ Tres fuentes, en orden de fuerza:
    Las citas `hermes:<archivo>:<línea>` son relativas a `/opt/hermes/` dentro de
    esa imagen.
 2. **El prompt efectivo de La Mano**, que el motor guarda entero en
-   `state.db`:
+   `state.db` — leída **desde adentro del contenedor**, nunca con el `sqlite3`
+   del host (ver el aviso de la sección 5):
    ```bash
-   sqlite3 "file:data/state.db?mode=ro&immutable=1" \
-     "select system_prompt from sessions where id='api-f78a7267839058f3';"
+   docker exec <cliente>-hermes python3 -c "
+   import sqlite3
+   c = sqlite3.connect('file:/opt/data/state.db?mode=ro', uri=True)
+   print(c.execute(\"select system_prompt from sessions where id='api-f78a7267839058f3'\").fetchone()[0])
+   "
    ```
    40.161 caracteres (40.792 bytes UTF-8), sesión `api_server` del 10/8/2026.
 3. **El request real al modelo**: `data/sessions/request_dump_cron_*.json`
@@ -394,10 +398,25 @@ skill en `.usage.json`); o montarlas como `external_dirs`, que las vuelve
 El motor guarda el prompt completo de cada sesión en la columna
 `sessions.system_prompt` (`hermes:hermes_state.py:2625-2705`, `3736-3741`).
 
+⚠️ **Se lee DESDE ADENTRO DEL CONTENEDOR.** Abrir `state.db` con el `sqlite3`
+del host sobre el bind mount **mata al gateway**: los locks de SQLite no cruzan
+la frontera host↔VM, el proceso de afuera toca el `-shm` que el motor tiene
+mapeado en memoria y el motor se cae con `Fatal Python error: Bus error`
+(reproducido el 12/8/2026: 57 de 60 pedidos a `/api/sessions` sin respuesta —
+ver "Mirar las bases de un agente" en el README del kit). Y `immutable=1`, que
+es lo que decía acá, **no es la salida**: le dice a SQLite que el archivo no
+cambia, así que ignora el `-wal` y te devuelve datos rancios. Para capturar
+*el prompt efectivo* eso es su propia trampa — la sesión que acabás de abrir
+todavía vive en el WAL y no la ves.
+
 ```bash
-sqlite3 "file:$DATA/state.db?mode=ro&immutable=1" \
-  "select id, source, length(system_prompt) from sessions
-    where system_prompt is not null order by rowid desc limit 5;"
+docker exec <cliente>-hermes python3 -c "
+import sqlite3
+c = sqlite3.connect('file:/opt/data/state.db?mode=ro', uri=True)
+for r in c.execute('''select id, source, length(system_prompt) from sessions
+                       where system_prompt is not null order by rowid desc limit 5'''):
+    print(*r)
+"
 ```
 
 Da una fila por sesión y por plataforma. Hoy en La Mano: `api_server` 40.160 ch,

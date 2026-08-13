@@ -36,6 +36,8 @@ import sys
 from pathlib import Path
 
 FLUJOS = Path("/opt/data/flujos")
+DATA = Path("/opt/data")
+CATALOGO = DATA / "connections" / "catalogo.json"
 
 # EL BINARIO SE RESUELVE, NO SE INVOCA POR NOMBRE. La herramienta `terminal` del
 # agente corre con un PATH saneado —/usr/local/bin:/usr/bin:/bin:/usr/local/games:
@@ -81,6 +83,48 @@ def cron(binario, *args, timeout=30):
     except (OSError, subprocess.TimeoutExpired) as e:
         return "", str(e)
     return (r.stdout or ""), (r.stderr or "")
+
+
+def conexiones_faltantes(ids):
+    """De las conexiones que el flujo declara, cuales NO estan puestas.
+
+    Mismas tres reglas que usa el adapter en `_falta_de` —variable de entorno,
+    archivo bajo data/, plugin nombrado en el config— sobre el MISMO catalogo
+    (data/connections/catalogo.json), que es la fuente de verdad. Los dos
+    procesos ven lo mismo: el compose les pasa el mismo `env_file` y el mismo
+    volumen.
+
+    OJO: `adapter/portal_adapter.py::_falta_de` tiene la copia gemela. Si tocas
+    una regla, toca las dos — el dia que se separen, el portal va a decir que
+    falta el correo y el flujo va a salir programado como si estuviera todo.
+
+    Si el catalogo no esta o no se puede leer devuelve [] a proposito: sin
+    catalogo no sabemos nada, y frenar la creacion de un flujo por eso seria
+    peor que dejarlo pasar (el portal igual muestra lo que falta).
+    """
+    ids = [i for i in ids if i]
+    if not ids:
+        return []
+    try:
+        catalogo = json.loads(CATALOGO.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    try:
+        config = (DATA / "config.yaml").read_text(encoding="utf-8")
+    except OSError:
+        config = ""
+    faltan = []
+    for c in catalogo.get("conexiones", []):
+        if c.get("id") not in ids:
+            continue
+        regla = c.get("detecta", {}) or {}
+        falta = [v for v in regla.get("env", []) if not os.environ.get(v, "").strip()]
+        falta += [a for a in regla.get("archivos", [])
+                  if not (DATA / a).is_file()]
+        falta += [p for p in regla.get("plugin", []) if p not in config]
+        if falta:
+            faltan.append(c.get("id"))
+    return faltan
 
 
 def _muy_frecuente(cron):
@@ -152,9 +196,24 @@ def main():
                 + " y en el PATH). Sin eso no puedo programar nada: NO cuentes que el "
                 "flujo quedó andando"
             )
-        prompt = (f"Trabaja el flujo {args.slug}: abri /opt/data/flujos/{args.slug}/FLUJO.md "
-                  "y segui sus instrucciones tal cual. Si el gatillo no encuentra nada "
-                  "nuevo, termina en silencio.")
+        # EL SILENCIO SOLO VALE PARA "NO HABIA NADA QUE HACER". Este prompt
+        # decia nada mas "si el gatillo no encuentra nada nuevo, termina en
+        # silencio", y una corrida que NO PODIA trabajar —el flujo semanal de
+        # precios con el correo sin conectar— caia en esa misma frase: corria,
+        # no podia leer la casilla, y se callaba. Para el cliente eso no se
+        # distingue de "no hubo cambios de precios esta semana": es la peor
+        # falla posible, la que parece exito. (QA de experiencia del 12/8.)
+        prompt = (
+            f"Trabaja el flujo {args.slug}: abri /opt/data/flujos/{args.slug}/FLUJO.md "
+            "y segui sus instrucciones tal cual. "
+            "Si lo trabajaste y no habia nada nuevo que hacer, termina en silencio. "
+            "PERO si NO PUDISTE trabajarlo —falta una conexion, una credencial "
+            "vencio, no tenes una herramienta—, NO termines en silencio: crea un "
+            "ticket en el tablero que diga que no pudiste, que falta y que se "
+            "pierde mientras tanto, y pedi lo que falte con la skill capacidad. "
+            "El cliente lee el silencio como 'no hubo novedades', asi que una "
+            "corrida que no pudo hacer su trabajo SIEMPRE deja rastro visible."
+        )
         salida, error = cron(binario, "create", args.cron, prompt,
                              f"--name=flujo-{args.slug}", "--deliver=local")
         m = re.search(r"Created job:\s*([0-9a-f]+)", salida)
@@ -201,13 +260,39 @@ def main():
     (carpeta / "FLUJO.md").write_text("\n".join(front) + f"\n\n{cuerpo}\n", "utf-8")
     (Path("/opt/data/workspace/entregables") / args.slug).mkdir(parents=True, exist_ok=True)
 
-    print(json.dumps({
+    # Lo ultimo que hace el script es mirar si el flujo puede hacer su trabajo
+    # HOY. Si le falta una conexion, el que crea el flujo se tiene que enterar
+    # ACA —no el lunes que viene— y decirselo al cliente con todas las letras.
+    # Antes esto salia con un "el portal se lo pide solo" tranquilizador: el
+    # portal efectivamente lo muestra en ambar, pero el agente le decia al
+    # cliente "listo, todos los lunes a las 9", y el cliente se quedaba con esa.
+    faltan = conexiones_faltantes(
+        [c.strip() for c in args.conexiones.split(",")]
+        if args.conexiones.strip().lower() not in ("ninguna", "-") else []
+    )
+    salida = {
         "ok": True,
         "flujo": str(carpeta / "FLUJO.md"),
         "cron_job": job_id or None,
-        "nota": "El cliente ya lo ve en su pestaña Flujos. Si le falta una conexion, "
-                "el portal se lo pide solo.",
-    }, ensure_ascii=False))
+        "conexiones_faltan": faltan,
+    }
+    if faltan:
+        salida["decile_al_cliente"] = (
+            "El flujo quedó armado, pero HOY no puede hacer su trabajo: falta "
+            + ", ".join(faltan)
+            + ". Decíselo al cliente en la misma respuesta en que le contás que "
+            "lo creaste —qué se pierde mientras tanto y cómo se conecta—, y pedí "
+            "la conexión con la skill capacidad. No le digas que quedó andando."
+        )
+        salida["nota"] = (
+            "El gatillo queda programado igual, a propósito: el día que se "
+            "conecte, arranca solo sin que nadie se acuerde de reactivarlo. Y si "
+            "corre sin la conexión, el prompt del gatillo le ordena dejar un "
+            "ticket visible en vez de terminar en silencio."
+        )
+    else:
+        salida["nota"] = "El cliente ya lo ve en su pestaña Flujos."
+    print(json.dumps(salida, ensure_ascii=False))
     return 0
 
 

@@ -92,6 +92,12 @@ MD
   `--conexiones ninguna`. Si toca una que no está conectada, declarala igual:
   así el portal la muestra en ámbar con el botón para conectarla, en vez de
   fingir que el flujo está completo.
+  **El script chequea cuáles de esas conexiones están puestas de verdad** y, si
+  falta alguna, te devuelve `conexiones_faltan` y un `decile_al_cliente`. Eso no
+  es decorativo: contale al cliente, en la misma respuesta en que le decís que
+  creaste el flujo, que hoy no puede trabajar y qué se pierde hasta que se
+  conecte. "Todos los lunes a las 9 te llega el resumen" a secas, con la casilla
+  sin conectar, es una promesa falsa.
 - El cuerpo (stdin) son TUS instrucciones para cuando trabajes el flujo:
   pasos, con qué skills, cuándo crear tickets, qué avisar. Sé concreto — tu yo
   de mañana lo va a seguir al pie de la letra. **Máximo 7 pasos y 320
@@ -112,6 +118,19 @@ MD
 Abrí su FLUJO.md y seguilo tal cual. Cada unidad de trabajo real (una
 entrevista, un resumen) = **un ticket** en el tablero, y sus entregables van
 con `entregable --flujo <slug>` para que caigan en la carpeta del flujo.
+
+**Una corrida que no pudo hacer su trabajo SIEMPRE deja rastro visible.** El
+silencio está reservado para "lo trabajé y no había nada nuevo". Si no pudiste
+—falta una conexión, venció una credencial, no tenés una herramienta— dejá un
+**ticket en el tablero** diciendo qué falta y qué se pierde mientras tanto, y
+pedí lo que falte con la skill `capacidad`. Nunca te quedes callado: el cliente
+lee el silencio de un flujo como "no hubo novedades", y con eso toma decisiones.
+Un flujo semanal de precios que corre sin la casilla conectada y se calla le
+hace creer que los proveedores no cambiaron nada.
+
+(Esto vale para CUALQUIER flujo, incluso los creados antes de esta regla: los
+gatillos viejos traen un prompt que solo hablaba del silencio. Para ponerle el
+texto nuevo a uno viejo: `hermes cron edit <job> --prompt="…"`.)
 
 ## Preferencias globales del cliente
 

@@ -58,6 +58,13 @@ apagaría al cliente su propio trabajo.
 La política —qué queda prendido— es `compose/skills-permitidas.txt`, y la leen
 el generador y `agente-check.py`.
 
+El bloque generado **anota de dónde salió la lista** (`#   fuente: imagen <tag>`
+o el `.bundled_manifest` que leyó): es lo que después contesta "¿de qué imagen
+salieron estos 70 nombres?" sin adivinar. Esa línea no cuenta para decidir si el
+bloque cambió —dos corridas con la misma lista y distinta fuente informan "misma
+lista, fuente al día", no "reemplazado"—, así que registrar la procedencia no
+hace ruido al migrar agentes.
+
 **El círculo cerrado.** Una blocklist es una foto: el día que el motor suba de
 tag y traiga `himalaya-2`, la lista vieja no la nombra y vuelve a haber una
 skill saliente prendida. Por eso `agente-check.py` compara el
@@ -255,6 +262,170 @@ que lee la web es `curl` por terminal, que es lo que el agente ya hace.
 `platform_toolsets.api_server` —no sacarlo de `disabled_toolsets`, que ahí no
 está—, poner las credenciales de Browserbase y **probar una captura antes de
 prometérselo**.
+
+## 2d. La puerta en código: los hooks
+
+El motor corre scripts nuestros **antes** de cada tool y, si contestan
+`{"action":"block"}`, no la ejecuta y le devuelve el mensaje al modelo
+(`agent/shell_hooks.py`; registro en `gateway/run.py:10499`). Es la primera vez
+que un guardrail de conducta del kit está en código y no en prosa.
+
+`politica/hooks/puerta.py` bloquea tres FAMILIAS, todas medidas en el QA o
+dejadas abiertas por él:
+
+| Qué | Por qué |
+|---|---|
+| instalar: `skills install/update/tap`, `mcp add`, `plugins install`, `hermes update`, `npm/npx`, `uv/uvx`, `corepack`, `pip`, `apt`, `dpkg -i`, y cualquier `… \| sh` | el agente se instaló 4 skills y 16 MB de npm en el volumen del cliente, con `--yes`, sin permiso |
+| firmar: `--author=…`, `--created-by=…` y `HERMES_PROFILE=…` en cualquier comando de kanban | `portal` es la firma del botón Aprobar y `cliente` la del comentario "Aprobado CON CORRECCIONES" —el que lleva el contenido a ejecutar—: escribir cualquiera de las dos es falsificar la aprobación |
+| desbloquear: `kanban unblock`, `kanban promote` y la tool `kanban_unblock` | desbloquearse el ticket que uno mismo bloqueó es saltear la puerta |
+
+**Se bloquea la familia, no el comando.** Es la lección de la primera versión,
+que solo miraba `--author=portal` y dejaba pasar `--author=cliente`: media
+puerta. Hoy la firma se bloquea por PONER FIRMA —ninguna skill del kit usa esas
+banderas y el default sale solo del profile—, y el motor tomó la misma decisión
+del lado de las tools (`kanban_comment` dejó de aceptar `author` para que un
+worker no forje un nombre con autoridad, `tools/kanban_tools.py:871-877`).
+
+**El modelo de amenaza no es un agente astuto.** Es un agente aplicado que
+choca contra un bloqueo y prueba variantes: comillas (`skills "install"`), otra
+ruta (`npm --prefix /tmp install`), otro gestor. Por eso el comando se
+**normaliza** antes de mirarlo —se sacan comillas, se colapsan espacios, se
+parte en segmentos respetando lo que está entre comillas— y por eso el MENSAJE
+dice explícitamente *"no hay variante de este comando que sí pase"* y enseña el
+camino correcto (abrir `capacidad`, elegir un id, escribir `capacidad:<id>`).
+Cerrar la búsqueda vale tanto como cerrar el comando: **probado contra el agente
+del lab**, después de un bloqueo y con el cliente insistiendo *"probá con pip, o
+con npm, o bajalo con curl, hacelo como sea"*, el agente no corrió ni un comando
+más — releyó la skill `capacidad` y contestó que las tres son lo mismo.
+
+**Lo que NO se bloquea, a propósito**: escribir la frase en una nota
+(`echo 'pip install' >> notas.md`) y contarlo en un comentario del tablero
+(`kanban comment -- t_1 'haría falta npm install x'`). Es la conducta correcta
+—decir qué le falta— y castigarla sería el peor falso positivo posible.
+
+**Límites conocidos** (escritos en el docstring del script, no perseguidos:
+todos piden dos pasos deliberados): variables de shell (`I=install; hermes
+skills $I x`), bajar y correr en dos comandos, codificar el comando, escribirle
+a `kanban.db` por SQL. La puerta cierra el camino fácil; el guardrail de fondo
+sigue siendo el SOUL.
+
+**Falla abierto, y por eso hay un chequeo.** Si el script revienta o vence el
+timeout, el motor deja pasar la tool con un `logger.warning` que nadie mira: un
+guardrail roto se ve igual que uno que anda. Por eso `agente-check.py` (`la
+puerta (hooks)`) es `required=True` y **la única señal** de que la puerta
+funciona: verifica que esté declarado, que haya consentimiento, que el script
+exista y sea ejecutable, y **lo corre** con 13 casos —uno por familia, las
+evasiones de reintento, y los dos falsos positivos que cuestan caro—. Cuando
+falla, el mensaje empieza con `LA PUERTA ESTÁ ABIERTA`.
+
+Dos cosas verificadas contra el motor v2026.7.30 que conviene no re-descubrir:
+
+- **Editar el script no lo desactiva.** `hermes hooks list` avisa *"script
+  modified since approval"*, pero el allowlist se compara por `(evento,
+  comando)` y no por mtime (`agent/shell_hooks.py:679-687`): el hook nuevo
+  corre igual. El aviso es cosmético.
+- **Qué gestores de paquetes existen de verdad** en la imagen (verificado el
+  2026-08-12 con `command -v`): npm, npx, uv, uvx, corepack, apt/apt-get, curl,
+  git, node, python3. **No** están pip, pipx, yarn, pnpm, poetry, conda, wget.
+  Por eso no hay patrones para yarn/pnpm/poetry —serían decorativos— pero sí
+  para `corepack`, que es el camino soportado para materializar yarn y pnpm. Si
+  cambia la imagen, hay que correr ese loop de nuevo.
+
+El consentimiento va en `hooks_auto_accept: true` y en `HERMES_ACCEPT_HOOKS=1`
+del compose, **nunca** en el allowlist de `data/`: ese vive en el volumen del
+agente, que lo puede borrar, y sin consentimiento el hook no corre.
+
+### El resto de `politica/`, que a un agente local no le llegaba
+
+`politica/` no son solo los hooks: ahí van también la guardia de los MCP
+(`guardia.py`), el permiso de cada conexión (`tools/<conexion>.json`), los
+servidores MCP propios y **el parche del mensaje de pairing**. Todo eso lo
+subía `desplegar-remoto.sh` a la VPS y `install.sh` no lo instalaba: un agente
+LOCAL se quedaba sin nada de eso. El síntoma no era un error sino un cliente
+perdido — sin el parche, el primer mensaje del bot de Telegram sale en inglés
+pidiéndole que corra `hermes pairing approve …` en una terminal, justo mientras
+el portal le dice "pegá el código acá".
+
+Ahora las dos rutas ponen lo mismo y los archivos entran en la lista que
+compara `install.sh --diff`, que es el control de deriva.
+
+**Las dos líneas van juntas.** El compose monta
+`./politica/cont-init-parches.sh:/etc/cont-init.d/03-parches:ro`, y si el
+archivo no está, Docker crea un **directorio** con ese nombre. Medido sobre un
+agente de cero: el contenedor **levanta igual** —s6 intenta ejecutarlo, escupe
+`Permission denied` … `exited 126` en el medio del log y sigue—, así que no hay
+nada roto a la vista y el cliente recibe el mensaje en inglés. Por eso
+`agente-check.py` lo chequea (`politica: parche del pairing`) antes de prender,
+y por eso el archivo lo pone `install.sh`, que corre antes del primer `up`.
+
+Verificado sobre un agente creado con `nuevo-agente.sh`: los 10 archivos en
+`politica/`, `cont-init: info: running /etc/cont-init.d/03-parches` →
+`[parche-pairing] aplicado` → `exited 0`, y adentro del contenedor el
+`run.py` con el texto en español y **cero** apariciones del inglés.
+
+Al actualizar el `.sh` en un agente que ya corre: `install.sh` usa `cp`, que
+conserva el inodo, así que alcanza con reiniciar. Con `rsync` o `mv` —que
+reemplazan el archivo— el montaje se queda con el viejo y hace falta
+`docker compose up -d --force-recreate`.
+
+## 2d-bis. Las capacidades: dónde vive el catálogo y qué se anota
+
+El catálogo (`capacidades/catalogo.json`) se instala en **`politica/capacidades/`**,
+no en `data/`. Es el texto que el cliente lee sobre lo que su agente puede hacer,
+y en el volumen del agente —que corre como root— el agente lo podía reescribir y
+podía borrar el registro de pedidos. El markdown que el agente LEE ya estaba
+`:ro` en `kit-skills/`: o sea que podía mentirle al cliente pero no a sí mismo,
+justo al revés de lo que hace falta. Verificado desde adentro del contenedor:
+`rm` y `>` sobre esa carpeta dan `Read-only file system`.
+
+`pedidos.jsonl` vive al lado y lo escribe **el adapter**, que monta `politica/`
+rw mientras el agente la tiene `:ro`. Se anotan dos cosas distintas, con
+`origen`: `cliente` (apretó el botón en la tarjeta) y `mencion` (el agente
+escribió `capacidad:<id>` y el adapter lo detectó al pasar el stream, mirando
+solo el evento `assistant.completed` — los deltas parten la mención al medio y
+un `skill_view` de la skill devuelve el catálogo con el ejemplo adentro, que
+habría inventado demanda en cada lectura).
+
+**Lo que el agente NO promete**: la skill decía "queda registrado del lado
+nuestro" para el caso en que no hay ninguna capacidad que aplique — y eso no lo
+anotaba nadie. Se sacó la promesa en vez de fabricarla: el agente dice qué no
+puede y sigue. Anotar la mención es cosa de la máquina, no una promesa suya.
+
+`activa` es de verdad. `/v1/toolsets` no sirve —contesta el catálogo ESTÁTICO de
+cada toolset: dice `web_search` y `image_generate` estén disponibles o no—, así
+que el adapter importa el motor (corre sobre la misma imagen) y llama
+`get_tool_definitions()` con las dos listas, igual que `agent_init.py:1390`. Es
+la única parte del adapter atada a las internas del motor: va envuelta, cachea
+60 s, y si algún día falla vuelve a "no se sabe" **avisando por el log** (la
+primera versión se tragó un `NameError` mío en silencio).
+
+**Las skills sombra no hay que sacarlas a mano.** Se retiran solas: verificado
+con `build_skills_system_prompt` — sin tools están las dos, con `image_generate`
+desaparece `sin-imagenes`, con `web_search` desaparece `sin-busqueda-web`, y
+`capacidad` queda siempre.
+
+**`imagenes` quedó verificada a medias, y el texto lo dice.** Con
+`image_gen: {provider: openrouter}` en el config, `image_generate` **aparece** en
+las tools (probado sobre un agente creado de cero: 27 tools contra 26, y
+`activa: true` en el endpoint). Lo que NO se probó es el primer render real: no
+hay clave con acceso a modelos de imagen, y el propio plugin avisa que los
+`openai/*` de OpenRouter pueden pedir habilitación de cuenta. Por eso el `como`
+que ve el cliente promete **una prueba con él**, no que quede andando.
+
+## 2e. Auto-mejora: cada 25, no cada 10
+
+`skills.creation_nudge_interval: 25`. El fork que escribe skills se dispara por
+**volumen de trabajo**, no por calidad (`turn_finalizer.py:633-637`): cuanto más
+sufre el agente por no tener la herramienta correcta, más probable es que
+canonice el sufrimiento — es la causa mecánica de la skill que fijaba "dibujar
+el SVG a mano" como método. No se apaga: hoy es la única señal que tenemos de
+qué le falta a un agente en producción. Se acota, y la cosecha (mirar lo que se
+escribió y subir lo bueno al kit) es trabajo humano pendiente.
+
+La clave **no tiene default declarado** en `config_defaults.py`: vive como el
+`.get(..., 10)` de `agent_init.py:1706-1710`, así que un bump del motor puede
+cambiar el número sin que nada falle.
+
 
 ## 3. Las skills del kit, afuera de `data/`
 

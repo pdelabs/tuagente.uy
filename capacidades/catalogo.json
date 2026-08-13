@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "_comentario": [
+    "Catalogo CURADO de capacidades. Hermano de connections/catalogo.json y",
+    "cerrado por la misma razon: el agente ELIGE un id de aca, nunca redacta un",
+    "pedido libre ni nombra una URL. Lo que corta la ingenieria social no es que",
+    "el agente se porte bien, es que no tiene donde escribir.",
+    "",
+    "UNA ENTRADA = UN TRABAJO QUE EL CLIENTE ENTIENDE, no una skill. 'Que sepa",
+    "hacer imagenes' por dentro son tres cosas (una clave de config, una",
+    "excepcion de skill del motor y una skill nuestra); el cliente ve una fila.",
+    "",
+    "El catalogo es CERRADO a lo que ya viene en la imagen del motor (los 66",
+    "skills apagadas + las 111 optional-skills) y a lo que escribimos nosotros.",
+    "Sin hub, sin repos de terceros: no hay skill_search, y TODO lo instalado y",
+    "visible entra al system prompt de CADA request — el costo es lineal.",
+    "",
+    "  para_que  -> que cambia en el trabajo del cliente, en sus palabras",
+    "  como      -> quien lo hace y cuanto tarda, en sus palabras",
+    "  detecta   -> como se sabe si la capacidad YA esta puesta en este agente",
+    "  instala   -> que hacemos NOSOTROS cuando el cliente dice que si",
+    "  verifica  -> que chequea capacidad-check contra la imagen del motor",
+    "",
+    "esfuerzo: minutos | horas | dias   (lo que tarda el alta, no el trabajo)",
+    "quien: cliente_solo | asistido | nosotros"
+  ],
+  "capacidades": [
+    {
+      "id": "imagenes",
+      "label": "Imágenes para publicaciones",
+      "grupo": "contenido",
+      "para_que": "Que el agente genere las imágenes de tus posts en vez de armarlas a mano, pieza por pieza.",
+      "como": "La prendemos nosotros y hacemos una prueba con vos antes de darla por buena.",
+      "costo": "Por imagen, dentro de tu cuota de modelos.",
+      "esfuerzo": "horas",
+      "quien": "nosotros",
+      "detecta": { "tool": "image_generate" },
+      "verifica": { "toolset": "image_gen", "imagen": true },
+      "instala": {
+        "config": { "image_gen": { "provider": "openrouter" } },
+        "excepciones": [],
+        "kit_skills": []
+      },
+      "nota_interna": "VERIFICADO el 12/8/2026 sobre un agente creado de cero: con `image_gen: {provider: openrouter}` en config.yaml, image_generate APARECE en las tools (check_image_generation_requirements pasa a True porque el plugin plugins/image_gen/openrouter existe en la imagen y su is_available() solo pide OPENROUTER_API_KEY, que todos nuestros agentes tienen). LO QUE SIGUE SIN VERIFICAR es el primer render de verdad: no se probo con una clave real, y el propio plugin avisa que los modelos openai/* en OpenRouter pueden pedir habilitacion de cuenta o BYOK (_FALLBACK_MODEL google/gemini-3-pro-image). Por eso el `como` promete una prueba con el cliente, no que quede andando. NO usar bfl: es video y pide cuenta paga de Nous. Al prender, COSECHA OBLIGATORIA de data/skills/*/social-content-workflows, que canoniza el SVG a mano."
+    },
+    {
+      "id": "busqueda-web",
+      "label": "Buscar en internet",
+      "grupo": "informacion",
+      "para_que": "Que el agente busque y lea páginas para responderte con datos de hoy, en vez de trabajar solo con lo que le contaste.",
+      "como": "Necesita una cuenta de un buscador. La contratamos y la dejamos puesta nosotros.",
+      "costo": "Una suscripción mensual del buscador, aparte de tu cuota de modelos.",
+      "esfuerzo": "dias",
+      "quien": "nosotros",
+      "detecta": { "tool": "web_search" },
+      "verifica": { "toolset": "web", "imagen": true },
+      "instala": {
+        "env": ["TAVILY_API_KEY"],
+        "config": { "web": { "backend": "tavily" } },
+        "kit_skills": []
+      },
+      "nota_interna": "Hoy check_web_api_key devuelve False en cada arranque y el agente lo suple con curl por terminal. Backends posibles: EXA_API_KEY, TAVILY_API_KEY, PARALLEL_API_KEY, BRAVE_SEARCH_API_KEY, Firecrawl o un SEARXNG_URL propio. ddgs no sirve: el paquete no esta en la imagen."
+    },
+    {
+      "id": "formato-redes",
+      "label": "Medidas y formatos de redes",
+      "grupo": "contenido",
+      "para_que": "Que lo que te entrega salga con la medida correcta de cada red (Instagram, LinkedIn, historias) sin que tengas que recortar nada.",
+      "como": "La escribimos nosotros y llega con la próxima actualización de tu agente.",
+      "costo": "Sin costo.",
+      "esfuerzo": "dias",
+      "quien": "nosotros",
+      "detecta": { "kit_skill": "formato-redes" },
+      "verifica": { "kit_skill": "formato-redes" },
+      "instala": { "kit_skills": ["formato-redes"] },
+      "nota_interna": "Todavia no escrita: es la entrada que prueba que el catalogo tambien cubre capacidades que el motor no conoce. Cuando exista, va al kit y llega a todos con install.sh."
+    }
+  ]
+}

@@ -5,6 +5,8 @@
 #   ./instalar-soul.sh root@1.2.3.4 east   # si el host ssh no se llama como el agente
 #   ./instalar-soul.sh --bloque            # imprime lo que instalaria, sin ssh y sin tocar nada
 #   ./instalar-soul.sh --reemplazar tuagente   # cambia el bloque viejo por el nuevo
+#   ./instalar-soul.sh --reemplazar --rescatar tuagente   # y ademas saca del bloque
+#                                              # lo que escribio el cliente adentro
 #
 # POR QUE EXISTE: `desplegar-remoto.sh` nunca instalaba SOUL. Los agentes
 # remotos corrian con los 800 bytes del preambulo de Nous y NADA mas: sin regla
@@ -24,9 +26,15 @@
 # Es idempotente: si ya hay un bloque —de la version que sea— no lo duplica.
 # Para PASAR de una version a otra esta `--reemplazar`, que saca el bloque viejo
 # y pone el nuevo conservando todo lo de afuera (la identidad, el bloque que
-# escribio el portal en el bautizo) y negandose si adentro del viejo hay algo
-# escrito para ese cliente. Antes esto era "saca el bloque viejo a mano", sobre
-# un archivo de 15 KB y por ssh.
+# escribio el portal en el bautizo). Antes esto era "saca el bloque viejo a
+# mano", sobre un archivo de 15 KB y por ssh.
+#
+# Y se niega si adentro del bloque viejo hay texto que no esta en el bloque
+# canonico de esa version (soul/versiones/vN.md): eso lo escribio una persona
+# para ESE cliente y el reemplazo se lo llevaria puesto. Lo imprime linea por
+# linea; con `--rescatar` lo mueve afuera del bloque —a la seccion "Lo que en
+# esta empresa no se hace sin permiso" de la identidad, que el reemplazo
+# conserva palabra por palabra— y recien ahi reemplaza.
 #
 # NECESITA python3 EN TU MAQUINA (no en el servidor): antes de subir nada corre
 # `agente-check.py --revisar` sobre el bloque que compuso. Sin python3 no
@@ -76,14 +84,24 @@ if [[ "${1:-}" == "--bloque" ]]; then
 fi
 
 REEMPLAZAR=0
-if [[ "${1:-}" == "--reemplazar" ]]; then
-  REEMPLAZAR=1
-  shift
+RESCATAR=()
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --reemplazar) REEMPLAZAR=1; shift ;;
+    # Se lo pasa tal cual a reemplazar-bloque.py: mueve lo que el cliente
+    # escribio adentro del bloque a la identidad, afuera, antes de reemplazar.
+    --rescatar)   RESCATAR=(--rescatar); shift ;;
+    *) echo "no conozco la opcion $1" >&2; exit 1 ;;
+  esac
+done
+if [[ ${#RESCATAR[@]} -gt 0 && $REEMPLAZAR -eq 0 ]]; then
+  echo "--rescatar solo tiene sentido con --reemplazar." >&2
+  exit 1
 fi
 
 HOST="${1:-}"
 [[ -n "$HOST" ]] || {
-  echo 'uso: ./instalar-soul.sh [--reemplazar] <host-ssh> [slug] | --bloque' >&2
+  echo 'uso: ./instalar-soul.sh [--reemplazar [--rescatar]] <host-ssh> [slug] | --bloque' >&2
   exit 1
 }
 # El directorio en la VPS es /opt/agentes/<slug>, y por defecto el slug es el
@@ -97,6 +115,32 @@ DIR="/opt/agentes/$SLUG"
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 componer > "$tmp"
+
+# El bloque que se instala tiene que ser IGUAL al congelado en
+# soul/versiones/$VERSION.md. Ese archivo no es documentacion: es contra lo que
+# `reemplazar-bloque.py` va a comparar el bloque de ESTE agente el dia que suba
+# a la version siguiente, y es lo unico que distingue "esto lo trajo el kit" de
+# "esto lo escribio una persona para este cliente". Si se instala un bloque que
+# no esta congelado, esa comparacion se queda sin linea de base y volvemos al
+# bug del 12/8: el reemplazo borra en silencio lo que agrego el cliente.
+CONGELADO="$KIT/soul/versiones/$VERSION.md"
+if [[ ! -f "$CONGELADO" ]]; then
+  echo "falta $CONGELADO: este kit nunca congelo el bloque $VERSION." >&2
+  echo "Sin eso, la proxima actualizacion de este agente no va a tener contra" >&2
+  echo "que comparar. Congelalo y volve a correr:" >&2
+  echo "   ./tools/instalar-soul.sh --bloque > soul/versiones/$VERSION.md" >&2
+  exit 1
+fi
+if ! diff -q "$CONGELADO" "$tmp" >/dev/null; then
+  echo "los bloques de soul/ ya no componen lo que dice $CONGELADO:" >&2
+  diff -u "$CONGELADO" "$tmp" | sed -n '3,40p' >&2
+  echo >&2
+  echo "O cambiaste soul/*.md sin subir soul/VERSION —y entonces hay dos cosas" >&2
+  echo "distintas llamadas $VERSION dando vueltas—, o el congelado quedo viejo." >&2
+  echo "Subi la version y congela la nueva, o volve a congelar esta:" >&2
+  echo "   ./tools/instalar-soul.sh --bloque > soul/versiones/$VERSION.md" >&2
+  exit 1
+fi
 
 # NADA sale de aca sin revisar, y se revisa ANTES de tocar la red: es una
 # propiedad del kit, no del servidor. Son las dos fallas mudas del SOUL, con el
@@ -141,7 +185,10 @@ if [[ $REEMPLAZAR -eq 1 ]]; then
   respaldo="$KIT/respaldos-soul/$SLUG-$(date +%Y%m%d-%H%M%S).md"
   cp "$viejo" "$respaldo"
   echo "   copia del SOUL viejo: $respaldo"
-  if ! python3 "$KIT/tools/reemplazar-bloque.py" "$viejo" "$tmp" > "$nuevo"; then
+  # `${a[@]+"${a[@]}"}`: con `set -u` y bash 3.2 —el de macOS—, expandir un
+  # array vacio con "${a[@]}" a secas aborta el script.
+  if ! python3 "$KIT/tools/reemplazar-bloque.py" "$viejo" "$tmp" \
+       ${RESCATAR[@]+"${RESCATAR[@]}"} > "$nuevo"; then
     echo >&2
     echo "No toqué nada en $HOST." >&2
     exit 1

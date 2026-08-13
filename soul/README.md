@@ -5,16 +5,24 @@ romper. Se arma pegando estos bloques en orden y reemplazando lo que está
 `<ENTRE CORCHETES>`.
 
 ```
-00-identidad.md      ← del cliente, se escribe cada vez, y va AFUERA del bloque
-<!-- kit:base v3 -->
-01-aprobaciones.md   ← la regla dura, ya genérica; adentro tiene un comentario
-                       para sumarle lo sensible de esta empresa
+00-identidad.md      ← del cliente, se escribe cada vez, y va AFUERA del bloque.
+                       Adentro va la sección "Lo que en esta empresa no se hace
+                       sin permiso": las acciones sensibles propias del negocio
+<!-- kit:base v7 -->
+01-aprobaciones.md   ← la regla dura, genérica; apunta a esa sección de arriba
 02-entrega.md        ← genérico, va tal cual
 03-canales.md        ← genérico, va tal cual
 04-lenguaje.md       ← genérico, va tal cual
 05-precedencia.md    ← genérico, cierra el bloque: la regla de desempate
 <!-- /kit:base -->
 ```
+
+**Nada propio de un cliente va adentro del bloque.** El bloque se reemplaza
+entero cuando sube la versión del kit; lo de afuera se conserva palabra por
+palabra. Por eso las acciones sensibles de la empresa viven en la identidad, no
+en `01-aprobaciones.md`, y la REGLA DURA las trae por referencia ("y todo lo que
+diga la sección … de tu identidad"). Costó cuatro líneas perdidas aprenderlo:
+está contado abajo, en «El bloque canónico de cada versión».
 
 Lo hacen solos `nuevo-agente.sh` (un agente nuevo) y `tools/instalar-soul.sh`
 (uno que ya existe y no lo tiene). A mano se pega igual, en ese orden y con los
@@ -37,14 +45,20 @@ Los bloques genéricos van envueltos entre `<!-- kit:base v3 -->` y
 
 ```bash
 tools/instalar-soul.sh --reemplazar <host> [slug]
+tools/instalar-soul.sh --reemplazar --rescatar <host> [slug]
 ```
 
 Saca el bloque viejo entre marcadores y pone el nuevo **conservando todo lo de
 afuera**: la identidad y el `portal:identidad` que escribió el bautizo. Antes de
-subir nada deja una copia del SOUL viejo en tu máquina, y **se niega** si adentro
-del bloque viejo hay texto puesto para ese cliente —el comentario `por-cliente`
-de `01-aprobaciones.md`, donde van sus acciones sensibles— para que no se pierda
-sin que nadie se entere: lo imprime y te manda a copiarlo primero.
+subir nada deja una copia del SOUL viejo en tu máquina.
+
+Y **se niega** si adentro del bloque viejo hay texto que no está en el bloque
+canónico de esa versión: eso lo escribió una persona para ese cliente y el
+reemplazo se lo llevaría puesto. Lo imprime línea por línea; con `--rescatar` lo
+mueve afuera del bloque —a la sección "Lo que en esta empresa no se hace sin
+permiso" de la identidad— y recién ahí reemplaza. Si además le faltan o le
+cambiaron líneas del kit, se planta sin ofrecer nada: alguien editó las reglas y
+eso lo mira una persona.
 
 La versión vive en `soul/VERSION`: una línea, con forma `vN`. De ahí la leen
 `nuevo-agente.sh`, `tools/instalar-soul.sh` y `tools/agente-check.py`, y si el
@@ -54,6 +68,32 @@ Se sube cuando aparece una regla nueva o cuando una cambia de sentido: o sea,
 cuando los agentes ya instalados quedan atrás y hay que reinstalarles el bloque.
 `v1` es el marcador sin versión, de antes de que esto existiera, y
 `agente-check.py` lo reporta como tal.
+
+## El bloque canónico de cada versión
+
+`soul/versiones/vN.md` es el bloque **tal cual salió** esa versión, congelado.
+No es documentación: es la única forma de mirar el bloque de un agente y saber
+qué de ahí adentro lo escribió el kit y qué lo escribió una persona. Sin eso,
+`reemplazar-bloque.py` no puede distinguir una cosa de la otra —y el 12/8/2026,
+cuando comparaba solo los comentarios `<!-- por-cliente: … -->`, un reemplazo
+v4→v5 se llevó puestas las cuatro acciones sensibles de una empresa con exit 0 y
+tres avisos tranquilizadores.
+
+**Al subir la versión hay que congelarla**, y los tres scripts que componen el
+bloque se niegan si no lo hiciste:
+
+```bash
+echo v7 > soul/VERSION
+./tools/instalar-soul.sh --bloque > soul/versiones/v7.md
+```
+
+`v2`, `v3` y `v4` se reconstruyeron desde el git del kit (la composición no
+cambió entre esas versiones); el `v4` reconstruido salió **byte a byte igual** al
+bloque que tiene el agente de producción, que es lo que dice que la
+reconstrucción es la buena. De `v1` no hay canónico posible: bajo ese marcador
+pelado convivieron varios bloques. Para esos casos, `reemplazar-bloque.py` pide
+`--canonico <archivo>` o `--sin-canonico`, que es una afirmación tuya, no del
+script, y así lo dice el aviso.
 
 ## Los comentarios del SOUL tienen cinco palabras prohibidas
 
@@ -65,9 +105,9 @@ comentario: **descarta el SOUL entero** y deja en su lugar un
 identidad y sin reglas, contesta como si nada, y el único rastro es una línea en
 el log del motor.
 
-O sea que un comentario `por-cliente` bienintencionado —"ignore los mails de
-facturación", "override de precios para mayoristas", "los datos hidden del
-panel"— le apaga al agente todas las reglas, en silencio. Escribilos en español
+O sea que un comentario bienintencionado en la identidad de un cliente —"ignore
+los mails de facturación", "override de precios para mayoristas", "los datos
+hidden del panel"— le apaga al agente todas las reglas, en silencio. Escribilos en español
 y sin esas palabras. Lo chequea `agente-check.py`, que para eso mira todos los
 comentarios del SOUL, no solo los nuestros.
 
@@ -113,12 +153,14 @@ O sea: **la palanca grande son las herramientas, no la prosa.** Sacar `tts` y
 párrafos. Antes de podar el SOUL, mirá `agent.disabled_toolsets` en el
 `config.yaml`.
 
-Regla práctica: los bloques genéricos rondan los 14 KB —eran 11 antes de la
-regla dura genérica y del bloque de precedencia— y cada regla que tienen está
-porque algo falló sin ella. Lo que sí conviene cuidar es **la parte del cliente**
-(`00-identidad` y las acciones sensibles propias): si eso pasa de ~4 KB, algo de
-ahí debería ser una skill o un entregable de referencia, no prompt. Por ahí anda
-el aviso de `agente-check.py`, que mira el SOUL entero.
+Regla práctica: el bloque genérico creció y hay que mirarlo —11 KB antes de la
+regla dura genérica, 14,4 KB en `v2`, **19,2 KB en `v7`**, y se puede medir
+exacto con `wc -c soul/versiones/*.md`— y cada regla que tiene está porque algo
+falló sin ella. Lo que sí conviene cuidar es **la parte del cliente**
+(`00-identidad`, incluidas sus acciones sensibles): si eso pasa de ~4 KB, algo de
+ahí debería ser una skill o un entregable de referencia, no prompt. Ojo con el
+aviso de `agente-check.py`: mira el SOUL entero, así que hoy se dispara por el
+tamaño del bloque del kit y no por lo que escribió el cliente.
 
 ## Lo que el agente NO tiene que saber
 

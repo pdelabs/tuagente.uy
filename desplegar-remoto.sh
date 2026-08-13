@@ -62,7 +62,7 @@ mkdir -p /opt/agentes
 REMOTO_SCRIPT
 
 # ── 2. Estructura ─────────────────────────────────────────────────────────
-ssh "$SERVIDOR" "mkdir -p $REMOTO/data/skills $REMOTO/data/scripts $REMOTO/kit-skills $REMOTO/politica/tools"
+ssh "$SERVIDOR" "mkdir -p $REMOTO/data/skills $REMOTO/data/scripts $REMOTO/kit-skills $REMOTO/politica/tools $REMOTO/politica/hooks"
 
 # ── 3. El kit ─────────────────────────────────────────────────────────────
 echo "→ subiendo el kit"
@@ -89,8 +89,23 @@ if ! ssh "$SERVIDOR" "grep -q 'enabled: true' $REMOTO/data/config.yaml 2>/dev/nu
 else
   echo "→ config.yaml ya configurado, no lo toco"
 fi
-ssh "$SERVIDOR" "mkdir -p $REMOTO/data/connections"
+ssh "$SERVIDOR" "mkdir -p $REMOTO/data/connections $REMOTO/politica/capacidades"
 rsync -a "$KIT/connections/catalogo.json" "$SERVIDOR:$REMOTO/data/connections/"
+
+# LO QUE INSTALA install.sh Y ACA FALTABA. Este script y install.sh son dos
+# instaladores del mismo kit con dos listas a mano, y la deriva ya se cobró dos
+# piezas —en un sentido, politica/ no llegaba a los agentes locales; en el otro,
+# esto no llegaba a los remotos, que son los de los clientes de verdad—:
+#   - el catálogo de capacidades, que es lo que el adapter sirve en
+#     /portal/capacidades: sin él, el agente escribe `capacidad:<id>` y el
+#     portal no tiene con qué dibujar la tarjeta. Va a politica/ y no a data/:
+#     es el texto que ve el cliente y el agente no lo puede reescribir;
+#   - el manifiesto de skills del kit, que el portal usa para no ofrecer editar
+#     la skill que sostiene una de sus pestañas;
+#   - las carpetas del workspace, que las skills dan por sentadas.
+rsync -a "$KIT/capacidades/catalogo.json" "$SERVIDOR:$REMOTO/politica/capacidades/"
+ssh "$SERVIDOR" "mkdir -p $REMOTO/data/workspace/entregables $REMOTO/data/workspace/artifacts $REMOTO/data/workspace/entrada $REMOTO/data/workspace/interno"
+ls -1 "$KIT/skills" | ssh "$SERVIDOR" "cat > $REMOTO/data/skills/.kit_manifest"
 
 # Un tools.json por conexión, con el nombre de la carpeta: es como los busca la
 # guardia (GUARDIA_TOOLS=/opt/politica/tools/<conexion>.json).
@@ -105,6 +120,12 @@ done
 # directo. (Faltaba: la primera corrida del script subió solo los tools.json y
 # la guardia quedó sin subir.)
 rsync -a "$KIT/mcp-guardia/guardia.py" "$SERVIDOR:$REMOTO/politica/guardia.py"
+# LOS HOOKS, que son la puerta en codigo: bloquean instalar software, firmar
+# como el portal y desbloquearse solo. Van en politica/, que se monta :ro — si
+# vivieran en data/ el agente podria editarlos, y un guardrail que el guardado
+# puede cambiar no es un guardrail.
+rsync -a "$KIT/politica/hooks/" "$SERVIDOR:$REMOTO/politica/hooks/"
+ssh "$SERVIDOR" "chmod +x $REMOTO/politica/hooks/*.py"
 rsync -a "$KIT/tools/parche-pairing.py"      "$SERVIDOR:$REMOTO/politica/"
 rsync -a "$KIT/tools/cont-init-parches.sh"  "$SERVIDOR:$REMOTO/politica/"
 ssh "$SERVIDOR" "chmod +x $REMOTO/politica/cont-init-parches.sh"

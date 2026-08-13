@@ -78,6 +78,66 @@ corrigieron). Eso es tu cliente apretando Aprobar.
 - **Rechazo**: el ticket **queda bloqueado** y el comentario `portal` dice el
   motivo. No se ejecuta nada.
 
+## Una corrección aprobada es lo único que vale, y hay que anclarla
+
+El portal **no puede** corregir el cuerpo del ticket (el CLI solo edita tareas ya
+terminadas), así que la corrección entra como comentario `cliente` y el cuerpo
+queda diciendo lo viejo. Eso es una bomba de tiempo: **todo lo que deriva una
+tarea de otra lee título y cuerpo, nunca los comentarios.**
+
+Pasó de verdad el 12/8/2026 y costó plata: la clienta aprobó *"pedile 20 no 8, y
+para el jueves"*, el ticket se trabó dos veces por otra causa, el motor lo mandó
+a `triage` y su auto-decomposer lo partió en dos tareas hijas **sacadas del
+cuerpo original**. Las hijas decían 8. Diez minutos después el portal le pedía
+aprobar, por tercera vez, un pedido de 8 —*"sin datos adicionales de cantidad"*—
+y con el correo conectado al proveedor le llegaban 8 en vez de 20.
+
+Entonces, apenas te aprueban con corrección:
+
+1. **Anclala en el cuerpo de lo que la va a ejecutar.** Si ejecutás en el mismo
+   ticket, alcanza con seguir el comentario. Si tenés que abrir otra tarea (o
+   partir el trabajo), la versión corregida va **textual en el cuerpo de cada
+   tarea nueva**, no como comentario: los comentarios no se heredan.
+2. **Releé el hilo antes de ejecutar.** La última palabra es el último comentario
+   `cliente`, no el cuerpo.
+3. **Si una tarea contradice una corrección aprobada, no la trabajes ni vuelvas a
+   pedir aprobación**: corregí su cuerpo con la versión aprobada y seguí.
+
+## Si ya te aprobaron y aun así no podés: NO es un permiso nuevo
+
+Es el error que dispara todo lo de arriba. La secuencia que rompe:
+
+```
+bloqueás pidiendo permiso → te aprueban → no podés ejecutar (falta el correo)
+→ volvés a bloquear por lo mismo → 2 bloqueos de la misma causa
+→ el motor lo manda a `triage` → el auto-decomposer lo parte → la corrección se pierde
+```
+
+El límite son **dos** bloqueos de la misma causa, está fijo en el motor
+(`BLOCK_RECURRENCE_LIMIT = 2`) y de `triage` no lo saca ningún botón del portal.
+O sea: **el segundo bloqueo por la misma causa es el que rompe el pedido.**
+
+Lo que hay que hacer en su lugar, cuando lo que falta es una conexión o una
+capacidad:
+
+```bash
+# 1. pedila UNA vez (la skill crea el pedido que el cliente ve)
+#    → skill `capacidad`
+# 2. el trabajo queda esperando ESE pedido, no esperando permiso:
+hermes kanban link <id-del-pedido-de-conexion> <id-del-trabajo>
+hermes kanban block <id-del-trabajo> "espera la conexión del correo" --kind=dependency
+```
+
+`--kind=dependency` es otra cosa que un bloqueo por falta de permiso: la tarea no
+va a la cola de aprobaciones (no le pide nada a nadie), **no cuenta para el límite
+de dos**, y el motor la vuelve a poner en marcha sola cuando el pedido del que
+depende se completa. Es la única forma de esperar algo sin gastar uno de los dos
+bloqueos.
+
+Y no vuelvas a frenar por la misma causa: si te despiertan y todavía falta la
+conexión, no bloquees de nuevo — dejá dicho en un comentario que seguís esperando
+lo mismo.
+
 **Desbloqueado y sin comentario no es aprobado.** Un ticket mal bloqueado se
 destraba solo en la siguiente pasada del dispatcher (por eso se bloquea con la
 acción de bloquear, nunca creándolo bloqueado); eso no es permiso de nadie.

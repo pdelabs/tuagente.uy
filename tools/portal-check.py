@@ -6,7 +6,14 @@ escribir nada. Sirve para dar de alta un cliente nuevo sin sorpresas.
 
     python3 tools/portal-check.py --key <API_SERVER_KEY> \
         [--adapter http://localhost:8643] [--endpoint http://localhost:8642] \
-        [--origin http://localhost:8090]
+        [--origin http://localhost:8090] [--intentos 3]
+
+CADA CHEQUEO SE CORRE VARIAS VECES, y no es paranoia: el 12/8/2026, en el lab,
+`GET /api/sessions` se puso a devolver 500 de forma intermitente —14 de 20
+pedidos— y este chequeo, que pegaba UNA sola vez, daba verde 3 de cada 10
+corridas. Un chequeo que es verde el 30% del tiempo es peor que no tenerlo:
+certifica justo lo que no miró. Ahora un endpoint que falla aunque sea un
+intento es FALLA, y el mensaje dice la tasa.
 
 Exit 0 = cumple. Exit 1 = hay fallas (se listan al final).
 """
@@ -18,17 +25,40 @@ import urllib.request
 
 OK, FAIL, WARN = "OK  ", "FALLA", "aviso"
 results = []
+INTENTOS = 3
 
 
 def check(name, fn, required=True):
-    """Corre una verificación y registra el resultado sin cortar el chequeo."""
-    try:
-        detail = fn()
-        results.append((OK, name, detail or ""))
+    """Corre una verificación N veces y registra el resultado.
+
+    N veces y no una: ver la nota de arriba. La regla es tajante a propósito —
+    un endpoint que anda 2 de cada 3 veces NO está listo para el portal, porque
+    en la tercera el cliente ve "No pude hablar con tu agente" y manda a buscar
+    el bug al portal, que no tiene nada que ver.
+
+    Los intentos van seguidos y sin espera: el modo de falla que buscamos
+    aparece bajo pedidos consecutivos, no después de una pausa. Con el agente
+    caído esto no se vuelve eterno: el chequeo del manifiesto es el primero y,
+    si no responde, main() corta ahí.
+    """
+    detalle, fallos = "", []
+    for _ in range(INTENTOS):
+        try:
+            detalle = fn() or detalle
+        except Exception as exc:  # noqa: BLE001 — queremos reportar cualquier falla
+            fallos.append(str(exc)[:120])
+    if not fallos:
+        results.append((OK, name, detalle))
         return True
-    except Exception as exc:  # noqa: BLE001 — queremos reportar cualquier falla
-        results.append((FAIL if required else WARN, name, str(exc)[:160]))
-        return False
+    if len(fallos) < INTENTOS:
+        # Lo peor que puede pasar es que esto pase por un tropiezo y quede en
+        # verde: se dice la tasa y el primer error, que es lo que hace falta
+        # para saber si es la red o es el agente.
+        tasa = f"INTERMITENTE — falló {len(fallos)} de {INTENTOS} intentos"
+    else:
+        tasa = f"falló los {INTENTOS} intentos"
+    results.append((FAIL if required else WARN, name, f"{tasa}: {fallos[0]}"))
+    return False
 
 
 def http(url, key=None, origin=None, method="GET", expect=200):
@@ -53,12 +83,21 @@ def jget(url, key, origin=None):
 
 
 def main():
+    global INTENTOS
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", required=True)
     ap.add_argument("--adapter", default="http://localhost:8643")
     ap.add_argument("--endpoint", default="http://localhost:8642")
     ap.add_argument("--origin", default="http://localhost:8090")
+    ap.add_argument(
+        "--intentos", type=int, default=INTENTOS, metavar="N",
+        help=f"veces que se corre CADA chequeo (por defecto {INTENTOS}). Subilo "
+             "cuando sospeches algo intermitente: con 10 se ve la tasa real "
+             "sin adivinar")
     args = ap.parse_args()
+    if args.intentos < 1:
+        ap.error("--intentos tiene que ser 1 o más")
+    INTENTOS = args.intentos
     A, E, K, O = args.adapter.rstrip("/"), args.endpoint.rstrip("/"), args.key, args.origin
 
     manifest = {}
@@ -160,7 +199,9 @@ def main():
         print(f"  [{estado}] {nombre}" + (f" — {detalle}" if detalle else ""))
     fallas = [r for r in results if r[0] == FAIL]
     avisos = [r for r in results if r[0] == WARN]
-    print(f"\n{len(results) - len(fallas) - len(avisos)} ok · {len(avisos)} avisos · {len(fallas)} fallas")
+    veces = "1 vez" if INTENTOS == 1 else f"{INTENTOS} veces"
+    print(f"\n{len(results) - len(fallas) - len(avisos)} ok · {len(avisos)} avisos · "
+          f"{len(fallas)} fallas  (cada chequeo corrió {veces})")
     if fallas:
         print("\nNo está listo para el portal. Arreglar:")
         for _, nombre, detalle in fallas:

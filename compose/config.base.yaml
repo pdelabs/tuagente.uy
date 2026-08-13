@@ -145,6 +145,40 @@ platform_toolsets:
 display:
   file_mutation_verifier: false
 
+# LA PUERTA, EN CODIGO Y NO EN PROSA. El motor corre estos scripts ANTES de la
+# tool y, si contestan {"action":"block"}, no la ejecuta y le devuelve el
+# mensaje al modelo (agent/shell_hooks.py; registro en gateway/run.py:10499).
+# Cubre las tres cosas que el QA vio o dejo abiertas: instalar software en el
+# volumen del cliente, firmar un comentario como `portal` (o sea falsificar una
+# aprobacion) y desbloquearse el propio ticket.
+#
+# El consentimiento va ACA y en el compose (HERMES_ACCEPT_HOOKS=1), NUNCA por el
+# allowlist de data/: ese vive en el volumen y el agente lo puede borrar, y un
+# hook sin consentimiento FALLA ABIERTO.
+#
+# OJO: el hook falla abierto por diseño (si el script revienta o vence el
+# timeout, la tool corre igual con un logger.warning que nadie mira). Por eso
+# `agente-check.py` chequea que este declarado, que el script exista, que sea
+# ejecutable y que de verdad bloquee.
+hooks_auto_accept: true
+hooks:
+  pre_tool_call:
+    - matcher: "terminal"
+      command: "/opt/politica/hooks/puerta.py"
+      timeout: 10
+    - matcher: "kanban_unblock"
+      command: "/opt/politica/hooks/puerta.py"
+      timeout: 10
+
+# AUTO-MEJORA: cada 25 turnos, no cada 10. El fork que escribe skills se dispara
+# por VOLUMEN de trabajo, no por calidad (turn_finalizer.py:633-637), asi que
+# cuanto mas sufre el agente por no tener la herramienta correcta, mas probable
+# es que canonice el sufrimiento — es la causa mecanica de la skill que fijaba
+# "dibujar el SVG a mano" como metodo. No se apaga: es la unica fuente que
+# tenemos de que le falta a un agente en produccion. Se acota y se cosecha.
+# La clave no tiene default declarado en config_defaults.py: vive como el
+# .get(..., 10) de agent_init.py:1706-1710, asi que un bump puede cambiar el
+# numero sin que nada falle.
 # EL PREAMBULO DEL PORTAL. Sin esto, el motor le mete al agente —en cada sesion
 # del api_server, 200 lineas DESPUES del SOUL— un parrafo que dice "the
 # rendering layer is unknown, assume plain text, no markdown formatting" y que
@@ -177,6 +211,23 @@ platform_hints:
 # (descubierto el 7/8/2026 con East: /start sin respuesta, cero errores).
 # El home_channel arranca apuntando a soporte; se cambia al chat del cliente
 # cuando se empareja.
+# EL DESPEDAZADOR AUTOMATICO, APAGADO. Corrompio una aprobacion en el QA y la
+# cadena esta medida de punta a punta: la clienta aprobo CON CORRECCION ("20, no
+# 8, y para el jueves"), el segundo rebloqueo por la misma causa mando el ticket
+# a `triage` (BLOCK_RECURRENCE_LIMIT = 2, hardcodeado), el dispatcher barre
+# triage en cada tick y llama al decomposer, y el decomposer arma su prompt con
+# TITULO Y CUERPO SOLAMENTE (kanban_decompose.py:306-312). Los comentarios no
+# viajan — y la correccion de la clienta vive en un comentario, porque el cuerpo
+# de un ticket bloqueado no se puede reescribir desde afuera. Salieron dos
+# tareas hijas pidiendo las 8 viejas y el portal pidiendo aprobar por tercera
+# vez el numero equivocado. Con el correo conectado, al proveedor le llegaban 8.
+#
+# Ninguna skill ni script del kit usa `decompose`, y el motor relee la perilla
+# en cada tick: no hace falta reiniciar. Probado en el lab: con esto apagado, un
+# ticket que cae en triage ya no se parte (0 hijas contra 2).
+kanban:
+  auto_decompose: false
+
 platforms:
   telegram:
     enabled: true
@@ -187,7 +238,7 @@ platforms:
       user_id: 'COMPLETAR_CHAT_ID'
 
 # <<< generado por tools/perilla-skills.py — no editar a mano
-#   fuente: imagen nousresearch/hermes-agent:v2026.7.30
+#   fuente: las skills que el motor trae instaladas
 #   apagadas: 66 · prendidas: docx, ocr-and-documents, pdf, xlsx
 #
 # Regenerar al subir de tag el motor:
@@ -270,6 +321,14 @@ skills:
     - weights-and-biases
     - xurl
     - youtube-content
+  # AUTO-MEJORA cada 25 turnos, no cada 10. El fork que escribe skills se
+  # dispara por VOLUMEN de trabajo, no por calidad (turn_finalizer.py:633),
+  # asi que cuanto mas sufre el agente sin la herramienta correcta, mas
+  # probable es que canonice el sufrimiento. No se apaga —es la unica
+  # senal de que le falta algo a un agente en produccion—: se acota y se
+  # cosecha. Sin default declarado en config_defaults.py: vive como el
+  # .get(..., 10) de agent_init.py:1706-1710.
+  creation_nudge_interval: 25
   # Las skills del kit, montadas de solo lectura desde el compose. Viven
   # afuera de data/skills/ para que el agente no pueda reescribirlas y para
   # que el curator no las archive a los 90 dias sin uso.
