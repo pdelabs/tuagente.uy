@@ -13,6 +13,11 @@
 //
 // Los resultados se muestran como chips de archivo (EntityChip): el mismo
 // visor del chat, cero código nuevo de preview.
+//
+// Y DESDE EL 13/8 DICE LA VERDAD SOBRE LA ÚLTIMA CORRIDA. Esta pantalla existe
+// para que el cliente se pueda olvidar del tema; mostrando "Activo" en verde
+// sobre dos flujos que ya habían fallado hacía exactamente lo contrario. El
+// cruce con las tareas del motor (`/api/jobs`) vive en `corridas.ts`.
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -21,9 +26,11 @@ import {
   Zap, type LucideIcon,
 } from "lucide-react";
 import {
-  etiquetaConexion, getConnections, getFlujos, loadConfig,
-  type Connection, type Flujo, type HttpError, type PortalConfig,
+  etiquetaConexion, getConnections, getFlujos, getJobs, loadConfig,
+  type Connection, type CronJob, type Flujo, type HttpError, type PortalConfig,
 } from "../lib/agent";
+import { estadoReal, jobDeFlujo, type EstadoReal } from "./corridas";
+import { AccionesFlujo, CartelEstado, Corridas, PorQueNoPudo } from "./EstadoFlujo";
 import { EntityProvider } from "../lib/EntityViewer";
 import { EntityChip } from "../lib/entities";
 import { CarruselEjemplos, linkArmar } from "../lib/ejemplosFlujos";

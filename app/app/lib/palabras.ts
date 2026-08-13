@@ -161,6 +161,98 @@ export function rotuloEvento(kind: string, nombreAgente = "Tu agente"): string {
   return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
 
+/* ── Por qué no pudo ─────────────────────────────────────────────────────── */
+
+/** Una falla contada de forma que el cliente sepa qué pasó y qué hacer.
+ *  `crudo` viaja siempre: no se esconde, se pliega. */
+export type Falla = {
+  /** Qué pasó, en una línea, sin nombres de máquina. */
+  que: string;
+  /** Qué puede hacer ÉL. Vacío = no hay nada que pueda hacer, lo miramos nosotros. */
+  hace: string;
+  /** true cuando la pelota es nuestra: la pantalla ofrece escribirnos. */
+  nuestro: boolean;
+  /** El texto del motor, tal cual vino, para el que quiera abrirlo. */
+  crudo: string;
+};
+
+// EL MOTOR ESCRIBE EN INGLÉS Y PARA UN OPERADOR: la corrida de los lunes de una
+// veterinaria falló con «RuntimeError: No LLM provider configured. Run `hermes
+// model` to select a provider». Eso en la pantalla de una veterinaria no es
+// información, es un susto — y encima le pide correr un comando que no puede
+// correr. Pero borrarlo es peor: la clienta descubrió la falla en Actividad y
+// la frase que la salvó fue la del agente diciéndole la verdad. Regla: se
+// traduce lo conocido, se dice honestamente lo desconocido, y el crudo queda a
+// un click.
+//
+// `hace` vacío = no hay nada que el cliente pueda hacer. Inventarle un paso
+// ("revisá tu conexión") cuando el problema es nuestro le hace perder la tarde.
+const FALLAS: { re: RegExp; que: string; hace: string; nuestro: boolean }[] = [
+  {
+    re: /no llm provider|no model configured|hermes setup|provider not configured/i,
+    que: "Tu agente se quedó sin el motor que usa para pensar, así que la corrida ni arrancó.",
+    hace: "",
+    nuestro: true,
+  },
+  {
+    re: /rate.?limit|429|quota exceeded|insufficient.?(credit|quota|funds)|payment required|402/i,
+    que: "El servicio de IA cortó a tu agente por consumo: no lo dejó trabajar esta vez.",
+    hace: "",
+    nuestro: true,
+  },
+  {
+    re: /401|403|unauthorized|forbidden|invalid.?(api.?)?key|authentication|credential|token expired|invalid_grant/i,
+    que: "Una clave de las que usa tu agente dejó de servir, y sin eso no pudo entrar a buscar los datos.",
+    hace: "Fijate en Conexiones si alguna quedó desconectada: reconectarla lo destraba.",
+    nuestro: true,
+  },
+  {
+    re: /timeout|timed out|deadline exceeded|took too long/i,
+    que: "Se hizo muy largo y se cortó por tiempo antes de terminar.",
+    hace: "Con «Probarlo ahora» ves si fue algo de ese momento o si se repite.",
+    nuestro: false,
+  },
+  {
+    re: /name or service not known|connection refused|network is unreachable|dns|econnrefused|temporary failure in name resolution|urlopen error/i,
+    que: "No pudo llegar a un servicio de afuera: estaba caído o sin red en ese momento.",
+    hace: "Con «Probarlo ahora» ves si ya volvió.",
+    nuestro: false,
+  },
+  {
+    re: /no such file|file not found|filenotfound|directory.*not exist|is a directory/i,
+    que: "Le faltó un archivo que esperaba encontrar y no siguió para no inventar nada.",
+    hace: "Si es un archivo que subís vos, subilo y probalo de nuevo.",
+    nuestro: false,
+  },
+  {
+    re: /permission denied|read-only file system|eacces/i,
+    que: "Quiso hacer algo que no tiene permitido y se frenó ahí.",
+    hace: "",
+    nuestro: true,
+  },
+  {
+    re: /disk|no space left|quota.*disk/i,
+    que: "Se quedó sin lugar para guardar y no pudo terminar.",
+    hace: "",
+    nuestro: true,
+  },
+];
+
+const FALLA_GENERICA = {
+  que: "La corrida se cortó antes de terminar y no dejó resultado.",
+  hace: "",
+  nuestro: true,
+};
+
+/** Por qué no pudo, en criollo. Vale para el `last_error` de una tarea
+ *  programada y para el error de una corrida. */
+export function leerFalla(crudo: string | null | undefined): Falla {
+  const texto = (crudo ?? "").trim();
+  const m = FALLAS.find((f) => f.re.test(texto));
+  const base = m ?? FALLA_GENERICA;
+  return { que: base.que, hace: base.hace, nuestro: base.nuestro, crudo: texto };
+}
+
 /* ── Por dónde le hablaron al agente ─────────────────────────────────────── */
 
 // Va en Uso ("cli · 28 sesiones" era la pantalla de la plata hablando en
