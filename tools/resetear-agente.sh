@@ -86,14 +86,18 @@ else
 fi
 
 echo "→ respaldo"
+# La marca de tiempo se resuelve ACA y no del otro lado: metida adentro de las
+# comillas simples que protegen la ruta, `$(date …)` no se expande y el respaldo
+# queda llamándose literalmente `agente-$(date +%Y%m%d-%H%M%S).tgz`.
+TS="$(date +%Y%m%d-%H%M%S)"
 if [[ "$MODO" == ssh ]]; then
-  correr "mkdir -p /root/respaldos && tar czf /root/respaldos/$SLUG-\$(date +%Y%m%d-%H%M%S).tgz -C $DIR data 2>/dev/null; ls -1t /root/respaldos | head -1 | sed 's/^/   /'"
+  RESP="/root/respaldos"
 else
   # Afuera del repo del agente: adentro ensuciaría su `git status`, que es donde
   # se mira "¿toqué algo?".
   RESP="$(dirname "$DIR")/respaldos"
-  correr "mkdir -p '$RESP' && tar czf '$RESP/$SLUG-\$(date +%Y%m%d-%H%M%S).tgz' -C '$DIR' data 2>/dev/null; ls -1t '$RESP' | head -1 | sed 's|^|   $RESP/|'"
 fi
+correr "mkdir -p '$RESP' && tar czf '$RESP/$SLUG-$TS.tgz' -C '$DIR' data 2>/dev/null; ls -l '$RESP/$SLUG-$TS.tgz' | sed 's|^|   |'"
 
 echo "→ apagando"
 correr "cd '$DIR' && docker compose stop hermes portal-adapter" >/dev/null 2>&1
@@ -123,9 +127,17 @@ if (( ENTREGA )); then
   # nombre que le pusimos probando y el portal vuelve a pedir el bautizo: dos
   # fuentes de identidad diciendo cosas distintas.
   echo "→ sacando el bloque portal:identidad del SOUL (si el bautizo lo dejó)"
-  correr "cd '$DIR/data' && [ -f SOUL.md ] && grep -q 'portal:identidad' SOUL.md && \
-    { sed '/<!-- *portal:identidad *-->/,/<!-- *\\/portal:identidad *-->/d' SOUL.md > SOUL.md.nuevo && \
-      mv SOUL.md.nuevo SOUL.md && echo '   sacado'; } || echo '   no había'"
+  # SE EXIGEN LOS DOS MARCADORES, y no es prolijidad: si estuviera solo el de
+  # apertura, el rango de sed borraría desde ahí HASTA EL FINAL DEL ARCHIVO, o
+  # sea el trabajo del alta entero. Y se buscan los MARCADORES, no la palabra:
+  # el bloque del kit menciona `portal:identidad` en prosa (v10, línea 508), así
+  # que con un `grep portal:identidad` esto decía "sacado" en todos los agentes,
+  # incluso en los que nunca se bautizaron.
+  abre='<!-- *portal:identidad *-->'
+  cierra='<!-- */portal:identidad *-->'
+  correr "cd '$DIR/data' && if [ -f SOUL.md ] && grep -q '$abre' SOUL.md && grep -q '$cierra' SOUL.md; then
+      sed '/$abre/,/${cierra//\//\\/}/d' SOUL.md > SOUL.md.nuevo && mv SOUL.md.nuevo SOUL.md && echo '   sacado'
+    else echo '   no había (este agente nunca se bautizó)'; fi"
 fi
 
 echo "→ levantando"

@@ -46,7 +46,10 @@ def check(name, fn, required=True):
         try:
             detalle = fn() or detalle
         except Exception as exc:  # noqa: BLE001 — queremos reportar cualquier falla
-            fallos.append(str(exc)[:120])
+            # 300 y no 120: el corte se comía justo la parte útil —el comando
+            # para arreglarlo va al final del mensaje—, y una falla que dice el
+            # síntoma sin decir qué hacer manda a adivinar.
+            fallos.append(str(exc)[:300])
     if not fallos:
         results.append((OK, name, detalle))
         return True
@@ -268,7 +271,10 @@ def main():
             if mods.get("usage"):
                 uso = jget(f"{A}/portal/usage", K)[0]
                 if uso.get("available") and (uso.get("cost_usd") or 0) > 0:
-                    rastro.append(f"USD {uso['cost_usd']:.2f} de gasto en Uso")
+                    # Cuatro decimales: una verificación cuesta centésimas y con
+                    # dos decimales el rastro se lee "USD 0.00", que es lo mismo
+                    # que decir que no hay gasto.
+                    rastro.append(f"USD {uso['cost_usd']:.4f} de gasto en Uso")
             if manifest.get("bautizado"):
                 rastro.append("ya está bautizado (el cliente no vería el onboarding)")
             if rastro:
