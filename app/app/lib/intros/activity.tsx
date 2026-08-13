@@ -9,10 +9,15 @@
 //
 // El código de colores no se explica en un párrafo: se ve en la maqueta y se
 // confirma en la fila de referencias de abajo.
+//
+// Y la bitácora dibujada va adentro de `Maqueta`: era la pantalla de verdad,
+// con hora de hoy y un "Chequeo de novedades — falló" a las 11:15. Una mala
+// noticia inventada en la pestaña que existe justamente para dar las noticias
+// es de lo peor que puede afirmar un dibujo.
 
 import type { ReactNode } from "react";
 import { Activity, CalendarDays, Eye, Layers } from "lucide-react";
-import { Eyebrow, IntroPage, Lead, Point, Title, type IntroProps } from "./shell";
+import { Eyebrow, IntroPage, Lead, Maqueta, Point, Title, type IntroProps } from "./shell";
 
 type Tono = "green" | "amber" | "coral";
 
@@ -93,9 +98,12 @@ function Grupo({ titulo, eventos, className = "" }: {
   );
 }
 
+/** Referencia del color. Sin cápsula ni fondo: es una leyenda, no un filtro —
+ *  con forma de pastilla se leía como los chips que en otras pantallas SÍ
+ *  filtran. */
 function Ref({ tono, children }: { tono: Tono; children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-pill border border-black/[0.07] bg-white px-2.5 py-1 text-[12px] text-ink-soft">
+    <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-soft">
       <span className={`h-3 w-3 rounded-full border-2 ${DOT[tono]}`} />
       {children}
     </span>
@@ -123,14 +131,19 @@ export default function ActivityIntro({ onOk }: IntroProps) {
       </Lead>
 
       {/* ── La bitácora ───────────────────────────────────────────────────── */}
-      <div className="relative mt-6 overflow-hidden rounded-card border border-black/[0.07] bg-white p-4 sm:p-5">
-        <Grupo titulo="Hoy" eventos={HOY} />
-        <Grupo titulo="Ayer" eventos={AYER} className="mt-4 opacity-55" />
-        {/* La línea no termina: se va hacia abajo. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white via-white/80 to-transparent" />
-      </div>
+      <Maqueta
+        className="relative mt-6 overflow-hidden bg-white"
+        nota="Movimientos inventados: no son los de tu agente."
+      >
+        <div className="relative">
+          <Grupo titulo="Hoy" eventos={HOY} />
+          <Grupo titulo="Ayer" eventos={AYER} className="mt-4 opacity-55" />
+          {/* La línea no termina: se va hacia abajo. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white via-white/80 to-transparent" />
+        </div>
+      </Maqueta>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="text-[12px] font-semibold text-ink-soft">El color dice cómo salió:</span>
         <Ref tono="green">salió bien</Ref>
         <Ref tono="amber">en curso</Ref>

@@ -6,7 +6,9 @@
 // por mí?". Un flujo es un trabajo con nombre — algo que pasa solo, produce
 // resultados que quedan acá, y se pide con palabras, no configurando nada.
 // La ilustración es un flujo de ejemplo en tres pasos: llega algo → el agente
-// trabaja → el resultado te espera.
+// trabaja → el resultado te espera. Los tres pasos van sin caja blanca: en esta
+// pestaña las tarjetas blancas con borde son flujos que se abren, y estas no se
+// abren — son un dibujo. La flecha entre uno y otro alcanza para leerlo.
 
 import { ArrowDown, FolderOpen, MessageSquare, Sparkles, Workflow } from "lucide-react";
 import { Eyebrow, IntroPage, Lead, Point, Title, type IntroProps } from "./shell";
@@ -27,13 +29,16 @@ export default function FlujosIntro({ onOk }: IntroProps) {
         manera, y sus resultados quedan juntos acá. Sin configurar nada.
       </Lead>
 
-      <div className="my-6 flex flex-col items-center gap-1">
+      {/* Alineado a la izquierda con el título: sin la caja blanca, centrar el
+          bloque lo dejaba flotando en el medio de la página. */}
+      <div className="my-6 flex max-w-xl flex-col gap-1">
         {PASOS.map((p, i) => {
           const Icon = p.icon;
           return (
-            <div key={i} className="flex w-full max-w-md flex-col items-center gap-1">
-              {i > 0 && <ArrowDown className="h-4 w-4 text-ink-soft/50" />}
-              <div className="flex w-full items-center gap-3 rounded-xl border border-black/[0.07] bg-white px-4 py-3">
+            <div key={i} className="flex w-full flex-col gap-1">
+              {/* La flecha cae en la columna de los íconos, no en el medio. */}
+              {i > 0 && <ArrowDown className="ml-2 h-4 w-4 text-ink-soft/50" />}
+              <div className="flex w-full items-center gap-3 py-1">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-c-violet/60">
                   <Icon className="h-4 w-4 text-c-violet-ink" />
                 </span>

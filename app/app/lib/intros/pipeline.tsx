@@ -2,12 +2,18 @@
 
 // Bienvenida del módulo Pipeline.
 // Idea visual: el tablero en miniatura arriba de todo —tres columnas con
-// tarjetitas y el botón de crear tarea— y el texto abajo, alineado en tres
-// puntos que hacen eco de las tres columnas.
+// tarjetitas— y el texto abajo, alineado en tres puntos que hacen eco de las
+// tres columnas.
+//
+// DOS COSAS QUE ESTE DIBUJO YA NO HACE. Pasaba por el tablero de verdad: una
+// clienta de prueba leyó «Confirmar antes de seguir» y «Resumen de la semana»
+// como tareas suyas. Ahora va adentro de `Maqueta`, que lo marca como ejemplo.
+// Y tenía arriba a la derecha un «+ Nueva tarea» violeta, calcado del botón de
+// verdad, que no hacía nada: un botón dibujado es una promesa de clic.
 
 import type { ReactNode } from "react";
 import { Check, Columns3, Hand, MessageCircle, PanelRightOpen, Plus, Search, UserRound } from "lucide-react";
-import { IntroPage, Eyebrow, Title, Lead, Point, type IntroProps } from "./shell";
+import { IntroPage, Eyebrow, Title, Lead, Maqueta, Point, type IntroProps } from "./shell";
 
 function MiniCard({ title, meta, destacada }: {
   title: string;
@@ -46,18 +52,14 @@ function Columna({ dot, label, children }: {
   );
 }
 
-/** Maqueta decorativa del tablero. */
+/** El tablero dibujado. Ejemplo declarado y sin un solo control adentro. */
 function TableroDemo() {
   return (
-    <div aria-hidden className="rounded-card border border-black/[0.07] bg-white p-3 sm:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <Maqueta className="bg-white" nota="Tarjetas de ejemplo: no son tus tareas.">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-ink-soft">
           <Columns3 className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">Tablero de tu agente</span>
-        </span>
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-pill bg-primary px-2 py-1 text-[10px] font-semibold text-white">
-          <Plus className="h-3 w-3" />
-          Nueva tarea
+          <span className="truncate">Un tablero, tres estados</span>
         </span>
       </div>
 
@@ -121,7 +123,7 @@ function TableroDemo() {
           </Columna>
         </div>
       </div>
-    </div>
+    </Maqueta>
   );
 }
 

@@ -1,20 +1,27 @@
 "use client";
 
 // Bienvenida del módulo Aprobaciones.
-// Idea visual: la tarjeta de aprobación en miniatura con sus dos botones y,
-// abajo, las dos salidas posibles en tonal verde y coral. Composición espejada
-// respecto del chat: maqueta a la izquierda, texto a la derecha.
+// Idea visual: la tarjeta de un pedido en miniatura y, abajo, las dos salidas
+// posibles en tonal verde y coral. Composición espejada respecto del chat:
+// maqueta a la izquierda, texto a la derecha.
 // El aviso ámbar es la parte honesta: aprobar habilita, no envía.
+//
+// LA TARJETA DIBUJADA YA NO TRAE «Rechazar» y «Aprobar». Eran las dos réplicas
+// exactas de los botones más caros del portal —uno de ellos destraba un ticket
+// y el desbloqueo se gasta una sola vez— arriba de un pedido inventado que
+// además decía "espera 2 h". Nadie tiene que descubrir apretando que ese pedido
+// no era suyo. Las dos salidas se explican igual, en los dos bloques de abajo,
+// que son texto y no botones.
 
 import { Check, Clock, Hand, Info, Settings2, X } from "lucide-react";
-import { IntroPage, Eyebrow, Title, Lead, Point, type IntroProps } from "./shell";
+import { IntroPage, Eyebrow, Title, Lead, Maqueta, Point, type IntroProps } from "./shell";
 
-/** Maqueta decorativa de un pedido de aprobación y sus dos desenlaces. */
+/** El pedido dibujado y sus dos desenlaces. Ejemplo declarado, sin controles. */
 function AprobacionDemo() {
   return (
-    <div
-      aria-hidden
-      className="rounded-card border border-black/[0.07] bg-gradient-to-b from-white to-c-violet/30 p-3 sm:p-4"
+    <Maqueta
+      className="bg-gradient-to-b from-white to-c-violet/30"
+      nota="Un pedido de ejemplo: no es uno tuyo."
     >
       <div className="rounded-xl border border-black/[0.07] bg-white p-3">
         <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
@@ -38,22 +45,15 @@ function AprobacionDemo() {
           <span className="h-1.5 w-4/5 rounded-full bg-black/[0.07]" />
           <span className="h-1.5 w-2/3 rounded-full bg-black/[0.07]" />
         </div>
-
-        <div className="mt-3 flex flex-wrap justify-end gap-1.5">
-          <span className="rounded-lg border border-c-coral bg-white px-2 py-1 text-[11px] font-semibold text-c-coral-ink">
-            Rechazar
-          </span>
-          <span className="rounded-lg bg-primary px-2 py-1 text-[11px] font-semibold text-white">
-            Aprobar
-          </span>
-        </div>
       </div>
 
+      {/* "Si aprobás" y no "Aprobar": lo primero es una consecuencia, lo
+          segundo es el rótulo de un botón. */}
       <div className="mt-2.5 grid gap-1.5 sm:grid-cols-2">
         <div className="min-w-0 rounded-lg border border-c-green bg-c-green/50 p-2">
           <p className="flex items-center gap-1 text-[11px] font-semibold text-c-green-ink">
             <Check className="h-3 w-3 shrink-0" />
-            Aprobás
+            Si aprobás
           </p>
           <p className="mt-0.5 break-words text-[10.5px] leading-snug text-c-green-ink/80">
             La tarea sigue adelante.
@@ -62,14 +62,14 @@ function AprobacionDemo() {
         <div className="min-w-0 rounded-lg border border-c-coral bg-c-coral/50 p-2">
           <p className="flex items-center gap-1 text-[11px] font-semibold text-c-coral-ink">
             <X className="h-3 w-3 shrink-0" />
-            Rechazás
+            Si rechazás
           </p>
           <p className="mt-0.5 break-words text-[10.5px] leading-snug text-c-coral-ink/80">
             Queda asentado tu motivo.
           </p>
         </div>
       </div>
-    </div>
+    </Maqueta>
   );
 }
 

@@ -8,14 +8,24 @@
 // huecas, y la marca de "ahora" cruzando las tres pistas. De un vistazo se ve
 // la cadencia, lo que ya corrió y lo que viene.
 //
-// Abajo, la consola: los tres controles reales (correr ahora, pausar,
-// reanudar), sin prometer lo que el portal no hace (crear o editar).
+// Abajo, la lista de lo que se puede hacer sobre cada tarea (correr ahora,
+// pausar, reanudar), sin prometer lo que el portal no hace (crear o editar).
+//
+// El día dibujado va adentro de `Maqueta`: tres tareas con nombre, una
+// "Pausada" y una que "falló" hace 24 minutos son tres afirmaciones sobre el
+// agente del cliente. Y los tres controles de abajo dejaron de tener forma de
+// pastilla: son los nombres de los botones de verdad de esa pestaña, y
+// dibujados como botones invitaban a apretarlos acá.
+//
+// (Hoy esta bienvenida no se llega a ver: "Tareas" salió del nav cuando Flujos
+// la reemplazó, así que ningún módulo de `MODULES` la reclama. Se arregla igual
+// — la ruta sigue viva y el registro sigue apuntando acá.)
 
 import type { ReactNode } from "react";
 import {
-  CheckCircle2, Clock, Pause, Play, SlidersHorizontal, Zap, type LucideIcon,
+  CheckCircle2, Clock, Pause, Play, SlidersHorizontal, Zap,
 } from "lucide-react";
-import { Eyebrow, IntroPage, Lead, Point, Title, type IntroProps } from "./shell";
+import { Eyebrow, IntroPage, Lead, Maqueta, Paso, Point, Title, type IntroProps } from "./shell";
 
 // Hora del día (0–24) en la que está parada la maqueta.
 const AHORA = 15.4;
@@ -111,18 +121,6 @@ function Pista({ horas, pausada }: { horas: number[]; pausada: boolean }) {
   );
 }
 
-function Control({ icon: Icon, children }: {
-  icon: LucideIcon;
-  children: ReactNode;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-pill border border-black/[0.07] bg-white px-2.5 py-1 text-[12px] font-semibold text-ink">
-      <Icon className="h-3.5 w-3.5 text-ink-soft" />
-      {children}
-    </span>
-  );
-}
-
 export default function CronsIntro({ onOk }: IntroProps) {
   return (
     <IntroPage
@@ -144,9 +142,14 @@ export default function CronsIntro({ onOk }: IntroProps) {
         podés hacer si querés intervenir.
       </Lead>
 
-      {/* ── El día de tu agente ───────────────────────────────────────────── */}
-      <div className="mt-6 overflow-hidden rounded-card border border-black/[0.07] bg-gradient-to-br from-c-violet/60 via-surface to-white p-4 sm:p-5">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">Hoy</p>
+      {/* ── Un día cualquiera ─────────────────────────────────────────────── */}
+      <Maqueta
+        className="mt-6 overflow-hidden bg-gradient-to-br from-c-violet/60 via-surface to-white"
+        nota="Tareas inventadas: no son las de tu agente."
+      >
+        <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
+          Un día cualquiera
+        </p>
         {/* La marca de "ahora" vive a lo ancho de la tarjeta, alineada con las pistas. */}
         <div className="relative mt-1 h-4">
           <span
@@ -190,14 +193,14 @@ export default function CronsIntro({ onOk }: IntroProps) {
             </span>
           ))}
         </div>
-      </div>
+      </Maqueta>
 
-      {/* ── La consola ────────────────────────────────────────────────────── */}
-      <div className="mt-4 flex flex-wrap items-center gap-2 rounded-card border border-black/[0.07] bg-white px-4 py-3">
+      {/* ── Lo que se puede hacer sobre cada tarea, ADENTRO ────────────────── */}
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-black/[0.07] bg-white px-4 py-3">
         <p className="text-[12px] font-semibold text-ink-soft">Sobre cada tarea podés:</p>
-        <Control icon={Zap}>Correr ahora</Control>
-        <Control icon={Pause}>Pausar</Control>
-        <Control icon={Play}>Reanudar</Control>
+        <Paso icon={Zap}>Correr ahora</Paso>
+        <Paso icon={Pause}>Pausar</Paso>
+        <Paso icon={Play}>Reanudar</Paso>
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">

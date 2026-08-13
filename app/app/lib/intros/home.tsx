@@ -46,15 +46,17 @@ export default function HomeIntro({ onOk }: IntroProps) {
         registro de todo lo que toca y te pregunta cuando corresponde.
       </Lead>
 
-      {/* El ciclo completo, que es lo que nadie entiende de entrada. */}
-      <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* El ciclo completo, que es lo que nadie entiende de entrada.
+          SIN TARJETA: cuatro bloques blancos con borde en una grilla son, en
+          este portal, cosas que se tocan —así se ven los ejemplos de flujos y
+          las conexiones—. Una clienta de prueba le tocó las del alta, que son
+          estas mismas, y anotó que "no hacen nada". Son cuatro pasos de un
+          dibujo: quedan como el ícono, el título y el texto, sin caja. */}
+      <div className="mt-8 grid gap-x-3 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
         {PASOS.map((p, i) => {
           const Icon = p.icon;
           return (
-            <div
-              key={p.titulo}
-              className="relative rounded-card border border-black/[0.07] bg-white p-4"
-            >
+            <div key={p.titulo} className="relative pr-4">
               <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${p.tono}`}>
                 <Icon className="h-4 w-4 text-ink" />
               </div>
@@ -62,7 +64,7 @@ export default function HomeIntro({ onOk }: IntroProps) {
               <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{p.texto}</p>
               {i < PASOS.length - 1 && (
                 <ArrowRight
-                  className="absolute -right-[13px] top-1/2 hidden h-4 w-4 -translate-y-1/2 text-ink-soft/40 lg:block"
+                  className="absolute right-0 top-3 hidden h-4 w-4 text-ink-soft/40 lg:block"
                   aria-hidden
                 />
               )}

@@ -2,12 +2,18 @@
 
 // Bienvenida del módulo Chat.
 // Idea visual: una conversación en miniatura —tu burbuja, el rastro de lo que
-// el agente está haciendo, su respuesta citando un ticket, y el compositor
-// abajo— para que se vea cómo es hablarle antes de escribir la primera línea.
+// el agente está haciendo y su respuesta citando un ticket— para que se vea
+// cómo es hablarle antes de escribir la primera línea.
 // Texto a la izquierda, maqueta a la derecha; en angosto se apila.
+//
+// ACÁ ABAJO HABÍA UN COMPOSITOR DIBUJADO, con su "Escribile a tu agente…" y su
+// flechita violeta. Una clienta de prueba escribió "hola" ahí y se quedó
+// esperando: era un dibujo. Una caja de texto invita a escribir — no hay copy
+// que arregle eso, así que se fue. La invitación a hablar la hace el botón del
+// pie, que es de verdad y lleva al chat.
 
-import { ArrowUp, Hand, History, MessageSquare, Plug, Ticket } from "lucide-react";
-import { IntroPage, Eyebrow, Title, Lead, Point, type IntroProps } from "./shell";
+import { Hand, History, MessageSquare, Plug, Ticket } from "lucide-react";
+import { IntroPage, Eyebrow, Title, Lead, Maqueta, Point, type IntroProps } from "./shell";
 
 /** Chip de entidad como el que dibuja el chat cuando el agente cita un ticket. */
 function EntityChipDemo({ children }: { children: string }) {
@@ -19,12 +25,13 @@ function EntityChipDemo({ children }: { children: string }) {
   );
 }
 
-/** Maqueta decorativa: no es interactiva y el texto de al lado ya la explica. */
+/** Una conversación de ejemplo. No es la del cliente y no es interactiva: por
+ *  eso va adentro de `Maqueta`, que lo dice con el borde y con el rótulo. */
 function ConversacionDemo() {
   return (
-    <div
-      aria-hidden
-      className="rounded-card border border-black/[0.07] bg-gradient-to-b from-c-violet/45 via-white to-white p-3 sm:p-4"
+    <Maqueta
+      className="bg-gradient-to-b from-c-violet/45 via-white to-white"
+      nota="Una conversación cualquiera, no la tuya."
     >
       {/* Lo que le escribís */}
       <div className="flex justify-end">
@@ -57,17 +64,7 @@ function ConversacionDemo() {
           te lo paso a aprobar.
         </p>
       </div>
-
-      {/* Compositor */}
-      <div className="mt-3 flex items-center gap-2 rounded-2xl border border-black/10 bg-white py-1.5 pl-3 pr-1.5">
-        <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-soft/60">
-          Escribile a tu agente…
-        </span>
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-primary">
-          <ArrowUp className="h-3.5 w-3.5 text-white" />
-        </span>
-      </div>
-    </div>
+    </Maqueta>
   );
 }
 

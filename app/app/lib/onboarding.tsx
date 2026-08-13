@@ -152,6 +152,14 @@ export function altaYaContestada(manifest: Manifest | null | undefined): boolean
 }
 
 // Qué contamos en el paso 2: solo lo que el manifest habilita.
+//
+// SE MUESTRAN SIN TARJETA, y eso no es estética. Eran tres cajas blancas con
+// hairline en una grilla de tres — o sea, lo mismo que el carrusel de ejemplos
+// de la pantalla siguiente, que SÍ se toca y arranca la charla. Una clienta de
+// prueba las apretó una por una y anotó "se ven clickeables y no hacen nada".
+// Esto es un índice de lo que va a encontrar adentro, no un menú: sin caja no
+// hay nada que invite a tocarlo, y el único control de la pantalla queda siendo
+// el botón de abajo.
 const PUNTOS = [
   {
     key: "chat",
@@ -681,11 +689,11 @@ export default function Onboarding({ manifest, cfg, onDone }: {
         ) : paso === "presentacion" ? (
           <div className="animate-fadeup">
             {puntos.length > 0 && (
-              <div className="mt-8 grid gap-3 text-left sm:grid-cols-3">
+              <div className="mt-8 grid gap-x-5 gap-y-6 text-left sm:grid-cols-3">
                 {puntos.map((p) => {
                   const Icon = p.icon;
                   return (
-                    <div key={p.key} className="rounded-card border border-black/[0.07] bg-white p-4">
+                    <div key={p.key}>
                       <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${p.tono}`}>
                         <Icon className="h-4 w-4 text-ink" />
                       </div>

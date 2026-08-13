@@ -9,13 +9,16 @@
 // que la gente no adivina sola: cómo se piden y cómo se citan.
 //
 // Todo es div/SVG inline: ni imágenes, ni datos reales, ni nada del dominio de
-// ningún cliente.
+// ningún cliente. Pero "no son datos de nadie" no se ve desde afuera: 1.284 y
+// +12% dibujados con la tipografía de los números de verdad se leen como los
+// números de uno. Por eso los dos dibujos van adentro de `Maqueta`, que lo dice
+// con todas las letras.
 
 import type { ReactNode } from "react";
 import {
-  ArrowUpRight, BarChart3, Download, LayoutDashboard, Search, Sparkles,
+  BarChart3, Download, LayoutDashboard, Search, Sparkles,
 } from "lucide-react";
-import { Eyebrow, IntroPage, Lead, Point, Title, type IntroProps } from "./shell";
+import { Eyebrow, IntroPage, Lead, Maqueta, Point, Title, type IntroProps } from "./shell";
 
 // Alturas de las barras del mini-gráfico (%), con una forma que se lee como
 // "esto viene creciendo" sin afirmar nada de nadie.
@@ -85,7 +88,10 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
       </Lead>
 
       {/* ── Maqueta: tres artefactos como se ven en la grilla ─────────────── */}
-      <div className="mt-6 overflow-hidden rounded-card border border-black/[0.07] bg-gradient-to-br from-c-violet/70 via-surface to-white p-4 sm:p-5">
+      <Maqueta
+        className="mt-6 overflow-hidden bg-gradient-to-br from-c-violet/70 via-surface to-white"
+        nota="Gráficos y números inventados, para que se vea la forma."
+      >
         <div className="grid gap-3 sm:grid-cols-5">
           {/* Gráfico */}
           <Mini
@@ -170,7 +176,7 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
             </Mini>
           </div>
         </div>
-      </div>
+      </Maqueta>
 
       {/* ── Cómo se piden + qué podés hacer con ellos ─────────────────────── */}
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -182,19 +188,22 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
             Con tus palabras, en el chat de siempre.
           </p>
 
-          <div className="mt-3 flex flex-col gap-2">
-            <p className="max-w-[92%] self-end rounded-2xl rounded-br-md bg-c-violet px-3 py-2 text-[13px] leading-snug text-c-violet-ink">
-              Mostrame cómo viene evolucionando esto mes a mes
-            </p>
-            <div className="max-w-[95%] rounded-2xl rounded-bl-md border border-black/[0.07] bg-surface px-3 py-2">
-              <p className="text-[13px] leading-snug text-ink">Te armé un gráfico:</p>
-              <span className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-pill border border-primary/25 bg-c-violet/60 px-2.5 py-1 text-[12px] font-semibold text-primary">
-                <BarChart3 className="h-3 w-3" />
-                Evolución mensual
-                <ArrowUpRight className="h-3 w-3" />
-              </span>
+          {/* El chip de la entrega va SIN la flechita de "abrir": con ella era
+              el chip clickeable de verdad, y acá no lleva a ningún lado. */}
+          <Maqueta className="mt-3 bg-surface" nota="Así se pide.">
+            <div className="flex flex-col gap-2">
+              <p className="max-w-[92%] self-end rounded-2xl rounded-br-md bg-c-violet px-3 py-2 text-[13px] leading-snug text-c-violet-ink">
+                Mostrame cómo viene evolucionando esto mes a mes
+              </p>
+              <div className="max-w-[95%] rounded-2xl rounded-bl-md border border-black/[0.07] bg-white px-3 py-2">
+                <p className="text-[13px] leading-snug text-ink">Te armé un gráfico:</p>
+                <span className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-pill border border-primary/25 bg-c-violet/60 px-2.5 py-1 text-[12px] font-semibold text-primary">
+                  <BarChart3 className="h-3 w-3" />
+                  Evolución mensual
+                </span>
+              </div>
             </div>
-          </div>
+          </Maqueta>
 
           <p className="mt-3 border-t border-black/[0.07] pt-3 text-[12px] leading-relaxed text-ink-soft">
             Cuando tu agente cita una entrega en una respuesta, se abre de un click.
