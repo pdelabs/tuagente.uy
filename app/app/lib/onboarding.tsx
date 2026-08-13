@@ -100,6 +100,16 @@ function sortearLook(actual: AgentitoLook): AgentitoLook {
   }
 }
 
+/** La copia local del nombre. Un solo escritor: el bautizo y el layout cuando
+ *  se lo aprende del manifiesto. */
+export function saveAgentName(n: string) {
+  try {
+    localStorage.setItem(NAME_KEY, n);
+  } catch {
+    /* modo privado: al menos vale para esta sesión */
+  }
+}
+
 /** Nombre que el cliente le puso a su agente, o null si nunca lo bautizó. */
 export function loadAgentName(): string | null {
   if (typeof window === "undefined") return null;
@@ -269,11 +279,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     // transicion: sacarla en el mismo tick devuelve el frame viejo.
     setPosando(true);
     await new Promise((r) => setTimeout(r, 450));
-    try {
-      localStorage.setItem(NAME_KEY, n);
-    } catch {
-      /* modo privado: al menos vale para esta sesión */
-    }
+    saveAgentName(n);
     setNombre(n);
     setFestejos((f) => f + 1);
     setPaso("negocio");

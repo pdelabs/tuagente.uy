@@ -16,9 +16,15 @@ import { ConexionLogo } from "./ConexionLogo";
 import Permisos from "./Permisos";
 
 let cache: Promise<Connection[]> | null = null;
+// De QUÉ agente es lo que hay en el cache. Sin esto, el cache es de la página y
+// no del agente: si la credencial cambia mientras la pestaña vive, las tarjetas
+// siguen mostrando las conexiones del cliente anterior.
+let cacheDe: string | null = null;
 function conexiones(): Promise<Connection[]> {
-  if (!cache) {
-    const cfg = loadConfig();
+  const cfg = loadConfig();
+  const de = cfg ? `${cfg.endpoint}|${cfg.key}` : "";
+  if (!cache || cacheDe !== de) {
+    cacheDe = de;
     cache = cfg
       ? getConnections(cfg)
           .then((r) => r?.conexiones ?? [])

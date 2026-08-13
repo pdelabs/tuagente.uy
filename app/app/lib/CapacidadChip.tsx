@@ -30,9 +30,14 @@ import { Check, Sparkles } from "lucide-react";
 import { getCapacidades, loadConfig, pedirCapacidad, type Capacidad } from "./agent";
 
 let cache: Promise<Capacidad[]> | null = null;
+// De QUÉ agente es lo cacheado: el cache es de la página, y la credencial puede
+// cambiar mientras la pestaña sigue viva.
+let cacheDe: string | null = null;
 function capacidades(): Promise<Capacidad[]> {
-  if (!cache) {
-    const cfg = loadConfig();
+  const cfg = loadConfig();
+  const de = cfg ? `${cfg.endpoint}|${cfg.key}` : "";
+  if (!cache || cacheDe !== de) {
+    cacheDe = de;
     cache = cfg
       ? getCapacidades(cfg)
           .then((r) => r?.capacidades ?? [])

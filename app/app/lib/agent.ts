@@ -38,7 +38,57 @@ export type Ticket = {
 };
 
 const DEFAULTS = { endpoint: "http://localhost:8642", adapter: "http://localhost:8643" };
-const KEY = "tuagente_portal_config";
+export const CLAVE_CONFIG = "tuagente_portal_config";
+const KEY = CLAVE_CONFIG;
+// Todo lo que el portal guarda de UN agente va bajo este prefijo: la
+// credencial, el nombre que el cliente le puso, su pinta, las bienvenidas
+// vistas, los pines del chat, las capacidades pedidas. NADA de lo que hay acá
+// adentro puede sobrevivir a un cambio de agente.
+const PREFIJO = "tuagente_";
+
+/** ¿Son el mismo agente con la misma clave? La credencial ENTERA es la
+ *  identidad: dos clientes distintos no comparten nada del browser, y el mismo
+ *  cliente con la clave rotada tampoco arrastra caché (el nombre y la pinta
+ *  vuelven del manifiesto, que es donde viven de verdad). */
+export function mismaSesion(
+  a: Partial<PortalConfig> | null | undefined,
+  b: Partial<PortalConfig> | null | undefined,
+): boolean {
+  return Boolean(a && b && a.endpoint === b.endpoint && a.adapter === b.adapter && a.key === b.key);
+}
+
+/** La credencial que tiene guardada este browser. Solo LEE: no la escribe, no
+ *  mira el hash y no borra nada. */
+export function configGuardada(): PortalConfig | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const c = JSON.parse(localStorage.getItem(KEY) || "null");
+    return c?.key ? (c as PortalConfig) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Borra TODO lo que este browser sabe del agente. Se usa al salir y al entrar
+ *  con el link de otro.
+ *
+ *  Va por prefijo y no por una lista de claves a propósito: una lista se
+ *  desactualiza sola —el módulo que empieza a cachear algo se olvida de
+ *  agregarse— y el precio de olvidarse es mostrarle a un cliente cosas de
+ *  otro. Fue exactamente el bug del 12/8: `clearConfig` borraba la credencial
+ *  y dejaba el nombre, la pinta y las bienvenidas del agente anterior, así que
+ *  el portal de un estudio contable decía llamarse como el de una veterinaria
+ *  —y, como la bienvenida figuraba vista, nunca le preguntó su nombre. */
+export function olvidarAgente() {
+  if (typeof window === "undefined") return;
+  try {
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith(PREFIJO)) localStorage.removeItem(k);
+    }
+  } catch {
+    /* modo privado */
+  }
+}
 
 export function loadConfig(): PortalConfig | null {
   if (typeof window === "undefined") return null;
@@ -49,20 +99,30 @@ export function loadConfig(): PortalConfig | null {
     adapter: get("adapter") ? decodeURIComponent(get("adapter")!) : undefined,
     key: get("key"),
   };
-  const stored = JSON.parse(localStorage.getItem(KEY) || "null");
+  const stored = configGuardada();
   const cfg = {
     endpoint: fromHash.endpoint || stored?.endpoint || DEFAULTS.endpoint,
     adapter: fromHash.adapter || stored?.adapter || DEFAULTS.adapter,
     key: fromHash.key || stored?.key,
   };
   if (!cfg.key) return null;
+  // Cambió el agente: lo del anterior se va entero ANTES de guardar el nuevo.
+  if (stored && !mismaSesion(stored, cfg)) olvidarAgente();
   localStorage.setItem(KEY, JSON.stringify(cfg));
   return cfg as PortalConfig;
 }
 
+/** Salir: no alcanza con soltar la credencial. El nombre, la cara y las
+ *  bienvenidas son del cliente que se va. */
 export function clearConfig() {
-  localStorage.removeItem(KEY);
+  olvidarAgente();
 }
+
+// Se corre UNA vez, al cargar el JS del portal, y no en un efecto: el layout
+// lee el nombre y la pinta del browser en SUS efectos, que corren antes que el
+// primer `loadConfig()`. Sincronizando acá —antes del primer render— cuando el
+// cliente entra con otro link, lo del agente anterior ya no está para leerse.
+if (typeof window !== "undefined") loadConfig();
 
 function headers(cfg: PortalConfig): HeadersInit {
   return { Authorization: `Bearer ${cfg.key}` };
@@ -505,6 +565,11 @@ export type Flujo = {
   estado: "activo" | "pausado" | "incompleto" | string;
   conexiones_faltan: string[];
   ultima_corrida?: { cuando?: string | null; status?: string } | null;
+  /** Id de la tarea programada que dispara el flujo. El adapter LO TIENE (lo
+   *  lee del frontmatter para calcular `ultima_corrida`) pero todavía no lo
+   *  publica; ver `docs/PENDIENTES.md`. Mientras tanto el portal ata el flujo a
+   *  su tarea por el nombre `flujo-<slug>`, que es el que le pone el kit. */
+  gatillo_job?: string | null;
   resultados: { path: string; mtime: number }[];
   resultados_total: number;
 };
@@ -622,10 +687,40 @@ export const getCronDetail = (c: PortalConfig, id: string) =>
   get<CronDetail>(c.adapter, `/portal/crons/${encodeURIComponent(id)}`, c);
 
 // ── Agente (:8642) ──
+
+/** Una tarea programada, tal cual la publica el gateway en `/api/jobs`.
+ *
+ *  ES LA ÚNICA FUENTE QUE SABE CUÁNDO VA A CORRER Y POR QUÉ FALLÓ. El adapter
+ *  publica en `/portal/flujos` un `ultima_corrida` con la fecha y un
+ *  `"failed"`, y nada más: ni el próximo horario, ni el error, ni si está
+ *  pausada. Flujos junta las dos cosas. */
+export type CronJob = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  /** "scheduled" | "paused" | "running" | … */
+  state?: string | null;
+  schedule?: { kind?: string; expr?: string; minutes?: number; run_at?: string; display?: string } | null;
+  schedule_display?: string | null;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  /** "ok" | "error" | … */
+  last_status?: string | null;
+  last_error?: string | null;
+  paused_at?: string | null;
+};
+
 // include_disabled: el listado pelado excluye los jobs pausados.
-export const getJobs = (c: PortalConfig) => get<any>(c.endpoint, "/api/jobs?include_disabled=true", c);
+export const getJobs = (c: PortalConfig) =>
+  get<{ jobs: CronJob[] }>(c.endpoint, "/api/jobs?include_disabled=true", c);
+/** Pausar, reanudar y correr ahora. SON NATIVOS DEL MOTOR (`POST
+ *  /api/jobs/{id}/{pause|resume|run}`) y el gateway los deja pasar por CORS:
+ *  no hace falta nada del adapter para que el cliente pueda tocar su flujo.
+ *  Cambiar el día y la hora NO entra por acá: es `PATCH /api/jobs/{id}` y el
+ *  gateway no publica PATCH en `Access-Control-Allow-Methods` (ver
+ *  `docs/PENDIENTES.md`). */
 export const jobAction = (c: PortalConfig, id: string, action: "pause" | "resume" | "run") =>
-  post<any>(c.endpoint, `/api/jobs/${id}/${action}`, c);
+  post<{ job?: CronJob }>(c.endpoint, `/api/jobs/${encodeURIComponent(id)}/${action}`, c);
 export const getSessions = (c: PortalConfig) => get<any>(c.endpoint, "/api/sessions", c);
 export const getSessionMessages = (c: PortalConfig, id: string) =>
   get<any>(c.endpoint, `/api/sessions/${id}/messages`, c);

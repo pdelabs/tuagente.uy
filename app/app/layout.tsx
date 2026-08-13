@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest, getApprovals, EVENTO_APROBACIONES,
-  esPedidoDelCliente,
+  esPedidoDelCliente, CLAVE_CONFIG, configGuardada, mismaSesion,
   type PortalConfig, type Manifest,
 } from "./lib/agent";
 import { Btn, SOPORTE, Soporte, Spinner, inputCls } from "./lib/ui";
@@ -22,7 +22,7 @@ import {
   volverAlaPestania,
 } from "./lib/rutas";
 import { INTROS, useIntroGate } from "./lib/intros";
-import Onboarding, { loadAgentName } from "./lib/onboarding";
+import Onboarding, { loadAgentName, saveAgentName } from "./lib/onboarding";
 import {
   AgentitoAvatar, hayLookGuardado, loadAgentLook, lookDesdeAgente, saveAgentLook,
 } from "./lib/agentito";
@@ -114,7 +114,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (pathname.startsWith("/app/avatar")) return <>{children}</>;
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [manifest, setManifest] = useState<Manifest | null>(null);
-  const [state, setState] = useState<"loading" | "login" | "error" | "ok">("loading");
+  const [state, setState] = useState<"loading" | "login" | "error" | "ok" | "otro">("loading");
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
   // Nombre y look que el cliente le dio a su agente en el onboarding.
@@ -173,8 +173,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // mira `conIntencion`, que se mantiene mientras siga en esa pestaña).
 
   // Si este browser no conoce al agente pero el agente sí se conoce a sí mismo
-  // (el cliente lo bautizó desde otra máquina), el portal se lo copia.
+  // (el cliente lo bautizó desde otra máquina, o entró con otro link y se
+  // limpió lo del anterior), el portal se lo copia.
+  //
+  // El NOMBRE también, y no solo la pinta: media docena de pantallas lo leen
+  // del browser sin tener el manifiesto a mano (`loadAgentName() || "Tu
+  // agente"`), así que sin esta copia el cliente que entra desde otra máquina
+  // ve a su agente llamado "Tu agente" en el tablero y en las aprobaciones.
   const aprenderDelAgente = (m: Manifest) => {
+    if (m.bautizado && m.agent && !loadAgentName()) {
+      saveAgentName(m.agent);
+      setNombre(m.agent);
+    }
     if (hayLookGuardado()) return;
     const suyo = lookDesdeAgente(m.look);
     if (suyo) { saveAgentLook(suyo); setLookAgente(suyo); }
@@ -206,6 +216,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       .catch(() => setState("error"))
       .finally(listo);
   };
+
+  // La credencial vive en localStorage, que es del ORIGEN y no de la pestaña:
+  // si en otra pestaña se entra con el link de OTRO agente, esta se queda con
+  // el agente viejo en memoria (el shell, el manifiesto, la pestaña que ya
+  // estaba abierta) y el nuevo en el disco — y desde ahí cada pantalla que se
+  // monta lee el nuevo. El resultado es una ventana mostrando dos clientes a la
+  // vez: el sidebar con las aprobaciones de uno y el chat con las
+  // conversaciones del otro. (Reproducido el 12/8 con dos agentes de prueba.)
+  //
+  // No recargamos solos: puede haber un mensaje a medio escribir. Frenamos la
+  // pestaña —los módulos ni se pintan— y que el cliente decida.
+  useEffect(() => {
+    if (!cfg) return;
+    const alCambiar = (e: StorageEvent) => {
+      // `key === null` es un `localStorage.clear()` de otra pestaña.
+      if (e.key !== null && e.key !== CLAVE_CONFIG) return;
+      if (!mismaSesion(configGuardada(), cfg)) setState("otro");
+    };
+    window.addEventListener("storage", alCambiar);
+    return () => window.removeEventListener("storage", alCambiar);
+  }, [cfg]);
 
   // El indicador tiene que decir la verdad: si el agente se apaga mientras el
   // portal está abierto, el punto verde mintiendo es peor que no tenerlo.
@@ -243,6 +274,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (state === "loading") return <main className="app-shell min-h-screen bg-surface"><Spinner /></main>;
   if (state === "login") return <Login onReady={boot} />;
+  // Otro agente entró en este navegador. Antes que mezclar dos clientes en una
+  // pantalla, esta pestaña se queda quieta.
+  if (state === "otro") {
+    return (
+      <main className="app-shell flex min-h-screen flex-col items-center justify-center bg-surface p-6 text-center">
+        <AgentitoAvatar look={lookAgente} apagado className="mb-2 h-20 w-20 opacity-45 grayscale" />
+        <p className="text-sm font-semibold text-ink">Se abrió otro portal en este navegador</p>
+        <p className="mb-4 mt-1 max-w-sm text-sm text-ink-soft">
+          En otra pestaña se entró con un link distinto. Para no mezclar el trabajo
+          de dos agentes, esta pestaña se quedó quieta: recargá y seguís con el que
+          está activo ahora.
+        </p>
+        <Btn size="sm" onClick={() => window.location.reload()}>Recargar</Btn>
+        <Soporte className="mt-5" />
+      </main>
+    );
+  }
   if (state === "error" || !manifest || !cfg) {
     return (
       <main className="app-shell flex min-h-screen flex-col items-center justify-center bg-surface p-6 text-center">
