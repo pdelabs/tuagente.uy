@@ -641,3 +641,92 @@ Lo que **necesita el kit** (nada de esto se puede hacer desde el portal):
    quién dejara el rastro: la única huella quedó en `executions`, donde nadie
    mira. Un flujo que falla dos lunes seguidos tiene que salir a buscar al
    cliente por su canal, no esperar a que entre. Eso es del kit.
+
+---
+
+## Segunda vuelta del 13/8 — lo que cerró la auditoría y lo que dejó abierto
+
+Los arreglos del 13/8 (flujos, reloj, alta) pasaron por **tres auditorías
+independientes**: una del alta, una de flujos y actividad, y una del portal
+entero contra el build servido. Las tres midieron en pantalla y contra los
+agentes del lab, no leyendo código. Los 15 puntos declarados dieron **cumple**.
+
+Lo que encontraron ADEMÁS, y ya está cerrado (commits `b5fe118`, `3cf0e4a`):
+
+- **La mentira sobrevivía en el resumen de Flujos**, que es la primera línea
+  que se lee: juntaba "falló", "no arrancó" y "ya no está programado" en un
+  solo *"N no pudieron terminar la última vez"*, contradiciendo a las tarjetas
+  de abajo. Ahora los nombra por separado y **la suma cierra con las tarjetas**
+  — hay un chequeo que lo cruza mecánicamente, para que la mentira no vuelva.
+- **"Trabajando ahora" mostraba la hora de arranque de la corrida anterior.**
+- **El Chat contaba los días con el reloj del browser**: una conversación de
+  las 02:40 caía bajo "AYER" mientras Actividad la ponía bajo "HOY".
+- **El huso era un dato aprendido que sólo aprendían 3 de las 11 pantallas.**
+  El arreglo salió de las pantallas y entró en el único punto de red: `get()`
+  aprende de cualquier fecha con offset, y el arranque lo va a buscar. Se
+  aprende **sólo de claves conocidas**: barrer el JSON entero dejaría que el
+  reloj lo fijara el markdown de un ticket.
+- **El alta se repetía sobre un agente ya bautizado** al cambiar de agente, y
+  contestar le escribía. Ahora le gana el manifiesto a lo que se acuerda el
+  browser.
+
+### Lo que quedó abierto
+
+1. **`atrasado` tapa una falla anterior.** En `corridas.ts` el estado
+   "no arrancó cuando le tocaba" se evalúa **antes** que "la última vez falló",
+   así que un flujo que falló *y* además quedó atrasado sólo muestra el atraso.
+   Arreglarlo desalinea el resumen respecto de las tarjetas si se hace a medias:
+   es una tanda propia.
+2. **El modal de un pedido del cliente sigue ofreciendo "Aprobar".** Es la misma
+   mentira que se sacó del rótulo (esos tickets no esperan nada del cliente),
+   pero sacarle la acción los deja sin forma de destrabarse desde el portal
+   salvo Archivar. Decisión de producto pendiente.
+3. **La columna "Completados" quedó en singular** ("Completado"): es el precio
+   de adoptar la palabra compartida de `palabras.ts`. Si se quiere el plural,
+   hay que volver a tener un rótulo propio.
+4. **Tres tickets de Tero llegan con `status: "todo"`**, que ni `columnOf` ni
+   `estadoDeTarea` conocen; los dos lo mandan a "En curso". Anda por accidente.
+
+### Lo que le queda al kit (además de los seis del bloque anterior)
+
+7. **El pedido de conexión necesita nacer bloqueado en UN viaje.**
+   `adapter/portal_adapter.py:1723` (`create_ticket`) crea el ticket `ready` y
+   asignado, así que el worker lo levanta a los segundos. El portal hoy hace
+   dos viajes (crear + bloquear) y queda una ventana de ~2 s contra los ~6-22 s
+   del dispatcher. Un `{"esperando": true}` lo cierra.
+8. **Un bloqueo de dependencia sobre un ticket SIN PADRES es un re-promote
+   instantáneo** (`hermes_cli/kanban_db.py:5530` + `recompute_ready` en
+   `:3988`). Es la fábrica del loop que gastó US$0,09 en 13 minutos, y le pasa
+   a **cualquier** ticket, no sólo a los nuestros. Es del motor: candidato a
+   reportar upstream a Nous.
+9. **`connections/catalogo.json:31`** — el `como` de Telegram afirma *"El bot ya
+   está creado"*, que es falso cuando falta `TELEGRAM_BOT_TOKEN`, y el portal lo
+   muestra tal cual arriba de "Pedir que la conecten".
+10. **`aviso` en el manifiesto es lo que el cliente CONTESTÓ, no lo que
+    FUNCIONA** (`adapter/portal_adapter.py:342`). Si le conectamos el canal
+    desde nuestro lado, nadie actualiza `contacto` y la franja sigue apareciendo.
+    Lo correcto es derivarlo del estado real de los canales.
+11. **`CANALES_AVISO` no acepta `whatsapp`** (`adapter/portal_adapter.py:165`):
+    mientras tanto vive como pedido y nunca como canal.
+
+### Una trampa de la API del motor, para el que escriba el próximo cliente
+
+`GET /api/jobs` **esconde los pausados**: hay que pedir `?include_disabled=true`
+(`gateway/platforms/api_server.py:5262`). El portal ya lo hace desde su primer
+commit, pero quien pruebe con curl a secas va a leer "no existe" donde el motor
+quiere decir "en pausa". Verificado el 13/8 pausando un cron de Pulga: el job
+desaparece entero de la lista.
+
+### Lo que se verificó en vivo y conviene no volver a discutir
+
+Contra Pulga, el 13/8, con POST de verdad:
+
+- `POST /api/jobs/{id}/run` sobre un flujo pausado **lo despausa**
+  (`enabled:true`, `paused_at:null`): el motor implementa "correr ahora" como
+  "adelantá el próximo disparo".
+- **Pausar con la corrida en vuelo NO la mata**: pause 12:39:49, la corrida
+  terminó 12:40:56 con `ok`, y el job quedó en pausa. Por eso el guardián del
+  portal re-pausa *después* de que el motor tomó la corrida y no antes.
+- La corrida disparada aparece como `latest_execution.status: "claimed"` a los
+  ~36 s. Es la única fuente de "está corriendo": el motor **nunca** escribe
+  `state: "running"`.

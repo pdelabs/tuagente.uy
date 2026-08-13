@@ -10,6 +10,37 @@ está arriba es lo que hace que alguien no recomiende el producto.
 
 ---
 
+## Estado al cierre del 13/8
+
+Lo que sigue abajo es el diagnóstico completo, tal como salió de las pruebas.
+Esto es qué quedó **cerrado y medido** ese día, para no volver a discutirlo.
+
+| | Estado |
+|---|---|
+| 1 · Flujos que se ven y se tocan | **cerrado** — próxima corrida, pausar, reanudar, probarlo ahora |
+| 1.b · La pantalla miente en verde | **cerrado**, y auditado dos veces: la mentira sobrevivía en el resumen de arriba |
+| 5 · Onboarding con peaje | **cerrado** — cuatro opciones, ninguna traba |
+| Actividad escondida en "Más" | **cerrado** — está en la barra principal |
+| Aviso por fuera del portal | **abierto** — sigue siendo lo que más piden |
+| 1.c · Una aprobación para cuatro acciones | **abierto** |
+| 2 · Cinco nombres para la misma cosa | **abierto** |
+| 3 · Clientes/Leads, calendario, brand kit | **abierto** — la pieza grande |
+
+Tres cosas que se aprendieron cerrando esto, y valen más que los arreglos:
+
+- **Casi todos los bugs graves fallaban en silencio.** El SOUL que no se
+  instalaba, los flujos que el agente decía haber creado, el rechazo que no
+  despertaba a nadie, el chequeo que daba verde. La contramedida no es mirar
+  mejor: es que las cosas **griten** — chequeos que fallan en vez de degradar.
+- **Los buenos arreglos sacan la cosa de alcance, no la vigilan.** Las skills
+  del kit fuera del árbol indexado, los secretos fuera de `data/`, el rechazo
+  que no toca el estado del ticket, el reloj fuera de las pantallas y adentro
+  del único punto de red.
+- **La prueba a ciegas encuentra más que cualquier revisión de código**, y
+  cuesta centavos. La regla que la hace valer está en la sección 8.
+
+---
+
 ## 1. Los flujos: se arman bien, pero no se pueden mirar ni tocar
 
 Lo mejor que tiene el producto hoy: el cliente cuenta un problema en dos
