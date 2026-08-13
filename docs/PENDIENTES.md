@@ -730,3 +730,61 @@ Contra Pulga, el 13/8, con POST de verdad:
 - La corrida disparada aparece como `latest_execution.status: "claimed"` a los
   ~36 s. Es la única fuente de "está corriendo": el motor **nunca** escribe
   `state: "running"`.
+
+---
+
+## Cierre del 13/8 — la prueba a ciegas de la inmobiliaria
+
+Un cuarto agente de laboratorio (rubro nuevo, sin estrenar) entregado a alguien
+sin acceso al repo, a los docs ni idea de qué es el producto. Encontró el peor
+bug del día y la mitad de la lista de arriba.
+
+**Su número:** US$150–250 por mes por lo que vio, US$300 "sin discutir" con
+impagos y carpetas de garantía. Hoy, **cero**, y la razón es una frase que ya
+dijeron las otras dos clientas: *"no puede leer mis contratos ni avisarme por
+WhatsApp, que son las dos cosas para las que lo quiero"*.
+
+### Lo que quedó cerrado en el portal
+
+`53ef4b9` el link al entregable no se podía tocar (más tokens, inglés, subida
+de archivos) · `a4ae59b` "Aprobar" sobre un freno quemaba el ticket (más el
+vocabulario unificado, Inicio vs Flujos, la última actividad y el saludo) ·
+`3e34d78` las bienvenidas dibujaban una interfaz de mentira.
+
+### Lo que quedó cerrado en el kit
+
+`3e67a0c` el agente afirmaba trabajo que no hizo · `cdb9948` cada charla
+arrancaba de cero · `5541488` "el chat no me contestó nunca".
+
+### ABIERTO Y GRAVE — la puerta falla abierto bajo carga
+
+Medido el 13/8: `shell hook timed out after 25.54s` con la máquina cargada. La
+puerta está declarada con `timeout: 10` y **un hook que vence deja pasar la
+tool** (`agent/shell_hooks.py:509-515`), con un `logger.warning` que nadie mira.
+Es decir: **bajo carga, la barrera de aprobación deja de ser una barrera**, y el
+único rastro queda en un log. No se cierra desde el config. Detalle en
+`hermes-kit/notas/perillas-motor.md` §8.
+
+Es el agujero más serio que queda abierto hoy, porque anula desde afuera el
+trabajo del día sobre la puerta.
+
+### Otros abiertos de esta vuelta
+
+- **La corrección del plugin de promesas no queda en el historial.** El motor
+  persiste el turno (`turn_finalizer.py:352`) antes de transformarlo (`:485`),
+  así que `state.db` guarda el texto original: el cliente ve la corrección
+  cuando llega y desaparece si refresca. Se cierra upstream.
+- **Una llamada al proveedor de 422 s sin nada en pantalla.** El SSE sólo manda
+  `: keepalive` cada 30 s y el `delivery_ledger` no cubre ese camino, así que el
+  chat se ve colgado. No es del motor: **es de producto, en el portal** — la
+  clienta esperó 15 minutos mirando un cartelito que no decía cuánto faltaba.
+- **El plugin no está en los agentes remotos.** `desplegar-remoto.sh` sube el
+  compose nuevo pero **no pisa un `config.yaml` existente**: a Mr.Wobble y East
+  hay que agregarles `plugins.enabled` a mano. Tero, Faro y Pulga siguen en
+  SOUL v10 y sin guardia.
+- **`flujos/page.tsx` sigue mostrando la cadencia declarada** (`f.gatillo`): si
+  el FLUJO.md queda viejo, Flujos se contradice consigo mismo. Inicio ya se
+  arregló; Flujos no.
+- **La escritura de la memoria depende de que el modelo llame a la tool**: no
+  hay perilla de extracción automática (`config_defaults.py:1531-1554`). Se
+  arregló el lado de la lectura, que era hueco nuestro.
