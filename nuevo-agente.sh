@@ -1,21 +1,68 @@
 #!/usr/bin/env bash
 # Crea el esqueleto de un agente para un cliente nuevo y le instala el kit.
 #
-#   ./nuevo-agente.sh acme "Acme SA" ~/Desktop/Luis/Projects/agente-acme
-#                     ^slug ^nombre visible del agente   ^dónde crearlo
+#   ./nuevo-agente.sh acme "Acme SA" ~/Desktop/Luis/Projects/agente-acme [8642]
+#                     ^slug ^nombre visible del agente   ^dónde crearlo  ^puerto
+#
+# El cuarto argumento es el puerto del GATEWAY en el host; el adapter va en el
+# siguiente. Por defecto 8642/8643, que es lo correcto cuando el cliente tiene
+# su propia VPS. En un host donde ya vive otro agente hay que moverlo: 8742,
+# 8842, etc.
 #
 # Deja todo listo salvo lo artesanal: escribir el SOUL y cargar las claves.
 set -euo pipefail
 
 KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SLUG="${1:-}"; NOMBRE="${2:-}"; DESTINO="${3:-}"
+SLUG="${1:-}"; NOMBRE="${2:-}"; DESTINO="${3:-}"; PUERTO="${4:-8642}"
 
 if [[ -z "$SLUG" || -z "$NOMBRE" || -z "$DESTINO" ]]; then
-  echo 'uso: ./nuevo-agente.sh <slug> "<Nombre del agente>" <ruta>' >&2
+  echo 'uso: ./nuevo-agente.sh <slug> "<Nombre del agente>" <ruta> [puerto-base]' >&2
   exit 2
 fi
 if [[ -e "$DESTINO" ]]; then
   echo "Ya existe $DESTINO — no piso nada." >&2
+  exit 2
+fi
+
+# LOS PUERTOS SE VALIDAN ACA, ANTES DE CREAR NADA, por el mismo motivo que la
+# version del SOUL: si el choque aparece en el `docker compose up -d` —que es
+# donde aparecia, porque los nombres de contenedor SI llevan el slug y no
+# chocan— ya escribiste el SOUL y cargaste las claves. Los tres ultimos agentes
+# del lab se editaron a mano despues de crearlos.
+[[ "$PUERTO" =~ ^[0-9]+$ ]] && (( PUERTO >= 1024 && PUERTO <= 65534 )) || {
+  echo "el puerto base tiene que ser un número entre 1024 y 65534 (dijiste '$PUERTO')." >&2
+  exit 2
+}
+PUERTO_ADAPTER=$((PUERTO + 1))
+
+ocupado() {
+  # `lsof` ve cualquier listener del host, incluido el docker-proxy de otro
+  # agente; el `/dev/tcp` de bash es el plan B para una máquina sin lsof.
+  local p="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1
+    return
+  fi
+  if (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then
+    exec 3<&-
+    return 0
+  fi
+  return 1
+}
+
+tomados=()
+for p in "$PUERTO" "$PUERTO_ADAPTER"; do
+  if ocupado "$p"; then tomados+=("$p"); fi
+done
+if (( ${#tomados[@]} )); then
+  sugerido="$PUERTO"
+  for _ in $(seq 1 100); do
+    sugerido=$((sugerido + 100))
+    if ! ocupado "$sugerido" && ! ocupado $((sugerido + 1)); then break; fi
+  done
+  echo "puerto(s) ocupado(s) en este host: ${tomados[*]} — ¿ya hay otro agente acá?" >&2
+  echo "Cada agente necesita DOS puertos libres y consecutivos (gateway y adapter)." >&2
+  echo "   ./nuevo-agente.sh $SLUG \"$NOMBRE\" $DESTINO $sugerido" >&2
   exit 2
 fi
 
@@ -37,9 +84,17 @@ SOUL_VERSION="$(tr -d '[:space:]' < "$KIT/soul/VERSION")"
 mkdir -p "$DESTINO/data"/{skills,scripts,memories,workspace/{entregables,artifacts,entrada,interno}}
 cd "$DESTINO"
 
-# Compose, con el slug y el nombre ya reemplazados.
+# Compose, con el slug, el nombre y los puertos ya reemplazados.
 sed -e "s/\${CLIENTE}/$SLUG/g" -e "s/\${AGENT_NAME}/$NOMBRE/g" \
+    -e "s/\${PUERTO_GATEWAY}/$PUERTO/g" -e "s/\${PUERTO_ADAPTER}/$PUERTO_ADAPTER/g" \
     "$KIT/compose/docker-compose.example.yml" > docker-compose.yml
+# Si quedó algún ${…} sin resolver, el compose no arranca y el error de Docker
+# no dice cuál es: mejor enterarse acá.
+if grep -n '\${' docker-compose.yml >/dev/null; then
+  echo "el compose generado quedó con placeholders sin resolver:" >&2
+  grep -n '\${' docker-compose.yml >&2
+  exit 2
+fi
 
 # LAS CLAVES VAN AFUERA DE data/. `data/` es del agente —la tiene rw y adentro
 # corre como root—, y este archivo es el env_file de los dos servicios: con las
@@ -111,6 +166,7 @@ git init -q && git add -A && git commit -qm "Agente de $NOMBRE: esqueleto + kit 
 cat <<FIN
 
 Listo: $DESTINO
+Puertos en este host: gateway 127.0.0.1:$PUERTO · adapter 127.0.0.1:$PUERTO_ADAPTER
 
 Lo que falta, en orden:
 
@@ -125,7 +181,8 @@ Lo que falta, en orden:
      0 fallas ANTES de prender: agarra el SOUL con huecos, las skills sin
      frontmatter y los olvidos de config, sin levantar nada.
   4. docker compose up -d
-  5. python3 $KIT/tools/portal-check.py --key <API_SERVER_KEY>
+  5. python3 $KIT/tools/portal-check.py --key <API_SERVER_KEY> \\
+       --endpoint http://127.0.0.1:$PUERTO --adapter http://127.0.0.1:$PUERTO_ADAPTER
      0 fallas o no se entrega.
   6. Primera tarea del agente: que investigue la web de la empresa y entregue
      su brief — ver onboarding/brief-empresa.md. Sale un borrador para revisar,

@@ -19,7 +19,15 @@ services:
     ports:
       # Solo loopback: el portal llega por el adapter o por un túnel, nunca
       # exponiendo el gateway a internet.
-      - "127.0.0.1:8642:8642"   # API server
+      #
+      # EL PUERTO DEL HOST LO RESUELVE `nuevo-agente.sh` (cuarto argumento, por
+      # defecto 8642); adentro del contenedor SIEMPRE es 8642, que es lo que
+      # dice `api_server.port` del config y lo que el adapter busca en
+      # `http://hermes:8642`. Antes esto era literal en los dos lados y el
+      # segundo agente del mismo host nacía pidiendo un puerto tomado: como los
+      # nombres de contenedor sí se distinguen, el choque recién aparecía en el
+      # `up -d`, con el SOUL ya escrito y las claves ya cargadas.
+      - "127.0.0.1:${PUERTO_GATEWAY}:8642"   # API server
       # El dashboard (9119) NO se publica: va apagado (ver HERMES_DASHBOARD más
       # abajo). Si alguna vez hace falta mirarlo, se prende, se publica esta
       # línea y se entra por un túnel SSH — nunca es para el cliente.
@@ -126,7 +134,9 @@ services:
     # despliegue.
     user: "10000:10000"
     ports:
-      - "127.0.0.1:8643:8643"
+      # El puerto del host lo resuelve `nuevo-agente.sh` (es el del gateway + 1);
+      # adentro del contenedor siempre es 8643.
+      - "127.0.0.1:${PUERTO_ADAPTER}:8643"
     volumes:
       - ./data:/opt/data
       # El adapter SÍ escribe: es quien recibe el clic del cliente en el portal.

@@ -58,20 +58,27 @@ compara lo instalado contra el kit. El porqué de cada montaje está en
 ## Alta de un cliente nuevo
 
 ```bash
-./nuevo-agente.sh acme "Acme SA" ~/Desktop/Luis/Projects/agente-acme
+./nuevo-agente.sh acme "Acme SA" ~/Desktop/Luis/Projects/agente-acme [8642]
 ```
 
-Crea el repo del agente —compose con el nombre ya puesto, `data/` con su
-estructura, `.env.example`, `.gitignore`, un borrador de SOUL armado con los
-bloques— le instala el kit y hace el primer commit. Después, a mano:
+Crea el repo del agente —compose con el nombre y los puertos ya puestos, `data/`
+con su estructura, `secretos.env`, `.gitignore`, un borrador de SOUL armado con
+los bloques— le instala el kit y hace el primer commit. Después, a mano:
 
 1. **Componer el SOUL** con los bloques de `soul/` — ver `soul/README.md`.
    Es el único trabajo verdaderamente artesanal y donde está el valor.
-2. Completar el compose (`AGENT_NAME`, `TZ`, los dos CORS) y el `.env`.
+2. Completar `secretos.env` (en la raíz del agente, **no** en `data/`).
 3. `python3 tools/agente-check.py <ruta>/data` → **0 fallas antes de prender.**
 4. `docker compose up -d`
 5. `python3 tools/portal-check.py --key <API_SERVER_KEY>` → **0 fallas o no se
    entrega.**
+
+**El cuarto argumento es el puerto del gateway en el host** (el adapter va en el
+siguiente). Por defecto 8642/8643, que es lo correcto cuando el cliente tiene su
+propia VPS; en un host donde ya vive otro agente hay que moverlo. El script
+verifica que los dos puertos estén libres **antes de crear nada**: el choque
+solía aparecer recién en el `up -d` —los nombres de contenedor llevan el slug y
+no chocan—, o sea con el SOUL ya escrito y las claves ya cargadas.
 
 El runbook completo, con los canales (Telegram, WhatsApp oficial vs puente QR) y
 los tiempos reales, está en `tuagente.uy/docs/alta-cliente.md`.
