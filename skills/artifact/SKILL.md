@@ -27,7 +27,7 @@ ni para un solo número. Un artefacto de más molesta.
 ## Uso
 
 ```bash
-python3 /opt/data/skills/artifact/create_artifact.py \
+python3 /opt/kit/skills/artifact/create_artifact.py \
   --title "Leads por mes" \
   --kind chart \
   --summary "Enero a junio, por origen" <<'HTML'

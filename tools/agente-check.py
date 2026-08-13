@@ -566,7 +566,43 @@ def main():
             )
         return f"{total} skills, todas con name + description"
 
+    def _rutas_de_las_skills():
+        """Las rutas `python3 /opt/…` que las SKILL.md le dictan al agente.
+
+        Una skill que documenta una ruta inexistente falla en silencio: el
+        agente corre el comando, le dice "No such file or directory", y de ahí
+        se las arregla como puede —o le cuenta al cliente que no se pudo—.
+        Pasó de verdad: la mudanza a `external_dirs` movió las skills del kit a
+        /opt/kit/skills y las seis SKILL.md siguieron diciendo /opt/data/skills,
+        en el repo y en producción.
+
+        El chequeo traduce las rutas del contenedor a las de acá: /opt/data es
+        el `data/` del agente y /opt/kit/skills es su `kit-skills/`.
+        """
+        montajes = ((f"/opt/kit/skills", kit_skills_dir(data)), ("/opt/data", data))
+        rotas, vistas = [], 0
+        for nombre, ruta in skills_en_disco(data):
+            with open(ruta, encoding="utf-8", errors="replace") as fh:
+                texto = fh.read()
+            for citada in re.findall(r"(/opt/[A-Za-z0-9_./-]+\.(?:py|sh))", texto):
+                vistas += 1
+                local = None
+                for prefijo, destino in montajes:
+                    if citada.startswith(prefijo + "/"):
+                        local = os.path.join(destino, citada[len(prefijo) + 1:])
+                        break
+                if local and not os.path.isfile(local):
+                    rotas.append(f"{nombre} → {citada}")
+        if rotas:
+            raise AssertionError(
+                f"{len(rotas)} ruta(s) que la skill le dicta al agente y no existen: "
+                + ", ".join(sorted(set(rotas))[:6])
+                + " — el agente corre eso y le da 'No such file or directory'"
+            )
+        return f"{vistas} rutas citadas, todas existen"
+
     check("frontmatter de las skills", _frontmatter)
+    check("rutas que citan las skills", _rutas_de_las_skills)
 
     # --- el índice vivo, que es lo que el agente realmente ve ---
     def _indice():

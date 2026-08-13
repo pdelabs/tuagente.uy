@@ -293,10 +293,18 @@ def agent_name():
     return "Agente"
 
 
-def blocked_count():
+def blocked_count(db=None):
+    """Cuantos pedidos de permiso siguen sin resolver.
+
+    Enciende la pestaña Aprobaciones, asi que tiene que contar lo MISMO que
+    lista `approvals()`: si contara solo los `blocked`, un pedido escalado a
+    triage apagaria la pestaña y el cliente no tendria donde aprobarlo.
+    """
     try:
-        conn = ro(KANBAN_DB)
-        n = conn.execute("SELECT COUNT(*) FROM tasks WHERE status='blocked'").fetchone()[0]
+        conn = ro(db or KANBAN_DB)
+        n = conn.execute(
+            f"SELECT COUNT(*) FROM tasks WHERE {_pendiente_where(conn)}"
+        ).fetchone()[0]
         conn.close()
         return n
     except sqlite3.Error:
@@ -1196,11 +1204,37 @@ def _summary(body, title):
     return title
 
 
+# UN PEDIDO DE PERMISO SIGUE VIVO AUNQUE EL MOTOR LO MUEVA. El agente bloquea
+# con `needs_input`, pero si el ticket se re-bloquea dos veces el motor lo manda
+# a `triage` "for a human-in-the-loop decision" (kanban_db.py, BLOCK_RECURRENCE_LIMIT
+# = 2, hardcodeado: no hay perilla). Preguntando solo por `blocked` el pedido
+# desaparecia de la pestaña —y si era el unico, la pestaña entera— justo cuando
+# mas hacia falta que el cliente lo viera. `block_kind` sobrevive a la mudanza,
+# asi que un `triage` con needs_input es exactamente eso: un permiso sin
+# resolver. Los demas triage (tareas nuevas sin clasificar) no entran.
+PENDIENTE_SQL = "(status = 'blocked' OR (status = 'triage' AND block_kind = 'needs_input'))"
+PENDIENTE_SQL_VIEJO = "status = 'blocked'"
+
+
+def _pendiente_where(conn):
+    """El filtro de pedidos sin resolver, según lo que tenga esta base.
+
+    `block_kind` lo agrega una migración del motor; en una base vieja la
+    columna no está y preguntar por ella tira error. Ahí se cae al filtro de
+    siempre en vez de romper la pestaña.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(tasks)")}
+    except sqlite3.Error:
+        return PENDIENTE_SQL_VIEJO
+    return PENDIENTE_SQL if "block_kind" in cols else PENDIENTE_SQL_VIEJO
+
+
 def approvals(db=None):
     conn = ro(db or KANBAN_DB)
     rows = conn.execute(
-        "SELECT id, title, body, created_at FROM tasks "
-        "WHERE status = 'blocked' ORDER BY created_at DESC LIMIT 100"
+        "SELECT id, title, body, created_at, status FROM tasks "
+        f"WHERE {_pendiente_where(conn)} ORDER BY created_at DESC LIMIT 100"
     ).fetchall()
     conn.close()
     return [
@@ -1210,6 +1244,10 @@ def approvals(db=None):
             "summary": _summary(r["body"], r["title"]),
             "body": r["body"],
             "created_at": r["created_at"],
+            # `blocked` es el pedido normal; `triage` es el que el motor escaló
+            # solo. El portal lo puede usar para avisar; si lo ignora, el
+            # pedido igual se ve, que es lo que importa.
+            "estado": r["status"],
         }
         for r in rows
     ]
@@ -2441,6 +2479,19 @@ class Handler(BaseHTTPRequestHandler):
         if status is None:
             return self._send(404, {"error": "ticket not found"})
         if status != "blocked":
+            # `triage` merece su propio mensaje: es el pedido que el motor
+            # escalo solo (dos rebloqueos por la misma causa) y que ahora se
+            # LISTA en la pestaña. Aprobarlo desde aca no funciona —ni
+            # `unblock` ni `promote` aceptan un triage, verificado en
+            # kanban_db.py— asi que se dice que pasa y que hacer, en vez de
+            # devolverle al cliente el nombre de un estado interno.
+            if status == "triage":
+                return self._send(409, {
+                    "error": "Este pedido quedó trabado y el sistema lo sacó de la "
+                             "cola de aprobaciones. Pedíselo de nuevo al agente por "
+                             "el chat y te lo vuelve a presentar para aprobar.",
+                    "estado": status,
+                })
             return self._send(409, {"error": f"ticket is not blocked (status={status})"})
 
         body = self._read_json_body()

@@ -17,7 +17,7 @@ qué pasa si aprueba, qué pasa si rechaza, y el contenido a revisar.**
 ## Paso 1 — armar el cuerpo con el script
 
 ```bash
-python3 /opt/data/skills/aprobacion/format_request.py \
+python3 /opt/kit/skills/aprobacion/format_request.py \
   --que "Enviar el mail de respuesta a Acme SA" \
   --si-apruebo "Se envía el mail tal cual está abajo, desde la casilla comercial" \
   --si-rechazo "No se envía nada; espero tu corrección" \
@@ -65,16 +65,26 @@ tarea con needs_input" no le sirve a nadie.
 
 ## Cuando te aprueban
 
-Puede llegar de dos formas:
-- **Aprobación simple**: el ticket se desbloquea. Ejecutás lo que pediste, tal
-  cual estaba.
-- **Aprobación con correcciones**: además del desbloqueo vas a ver un comentario
-  firmado por `cliente` que dice *"Aprobado CON CORRECCIONES"*. Esa versión es la
-  única válida: usala **textual**, no la original ni una mezcla. Si la corrección
-  te deja dudas sobre algo importante, preguntá antes de ejecutar.
+Son **dos señales juntas**: el ticket se desbloqueó **y** hay un comentario de
+esa aprobación (`portal`: "Aprobado desde el portal"; o `cliente`, si te
+corrigieron). Eso es tu cliente apretando Aprobar.
 
-Los comentarios firmados `portal` son auditoría automática del sistema, no
-instrucciones para vos.
+- **Aprobación simple**: desbloqueo + comentario `portal`. Ejecutás lo que
+  pediste, tal cual estaba.
+- **Aprobación con correcciones**: además vas a ver un comentario firmado por
+  `cliente` que dice *"Aprobado CON CORRECCIONES"*. Esa versión es la única
+  válida: usala **textual**, no la original ni una mezcla. Si la corrección te
+  deja dudas sobre algo importante, preguntá antes de ejecutar.
+- **Rechazo**: el ticket **queda bloqueado** y el comentario `portal` dice el
+  motivo. No se ejecuta nada.
+
+**Desbloqueado y sin comentario no es aprobado.** Un ticket mal bloqueado se
+destraba solo en la siguiente pasada del dispatcher (por eso se bloquea con la
+acción de bloquear, nunca creándolo bloqueado); eso no es permiso de nadie.
+Volvé a pedirlo.
+
+**Y no te desbloquees vos nunca.** Desbloquear es la respuesta del cliente, no
+un paso de tu trabajo: hacerlo es saltear la puerta que viniste a pedir.
 
 ## Qué NO requiere aprobación
 

@@ -28,12 +28,25 @@ Uso:
 """
 import argparse
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 FLUJOS = Path("/opt/data/flujos")
+
+# EL BINARIO SE RESUELVE, NO SE INVOCA POR NOMBRE. La herramienta `terminal` del
+# agente corre con un PATH saneado —/usr/local/bin:/usr/bin:/bin:/usr/local/games:
+# /usr/games— que NO tiene /opt/hermes/bin, asi que `["hermes", ...]` moria con
+# "[Errno 2] No such file or directory: 'hermes'" y NINGUN flujo se creaba.
+# Verificado en la corrida de conducta del 12/8 y en produccion: el directorio
+# flujos/ del agente no existia, la funcionalidad nunca habia andado.
+CANDIDATOS_HERMES = (
+    "/opt/hermes/bin/hermes",
+    "/opt/hermes/.venv/bin/hermes",
+)
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,48}$")
 GATILLOS = ("drive", "horario", "pedido")
 MIN_MINUTOS = 5
@@ -45,6 +58,29 @@ MAX_LARGO_PASO = 320
 def fallo(msg):
     print(json.dumps({"ok": False, "error": msg}, ensure_ascii=False))
     return 2
+
+
+def binario_hermes():
+    """La ruta del CLI de Hermes, o None si de verdad no está.
+
+    Se prueban todos los candidatos y recién al final el PATH: que el primero
+    exista pero no se pueda ejecutar (permisos, montaje raro) no puede dejarnos
+    sin CLI habiendo otro al lado.
+    """
+    for ruta in CANDIDATOS_HERMES:
+        if os.access(ruta, os.X_OK):
+            return ruta
+    return shutil.which("hermes")
+
+
+def cron(binario, *args, timeout=30):
+    """Corre `hermes cron ...` y devuelve (salida, error)."""
+    try:
+        r = subprocess.run([binario, "cron", *args],
+                           capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return "", str(e)
+    return (r.stdout or ""), (r.stderr or "")
 
 
 def _muy_frecuente(cron):
@@ -109,20 +145,36 @@ def main():
 
     job_id = ""
     if args.cron:
+        binario = binario_hermes()
+        if not binario:
+            return fallo(
+                "no encontré el CLI de Hermes (busqué en " + ", ".join(CANDIDATOS_HERMES)
+                + " y en el PATH). Sin eso no puedo programar nada: NO cuentes que el "
+                "flujo quedó andando"
+            )
         prompt = (f"Trabaja el flujo {args.slug}: abri /opt/data/flujos/{args.slug}/FLUJO.md "
                   "y segui sus instrucciones tal cual. Si el gatillo no encuentra nada "
                   "nuevo, termina en silencio.")
-        try:
-            raw = subprocess.run(
-                ["hermes", "cron", "create", args.cron, prompt,
-                 f"--name=flujo-{args.slug}", "--deliver=local"],
-                capture_output=True, text=True, timeout=30)
-        except (OSError, subprocess.TimeoutExpired) as e:
-            return fallo(f"no pude crear el cron: {e}")
-        m = re.search(r"Created job:\s*([0-9a-f]+)", raw.stdout or "")
+        salida, error = cron(binario, "create", args.cron, prompt,
+                             f"--name=flujo-{args.slug}", "--deliver=local")
+        m = re.search(r"Created job:\s*([0-9a-f]+)", salida)
         if not m:
-            return fallo(f"el cron no se creo: {(raw.stderr or raw.stdout or '').strip()[:200]}")
+            return fallo(f"el cron no se creo: {(error or salida).strip()[:200]}")
         job_id = m.group(1)
+
+        # Y AHORA SE VERIFICA QUE QUEDO. Que el create haya impreso un id no
+        # alcanza: lo que le decimos al cliente es "esto va a correr solo", y eso
+        # se afirma despues de verlo en la lista, no antes.
+        # Se compara por ID, NO por nombre: si ya existía un `flujo-<slug>` de
+        # antes y el nuevo no persistió, el nombre estaría igual y daríamos por
+        # creado un job que no es el que acabamos de pedir.
+        listado, err_listado = cron(binario, "list")
+        if job_id not in listado:
+            return fallo(
+                f"el cron dijo que creó {job_id} pero ese id no aparece en "
+                f"`hermes cron list` ({(err_listado or listado).strip()[:120]}) — "
+                "no lo des por creado"
+            )
 
     front = [
         "---",

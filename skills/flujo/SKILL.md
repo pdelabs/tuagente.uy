@@ -69,7 +69,7 @@ saber que entendiste. Si el gatillo es `pedido`, no corresponde.
 ## Uso
 
 ```bash
-python3 /opt/data/skills/flujo/crear_flujo.py \
+python3 /opt/kit/skills/flujo/crear_flujo.py \
   --slug resumen-semanal --nombre "Resumen semanal de ventas" \
   --para-cliente "Todos los lunes a las 8 te espera el resumen de la semana." \
   --gatillo horario --detalle "Todos los lunes a las 8:00" \

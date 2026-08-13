@@ -16,7 +16,7 @@ elijas vos la ruta: guardalo con esta skill.
 ## Uso
 
 ```bash
-python3 /opt/data/skills/entregable/deliver.py \
+python3 /opt/kit/skills/entregable/deliver.py \
   --title "Prospección Uruguay — logística" \
   --kind informe \
   --tags "uruguay,logistica" <<'MD'
@@ -42,6 +42,28 @@ te va a dar "File not found" aunque el archivo exista.
 `--tags`: opcional, separados por coma.
 `--replace`: solo si querés pisar una versión anterior del mismo día; sin esto,
 el script agrega un sufijo en vez de perder lo anterior.
+
+## Una imagen, un video o un PDF también son el entregable
+
+Si lo que hiciste incluye un archivo —la imagen de un post, un video, un PDF—
+**va con `--adjunto`**, no a `workspace/interno/`:
+
+```bash
+python3 /opt/kit/skills/entregable/deliver.py \
+  --title "Post 1 — Instagram" --kind borrador \
+  --adjunto /opt/data/workspace/interno/post-1.png <<'MD'
+Texto del post, hashtags y la fecha sugerida.
+MD
+```
+
+El script copia el archivo **al lado** del entregable, con el mismo nombre y
+fecha, y lo cita en una sección `## Archivos`. Se puede repetir `--adjunto`.
+
+Por qué importa: `interno/` es tu andamiaje y **el cliente no lo ve en su
+portal**. Un post cuya imagen quedó en `interno/` es un post que el cliente no
+puede aprobar. Si el archivo pesa más de 5 MB el script te frena: el portal no
+lo puede servir, así que anunciarlo sería prometerle algo que no va a poder
+abrir.
 
 ## El script decide dónde va
 

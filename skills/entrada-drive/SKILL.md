@@ -15,7 +15,7 @@ vos solo mirás el resultado y seguís el flujo del cliente con lo que llegó.
 ## Uso
 
 ```bash
-python3 /opt/data/skills/entrada-drive/vigilar.py \
+python3 /opt/kit/skills/entrada-drive/vigilar.py \
   --carpeta ID_DE_CARPETA [--carpeta OTRA]
 ```
 

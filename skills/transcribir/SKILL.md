@@ -16,7 +16,7 @@ usá esta skill. No intentes leer el archivo vos: es binario.
 ## Uso
 
 ```bash
-python3 /opt/data/skills/transcribir/transcribir.py \
+python3 /opt/kit/skills/transcribir/transcribir.py \
   --archivo /ruta/a/entrevista.mp4
 ```
 
