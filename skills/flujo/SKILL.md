@@ -44,7 +44,9 @@ cerrando qué se va a hacer.
    significar *publicalo* o *dejámelo listo*, y son dos productos distintos.
 2. **Con qué.** Si el trabajo necesita una conexión que no está, decilo y
    preguntá: ¿la conectamos, o arranco a medias mientras tanto? Nunca achiques
-   el alcance en silencio.
+   el alcance en silencio. **Pero no esperes la respuesta para crearlo**: el
+   script programa el gatillo igual y te devuelve `conexiones_faltan` para que
+   se lo cuentes. Ver "Faltar una conexión no es motivo para no crearlo".
 3. **Cuándo está bien hecho.** Si el resultado o la frecuencia admiten dos
    lecturas razonables, elegí con el cliente.
 
@@ -58,6 +60,24 @@ conexiones, el SOUL, el tablero), ni si arrancás.
 **Si no te contesta:** creá el flujo con la opción más conservadora —la que no
 manda nada para afuera— y dejá la pregunta escrita en el primer paso del
 cuerpo, para que se vea en el portal. Enterrada en el punto 13 no la lee nadie.
+
+## Faltar una conexión no es motivo para no crearlo
+
+Y acá está el error que costó la confianza de una clienta el 13/8: le faltaba de
+dónde leer los contratos, entonces el agente **no creó nada** y contestó "Queda
+definido: viernes a las 9:30". Ella fue a Flujos, leyó "Todavía no hay nada
+corriendo solo" y tuvo que preguntar "¿entonces quedó armado o no?" para
+enterarse. Si no chequeaba, el viernes no le llegaba nada.
+
+**El orden es: crear primero, contar después.** El gatillo queda programado aun
+sin la conexión —a propósito: el día que se conecte arranca solo— y el script te
+devuelve `conexiones_faltan` con la frase exacta para decirle a tu cliente que
+quedó armado pero hoy no puede trabajar. Preguntar y crear no compiten:
+preguntás **el contrato** (qué hace, dónde termina, cada cuánto), no **si lo
+creás**.
+
+Y mientras no lo hayas creado, no existe ninguna frase que lo dé por hecho:
+"queda definido" incluido.
 
 ## Corré la primera vuelta enseguida
 

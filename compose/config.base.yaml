@@ -176,6 +176,22 @@ hooks:
       command: "/opt/politica/hooks/puerta.py"
       timeout: 10
 
+# LA GUARDIA DE LAS PROMESAS. Un hook de shell NO alcanzaba: `shell_hooks.py`
+# solo sabe devolver `block`, `continue` o `context` — ninguno puede tocar el
+# texto de la respuesta— y `pre_verify`, que seria el lugar para hacerlo
+# reintentar, se dispara solo si el turno edito archivos
+# (conversation_loop.py:6808-6815). El turno del bug no escribio nada: miro dos
+# skills y contesto "Queda definido: viernes a las 9:30" sin crear ningun
+# flujo. `transform_llm_output` es el unico punto que ve la respuesta final
+# ANTES de guardarla y mandarla (turn_finalizer.py:485-505), y es de plugin.
+#
+# Los plugins de usuario son opt-in: sin esta lista el motor los descubre y no
+# los carga (plugins.py:1471-1487). El codigo vive en politica/plugins/,
+# montado :ro sobre /opt/data/plugins.
+plugins:
+  enabled:
+    - promesas
+
 # AUTO-MEJORA: cada 25 turnos, no cada 10. El fork que escribe skills se dispara
 # por VOLUMEN de trabajo, no por calidad (turn_finalizer.py:633-637), asi que
 # cuanto mas sufre el agente por no tener la herramienta correcta, mas probable

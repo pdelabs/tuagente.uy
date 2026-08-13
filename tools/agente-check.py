@@ -1547,6 +1547,92 @@ def main():
         return (f"{len(declarados)} hook(s), {len(casos)} casos probados: "
                 "bloquean lo que tienen que bloquear y dejan pasar el resto")
 
+    def _promesas():
+        """La guardia que impide anunciar un flujo que no existe.
+
+        Tiene tres piezas y las tres son necesarias, así que las tres se
+        miran: el código en `politica/plugins/promesas/`, el `plugins.enabled`
+        del config (los plugins de usuario son opt-in: sin la lista el motor
+        los descubre y NO los carga) y el montaje `:ro` del compose sobre
+        `/opt/data/plugins` —que es donde el motor los busca, o sea adentro
+        del volumen del agente: sin el montaje, la guardia está en un lugar
+        que el propio agente puede borrar—.
+
+        Y después se le hace correr el caso real, que es lo único que separa
+        "está el archivo" de "funciona": la frase con la que el 13/8/2026 un
+        agente le dijo a una clienta "Queda definido: viernes a las 9:30" sin
+        haber creado ningún flujo. Sobre un agente sin flujos tiene que
+        saltar, y sobre uno que sí lo tiene creado tiene que callarse.
+        """
+        agente = os.path.dirname(data)
+        dir_plugin = os.path.join(agente, "politica", "plugins", "promesas")
+        modulo = os.path.join(dir_plugin, "promesas.py")
+        for f in ("plugin.yaml", "__init__.py", "promesas.py"):
+            if not os.path.isfile(os.path.join(dir_plugin, f)):
+                raise AssertionError(
+                    f"falta politica/plugins/promesas/{f} — sin eso el agente "
+                    "puede decir que dejó algo corriendo solo y que no sea "
+                    "cierto. Lo instala install.sh"
+                )
+        texto = conf(data)
+        if not re.search(r"^plugins:\s*$", texto, re.M) or "- promesas" not in texto:
+            raise AssertionError(
+                "el config no tiene `plugins.enabled: [promesas]`: los plugins "
+                "de usuario son opt-in, así que el motor lo descubre y no lo "
+                "carga (hermes_cli/plugins.py:1471-1487). La guardia queda "
+                "instalada y apagada"
+            )
+        compose = os.path.join(agente, "docker-compose.yml")
+        if os.path.isfile(compose):
+            with open(compose, encoding="utf-8", errors="replace") as fh:
+                yml = fh.read()
+            if "politica/plugins:/opt/data/plugins:ro" not in yml:
+                raise AssertionError(
+                    "el compose no monta politica/plugins en /opt/data/plugins "
+                    ":ro — el motor busca los plugins adentro de data/, que es "
+                    "del agente: o no lo carga, o carga uno que el agente puede "
+                    "reescribir. Agregá la línea y `docker compose up -d hermes` "
+                    "(un restart no alcanza: es un montaje nuevo)"
+                )
+        # El caso real, con dos escenarios de mentira armados en caliente.
+        try:
+            spec = importlib.util.spec_from_file_location("promesas_check", modulo)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        except Exception as exc:
+            raise AssertionError(f"promesas.py no importa: {exc}")
+        MENTIRA = ("Queda definido: **viernes a las 9:30**, con dos bloques.\n"
+                   "Para dejarlo andando me falta de dónde leer los contratos.")
+        SUELTO = "Listo: el informe quedó listo y lo dejé en workspace/entregables/x.md."
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "cron"))
+            with open(os.path.join(tmp, "cron", "jobs.json"), "w") as fh:
+                fh.write('{"jobs": []}')
+            if not mod.revisar(MENTIRA, tmp):
+                raise AssertionError(
+                    "la guardia NO detecta la frase que originó el bug "
+                    "('Queda definido: viernes a las 9:30' sin ningún flujo). "
+                    "Alguien la editó y la dejó sin efecto")
+            if mod.revisar(SUELTO, tmp):
+                raise AssertionError(
+                    "la guardia salta con un entregable suelto, que no tiene "
+                    "nada que ver con flujos: va a ensuciar respuestas buenas")
+            os.makedirs(os.path.join(tmp, "flujos", "control"))
+            with open(os.path.join(tmp, "flujos", "control", "FLUJO.md"), "w") as fh:
+                fh.write('---\nnombre: Control\ngatillo_tipo: horario\n'
+                         'gatillo_cron: "30 9 * * 5"\ngatillo_job: abc123\n'
+                         'estado: activo\n---\n\ncuerpo\n')
+            with open(os.path.join(tmp, "cron", "jobs.json"), "w") as fh:
+                fh.write('{"jobs": [{"id": "abc123", "enabled": true, '
+                         '"schedule": {"expr": "30 9 * * 5"}}]}')
+            if mod.revisar(MENTIRA, tmp):
+                raise AssertionError(
+                    "la guardia salta con el flujo YA creado y en hora: estaría "
+                    "contradiciendo al agente cuando dice la verdad")
+        vivos = mod.flujos_vivos(data)
+        return (f"plugin montado :ro y prendido · 3 casos probados · "
+                f"{len(vivos)} flujo(s) vivo(s) hoy")
+
     def _parche_pairing():
         """El parche del mensaje de pairing, que se monta como cont-init.
 
@@ -1662,6 +1748,10 @@ def main():
     # la única señal de que la puerta funciona, así que degradarlo a aviso es
     # exactamente igual a no tener puerta.
     check("la puerta (hooks)", _hooks, required=True)
+    # Misma idea que la puerta, y por el mismo motivo: si esto degrada a aviso,
+    # un agente puede volver a decirle a su cliente que le dejó algo corriendo
+    # solo sin que exista, y nadie se entera hasta que el cliente va a mirar.
+    check("la guardia de las promesas", _promesas, required=True)
     check("politica: parche del pairing", _parche_pairing)
     check("capacidades: catálogo sincronizado", _capacidades)
     check("config: browser afuera, web adentro", _browser_afuera)

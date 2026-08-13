@@ -495,8 +495,11 @@ AG=/ruta/al/agente          # el repo del agente; adentro están data/ y kit-ski
 
 # 2. El compose: montar kit-skills en los DOS servicios (hermes y portal-adapter)
 #       - ./kit-skills:/opt/kit/skills:ro
-#    Ya viene en compose/docker-compose.example.yml y en el remoto; a un agente
-#    viejo hay que agregárselo a mano.
+#    y, SOLO en hermes, la guardia de las promesas:
+#       - ./politica/plugins:/opt/data/plugins:ro
+#    Los dos vienen en compose/docker-compose.example.yml y en el remoto; a un
+#    agente viejo hay que agregárselos a mano. El segundo es un montaje NUEVO:
+#    pide `docker compose up -d hermes`, un `restart` no lo toma.
 
 # 3. El config del agente. Está montado :ro: se abre, se edita, se cierra
 #    (tools/con-config-abierta.sh, o a mano en el host). UN SOLO COMANDO deja
@@ -515,6 +518,17 @@ AG=/ruta/al/agente          # el repo del agente; adentro están data/ y kit-ski
 #    migra. Si `python3 -c "import yaml"` falla, ponelo (pip install pyyaml) o
 #    corré el comando desde la imagen del motor, que ya lo trae.
 python3 tools/perilla-skills.py --agente $AG/data --aplicar $AG/data/config.yaml
+
+# 3a. Prender la guardia de las promesas. `perilla-skills.py` no la toca (no es
+#     una perilla de skills): va a mano en el config, que es corto y no se
+#     regenera. Sin esto el plugin queda instalado y APAGADO — los plugins de
+#     usuario son opt-in (hermes_cli/plugins.py:1471-1487).
+#       plugins:
+#         enabled:
+#           - promesas
+#     Es lo que impide que el agente le diga a su cliente "queda definido:
+#     viernes a las 9:30" sin haber creado ningún flujo. Verificar después con
+#     `hermes plugins list | grep promesas` → tiene que decir `enabled`.
 
 # 3b. Las excepciones de ESE cliente, si tiene (ver "Prender una skill para un
 #     cliente puntual"): sacarlas de la lista y declararlas con su motivo.

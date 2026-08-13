@@ -80,6 +80,13 @@ services:
       # Verificado: con el archivo :ro el gateway levanta en 18 s y
       # portal-check da 14 ok / 0 fallas.
       - ./data/config.yaml:/opt/data/config.yaml:ro
+      # EL PLUGIN `promesas`, DE SOLO LECTURA. El motor busca los plugins del
+      # usuario en HERMES_HOME/plugins (`hermes_cli/plugins.py:1369`), o sea
+      # adentro de ./data, que es del agente: sin este montaje encima, el
+      # agente puede borrar de un `rm` la guardia que le impide anunciar un
+      # flujo que no creo. Es la misma razon por la que politica/ esta afuera.
+      # Se prende con `plugins.enabled` en el config, que tambien es :ro.
+      - ./politica/plugins:/opt/data/plugins:ro
     environment:
       - TZ=America/Montevideo
       # DASHBOARD APAGADO, y no es por ahorrar: con HERMES_DASHBOARD=1 el

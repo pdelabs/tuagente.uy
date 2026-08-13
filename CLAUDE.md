@@ -87,6 +87,37 @@ puerta —instalar software, poner una firma que no es la suya (`--author`,
 mensaje redirige a `capacidad` diciendo que no hay variante que pase: eso es lo
 que evita que el agente siga probando. Detalle: `notas/perillas-aplicadas.md`.
 
+## Lo que el agente dice que dejó corriendo se contrasta con el disco
+
+El peor bug del producto no es que el agente falle: es que **diga que hizo algo
+que no hizo**. Pasó el 13/8/2026 con una clienta que pidió un control semanal;
+el agente contestó *"Queda definido: viernes a las 9:30"* y no llamó a
+`crear_flujo.py` ni una vez. En Flujos seguía diciendo "Todavía no hay nada
+corriendo solo". Si ella no iba a chequear, no se enteraba.
+
+Por eso hay un plugin, `politica/plugins/promesas/`, que corre en
+`transform_llm_output` —el único punto que ve la respuesta final **antes** de
+guardarla y de mandarla (`hermes:agent/turn_finalizer.py:485-505`)— y contrasta
+lo que la respuesta afirma contra `flujos/*/FLUJO.md` + `cron/jobs.json`. Si
+dice que algo quedó armado y no hay flujo vivo que lo respalde, le pega al
+mensaje una corrección que **afirma el hecho** (qué corre y qué no), nunca una
+acusación: la detección de la frase es aproximada; el estado del disco, no.
+
+Tres cosas de forma que valen para cualquier guardia que venga después:
+
+- **Un hook de shell no servía.** `agent/shell_hooks.py` solo sabe devolver
+  `block`, `continue` o `context`; ninguno toca el texto de la respuesta. Y
+  `pre_verify`, que sería el lugar para hacerlo reintentar, se dispara **solo
+  si el turno editó archivos** (`agent/conversation_loop.py:6808-6815`): el
+  turno del bug no escribió nada.
+- **Va en `politica/`, montado `:ro` sobre `/opt/data/plugins`**, que es donde
+  el motor los busca (`hermes_cli/plugins.py:1369`) y que es del agente.
+- **Se prende con `plugins.enabled`**: los plugins de usuario son opt-in, así
+  que sin esa lista el motor lo descubre y no lo carga.
+
+`agente-check.py` falla si falta cualquiera de las tres, y además le hace
+correr la frase del bug: "está el archivo" no es "funciona".
+
 ## Las tools de kanban se habilitan con DOS claves
 
 No hay plugin: Hermes ya las trae. Pero hace falta `toolsets: [kanban]` **y**

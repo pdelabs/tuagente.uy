@@ -12,20 +12,29 @@ con fecha vieja no es un problema; una fila que dice algo que ya no es cierto s�
 
 | Agente | Host | SOUL | Motor | Último check |
 |---|---|---|---|---|
-| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v4** (verificado byte a byte contra `soul/versiones/v4.md` el 12/8; el kit ya va por **v10**) | `v2026.7.30` (por el compose remoto) | TODO — nunca se corrió |
+| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v4** (verificado byte a byte contra `soul/versiones/v4.md` el 12/8; el kit ya va por **v11**) | `v2026.7.30` (por el compose remoto) | TODO — nunca se corrió |
 | East Comunicación | `east` → `/opt/agentes/east` | TODO | TODO | TODO |
 
-**Quedan atrás con v10** (bloque del 12/8/2026: rechazo que no desbloquea,
-qué hacer con un desbloqueo sin aprobación, y vocabulario). Los dos de la
-tabla: Mr.Wobble está en v4 —seis versiones atrás— y de East no sabemos ni la
-versión, que es peor. Ninguno de los dos entiende todavía qué es un rechazo,
-así que en los dos **rechazar desde el portal deja el ticket bloqueado y el
-agente no sabe qué hacer con eso**: va a leer el comentario y contestar, pero
-sin la regla puede volver a proponer lo mismo o intentar desbloquearse.
+**Quedan atrás con v11** (bloque del 13/8/2026: las frases que no se pueden
+escribir sin haberlo hecho — "queda definido", "queda armado", "todos los
+viernes a las 9:30 te dejo X"; y desde v10, rechazo que no desbloquea y
+vocabulario). Los dos de la tabla: Mr.Wobble está en v4 —siete versiones
+atrás— y de East no sabemos ni la versión, que es peor. Ninguno de los dos
+entiende todavía qué es un rechazo, así que en los dos **rechazar desde el
+portal deja el ticket bloqueado y el agente no sabe qué hacer con eso**.
 Migrarlos es una corrida de `tools/reemplazar-bloque.py` con
-`soul/versiones/v10.md` por agente, mirando antes el diff de lo que esté
-escrito a mano. El lab (`agente-lab`) ya está en v10. Sin agentes locales de
-cliente hoy: cualquiera creado con `nuevo-agente.sh` nace en v10.
+`soul/versiones/v11.md` por agente, mirando antes el diff de lo que esté
+escrito a mano. Sin agentes locales de cliente hoy: cualquiera creado con
+`nuevo-agente.sh` nace en v11.
+
+**Y les falta la guardia de las promesas** (`politica/plugins/promesas/`, del
+13/8/2026), que es lo único que impide que un agente diga "queda definido:
+viernes a las 9:30" sin haber creado nada. Son tres cosas y van juntas:
+`install.sh` deja el plugin, el compose lo monta
+(`./politica/plugins:/opt/data/plugins:ro`) y el config lo prende
+(`plugins.enabled: [promesas]`); después, `docker compose up -d hermes` —un
+`restart` no alcanza, es un montaje nuevo—. `agente-check.py` falla si falta
+cualquiera de las tres.
 
 **Bajas.** Un agente dado de baja sale de la tabla —la tabla dice qué corre
 dónde— pero no del registro:

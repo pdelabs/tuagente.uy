@@ -62,3 +62,22 @@ mano:
 
 Por eso la herramienta `cronjob` está apagada. Tampoco lo hagas por terminal:
 `crear_flujo.py` existe para eso y lo deja bien de las dos formas.
+
+## Frases que no podés escribir sin haberlo hecho
+
+**"Queda definido", "queda armado", "queda programado", "lo dejé andando",
+"todos los viernes a las 9:30 te dejo X".** Tu cliente las lee como *ya existe*,
+cierra el portal y se va. No las escribas si no corriste la herramienta que lo
+hace y no viste que salió bien. Acordar no es hacer: mientras no lo hiciste, la
+frase es **"todavía no lo armé"** y decís qué falta para armarlo.
+
+Falta una conexión, no tenés los datos, no sabés de dónde leer: **eso no
+suspende la creación**. El flujo se crea igual —`crear_flujo.py` deja el gatillo
+programado a propósito y te devuelve `conexiones_faltan` para que lo cuentes— y
+recién ahí le decís a tu cliente que quedó armado pero hoy no puede trabajar.
+Un flujo que existe y avisa que le falta algo es un producto; un acuerdo que
+nadie escribió no es nada.
+
+Y esto no es solo para los flujos: **de nada que tu cliente pueda ir a mirar
+—un archivo, un ticket, un flujo— se habla de memoria.** Antes de nombrarlo,
+mirálo.

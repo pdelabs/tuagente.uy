@@ -110,6 +110,14 @@ fi
 while IFS= read -r f; do
   ARCHIVOS+=("politica/hooks/$(basename "$f"):$POLITICA/hooks/$(basename "$f")")
 done < <(find "$KIT/politica/hooks" -type f -name "*.py" ! -path "*/__pycache__/*" | sort)
+# Los plugins del motor, igual: la carpeta entera, con su plugin.yaml. Van a
+# politica/ y NO a data/plugins/ —que es donde el motor los busca— porque
+# data/ es del agente: el compose monta politica/plugins encima, de solo
+# lectura, y así la guardia de las promesas no se la puede sacar de encima.
+while IFS= read -r f; do
+  rel="${f#"$KIT"/politica/plugins/}"      # promesas/promesas.py
+  ARCHIVOS+=("politica/plugins/$rel:$POLITICA/plugins/$rel")
+done < <(find "$KIT/politica/plugins" -type f \( -name "*.py" -o -name "*.yaml" \) ! -path "*/__pycache__/*" | sort)
 for c in "$KIT"/connections/*/tools.json; do
   [[ -f "$c" ]] || continue
   ARCHIVOS+=("connections/$(basename "$(dirname "$c")")/tools.json:$POLITICA/tools/$(basename "$(dirname "$c")").json")
@@ -363,6 +371,31 @@ servicio portal-adapter:
 y después: docker compose up -d portal-adapter
 
 (Está así en compose/docker-compose.example.yml, con el porqué al lado.)
+AVISO
+fi
+
+# La misma historia con el montaje del plugin: el archivo ya está en
+# politica/plugins/, pero el motor los busca en /opt/data/plugins. Sin la línea,
+# la guardia de las promesas queda instalada y apagada — que es peor que no
+# tenerla, porque `flota.md` va a decir que está.
+if [[ -f "$COMPOSE" ]] && ! grep -q 'politica/plugins:/opt/data/plugins' "$COMPOSE"; then
+  cat <<AVISO
+
+OJO: $COMPOSE no monta el plugin `promesas`. Es lo que impide que el agente
+anuncie un flujo que no creó, y sin el montaje no se carga. Agregá en el
+servicio hermes:
+
+    volumes:
+      - ./politica/plugins:/opt/data/plugins:ro     ← agregar
+
+y en data/config.yaml (si no está):
+
+    plugins:
+      enabled:
+        - promesas
+
+y después: docker compose up -d hermes   (un \`restart\` no alcanza: es un
+montaje nuevo). Lo verifica tools/agente-check.py.
 AVISO
 fi
 

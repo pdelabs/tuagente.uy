@@ -611,6 +611,48 @@ nombres de los jobs. Bien.
 
 ---
 
+## 8. Tocar la respuesta final antes de que salga. VERIFICADO en el lab (13/8/2026).
+
+Hace falta cuando algo que el agente **dice** se puede contrastar con el disco
+(el caso que lo motivó: "queda definido: viernes a las 9:30" sin ningún flujo
+creado). Lo que hay, en orden de menos a más útil:
+
+- **Los hooks de shell no sirven.** `agent/shell_hooks.py:580-620` solo
+  interpreta tres formas de respuesta: `block` (para `pre_tool_call`),
+  `continue` (para `pre_verify`) y `context`. Ninguna toca el texto de la
+  respuesta.
+- **`pre_verify` se dispara SOLO si el turno editó archivos.**
+  `agent/conversation_loop.py:6808-6815`: `if _edited and has_hook(...)`, donde
+  `_edited` es `agent._turn_file_mutation_paths`. Es el hook que existe para
+  hacer al agente seguir un turno más, y en el bug real no se disparó nunca
+  porque el turno solo miró dos skills y contestó. Además está acotado por
+  `agent.max_verify_nudges`. Y `verify_on_stop` —la versión que trae el
+  motor— es de código: filtra los paths que no son código
+  (`agent/verification_stop.py:24-38`) y se apaga sola en superficies de
+  mensajería.
+- **`transform_llm_output` SÍ, y es de plugin.** Se invoca una vez por turno en
+  `agent/turn_finalizer.py:485-505` con `response_text`, `session_id`, `model`
+  y `platform`; el primer string no vacío que devuelva **reemplaza** la
+  respuesta. El gateway se entera por `response_transformed` y manda la versión
+  final aunque ya haya streameado (`gateway/run.py:24585-24600`), así que la
+  corrección llega igual al cliente. Los plugins de usuario viven en
+  `HERMES_HOME/plugins` (`hermes_cli/plugins.py:1369`) y son **opt-in**:
+  sin `plugins.enabled` el motor los descubre y no los carga
+  (`plugins.py:1471-1487`).
+
+**El límite, medido y no obvio: lo que agrega el plugin NO queda en el
+historial.** `finalize_turn` persiste la sesión en la línea 352
+(`agent._persist_session`) y recién transforma en la 485: el `state.db` guarda
+el texto ORIGINAL. Verificado el 13/8 contra Zaguán —el aviso llegó en el
+`assistant.completed`, el portal lo dibujó, y `GET /api/sessions/<id>/messages`
+devuelve el mensaje sin el aviso—. O sea: **la corrección se ve cuando llega y
+desaparece si el cliente refresca**. Para el bug que nos ocupa alcanza (el
+momento que importa es cuando lo lee), pero hay que saberlo. Arreglo upstream
+de una línea: invocar `transform_llm_output` antes de `_persist_session`, o
+volver a persistir después de transformar.
+
+---
+
 ## Lo que no se puede cerrar sin encender el motor
 
 Todo lo de arriba sale de código, config o del prompt ya guardado. Estas cinco

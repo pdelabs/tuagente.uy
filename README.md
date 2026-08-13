@@ -147,8 +147,8 @@ nosotros). Para que un archivo se borre tienen que darse **las tres**:
 
 1. estar en la **lista de rutas que el kit puede poseer**
    (`PUEDE_SER_NUESTRO`, en `tools/limpiar-obsoletos.sh`) — son archivos
-   exactos, salvo `politica/hooks|tools|mcp/` y `kit-skills/`, que son carpetas
-   enteramente nuestras. `politica/` a secas **no** está: adentro viven
+   exactos, salvo `politica/hooks|plugins|tools|mcp/` y `kit-skills/`, que son
+   carpetas enteramente nuestras. `politica/` a secas **no** está: adentro viven
    `politica.json` y `capacidades/pedidos.jsonl`, que los escribe el cliente;
 2. estar en el manifiesto anterior y ya no en el nuevo;
 3. seguir teniendo el sha256 que escribimos nosotros.

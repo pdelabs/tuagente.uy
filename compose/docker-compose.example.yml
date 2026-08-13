@@ -73,6 +73,13 @@ services:
       # DE VERSIÓN del motor la precaución sigue valiendo: si la nueva migra el
       # config, se saca la línea, se arranca una vez y se vuelve a poner.
       - ./data/config.yaml:/opt/data/config.yaml:ro
+      # EL PLUGIN `promesas`, DE SOLO LECTURA. El motor busca los plugins del
+      # usuario en HERMES_HOME/plugins (`hermes_cli/plugins.py:1369`), o sea
+      # adentro de ./data, que es del agente: sin este montaje encima, el
+      # agente puede borrar de un `rm` la guardia que le impide anunciar un
+      # flujo que no creó. Es la misma razón por la que politica/ está afuera.
+      # Se prende con `plugins.enabled` en el config, que también es :ro.
+      - ./politica/plugins:/opt/data/plugins:ro
     environment:
       - TZ=America/Montevideo
       # DASHBOARD APAGADO. Con =1 el motor intenta bindear el dashboard en

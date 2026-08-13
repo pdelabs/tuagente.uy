@@ -69,6 +69,7 @@ PUEDE_SER_NUESTRO=(
   "politica/cont-init-parches.sh"     # el cont-init que lo dispara
   "politica/capacidades/catalogo.json"  # OJO: pedidos.jsonl, al lado, es del cliente
   "politica/hooks/"                   # la puerta en codigo
+  "politica/plugins/"                 # los plugins del motor (la guardia de las promesas)
   "politica/tools/"                   # el permiso de cada conexion, para la guardia
   "politica/mcp/"                     # los servidores MCP
   "kit-skills/"                       # las skills del kit (montada :ro, nadie mas escribe)
