@@ -212,9 +212,20 @@ fi
 # Se ANTEPONE a lo que ya hay: el preambulo de Nous y, sobre todo, el bloque
 # `portal:identidad` que el adapter reescribe en cada bautizo. Pisar el archivo
 # entero borraria el nombre y la empresa que el cliente ya cargo.
+#
+# Y SI NO HAY NADA, TAMBIEN INSTALA — que es el caso para el que existe este
+# script y era justo el que no andaba. Aca decia
+#     { cat /tmp/soul-base.md; [ -f SOUL.md ] && cat SOUL.md; } > SOUL.nuevo && mv …
+# y el estado del grupo es el del ULTIMO comando: sin SOUL.md, `[ -f … ]` da 1,
+# el `&& mv` no corre nunca y el agente se queda sin SOUL, con un SOUL.nuevo
+# huerfano al lado. El unico rastro era el `(el SOUL no se instalo; revisar a
+# mano)` de desplegar-remoto.sh, que se lee como un problema de ssh.
+# Se ve al resetear un agente en modo completo —el reset se lleva el SOUL— y en
+# cualquier alta donde el SOUL todavia no existe. Con `if` el grupo sale 0.
 ssh "$HOST" "cat > /tmp/soul-base.md" < "$tmp"
 ssh "$HOST" "cd $DIR/data && \
-  { cat /tmp/soul-base.md; [ -f SOUL.md ] && cat SOUL.md; } > SOUL.nuevo && \
+  cat /tmp/soul-base.md > SOUL.nuevo && \
+  if [ -f SOUL.md ]; then cat SOUL.md >> SOUL.nuevo; fi && \
   mv SOUL.nuevo SOUL.md && chown 10000:10000 SOUL.md && rm -f /tmp/soul-base.md"
 
 echo "→ SOUL $VERSION instalado en $HOST"
