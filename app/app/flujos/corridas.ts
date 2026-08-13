@@ -224,10 +224,16 @@ export function estadoReal(f: Flujo, cruce: Cruce, opts: OpcionesEstado = {}): E
   // o si el propio portal acaba de dispararla y el motor todavía no la anotó.
   // El cartel "Trabajando ahora" colgaba de `job.state === "running"`, un valor
   // que el motor no escribe nunca: era código muerto.
-  const corriendo = Boolean(
-    opts.enVuelo
-    || (ejec && EN_VUELO.has((ejec.status ?? "").trim().toLowerCase()) && !ejec.finished_at),
+  //
+  // LAS DOS COSAS SE GUARDAN SEPARADAS. `ejecEnVuelo` es "el motor tiene ESTA
+  // corrida tomada"; `opts.enVuelo` es "el portal la disparó y el motor todavía
+  // no la tomó", y en ese rato `ejec` sigue siendo la corrida ANTERIOR. Mezclar
+  // las dos es lo que hacía que la tarjeta le pusiera a la corrida nueva la
+  // hora de la vieja.
+  const ejecEnVuelo = Boolean(
+    ejec && EN_VUELO.has((ejec.status ?? "").trim().toLowerCase()) && !ejec.finished_at,
   );
+  const corriendo = Boolean(opts.enVuelo || ejecEnVuelo);
 
   // De las tres fuentes gana la MÁS FRESCA. La ejecución es la que primero se
   // entera —y en el camino del `unknown` es la única que se entera, porque ahí
@@ -324,19 +330,40 @@ export function estadoReal(f: Flujo, cruce: Cruce, opts: OpcionesEstado = {}): E
     // de reanudarlo.
     return {
       ...base, clave: "pausado", tono: "neutral", cartel: "En pausa",
+      // Y TAMPOCO BORRA EL RESULTADO CUANDO SALIÓ BIEN. Activo decía «Última
+      // vez: hoy a las 13:06 — salió bien» y el mismo flujo, pausado, decía
+      // sólo «Última vez: hoy a las 13:06». Pausar es justo lo que hace el
+      // cliente para ir a mirar cómo había salido: era el dato que le sacábamos.
       ultima: !cuando ? ""
         : resultado === "mal" ? `Última vez: ${cuando} — no pudo terminar`
         : resultado === "dudoso" ? `Última vez: ${cuando} — quedó sin confirmar`
+        : resultado === "bien" ? `Última vez: ${cuando} — salió bien`
         : `Última vez: ${cuando}`,
       nota: resultado === "mal" ? notaFalla() : resultado === "dudoso" ? notaDuda() : null,
     };
   }
 
   if (corriendo) {
+    // LA HORA DE ARRANQUE SOLO SE AFIRMA SI EL MOTOR TOMÓ ESTA CORRIDA. Mientras
+    // no la tomó, `ejec` es la ANTERIOR: leerle `started_at` era ponerle a la
+    // corrida nueva la hora de la vieja. Medido: se tocó "Probarlo ahora" a las
+    // 13:10 y la tarjeta dijo «Arrancó hoy a las 12:39 y sigue trabajando»,
+    // media hora antes. El fallback tampoco alcanzaba: sólo aparecía cuando no
+    // había NINGUNA ejecución previa, que es justo el caso raro.
+    //
+    // Sin arranque confirmado no se afirma ni la hora ni que ya esté
+    // trabajando: el cartel dice lo único que se sabe. El "lo mandé a correr"
+    // ya lo dice el vuelo, abajo en los botones; acá no se repite.
+    if (!ejecEnVuelo) {
+      return {
+        ...base, clave: "corriendo", tono: "violet", cartel: "Arrancando",
+        ultima: "Arranca en cualquier momento.", nota: null,
+      };
+    }
     const arranco = cuandoPaso(ejec?.started_at || ejec?.claimed_at);
     return {
       ...base, clave: "corriendo", tono: "violet", cartel: "Trabajando ahora",
-      ultima: arranco ? `Arrancó ${arranco} y sigue trabajando` : "Arrancó recién y sigue trabajando",
+      ultima: arranco ? `Arrancó ${arranco} y sigue trabajando` : "Está trabajando ahora",
       nota: null,
     };
   }
@@ -424,6 +451,71 @@ export const ordenarPorUrgencia = <T extends { estado: EstadoReal; flujo: Flujo 
   xs.slice().sort((a, b) =>
     PESO[a.estado.clave] - PESO[b.estado.clave] ||
     a.flujo.nombre.localeCompare(b.flujo.nombre, "es"));
+
+/* ── La franja de arriba: cuántos hay DE CADA COSA ───────────────────────── */
+
+// LA MENTIRA SOBREVIVIÓ ACÁ, en la primera línea que se lee. Cada tarjeta ya
+// decía la verdad y el resumen seguía metiendo `fallo`, `atrasado` y
+// `sin-tarea` en el mismo balde, redactado como "N no pudieron terminar la
+// última vez". Medido con un flujo fallado y otro atrasado, la franja decía
+//
+//   «Tus 2 trabajos automáticos necesitan que los mires: 2 no pudieron
+//    terminar la última vez»
+//
+// mientras la tarjeta de al lado decía "Última vez que corrió: hoy a las 13:06"
+// y "No arrancó cuando le tocaba". La misma pantalla contra sí misma. Lo mismo
+// con un flujo sin cron cuya última corrida salió bien.
+//
+// Son TRES cosas distintas y el cliente hace tres cosas distintas con cada una:
+// falló al correr / no arrancó cuando le tocaba / ya no está programado. Cada
+// una se cuenta y se nombra por separado, CON LAS MISMAS PALABRAS DEL CARTEL de
+// la tarjeta, así el número del resumen se verifica contando carteles abajo.
+//
+// El orden es el de `PESO`, o sea el mismo en que quedan las tarjetas: se lee
+// la franja de izquierda a derecha y se baja encontrándolas en ese orden.
+//
+// `pausado` NO se cuenta a propósito: la pausa la accionó el cliente y la
+// tarjeta ya cuenta cómo salió la última corrida. Meterlo acá sería pedirle que
+// mire algo que él mismo decidió frenar.
+const PROBLEMAS: { clave: ClaveEstado; uno: string; varios: string }[] = [
+  { clave: "fallo", uno: "no pudo terminar la última vez", varios: "no pudieron terminar la última vez" },
+  { clave: "atrasado", uno: "no arrancó cuando le tocaba", varios: "no arrancaron cuando les tocaba" },
+  { clave: "sin-tarea", uno: "ya no está programado", varios: "ya no están programados" },
+  { clave: "dudoso", uno: "quedó sin confirmar", varios: "quedaron sin confirmar" },
+  { clave: "incompleto", uno: "necesita una conexión", varios: "necesitan una conexión" },
+];
+
+const enumerar = (xs: string[]): string =>
+  xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`;
+
+/** Qué decir arriba de todo. `""` = no hay nada que decir y la pantalla se
+ *  calla, que es la respuesta a "¿me puedo olvidar del tema?".
+ *
+ *  Vive acá y no en la página porque es la misma cuenta que hace `estadoReal`,
+ *  y porque siendo pura se puede probar contra una lista de flujos donde
+ *  convivan los tres casos. */
+export function resumirFlujos(estados: EstadoReal[]): string {
+  const cuentas = PROBLEMAS
+    .map((p) => ({ ...p, n: estados.filter((e) => e.clave === p.clave).length }))
+    .filter((p) => p.n > 0);
+  const conProblema = cuentas.reduce((s, p) => s + p.n, 0);
+  if (conProblema === 0) return "";
+
+  const total = estados.length;
+  const sujeto =
+    total === 1 ? "Tu trabajo automático"
+      : conProblema === total ? `Tus ${total} trabajos automáticos`
+        : `${conProblema} de tus ${total} trabajos automáticos`;
+  const plural = conProblema > 1;
+  // Con un solo tipo de problema el número ya lo dijo el sujeto y repetirlo
+  // ("1 de tus 3 trabajos… : 1 no pudo terminar") es ruido. Con dos o más, el
+  // número de cada uno es justo el dato que faltaba.
+  const detalle = enumerar(cuentas.map(({ n, uno, varios }) =>
+    (cuentas.length === 1 ? "" : `${n} `) + (n === 1 ? uno : varios)));
+
+  return `${sujeto} ${plural ? "necesitan" : "necesita"} que ${plural ? "los" : "lo"} mires: `
+    + `${detalle}. ${plural ? "Abajo dice qué pasó en cada uno." : "Abajo dice qué pasó."}`;
+}
 
 /* ── Correr una vez sin desarmar la pausa ────────────────────────────────── */
 

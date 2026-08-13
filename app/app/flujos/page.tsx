@@ -30,8 +30,8 @@ import {
   type Connection, type CronJob, type Flujo, type HttpError, type PortalConfig,
 } from "../lib/agent";
 import {
-  cruzarTarea, enElAire, estadoReal, ordenarPorUrgencia, retomarRepausas,
-  useVuelos, vueloDe, type EstadoReal,
+  cruzarTarea, enElAire, estadoReal, ordenarPorUrgencia, resumirFlujos,
+  retomarRepausas, useVuelos, vueloDe, type EstadoReal,
 } from "./corridas";
 import { AccionesFlujo, CartelEstado, Corridas, PorQueNoPudo } from "./EstadoFlujo";
 import { EntityProvider } from "../lib/EntityViewer";
@@ -201,34 +201,19 @@ function TarjetaFlujo({ f, e, cfg, conexiones, onCambio }: {
 
 /** ¿Me puedo olvidar del tema? La pregunta con la que la veterinaria entró y
  *  salió sin respuesta. Una línea arriba de todo, y solo cuando hay algo que
- *  decir: cuando está todo bien la pantalla se calla y las tarjetas hablan. */
+ *  decir: cuando está todo bien la pantalla se calla y las tarjetas hablan.
+ *
+ *  EL TEXTO SE ARMA EN `corridas.ts`, al lado de los estados que cuenta. Acá
+ *  vivía la última mentira que quedaba en esta pantalla —"N no pudieron
+ *  terminar la última vez" sobre flujos atrasados o sin cron que habían corrido
+ *  bien—, y la cuenta no se podía probar sin montar React. */
 function Resumen({ estados }: { estados: EstadoReal[] }) {
-  const cuenta = (...claves: EstadoReal["clave"][]) =>
-    estados.filter((e) => claves.includes(e.clave)).length;
-  const rotos = cuenta("fallo", "atrasado", "sin-tarea");
-  const dudas = cuenta("dudoso");
-  const faltan = cuenta("incompleto");
-  const conProblema = rotos + dudas + faltan;
-  if (conProblema === 0) return null;
-
-  const total = estados.length;
-  const sujeto =
-    total === 1 ? "Tu trabajo automático"
-    : conProblema === total ? `Tus ${total} trabajos automáticos`
-    : `${conProblema} de tus ${total} trabajos automáticos`;
-  const plural = conProblema > 1;
-  const partes: string[] = [];
-  if (rotos > 0) partes.push(`${rotos} no ${rotos === 1 ? "pudo" : "pudieron"} terminar la última vez`);
-  if (dudas > 0) partes.push(`${dudas} ${dudas === 1 ? "quedó" : "quedaron"} sin confirmar`);
-  if (faltan > 0) partes.push(`${faltan} ${faltan === 1 ? "necesita" : "necesitan"} una conexión`);
-
+  const texto = resumirFlujos(estados);
+  if (!texto) return null;
   return (
     <div className="mb-4 flex items-start gap-2 rounded-lg border border-c-coral bg-c-coral/25 px-3 py-2.5">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-c-coral-ink" />
-      <p className="text-[13px] font-medium leading-snug text-c-coral-ink">
-        {sujeto} {plural ? "necesitan" : "necesita"} que {plural ? "los" : "lo"} mires:{" "}
-        {partes.join(" y ")}. Abajo dice qué pasó en cada uno.
-      </p>
+      <p className="text-[13px] font-medium leading-snug text-c-coral-ink">{texto}</p>
     </div>
   );
 }
