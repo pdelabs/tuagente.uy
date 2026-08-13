@@ -713,15 +713,42 @@ def main():
 
     # --- el SOUL, que es el system prompt ---
     def _soul():
-        # El umbral es 18 KB, no 6: los bloques genéricos del kit ya pesan ~14 KB
-        # y cada regla que tienen está porque algo falló sin ella. Avisar por lo
-        # normal entrena a ignorar los avisos. Lo que el umbral cuida es la parte
-        # del cliente (identidad + lo sensible propio): si eso pasa de ~4 KB,
-        # algo de ahí es una skill o un entregable de referencia, no prompt. Si
-        # querés bajar contexto de verdad, el gasto grande son los esquemas de
-        # herramientas (medilo con `hermes prompt-size`), no la prosa.
-        kb = len(soul(data).encode()) / 1024
-        return f"{kb:.1f} KB" + ("  (>18 KB: la parte del cliente se fue de escala)" if kb > 18 else "")
+        """Cuánto pesa el SOUL, y sobre todo cuánto de eso lo escribió el cliente.
+
+        SE MIDE LA PARTE DEL CLIENTE, NO EL TOTAL, y es la diferencia entre un
+        aviso y ruido fijo: el bloque `kit:base` solo ya pesa 23,4 KB en v10, y
+        el umbral viejo —18 KB sobre el total, escrito cuando el bloque pesaba
+        14— quedó 5 KB POR DEBAJO DEL PISO POSIBLE. O sea que el aviso "la parte
+        del cliente se fue de escala" salía siempre, incluso sobre el SOUL
+        recién generado por `nuevo-agente.sh`, que tiene cero líneas de cliente:
+        le echaba la culpa al cliente por el tamaño del kit. Un aviso que
+        siempre aparece es un aviso que nadie lee.
+
+        El umbral de la parte del cliente es 10 KB. Medido sobre agentes reales,
+        una identidad bien escrita pesa entre 4,6 y 7,5 KB (la más grande es una
+        inmobiliaria con una lista larga de "esto no lo hacés"), y
+        `soul/README.md` pide apuntar a ~4. O sea que 10 KB no se cruza
+        escribiendo con detalle: se cruza pegando un manual adentro del prompt,
+        que es exactamente lo que el aviso quiere agarrar.
+
+        Y si querés bajar contexto de verdad, el gasto grande son los esquemas
+        de herramientas (medilo con `hermes prompt-size`), no la prosa.
+        """
+        texto = soul(data)
+        total = len(texto.encode()) / 1024
+        abre, cierra = KIT_ABRE.search(texto), KIT_CIERRA.search(texto)
+        if not (abre and cierra and cierra.end() > abre.start()):
+            # Sin marcadores no hay forma de separar una parte de la otra. No es
+            # una falla acá: la reporta `_soul_bloque()`, que es su chequeo.
+            return f"{total:.1f} KB (sin marcadores kit:base no puedo separar la parte del cliente)"
+        bloque = len(texto[abre.start():cierra.end()].encode()) / 1024
+        cliente = total - bloque
+        version = abre.group(1) or "sin versión"
+        detalle = f"{total:.1f} KB — cliente {cliente:.1f} KB + bloque {version} {bloque:.1f} KB"
+        if cliente > 10:
+            detalle += ("  (>10 KB de cliente: algo de la identidad debería ser una "
+                        "skill o un entregable de referencia, no prompt)")
+        return detalle
 
     def _soul_huecos():
         huecos = huecos_de_plantilla(soul(data))

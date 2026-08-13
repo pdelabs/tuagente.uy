@@ -154,13 +154,24 @@ párrafos. Antes de podar el SOUL, mirá `agent.disabled_toolsets` en el
 `config.yaml`.
 
 Regla práctica: el bloque genérico creció y hay que mirarlo —11 KB antes de la
-regla dura genérica, 14,4 KB en `v2`, **19,2 KB en `v7`**, y se puede medir
-exacto con `wc -c soul/versiones/*.md`— y cada regla que tiene está porque algo
-falló sin ella. Lo que sí conviene cuidar es **la parte del cliente**
-(`00-identidad`, incluidas sus acciones sensibles): si eso pasa de ~4 KB, algo de
-ahí debería ser una skill o un entregable de referencia, no prompt. Ojo con el
-aviso de `agente-check.py`: mira el SOUL entero, así que hoy se dispara por el
-tamaño del bloque del kit y no por lo que escribió el cliente.
+regla dura genérica, 14,4 KB en `v2`, 19,2 KB en `v7`, **23,4 KB en `v10`**, y se
+puede medir exacto con `wc -c soul/versiones/*.md`— y cada regla que tiene está
+porque algo falló sin ella. Lo que sí conviene cuidar es **la parte del cliente**
+(`00-identidad`, incluidas sus acciones sensibles): apuntá a ~4 KB.
+
+`agente-check.py` mide las dos partes por separado y avisa **solo por la del
+cliente**, con umbral en 10 KB:
+
+```
+[OK  ] SOUL compuesto — 31.0 KB — cliente 7.5 KB + bloque v10 23.4 KB
+```
+
+Medido sobre agentes reales, una identidad bien escrita pesa entre 4,6 y 7,5 KB,
+así que los 10 KB no se cruzan escribiendo con detalle: se cruzan pegando un
+manual adentro del prompt. (Hasta el 13/8/2026 el chequeo miraba el SOUL entero
+contra 18 KB, o sea 5 KB por debajo del piso que impone el propio bloque del kit:
+el aviso salía siempre —incluso con cero líneas del cliente— y le echaba la culpa
+al cliente por el tamaño del kit.)
 
 ## Lo que el agente NO tiene que saber
 
