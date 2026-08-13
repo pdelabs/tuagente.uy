@@ -90,6 +90,9 @@ const ALCANCE_MIRADA = 300;
 const OCIO_BOSTEZO = 90_000;   // 1½ min sin actividad: el primer bostezo
 const OCIO_CELU = 240_000;     // 4 min: se aburre y saca el celu
 const REPETIR_BOSTEZO = 50_000;
+// Lo que dura `tomarMate` (260 frames a 60 fps), con un pelín de más para el
+// cruce de salida. Es la ventana en la que el bostezo NO puede salir.
+const DURA_MATE = 4_600;
 
 // Mover el mouse cuenta como "estás acá" para que no saque el celu mientras
 // leés, pero NO se lo guarda: si el mousemove cortara el gesto, la guardada no
@@ -103,6 +106,12 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
   const mirandoBadge = useRef(false);
   // Enganchado con el celu (el fondo de la escalera del ocio).
   const [distraido, setDistraido] = useState(false);
+  // Cuándo empezó la última cebada. El bostezo lo necesita: los dos usan
+  // `bocaChupa` —el mate como boquita para la bombilla, el bostezo escalado a
+  // óvalo— y el bostezo corre en un layer más alto, así que si caen juntos la
+  // boca se abre enorme CON LA BOMBILLA ADENTRO. Se pisan solos ~1 de cada 12
+  // bostezos, porque los dos relojes son independientes.
+  const ultimoMate = useRef(0);
   // Dónde está el personaje en la pantalla: la mirada se calcula desde ACÁ, no
   // desde el centro de la ventana. Si no, mira torcido en cuanto no está
   // centrado (por ejemplo arriba a la izquierda, en Inicio).
@@ -151,6 +160,7 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
     const programar = (ms: number) => {
       t = setTimeout(() => {
         matear.fire();
+        ultimoMate.current = Date.now();
         programar(45_000 + Math.random() * 75_000);
       }, ms);
     };
@@ -175,8 +185,15 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
       // El bostezo se repite solo mientras siga sin pasar nada; el celu es el
       // final del camino y se queda hasta que lo interrumpan.
       const bostezos = () => {
-        try { bostezar?.fire(); } catch { /* el runtime se fue */ }
-        aBostezo = setTimeout(bostezos, REPETIR_BOSTEZO + Math.random() * 20_000);
+        // Si está cebando, el bostezo espera a que termine (ver `ultimoMate`).
+        const cebando = Date.now() - ultimoMate.current < DURA_MATE;
+        if (!cebando) {
+          try { bostezar?.fire(); } catch { /* el runtime se fue */ }
+        }
+        aBostezo = setTimeout(
+          bostezos,
+          cebando ? DURA_MATE : REPETIR_BOSTEZO + Math.random() * 20_000,
+        );
       };
       aBostezo = setTimeout(bostezos, OCIO_BOSTEZO);
       aCelu = setTimeout(() => setDistraido(true), OCIO_CELU);
