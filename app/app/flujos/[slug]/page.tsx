@@ -16,7 +16,9 @@ import {
   etiquetaConexion, getFlujoDetalle, getFlujos, getJobs, loadConfig,
   type CronJob, type Flujo, type FlujoDetalle, type HttpError, type PortalConfig,
 } from "../../lib/agent";
-import { estadoReal, jobDeFlujo } from "../corridas";
+import {
+  cruzarTarea, enElAire, estadoReal, retomarRepausas, useVuelos, vueloDe,
+} from "../corridas";
 import { AccionesFlujo, CartelEstado, Corridas, PorQueNoPudo } from "../EstadoFlujo";
 import Markdown from "../../lib/Markdown";
 import { EntityProvider } from "../../lib/EntityViewer";
@@ -89,6 +91,11 @@ export default function FlujoDetallePage() {
   }, [cfg, slug]);
 
   useEffect(() => { cargar(); }, [cargar]);
+  // Un re-pausado que quedó a medias se retoma al entrar por acá también: el
+  // link del flujo se comparte, y el F5 puede caer en el detalle. Ojo con el
+  // orden — los hooks van todos ANTES de los returns condicionales de abajo.
+  useEffect(() => { if (cfg) retomarRepausas(cfg, cargar); }, [cfg, cargar]);
+  useVuelos();
 
   if (!cfg) return <div className={WRAP}><Spinner /></div>;
   if (noExiste) {
@@ -127,7 +134,10 @@ export default function FlujoDetallePage() {
   if (!flujo) return <div className={WRAP}><Spinner /></div>;
 
   const Icono = GATILLO_ICON[flujo.gatillo_tipo] ?? Workflow;
-  const e = estadoReal(flujo, jobDeFlujo(flujo, jobs));
+  const cruce = cruzarTarea(flujo, jobs);
+  const e = estadoReal(flujo, cruce, {
+    enVuelo: enElAire(vueloDe(cruce.tipo === "tarea" ? cruce.job.id : null)),
+  });
 
   return (
     <EntityProvider cfg={cfg}>
@@ -167,7 +177,10 @@ export default function FlujoDetallePage() {
             tenga que aprenderse dos pantallas distintas. */}
         <Corridas e={e} className="mb-3" />
         <div className="mb-5 flex flex-col gap-3">
-          {flujo.estado !== "incompleto" && <PorQueNoPudo e={e} />}
+          {/* El motivo real NUNCA se suprime, tampoco acá: estaba escondido
+              detrás de `estado !== "incompleto"`, así que un flujo al que le
+              faltaba una conexión no contaba por qué había fallado de verdad. */}
+          <PorQueNoPudo cfg={cfg} e={e} nombre={flujo.nombre} onCambio={cargar} />
           <AccionesFlujo
             cfg={cfg}
             e={e}
@@ -181,20 +194,20 @@ export default function FlujoDetallePage() {
             tarjeta concreta. Acá no traemos el catálogo (una llamada más por
             una pantalla de detalle no vale la pena): el rótulo sale de la
             tabla de conocidas y el motivo lo pone el flujo. */}
-        {flujo.estado === "incompleto" && flujo.conexiones_faltan.length > 0 && (
+        {e.faltan.length > 0 && (
           <div className="mb-5 rounded-lg border border-c-amber bg-c-amber/25 p-3">
             <p className="text-[13px] font-semibold text-c-amber-ink">
-              Le falta {flujo.conexiones_faltan.map((c) => etiquetaConexion(c)).join(" y ")}.
+              Le falta {e.faltan.map((c) => etiquetaConexion(c)).join(" y ")}.
             </p>
             <p className="mt-1 text-[12.5px] leading-relaxed text-c-amber-ink/85">
               Hasta que esté conectada, este trabajo queda a medias: te dejo lo que puedo
               y el resto espera.
             </p>
             <Link
-              href={`/app/conexiones?conexion=${encodeURIComponent(flujo.conexiones_faltan[0])}`}
+              href={`/app/conexiones?conexion=${encodeURIComponent(e.faltan[0])}`}
               className="mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
             >
-              Conectar {etiquetaConexion(flujo.conexiones_faltan[0])}
+              Conectar {etiquetaConexion(e.faltan[0])}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>

@@ -23,13 +23,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle, ArrowRight, Clock, FolderOpen, MessageSquare, RefreshCw,
-  Workflow, Zap, type LucideIcon,
+  WifiOff, Workflow, Zap, type LucideIcon,
 } from "lucide-react";
 import {
   etiquetaConexion, getConnections, getFlujos, getJobs, loadConfig,
   type Connection, type CronJob, type Flujo, type HttpError, type PortalConfig,
 } from "../lib/agent";
-import { estadoReal, jobDeFlujo, ordenarPorUrgencia, type EstadoReal } from "./corridas";
+import {
+  cruzarTarea, enElAire, estadoReal, ordenarPorUrgencia, retomarRepausas,
+  useVuelos, vueloDe, type EstadoReal,
+} from "./corridas";
 import { AccionesFlujo, CartelEstado, Corridas, PorQueNoPudo } from "./EstadoFlujo";
 import { EntityProvider } from "../lib/EntityViewer";
 import { EntityChip } from "../lib/entities";
@@ -132,17 +135,21 @@ function TarjetaFlujo({ f, e, cfg, conexiones, onCambio }: {
           tarjeta no contestaba mientras decía "Activo" en verde. */}
       <Corridas e={e} />
 
-      {/* Incompleto: el paso que lo destraba, no un diagnóstico. Y con NOMBRE
+      {/* PRIMERO EL MOTIVO REAL, SIEMPRE. Esto era un ternario: si faltaba una
+          conexión, `PorQueNoPudo` no se dibujaba y la causa verdadera
+          desaparecía. En Faro eso se veía como "Le falta correo · Conectar
+          correo" sobre una corrida que había fallado por otra cosa: la clienta
+          conecta el correo y vuelve a fallar. */}
+      <PorQueNoPudo cfg={cfg} e={e} nombre={f.nombre} onCambio={onCambio} />
+
+      {/* La conexión que falta, SEGUNDA y por separado: es lo único que el
+          cliente puede destrabar solo, pero no es un diagnóstico. Y con NOMBRE
           y MOTIVO: "Conectar lo que falta" no dice qué falta ni para qué, y al
           llegar a Conexiones el cliente se perdía entre seis tarjetas sin
           saber cuál era la suya. El "para qué" sale del catálogo, que ya lo
           tiene escrito en criollo — no lo inventamos acá. */}
-      {f.estado === "incompleto" && f.conexiones_faltan.length > 0 ? (
-        <FaltaConexion ids={f.conexiones_faltan} conexiones={conexiones} />
-      ) : (
-        // Una sola explicación por tarjeta: si le falta una conexión, ESA es la
-        // causa y el paso a seguir; el error del motor abajo sería ruido.
-        <PorQueNoPudo e={e} />
+      {e.faltan.length > 0 && (
+        <FaltaConexion ids={e.faltan} conexiones={conexiones} />
       )}
 
       {f.resultados.length > 0 && (
@@ -179,9 +186,9 @@ function TarjetaFlujo({ f, e, cfg, conexiones, onCambio }: {
 
       {/* "Todavía no produjo resultados" sobre un flujo que corrió y falló era
           la misma mentira en voz baja: ahí no es que todavía no produjo, es que
-          no pudo. Se calla siempre que haya una falla que contar —incluso
-          pausado, que es como queda un flujo roto que el cliente frenó. */}
-      {!e.falla && e.clave !== "incompleto" && f.resultados.length === 0 && (
+          no pudo. Se calla siempre que haya algo que contar —incluso pausado,
+          que es como queda un flujo roto que el cliente frenó. */}
+      {!e.nota && e.faltan.length === 0 && !e.sinConfirmar && f.resultados.length === 0 && (
         <p className="text-[12px] text-ink-soft/80">
           Todavía no produjo resultados: van a aparecer acá solos.
         </p>
@@ -196,30 +203,47 @@ function TarjetaFlujo({ f, e, cfg, conexiones, onCambio }: {
  *  salió sin respuesta. Una línea arriba de todo, y solo cuando hay algo que
  *  decir: cuando está todo bien la pantalla se calla y las tarjetas hablan. */
 function Resumen({ estados }: { estados: EstadoReal[] }) {
-  const rotos = estados.filter((e) => e.clave === "fallo").length;
-  const faltan = estados.filter((e) => e.clave === "incompleto").length;
-  if (rotos === 0 && faltan === 0) return null;
+  const cuenta = (...claves: EstadoReal["clave"][]) =>
+    estados.filter((e) => claves.includes(e.clave)).length;
+  const rotos = cuenta("fallo", "atrasado", "sin-tarea");
+  const dudas = cuenta("dudoso");
+  const faltan = cuenta("incompleto");
+  const conProblema = rotos + dudas + faltan;
+  if (conProblema === 0) return null;
 
   const total = estados.length;
-  const conProblema = rotos + faltan;
   const sujeto =
     total === 1 ? "Tu trabajo automático"
     : conProblema === total ? `Tus ${total} trabajos automáticos`
     : `${conProblema} de tus ${total} trabajos automáticos`;
   const plural = conProblema > 1;
-  const texto =
-    rotos > 0 && faltan > 0
-      ? `${sujeto} necesitan que los mires: ${rotos === 1 ? "uno falló" : `${rotos} fallaron`} la última vez y `
-        + `${faltan === 1 ? "a otro le falta una conexión" : `a otros ${faltan} les falta una conexión`}.`
-      : rotos > 0
-        ? `${sujeto} ${plural ? "no pudieron" : "no pudo"} terminar la última vez.`
-        : `${sujeto} ${plural ? "necesitan una conexión que todavía no está" : "necesita una conexión que todavía no está"}.`;
+  const partes: string[] = [];
+  if (rotos > 0) partes.push(`${rotos} no ${rotos === 1 ? "pudo" : "pudieron"} terminar la última vez`);
+  if (dudas > 0) partes.push(`${dudas} ${dudas === 1 ? "quedó" : "quedaron"} sin confirmar`);
+  if (faltan > 0) partes.push(`${faltan} ${faltan === 1 ? "necesita" : "necesitan"} una conexión`);
 
   return (
     <div className="mb-4 flex items-start gap-2 rounded-lg border border-c-coral bg-c-coral/25 px-3 py-2.5">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-c-coral-ink" />
       <p className="text-[13px] font-medium leading-snug text-c-coral-ink">
-        {texto} Abajo dice qué pasó en cada uno.
+        {sujeto} {plural ? "necesitan" : "necesita"} que {plural ? "los" : "lo"} mires:{" "}
+        {partes.join(" y ")}. Abajo dice qué pasó en cada uno.
+      </p>
+    </div>
+  );
+}
+
+/** Sin el cruce con `/api/jobs` la pantalla corre con datos parciales, y eso
+ *  se dice. Verificado con el gateway caído: un flujo pausado se veía "Activo"
+ *  en verde, los botones desaparecían sin explicación y no había una sola
+ *  palabra sobre que faltaba media pantalla. */
+function SinCruce() {
+  return (
+    <div className="mb-4 flex items-start gap-2 rounded-lg border border-c-amber bg-c-amber/25 px-3 py-2.5">
+      <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-c-amber-ink" />
+      <p className="text-[13px] font-medium leading-snug text-c-amber-ink">
+        No pude confirmar el estado con tu agente. Abajo está lo último que sé —
+        puede haber cambiado, y no puedo decirte si alguno quedó en pausa.
       </p>
     </div>
   );
@@ -311,10 +335,28 @@ export default function FlujosPage() {
     return () => clearInterval(t);
   }, [cfg, cargar]);
 
+  // Un re-pausado que quedó a medias (un F5 justo entre el "run" y el "pause")
+  // se retoma al entrar: la pausa no puede depender de que la pestaña siguiera
+  // abierta. Ver el guardián en `corridas.ts`.
+  useEffect(() => { if (cfg) retomarRepausas(cfg, cargar); }, [cfg, cargar]);
+
+  // Las corridas que disparó el propio portal y el motor todavía no anotó:
+  // mientras están en vuelo la tarjeta tiene que decir que está trabajando, no
+  // mostrar la corrida anterior con el botón habilitado.
+  const v = useVuelos();
   const conEstado = useMemo(
     () => ordenarPorUrgencia(
-      (flujos ?? []).map((f) => ({ flujo: f, estado: estadoReal(f, jobDeFlujo(f, jobs)) }))),
-    [flujos, jobs],
+      (flujos ?? []).map((f) => {
+        const cruce = cruzarTarea(f, jobs);
+        const jobId = cruce.tipo === "tarea" ? cruce.job.id : null;
+        return {
+          flujo: f,
+          estado: estadoReal(f, cruce, { enVuelo: enElAire(vueloDe(jobId)) }),
+        };
+      })),
+    // `v` es la versión del registro de vuelos: cambia con cada transición.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [flujos, jobs, v],
   );
 
   if (!cfg) return <div className={WRAP}><Spinner /></div>;
@@ -330,6 +372,7 @@ export default function FlujosPage() {
     if (flujos.length === 0) return <SinFlujos />;
     return (
       <>
+        {jobs === null && <SinCruce />}
         <Resumen estados={conEstado.map((x) => x.estado)} />
         <div className="grid items-start gap-3 md:grid-cols-2">
           {conEstado.map(({ flujo, estado }) => (
