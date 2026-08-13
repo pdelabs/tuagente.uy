@@ -8,13 +8,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown, ArrowUp, Brain, Check, ChevronRight, Copy, Download, Loader2, Menu,
-  Paperclip, Pencil, RefreshCw, Square, Wrench, X,
+  MessageSquareOff, Paperclip, Pencil, RefreshCw, Square, Wrench, X,
 } from "lucide-react";
 import {
   loadConfig, chatStream, sessionChatStream, getSessions, getSessionMessages,
   uploadFile, type PortalConfig, type ChatMessage,
 } from "../lib/agent";
-import { Btn, ErrorState, IconBtn, Spinner } from "../lib/ui";
+import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
+import {
+  CopiarLink, PARAM, PARAM_PEDIDO_CHAT, abrirEnRuta, reemplazarEnRuta, useParamRuta,
+} from "../lib/rutas";
 import { EntityProvider } from "../lib/EntityViewer";
 import Markdown from "../lib/Markdown";
 import dynamic from "next/dynamic";
@@ -28,6 +31,7 @@ const AgentitoRive = dynamic(() => import("../lib/AgentitoRive"), {
   ssr: false,
   loading: () => <AgentitoCargando />,
 });
+import { accionDe, resumenDeAcciones } from "../lib/palabras";
 import Sessions, { sessionTitle, type SessionSummary } from "./Sessions";
 import {
   MentionList, mentionAt, useMentionItems,
@@ -49,10 +53,11 @@ type Msg = {
 
 const THINKING = "_thinking";
 
-function toolLabel(tool: string): string {
-  if (tool === THINKING) return "Pensando";
-  return tool.replace(/_/g, " ");
-}
+// Lo que el agente está haciendo, en palabras del cliente. El nombre crudo de
+// la herramienta NO se muestra nunca: "Usando skill view…" y "Usando kanban
+// show…" fueron dos de las frases que el QA anotó como "no sé qué son esas
+// palabras, y son las que me muestra mientras espero". El nombre técnico sigue
+// viajando en el `title` para nosotros.
 
 /** Qué cara pone el agentito según lo que está haciendo AHORA.
  *
@@ -81,12 +86,7 @@ function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
   if (!tools.length) return null;
   const last = tools[tools.length - 1];
   const used = tools.filter((t) => t !== THINKING);
-  const summary =
-    used.length === 0
-      ? "Pensó un momento"
-      : used.length === 1
-        ? `Usó ${toolLabel(used[0])}`
-        : `Trabajó con ${used.length} herramientas`;
+  const summary = resumenDeAcciones(tools);
   return (
     <div className="mb-2">
       <button
@@ -97,7 +97,7 @@ function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
         {live ? (
           <>
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-            {last === THINKING ? "Pensando" : `Usando ${toolLabel(last)}`}…
+            {accionDe(last).curso}…
           </>
         ) : (
           <>
@@ -109,8 +109,8 @@ function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
       {open && (
         <ol className="ml-4 mt-1 flex flex-col gap-1 border-l border-black/[0.08] pl-3">
           {tools.map((t, i) => (
-            <li key={`${t}-${i}`} className="text-[12px] text-ink-soft">
-              {toolLabel(t)}
+            <li key={`${t}-${i}`} title={t} className="text-[12px] text-ink-soft">
+              {accionDe(t).hecho}
             </li>
           ))}
         </ol>
@@ -148,7 +148,9 @@ export default function ChatPage() {
   const [sessionsErr, setSessionsErr] = useState<string | null>(null);
   const [drawer, setDrawer] = useState(false);
 
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // Qué conversación está abierta lo dice la URL (`?conversacion=<id>`): así se
+  // comparte, refrescar la deja donde estaba y "atrás" vuelve a la anterior.
+  const activeId = useParamRuta(PARAM.conversacion);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [loadingThread, setLoadingThread] = useState(false);
   const [threadErr, setThreadErr] = useState<string | null>(null);
@@ -195,7 +197,7 @@ export default function ChatPage() {
     const pedido = new URLSearchParams(window.location.search).get("p");
     if (!pedido?.trim()) return;
     arrancado.current = true;
-    window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    reemplazarEnRuta({ [PARAM_PEDIDO_CHAT]: null });
     run(pedido.trim(), []);
   }, [cfg]);
 
@@ -280,23 +282,21 @@ export default function ChatPage() {
     if (!found) setMentionIdx(0);
   };
 
+  // Abrir una conversación (o empezar una nueva) es NAVEGAR. El hilo lo carga
+  // el efecto de abajo mirando la URL, así da igual si llegaste por la lista,
+  // por un link pegado o apretando "atrás".
   const newConversation = useCallback(() => {
     if (sendingRef.current) return;
-    openSeq.current++;
-    setActiveId(null);
-    setMsgs([]);
-    setLoadingThread(false);
-    setThreadErr(null);
-    setSendErr(null);
-    setFailedText(null);
-    setEditingIdx(null);
-    setAtBottom(true);
+    abrirEnRuta({ [PARAM.conversacion]: null });
   }, []);
 
-  const openSession = useCallback((c: PortalConfig, id: string) => {
+  const irASesion = useCallback((id: string) => {
     if (sendingRef.current) return;
+    abrirEnRuta({ [PARAM.conversacion]: id });
+  }, []);
+
+  const cargarHilo = useCallback((c: PortalConfig, id: string) => {
     const seq = ++openSeq.current;
-    setActiveId(id);
     setMsgs([]);
     setThreadErr(null);
     setSendErr(null);
@@ -315,15 +315,66 @@ export default function ChatPage() {
       })
       .catch((e) => {
         if (openSeq.current !== seq) return;
-        setThreadErr(e instanceof Error ? e.message : "error de red");
+        // Un 404 acá no es una caída: es un link viejo a una conversación que
+        // ya no está (se borró, o es de otro agente). "No pude hablar con tu
+        // agente — 404 en /api/sessions" era mentira y encima en jerga.
+        const msg = e instanceof Error ? e.message : "error de red";
+        setThreadErr(/\b404\b/.test(msg) ? "__vieja__" : msg);
       })
       .finally(() => { if (openSeq.current === seq) setLoadingThread(false); });
   }, []);
+
+  // De qué conversación es lo que hay en pantalla. Sin esto, la guarda de
+  // "hay un envío en curso" se tragaba los CAMBIOS de conversación: apretar
+  // atrás mientras el agente contestaba dejaba la URL y el encabezado en A, el
+  // hilo en pantalla en B, y el mensaje siguiente se escribía en A. Verificado
+  // por API. La guarda tiene que proteger el envío, no esconder la navegación.
+  const activeIdRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!cfg) return;
+    const previo = activeIdRef.current;
+    activeIdRef.current = activeId;
+    // `undefined` = primera vuelta: no es un cambio de conversación.
+    const cambioDeHilo = previo !== undefined && previo !== activeId;
+
+    if (sendingRef.current) {
+      // Mismo hilo y envío en curso: no tocar nada. Es el caso de `?p=`, que
+      // arranca la conversación en el mismo commit que este efecto.
+      if (!cambioDeHilo) return;
+      // Te fuiste a otra conversación: el envío que estaba en vuelo pertenece
+      // a la anterior. Se corta y se carga la que pediste. Cualquier otra cosa
+      // termina escribiendo en la conversación equivocada.
+      abortRef.current?.abort();
+      sendingRef.current = false;
+      setSending(false);
+      setLiveTools([]);
+    }
+    if (!activeId) {
+      // Conversación nueva: pizarra limpia. No se toca lo que se está
+      // escribiendo en el compositor.
+      openSeq.current++;
+      setMsgs([]);
+      setLoadingThread(false);
+      setThreadErr(null);
+      setSendErr(null);
+      setFailedText(null);
+      setEditingIdx(null);
+      setAtBottom(true);
+      return;
+    }
+    cargarHilo(cfg, activeId);
+  }, [cfg, activeId, cargarHilo]);
 
   // Envía `text` partiendo de `base` como historia previa.
   const run = async (text: string, base: Msg[]) => {
     if (!cfg || !text.trim() || sendingRef.current) return;
     sendingRef.current = true;
+    // A qué hilo pertenece ESTE envío. Si mientras corre el cliente se va a
+    // otra conversación, `openSeq` cambia y todo lo que llegue tarde se
+    // descarta en vez de pintarse encima de lo que está mirando ahora.
+    const seqEnvio = openSeq.current;
+    const vigente = () => openSeq.current === seqEnvio;
 
     const history: ChatMessage[] = [
       ...base.map((m): ChatMessage => ({ role: m.role, content: m.content })),
@@ -346,11 +397,13 @@ export default function ChatPage() {
     const ac = new AbortController();
     abortRef.current = ac;
     const tools: string[] = [];
-    const apply = (content: string) =>
+    const apply = (content: string) => {
+      if (!vigente()) return;
       setMsgs((ms) => [
         ...ms.slice(0, -1),
         { role: "assistant", content, tools: tools.length ? [...tools] : undefined },
       ]);
+    };
 
     // El markdown se re-parsea entero en cada repintado (código resaltado,
     // fórmulas, diagramas): agrupamos deltas por frame en vez de por token.
@@ -405,24 +458,38 @@ export default function ChatPage() {
         }, ac.signal);
       }
       flush();
-      setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
+      if (vigente()) {
+        setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
+      }
       refreshSessions(cfg);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         flush();
-        setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
+        if (vigente()) {
+          setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
+        }
         refreshSessions(cfg);
-      } else {
+      } else if (vigente()) {
         setMsgs(base);
         setInput(text);
         setFailedText(text);
-        setSendErr(e instanceof Error ? e.message : "error de red");
+        // Al ABRIR un hilo viejo el 404 ya se traducía ("Esa conversación ya no
+        // está"); al MANDAR salía crudo: "No pude enviar tu mensaje. 404 en
+        // chat de sesión". Es exactamente lo mismo pasando —la conversación no
+        // existe más— y encima acá Reintentar no puede funcionar nunca: vuelve
+        // a pegarle a la misma sesión que no está.
+        const msg = e instanceof Error ? e.message : "error de red";
+        setSendErr(/\b404\b/.test(msg) ? "__vieja__" : msg);
       }
     } finally {
       abortRef.current = null;
-      sendingRef.current = false;
-      setSending(false);
-      setLiveTools([]);
+      // Si el cliente ya cambió de conversación, el efecto de `activeId` limpió
+      // esto antes: no lo pisamos de nuevo.
+      if (vigente()) {
+        sendingRef.current = false;
+        setSending(false);
+        setLiveTools([]);
+      }
     }
   };
 
@@ -499,7 +566,7 @@ export default function ChatPage() {
       sessionsErr={sessionsErr}
       activeId={activeId}
       sending={sending}
-      onOpen={(id) => openSession(cfg, id)}
+      onOpen={irASesion}
       onNew={newConversation}
       onRefresh={() => refreshSessions(cfg)}
       onDeletedActive={newConversation}
@@ -537,6 +604,10 @@ export default function ChatPage() {
           <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
             {activeSession ? sessionTitle(activeSession) : "Nueva conversación"}
           </p>
+          {/* Solo las conversaciones guardadas tienen link. Una recién
+              empezada todavía no existe del lado del agente: prometerle un
+              link que no lleva a nada sería peor que no ofrecerlo. */}
+          {activeId && <CopiarLink titulo="Copiar el link de esta conversación" />}
           {msgs.length > 0 && (
             <IconBtn label="Exportar a Markdown" onClick={exportMd}>
               <Download className="h-3.5 w-3.5" />
@@ -548,8 +619,16 @@ export default function ChatPage() {
           <div className="mx-auto w-full max-w-3xl px-4 py-6 md:px-6">
             {loadingThread ? (
               <Spinner />
+            ) : threadErr === "__vieja__" ? (
+              <div className="pt-16">
+                <EmptyState
+                  icon={MessageSquareOff}
+                  title="Esa conversación ya no está"
+                  hint="Puede que la hayas borrado o que el link sea viejo. Empezá una nueva o abrí otra de la lista de la izquierda."
+                />
+              </div>
             ) : threadErr ? (
-              <ErrorState message={threadErr} onRetry={() => activeId && openSession(cfg, activeId)} />
+              <ErrorState message={threadErr} onRetry={() => activeId && cargarHilo(cfg, activeId)} />
             ) : msgs.length === 0 && !sending ? (
               <div className="flex flex-col items-center pt-24 text-center">
                 {/* El agentito recibe — el ANIMADO: mientras no le pedís nada,
@@ -664,14 +743,24 @@ export default function ChatPage() {
             </button>
           )}
           <div className="mx-auto w-full max-w-3xl px-4 md:px-6">
-            {sendErr && (
+            {sendErr === "__vieja__" ? (
+              <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-c-amber bg-c-amber/30 px-3 py-2 text-[13px] text-c-amber-ink">
+                <span className="min-w-0 font-medium">
+                  Esa conversación ya no está, así que no pude mandar tu mensaje. Lo dejé
+                  escrito abajo: empezá una nueva y mandalo ahí.
+                </span>
+                <Btn size="sm" kind="secondary" onClick={newConversation} disabled={sending}>
+                  Empezar una nueva
+                </Btn>
+              </div>
+            ) : sendErr ? (
               <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-c-coral bg-c-coral/30 px-3 py-2 text-[13px] text-c-coral-ink">
                 <span className="min-w-0 truncate font-medium">No pude enviar tu mensaje. {sendErr}</span>
                 <Btn size="sm" kind="secondary" onClick={() => failedText && send(failedText)} disabled={sending}>
                   Reintentar
                 </Btn>
               </div>
-            )}
+            ) : null}
             {mention && (
               <MentionList
                 kind={mention.kind}

@@ -117,6 +117,212 @@ export const MARCA_PEDIDO = "<!-- portal:pedido -->";
 /** Los pedidos anteriores a la marca se reconocen por cómo arranca el cuerpo. */
 export const PREFIJO_PEDIDO = "Pedido desde el portal.";
 
+/** ¿Este ticket lo pidió el cliente (y está en trámite nuestro), o es el agente
+ *  pidiéndole permiso? Son dos cosas distintas: los suyos no se aprueban ni
+ *  cuentan como pendientes en el badge del menú.
+ *
+ *  Vive acá y no en cada pantalla porque estaba copiado en cuatro lugares y ya
+ *  se habían desincronizado: el badge del sidebar aplicaba el filtro nuevo y el
+ *  Inicio no, así que el menú decía 2 y la portada decía "3 cosas esperando tu
+ *  ok" en la misma pantalla. */
+export function esPedidoDelCliente(body: string | null | undefined): boolean {
+  const b = body ?? "";
+  return b.includes(MARCA_PEDIDO) || b.trimStart().startsWith(PREFIJO_PEDIDO);
+}
+
+/* ── Lo que el cliente "dijo" según la máquina ────────────────────────────────
+   Aprobar-con-corrección y rechazar dejan en el ticket un comentario firmado
+   `cliente` que NO escribió el cliente: es una instrucción para el agente, con
+   mayúsculas y órdenes ("RECHAZADO POR TU CLIENTE. No hagas lo que pediste
+   aprobar, ni una versión parecida…"). La instrucción tiene que existir —es lo
+   que impide que el agente lea un "no" como un permiso—, pero mostrársela a la
+   clienta firmada "Vos" es ponerle en la boca un prompt que ella nunca
+   escribió. Se guarda entera y se muestra sólo su parte: sus palabras.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+const RECHAZO_RE = /^\s*RECHAZADO POR (?:TU|EL) CLIENTE\b/i;
+/** LA ÚNICA DEFINICIÓN DE "EL CLIENTE" DEL PORTAL.
+ *
+ *  Los autores con los que el ADAPTER firma lo que escribe en nombre del
+ *  cliente: `cliente` (el rechazo, la corrección) y `portal` (el asiento de
+ *  auditoría). Todo lo demás —`default`, `worker`, el nombre del profile, el
+ *  nombre de una persona— no es el cliente, y nadie habla por su clienta.
+ *
+ *  HABÍA TRES COPIAS DE ESTA REGLA y no decían lo mismo: acá entraban también
+ *  `user` y `usuario`, en el Tablero no, y en el visor de entidades `portal`
+ *  salía como "Portal" en vez de "Vos". Con un comentario firmado `user` el
+ *  Tablero mostraba «**user** · Lo rechazaste»: el rótulo decía que había
+ *  rechazado la clienta y el nombre decía otra cosa, en el mismo renglón.
+ *
+ *  Y `user`/`usuario` SE FUERON DEL CONJUNTO. El adapter no firma así —solo
+ *  `cliente` y `portal`—, así que no reconocían nada real; lo que sí hacían era
+ *  regalar superficie justo en la función que decide qué contenido se esconde
+ *  (ver `leerComentario`: lo que firma el cliente se filtra). Que hoy el hook
+ *  del motor bloquee `--author=` y `HERMES_PROFILE=` es una defensa de la otra
+ *  punta, y las defensas de la otra punta se caen solas. */
+export const esElCliente = (autor: string | null | undefined) =>
+  /^(cliente|portal)$/i.test((autor ?? "").trim());
+// El auto-decomposer del motor comenta en inglés y firmado con su propio
+// nombre. Justo en el momento en que al cliente se le rompió el pedido, la
+// pantalla le contestaba «Decomposed into t_f7052f4d, t_c8a7f149. Root will
+// wake when all children complete.» Y lo que hace falta decir ahí no es qué
+// pasó sino qué revisar: cuando el motor parte una tarea, la parte con el
+// texto ORIGINAL — por eso a la clienta le quedó en la cola una tarea de 8
+// bisagras después de haber corregido a 20.
+const DECOMPOSED_RE =
+  /^\s*Decomposed into (.+?)\.\s*Root will wake when all children complete\.?\s*$/i;
+/** El que firma un comentario que no es ni el cliente ni el agente. */
+export const esElSistema = (autor: string) =>
+  /^(auto-decomposer|system|kanban|engine)$/i.test((autor || "").trim());
+
+// Hermes firma los comentarios del agente con el autor del CLI: "default",
+// "worker" o el nombre del profile según el camino que los escribió. Todos son
+// LA MISMA persona para el cliente: su agente, con el nombre que le puso.
+//
+// `user` y `usuario` ESTÁN ACÁ Y NO EN `esElCliente`, y la diferencia es todo:
+// `user` es lo que `hermes kanban comment` pone cuando nadie dijo quién escribe
+// (el default del CLI, no una identidad), y adentro del agente de un cliente el
+// único que corre el CLI es el agente. Como RÓTULO es su nombre —mostrar la
+// palabra "user" en la pantalla es un identificador de máquina en la cara del
+// cliente—, pero como CONFIANZA no es nadie: por ahí no se esconde contenido ni
+// se habla en nombre de la clienta.
+const FIRMAS_DEL_AGENTE = new Set([
+  "", "default", "worker", "agent", "hermes", "user", "usuario",
+]);
+
+/** QUIÉN ESCRIBIÓ ESTE COMENTARIO, con nombre y apellido si lo tiene.
+ *
+ *  Vive acá, al lado de `esElCliente` y `esElSistema`, porque el rótulo es la
+ *  cara visible de esas dos reglas y separarlos ya salió caro: Aprobaciones
+ *  —la pantalla donde el cliente AUTORIZA— tenía su propio ternario binario
+ *  (`esDelCliente ? "Vos" : "Tu agente"`) y por eso el comentario de un tercero
+ *  real, el fundador de la empresa, se leía «**Tu agente** — Ojo que a
+ *  Panadería Rivas le prometí el precio viejo hasta fin de mes». El Tablero, con
+ *  los mismos datos, lo mostraba bien. Un rótulo de autor que miente en la
+ *  pantalla de aprobar es el peor lugar posible para que mienta.
+ *
+ *  Cuatro casos, y ninguno inventa: el cliente ("Vos"), el motor ("El sistema"),
+ *  el agente con cualquiera de sus firmas internas (el nombre que le puso el
+ *  cliente), y cualquier otro autor — que se muestra TAL CUAL vino, porque es
+ *  una persona de la empresa y su nombre es el dato.
+ *
+ *  `nombreAgente` entra por parámetro, igual que en `rotuloEvento`: leerlo acá
+ *  ataría este módulo al onboarding, que ya depende de éste. */
+export function rotuloAutor(autor: string | null | undefined, nombreAgente = "Tu agente"): string {
+  if (esElCliente(autor)) return "Vos";
+  const a = (autor ?? "").trim();
+  if (esElSistema(a)) return "El sistema";
+  return FIRMAS_DEL_AGENTE.has(a.toLowerCase()) ? nombreAgente : a;
+}
+// El adapter escribe «Motivo, con sus palabras: «…»». La variante con "Te dijo"
+// es de la versión que armaba el portal: quedó en tickets viejos.
+const MOTIVO_ENCABEZADO = /(?:Motivo|Te dijo),? con sus palabras:[ \t]*/i;
+/** Las comillas con las que el adapter envuelve el motivo. */
+const COMILLAS: [string, string][] = [["«", "»"], ["“", "”"], ['"', '"']];
+
+/** Las palabras del cliente, sacadas del bloque que arma el adapter.
+ *
+ *  HASTA LA ÚLTIMA COMILLA, no la primera. Con una captura perezosa
+ *  (`[\s\S]*?`) el motivo se cortaba en la primera comilla interna, y el
+ *  cliente que escribió «no me gusta la palabra «descuento», cambiala por
+ *  rebaja» leía en pantalla «no me gusta la palabra «descuento» — sus propias
+ *  palabras, a medias y diciendo otra cosa. El cierre que el adapter agrega
+ *  después del motivo no lleva comillas, así que la última cerrada es la suya.
+ *  Sin comillas (formato viejo), hasta el renglón en blanco. */
+function motivoDelRechazo(b: string): string {
+  const m = b.match(MOTIVO_ENCABEZADO);
+  if (!m || m.index === undefined) return "";
+  const resto = b.slice(m.index + m[0].length);
+  for (const [abre, cierra] of COMILLAS) {
+    if (!resto.startsWith(abre)) continue;
+    const fin = resto.lastIndexOf(cierra);
+    if (fin > abre.length - 1) return resto.slice(abre.length, fin).trim();
+  }
+  return resto.split(/\n\s*\n/)[0].trim();
+}
+
+// El encabezado de la corrección, con su preámbulo hasta los dos puntos. El
+// `\n+` que pedía antes acoplaba el filtro a que el adapter siguiera poniendo
+// la versión en un renglón aparte: una corrección de un solo renglón no
+// matcheaba y el prompt de máquina entero salía crudo, firmado "Vos".
+const CORRECCION_RE = /^\s*Aprobado CON CORRECCIONES\.[ \t]*(?:[^\n:]*:)?\s*/i;
+const APROBADO_RE = /^\s*Aprobado desde el portal(\s*\(con correcciones\))?\s*$/i;
+
+export type ComentarioLegible = {
+  /** Lo que se muestra. Vacío = no hay texto, sólo el rótulo. */
+  texto: string;
+  /** Qué fue esto, en una línea. Sólo cuando el texto crudo no se puede mostrar. */
+  rotulo?: string;
+};
+
+/** Un comentario del ticket, listo para los ojos del cliente.
+ *
+ *  EL AUTOR NO ES UN ADORNO: SIN ÉL, EL PREFIJO ES UN INTERRUPTOR DE LUZ.
+ *  Los formatos de máquina de acá abajo los escribe el ADAPTER firmando
+ *  `cliente`, y los rótulos hablan en nombre del cliente ("Lo rechazaste").
+ *  Reconocerlos por el texto, venga de quien venga, hacía dos cosas malas a la
+ *  vez. La primera es un rótulo que se contradice solo: un comentario del
+ *  AGENTE que arrancaba con "RECHAZADO POR TU CLIENTE." salía en pantalla como
+ *  «Tu agente · Lo rechazaste». La segunda es peor y es la que manda: como
+ *  después se muestra sólo el bloque del motivo —que un comentario del agente
+ *  no tiene—, el comentario quedaba ENTERO INVISIBLE. O sea, un canal por el
+ *  cual el modelo esconde cualquier cosa que escriba con sólo prefijarla.
+ *  Medido contra el agente del lab: el comentario se veía en el ticket y en la
+ *  pantalla no quedaba ni una palabra.
+ *
+ *  La promesa del producto es "ves lo que tu agente hace". Regla: el filtro se
+ *  aplica sólo a lo que firma el cliente; todo lo demás se muestra crudo. */
+export function leerComentario(body: string, autor?: string): ComentarioLegible {
+  const b = (body ?? "").trim();
+  const delCliente = esElCliente(autor);
+  if (delCliente && RECHAZO_RE.test(b)) {
+    const motivo = motivoDelRechazo(b);
+    // SIN BLOQUE DE MOTIVO SE MUESTRA EL CRUDO, NUNCA NADA. Hoy el adapter
+    // siempre lo escribe, pero atar "escondo el comentario entero" a "el otro
+    // lado no cambió el formato" es el acoplamiento que ya nos rompió otras
+    // veces: el día que cambie, el cliente deja de ver lo que dijo.
+    return motivo ? { rotulo: "Lo rechazaste", texto: motivo } : { rotulo: "Lo rechazaste", texto: b };
+  }
+  if (delCliente && CORRECCION_RE.test(b)) {
+    const texto = b.replace(CORRECCION_RE, "").trim();
+    return texto
+      ? { rotulo: "Tu versión corregida", texto }
+      : { rotulo: "Tu versión corregida", texto: b };
+  }
+  // El auto-decomposer es el motor, no el cliente: si esto viniera firmado por
+  // él sería un comentario suyo que empieza igual, y se muestra tal cual.
+  const partida = delCliente ? null : b.match(DECOMPOSED_RE);
+  if (partida) {
+    const hijas = partida[1].split(/\s*,\s*/).filter(Boolean);
+    return {
+      rotulo: "Se partió sola",
+      texto:
+        `Era muy grande y el sistema la partió en ${hijas.length === 1 ? "otra tarea" : `${hijas.length} tareas`} más chicas: `
+        + `${hijas.join(", ")}. Conviene abrirlas y revisar que digan lo que pediste: al partirla `
+        + "se copia el pedido original, no las correcciones que hayas hecho después. Esta tarea "
+        + "sigue abierta y se retoma cuando terminen las otras.",
+    };
+  }
+  if (delCliente && APROBADO_RE.test(b)) {
+    return { rotulo: b.toLowerCase().includes("correcciones") ? "Lo aprobaste con tu corrección" : "Le diste el ok", texto: "" };
+  }
+  return { texto: b };
+}
+
+/** ¿Este comentario es un "no" del cliente? Lo mismo que reconoce
+ *  `leerComentario`, expuesto para las pantallas que necesitan el ESTADO de la
+ *  negociación y no sólo el texto (ver `docs/PENDIENTES.md`: lo que está
+ *  abierto se lee de los datos, no de un `useState` que se muere con F5). */
+/** El motivo que el cliente escribió al rechazar, o "" si el comentario no
+ *  trae el bloque que arma el adapter. Las pantallas lo usan para citarlo entre
+ *  comillas: sin bloque no se cita nada (mostrar el prompt de máquina entre
+ *  comillas sería ponerle en la boca algo que no dijo). */
+export const motivoDeRechazo = (body: string) => motivoDelRechazo((body ?? "").trim());
+
+export function esRechazoDelCliente(c: { author?: string; body?: string } | null | undefined) {
+  return Boolean(c && esElCliente(c.author) && RECHAZO_RE.test((c.body ?? "").trim()));
+}
+
 export type TicketComment = { author: string; body: string; created_at: number };
 export type TicketEvent = {
   kind: string;
@@ -151,8 +357,68 @@ export const getApprovals = (c: PortalConfig) => get<{ approvals: any[] }>(c.ada
 export const approve = (c: PortalConfig, id: string, correction?: string) =>
   post<{ ok: boolean }>(c.adapter, `/portal/approvals/${id}/approve`, c,
     correction ? { correction } : undefined);
-export const reject = (c: PortalConfig, id: string, reason: string) =>
-  post<{ ok: boolean }>(c.adapter, `/portal/approvals/${id}/reject`, c, { reason });
+export type Rechazo = {
+  ok: boolean;
+  /** En qué estado quedó el ticket: `blocked` con un "no" común (igual que
+   *  antes de rechazar), `done` cuando el cliente lo cerró. */
+  estado?: string;
+  /** Siempre false: rechazar NO gasta el desbloqueo (ver abajo). */
+  desbloqueado?: boolean;
+  /** true sólo con `definitivo`: el ticket quedó terminado y el pedido se va
+   *  de la pestaña. */
+  cerrado?: boolean;
+  /** El pedido SIGUE en la pestaña esperando tu ok. */
+  en_aprobaciones?: boolean;
+  /** El comentario quedó escrito seguro; avisarle al agente es best-effort. */
+  avisado?: boolean;
+  /** Cuántas veces se re-bloqueó por lo mismo. El motor cuenta desde 1: el
+   *  PRIMER bloqueo ya deja 1, y ahí se queda toda la negociación mientras el
+   *  ticket no se desbloquee. Lo que importa es que no llegue a 2, que es
+   *  donde el motor lo manda a triage y el pedido muere. Medido en el lab con
+   *  dos rechazos y una aprobación con corrección: nunca pasó de 1. */
+  block_recurrences?: number | null;
+};
+
+/** RECHAZAR ES UN COMENTARIO FIRMADO POR EL CLIENTE, Y NADA MÁS.
+ *
+ *  UNA sola llamada, una sola escritura. El portal hacía tres —comentar,
+ *  comentar otra vez y mover el ticket a `ready`— y ninguna era atómica: si la
+ *  última fallaba, el comentario ya estaba puesto, la pantalla decía "no se
+ *  pudo" y reintentar comentaba dos veces.
+ *
+ *  Y sobre todo: EL ESTADO DEL TICKET NO SE TOCA. Un ticket tiene un solo
+ *  `unblock` útil antes de que el motor lo declare un loop (a las dos
+ *  re-bloqueadas por la misma causa se va a `triage`, donde Aprobar contesta
+ *  "quedó trabado" y ningún verbo lo trae de vuelta). Si rechazar destrabara,
+ *  la secuencia normal de una negociación —pido, me dicen que no, corrijo,
+ *  vuelvo a pedir— gastaría ese único desbloqueo en el primer "no", y el
+ *  segundo bloqueo mataría el pedido: o triage, o el auto-decomposer partiendo
+ *  la tarea con el CUERPO VIEJO (la clienta corrigió a 20 bisagras y le quedó
+ *  en la cola una tarjeta que decía 8).
+ *
+ *  Con el ticket quieto en `blocked`: el comentario despierta al agente igual
+ *  (`notify_agent_of_comment`), el agente re-propone sobre el mismo ticket, el
+ *  pedido no desaparece de la pestaña mientras se negocia, y el desbloqueo se
+ *  gasta UNA vez, al aprobar, que es el final.
+ *
+ *  `definitivo` ES LA OTRA MITAD, Y LA DECIDE EL CLIENTE. Hay dos "no"
+ *  distintos y sólo él sabe cuál está diciendo: "así no, traeme otra versión"
+ *  (el de arriba) y "esto no va, no me lo propongas más". El segundo cierra el
+ *  ticket (`done`) en la MISMA escritura que el comentario, del lado del
+ *  adapter. Sin él, un pedido definitivamente rechazado se quedaba para siempre
+ *  en Aprobaciones con un botón Aprobar vivo que ya no aprobaba nada. Y no se
+ *  infiere del texto del motivo: que el modelo adivine si un "no" era final es
+ *  exactamente la decisión que no le toca. */
+export const reject = (c: PortalConfig, id: string, reason: string, definitivo = false) =>
+  post<Rechazo>(c.adapter, `/portal/approvals/${id}/reject`, c,
+    definitivo ? { reason, definitivo: true } : { reason });
+
+/** Algo cambió en la cola de aprobaciones: que el badge del menú se entere ya
+ *  y no dentro de un minuto. */
+export const EVENTO_APROBACIONES = "tuagente:aprobaciones";
+export function avisarAprobacionesCambiaron() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENTO_APROBACIONES));
+}
 /** Bautizo y pinta, guardados EN EL AGENTE para que lo sigan a cualquier
  *  máquina. Con un adapter viejo tira 404 y el portal sigue con el browser. */
 export const guardarIdentidad = (
@@ -287,6 +553,36 @@ export type Connection = {
 };
 export const getConnections = (c: PortalConfig) =>
   get<{ disponible: boolean; conexiones: Connection[] }>(c.adapter, "/portal/connections", c);
+
+/** Lo que el agente NO puede hacer todavía y se puede prender. El adapter la
+ *  calcula por PRESENCIA (`activa`), igual que las conexiones, y esconde lo
+ *  nuestro (`instala`, `verifica`): acá solo llega lo que el cliente lee. */
+export type Capacidad = {
+  id: string;
+  label: string;
+  grupo?: string;
+  para_que: string;
+  como?: string;
+  costo?: string;
+  esfuerzo?: string;
+  quien?: string;
+  /** null = no se puede afirmar (el motor no expone el índice de tools). */
+  activa: boolean | null;
+};
+export const getCapacidades = (c: PortalConfig) =>
+  get<{ disponible: boolean; capacidades: Capacidad[] }>(c.adapter, "/portal/capacidades", c);
+
+/** El cliente pide una capacidad. Queda anotado del lado del agente (una línea
+ *  por pedido) y lo miramos nosotros: no prende nada solo. */
+export const pedirCapacidad = async (c: PortalConfig, id: string | null, texto: string) => {
+  const r = await post<{ ok?: boolean; error?: string; repetido?: boolean }>(
+    c.adapter, "/portal/capacidades/pedido", c, { id, texto });
+  // El adapter puede contestar 200 con `{ok:false}`: sin este chequeo el portal
+  // le dice al cliente "pedida" por algo que no se anotó en ningún lado, que es
+  // la peor variante posible de este botón.
+  if (r?.ok === false) throw new Error(r.error || "el pedido no quedó registrado");
+  return r;
+};
 
 export type ArtifactMeta = {
   id: string; title: string; kind: string; summary: string;

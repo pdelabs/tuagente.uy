@@ -27,15 +27,17 @@ import {
   ArrowRight, Check, Clock, ExternalLink, Link2, Plug, RefreshCw, TriangleAlert,
 } from "lucide-react";
 import {
-  etiquetaConexion, getConnections, getTickets, loadConfig, MARCA_PEDIDO, PREFIJO_PEDIDO,
+  esPedidoDelCliente, getConnections, getTickets, loadConfig,
+  MARCA_PEDIDO, PREFIJO_PEDIDO,
   type Connection, type PortalConfig, type Ticket,
 } from "../lib/agent";
 import { ConexionLogo } from "../lib/ConexionLogo";
 import Permisos from "../lib/Permisos";
 import DialogoWhatsApp from "./DialogoWhatsApp";
 import {
-  Btn, Card, Chip, EmptyState, ErrorState, Modal, PageHeader, Spinner, inputCls,
+  AvisoLinkViejo, Btn, Card, Chip, EmptyState, ErrorState, Modal, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
+import { CopiarLink, PARAM, traerALaVista, useParamRuta } from "../lib/rutas";
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
@@ -280,20 +282,27 @@ export default function ConexionesPage() {
   // lo pide, o si viene a buscar una conexión que está ahí adentro.
   const [verTodas, setVerTodas] = useState(false);
   const [busqueda, setBusqueda] = useState("");
-  // A qué conexión viene el cliente. Llega en el hash desde el flujo que la
-  // necesita: sin esto aterriza en una pantalla con seis tarjetas y ninguna
-  // le dice cuál era la suya. Va por hash y no por query para no romper el
-  // export estático ni pelearse con el magic link.
-  const [buscada, setBuscada] = useState<string | null>(null);
+  // A qué conexión viene el cliente. Llega en la URL desde el flujo que la
+  // necesita: sin esto aterriza en una pantalla con seis tarjetas y ninguna le
+  // dice cuál era la suya.
+  //
+  // Ahora va por query (`?conexion=telegram`), como el resto del portal. Antes
+  // iba por hash `#c=` para no pelearse con el magic link; el problema es que
+  // el hash es JUSTO donde llega la credencial, así que compartir esa URL era
+  // compartir la clave. El hash se sigue leyendo para no romper los links
+  // viejos que puedan estar dando vueltas.
+  const enRuta = useParamRuta(PARAM.conexion);
+  const [enHash, setEnHash] = useState<string | null>(null);
   useEffect(() => {
     const leer = () => {
       const m = window.location.hash.match(/(?:^#|&)c=([^&]+)/);
-      setBuscada(m ? decodeURIComponent(m[1]) : null);
+      setEnHash(m ? decodeURIComponent(m[1]) : null);
     };
     leer();
     window.addEventListener("hashchange", leer);
     return () => window.removeEventListener("hashchange", leer);
   }, []);
+  const buscada = enRuta ?? enHash;
 
   // Traerla a la vista cuando ya está pintada. Card no toma ref (React 18),
   // así que se busca por la clase marcadora.
@@ -307,14 +316,14 @@ export default function ConexionesPage() {
     }
   }, [buscada, conexiones]);
 
+  // Las deps son booleanos, no la lista: se refresca sola cada minuto y con
+  // `conexiones` acá el efecto corría en cada refresco — o sea, la página
+  // saltando sola cada 60 segundos mientras el cliente lee otra tarjeta.
+  const hayConexiones = conexiones !== null;
   useEffect(() => {
-    if (!buscada) return;
-    const t = setTimeout(() => {
-      document.querySelector(".conexion-buscada")
-        ?.scrollIntoView({ block: "center", behavior: "smooth" });
-    }, 150);
-    return () => clearTimeout(t);
-  }, [buscada, conexiones]);
+    if (!buscada || !hayConexiones) return;
+    return traerALaVista(".conexion-buscada");
+  }, [buscada, hayConexiones, verTodas]);
 
   useEffect(() => setCfg(loadConfig()), []);
 
@@ -333,11 +342,8 @@ export default function ConexionesPage() {
       const t = await getTickets(cfg);
       const abiertos = new Set(
         (t.tickets ?? [])
-          .filter((x: Ticket) => {
-            const b = x.body ?? "";
-            const esPedido = b.includes(MARCA_PEDIDO) || b.trimStart().startsWith(PREFIJO_PEDIDO);
-            return esPedido && x.status !== "done" && x.status !== "archived";
-          })
+          .filter((x: Ticket) =>
+            esPedidoDelCliente(x.body) && x.status !== "done" && x.status !== "archived")
           .map((x: Ticket) => (x.title ?? "").replace(/^Conectar\s+/i, "").trim().toLowerCase()),
       );
       setPedidosAbiertos(abiertos);
@@ -407,6 +413,12 @@ export default function ConexionesPage() {
    *  acabás de hacer en esta pantalla. */
   const yaPedida = (c: Connection) =>
     Boolean(pedidas[c.id]) || pedidosAbiertos.has((c.label ?? "").trim().toLowerCase());
+
+  /** La conexión a la que apunta el link, o null si el catálogo no la tiene.
+   *  El cartel de arriba se arma con ESTO, no con el id crudo de la URL: sin el
+   *  chequeo, `etiquetaConexion` humaniza cualquier cosa ("noexiste-xyz" →
+   *  "noexiste xyz") y el portal termina anunciando un producto inventado. */
+  const conexionBuscada = buscada ? conexiones.find((c) => c.id === buscada) ?? null : null;
 
   const tarjeta = (c: Connection) => (
     <Card
@@ -524,23 +536,53 @@ export default function ConexionesPage() {
         title="Conexiones"
         subtitle="Los sistemas de tu empresa a los que tu agente está enchufado."
         actions={
-          <Btn kind="ghost" onClick={cargar}>
-            <RefreshCw className="h-4 w-4" />
-            Actualizar
-          </Btn>
+          <>
+            {conexionBuscada && <CopiarLink titulo="Copiar el link de esta conexión" />}
+            <Btn kind="ghost" onClick={cargar}>
+              <RefreshCw className="h-4 w-4" />
+              Actualizar
+            </Btn>
+          </>
         }
       />
 
       {/* De dónde venís. Sin esto el cliente aterriza en seis tarjetas y
-          ninguna le dice cuál era la suya: "te perdés en todo lo que hay". */}
-      {buscada && (
+          ninguna le dice cuál era la suya: "te perdés en todo lo que hay".
+          PERO SOLO SE AFIRMA LO QUE SE SABE. El cartel decía siempre lo mismo —
+          "Venís a conectar X. Es la que te falta para uno de tus flujos"— y con
+          eso inventaba dos cosas: con `?conexion=noexiste-xyz` inventaba el
+          producto ("Venís a conectar noexiste xyz"), y con cualquier id real
+          inventaba la necesidad, incluso cuando la que hacía falta era otra.
+          Ahora son cuatro carteles distintos y ninguno afirma de más. */}
+      {buscada && conexionBuscada === null && (
+        <AvisoLinkViejo>
+          No tengo ninguna conexión que se llame «{buscada}» — puede que el link sea viejo o
+          que esté mal escrito. Abajo está todo lo que tu agente puede conectar hoy.
+        </AvisoLinkViejo>
+      )}
+
+      {conexionBuscada && conexionBuscada.estado === "conectado" && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-c-green bg-c-green/25 px-3 py-2.5">
+          <Check className="h-4 w-4 shrink-0 text-c-green-ink" />
+          <p className="text-[13px] font-semibold text-c-green-ink">
+            {conexionBuscada.label} ya está conectada.
+          </p>
+          <p className="text-[12.5px] text-c-green-ink/85">
+            Te la marcamos abajo, con sus permisos.
+          </p>
+        </div>
+      )}
+
+      {conexionBuscada && conexionBuscada.estado !== "conectado" && (
         <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-c-amber bg-c-amber/25 px-3 py-2.5">
           <TriangleAlert className="h-4 w-4 shrink-0 text-c-amber-ink" />
           <p className="text-[13px] font-semibold text-c-amber-ink">
-            Venís a conectar {etiquetaConexion(buscada, conexiones)}.
+            Venís a conectar {conexionBuscada.label}.
           </p>
           <p className="text-[12.5px] text-c-amber-ink/85">
-            Es la que te falta para uno de tus flujos — te la marcamos abajo.
+            {conexionBuscada.requerida
+              ? "Es la que le falta a uno de tus trabajos — te la marcamos abajo."
+              : "Te la marcamos abajo."}
           </p>
         </div>
       )}

@@ -13,13 +13,16 @@ import {
   RefreshCw, Workflow, Zap, type LucideIcon,
 } from "lucide-react";
 import {
-  etiquetaConexion, getFlujoDetalle, loadConfig,
-  type FlujoDetalle, type HttpError, type PortalConfig,
+  etiquetaConexion, getFlujoDetalle, getFlujos, loadConfig,
+  type Flujo, type FlujoDetalle, type HttpError, type PortalConfig,
 } from "../../lib/agent";
 import Markdown from "../../lib/Markdown";
 import { EntityProvider } from "../../lib/EntityViewer";
 import { EntityChip } from "../../lib/entities";
-import { Btn, Card, Chip, ErrorState, IconBtn, PageHeader, Spinner } from "../../lib/ui";
+import {
+  AvisoLinkViejo, Btn, Card, Chip, ErrorState, IconBtn, PageHeader, Spinner,
+} from "../../lib/ui";
+import { CopiarLink } from "../../lib/rutas";
 
 const WRAP = "mx-auto max-w-4xl px-6 py-6 md:px-8";
 
@@ -50,6 +53,13 @@ export default function FlujoDetallePage() {
   const [flujo, setFlujo] = useState<FlujoDetalle | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+  // Un slug que no existe NO es una caída del agente. Antes esta pantalla
+  // contestaba "No pude hablar con tu agente" —el patrón que la doc de rutas
+  // declara eliminado— a un link viejo, que es lo más normal del mundo: los
+  // flujos se renombran y se dan de baja. Ahora se dice en criollo y se
+  // muestra la lista de los que sí tiene, que es donde puede seguir.
+  const [noExiste, setNoExiste] = useState(false);
+  const [otros, setOtros] = useState<Flujo[] | null>(null);
 
   useEffect(() => setCfg(loadConfig()), []);
 
@@ -57,14 +67,54 @@ export default function FlujoDetallePage() {
     if (!cfg || !slug) return;
     setCargando(true);
     getFlujoDetalle(cfg, slug)
-      .then((f) => { setFlujo(f); setErr(null); })
-      .catch((e: HttpError) => setErr(e?.message || "error"))
+      .then((f) => { setFlujo(f); setErr(null); setNoExiste(false); })
+      .catch((e: HttpError) => {
+        if (e?.status === 404 || /^404\b/.test(e?.message ?? "")) {
+          setNoExiste(true);
+          setErr(null);
+          getFlujos(cfg).then((r) => setOtros(r.flujos ?? [])).catch(() => setOtros([]));
+        } else {
+          setErr(e?.message || "error");
+        }
+      })
       .finally(() => setCargando(false));
   }, [cfg, slug]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
   if (!cfg) return <div className={WRAP}><Spinner /></div>;
+  if (noExiste) {
+    return (
+      <div className={WRAP}>
+        <Link
+          href="/app/flujos"
+          className="mb-3 inline-flex items-center gap-1 text-[13px] font-semibold text-ink-soft transition hover:text-ink"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Flujos
+        </Link>
+        <AvisoLinkViejo>
+          Ese trabajo ya no está — puede que lo hayamos renombrado o dado de baja. Abajo
+          están los que tu agente tiene hoy.
+        </AvisoLinkViejo>
+        {otros === null ? <Spinner /> : otros.length === 0 ? (
+          <p className="text-sm text-ink-soft">Tu agente todavía no tiene ningún trabajo armado.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {otros.map((f) => (
+              <Link key={f.slug} href={`/app/flujos/${encodeURIComponent(f.slug)}`}>
+                <Card className="transition hover:border-black/[0.14]">
+                  <p className="text-sm font-semibold text-ink">{f.nombre}</p>
+                  {f.para_cliente && (
+                    <p className="mt-0.5 text-[13px] leading-snug text-ink-soft">{f.para_cliente}</p>
+                  )}
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
   if (err && !flujo) return <div className={WRAP}><ErrorState message={err} onRetry={cargar} /></div>;
   if (!flujo) return <div className={WRAP}><Spinner /></div>;
 
@@ -84,9 +134,12 @@ export default function FlujoDetallePage() {
           title={flujo.nombre}
           subtitle={flujo.para_cliente}
           actions={
-            <IconBtn label="Actualizar" disabled={cargando} onClick={cargar}>
-              <RefreshCw className={`h-4 w-4 ${cargando ? "animate-spin" : ""}`} />
-            </IconBtn>
+            <>
+              <CopiarLink titulo="Copiar el link de este flujo" />
+              <IconBtn label="Actualizar" disabled={cargando} onClick={cargar}>
+                <RefreshCw className={`h-4 w-4 ${cargando ? "animate-spin" : ""}`} />
+              </IconBtn>
+            </>
           }
         />
 
@@ -120,7 +173,7 @@ export default function FlujoDetallePage() {
               y el resto espera.
             </p>
             <Link
-              href={`/app/conexiones#c=${encodeURIComponent(flujo.conexiones_faltan[0])}`}
+              href={`/app/conexiones?conexion=${encodeURIComponent(flujo.conexiones_faltan[0])}`}
               className="mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
             >
               Conectar {etiquetaConexion(flujo.conexiones_faltan[0])}

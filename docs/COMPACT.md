@@ -39,6 +39,19 @@ archivos con `@`, crear/comentar/cambiar estado de tickets, **corregir un
 borrador y aprobarlo**, ver la consigna real de cada tarea programada con su
 historial, y el costo en USD por canal y por modelo.
 
+**Todo lo que se abre tiene URL** (12/8): pestaña y detalle —una tarea, un
+entregable, una carpeta, una conversación, un pedido de aprobación—. Van por
+query sobre la pestaña (`/app/pipeline?tarea=t_ab12`,
+`/app/archivos?archivo=entregables/informe.md`) y NO por segmentos de path:
+en el build todas las pestañas son `○ (Static)` y la única `ƒ` es
+`/app/flujos/[slug]`; un segmento por detalle ataría el portal a tener
+servidor. Tampoco por hash: ahí llega la credencial. El contrato completo
+—lo que el agente puede citar, con **qué fila se probó y cuál no**— está en
+`docs/rutas-portal.md`: ojo con darlo por verificado entero, la primera versión
+de esa tabla decía "cada fila está probada" y tres filas mentían.
+De paso, el magic link ya no deja la clave en la barra de direcciones: se borra
+del hash apenas queda guardada.
+
 Un comentario desde el portal **despierta al agente** (el adapter le manda la
 ficha del ticket con fechas) y **su respuesta se publica como comentario en el
 mismo ticket**. Todos los avisos usan una sola sesión, oculta del chat.
@@ -113,7 +126,8 @@ Los esquemas pesan casi el doble que el system prompt entero: **la palanca es
 `POST /api/jobs/{id}/pause|resume|run` · `GET /health`.
 
 **:8643** — `manifest` · `tickets` (+`/{id}`, POST crear, comentar, estado) ·
-`approvals` (+approve con `{correction}` opcional, reject) · `artifacts`
+`approvals` (+approve con `{correction}` opcional; reject con `{reason}` y
+`{definitivo}` opcional, que además CIERRA el ticket) · `artifacts`
 (+`/{id}`, DELETE) · `activity` · `usage` · `files` (+`/{path}`, siempre
 text/plain) · `crons/{id}` · `capabilities` · `boards` · `POST upload` ·
 `POST sessions/{id}/chat/stream` (proxy).
@@ -137,6 +151,36 @@ text/plain) · `crons/{id}` · `capabilities` · `boards` · `POST upload` ·
 4. `docker exec` con heredoc: siempre `-i`. Archivos al browser: siempre
    `text/plain`. Nunca `git add -A` con subagentes escribiendo.
 5. `hermes kanban`: opciones `--flag=valor` y `--` antes de los posicionales.
+6. **Un ticket tiene UN desbloqueo, y no es del portal gastarlo.** A las dos
+   re-bloqueadas por la misma causa el motor lo manda a `triage` —donde Aprobar
+   contesta 409— o lo parte con el auto-decomposer usando el **cuerpo viejo**.
+   Por eso rechazar es sólo un comentario firmado `cliente` y no toca el estado:
+   el `unblock` se gasta una vez, al aprobar. Ver `docs/PENDIENTES.md`.
+7. **Lo que firma `cliente` no siempre lo escribió el cliente.** Rechazar y
+   aprobar-con-corrección dejan en el ticket un prompt para la máquina firmado
+   como suyo ("RECHAZADO POR TU CLIENTE. No hagas lo que pediste aprobar…"), y
+   el portal lo mostraba tal cual arriba de un "Vos". Todo comentario pasa por
+   `leerComentario` (`lib/agent.ts`) antes de llegar a la pantalla.
+7b. **Y ese filtro se aplica MIRANDO QUIÉN FIRMA, no el prefijo.** Reconocerlo
+   sólo por el texto convertía el prefijo en un interruptor de luz: un
+   comentario del AGENTE que arrancaba con "RECHAZADO POR TU CLIENTE." salía
+   como «Tu agente · Lo rechazaste» y **sin una palabra de texto** — porque de
+   un rechazo se muestra el bloque del motivo, que un comentario suyo no tiene.
+   O sea, un canal por el cual el modelo esconde de la pantalla cualquier cosa
+   que escriba. Regla: los formatos de máquina se aplican sólo a lo que firma
+   el cliente; lo demás se muestra crudo. Y **ningún camino puede devolver
+   vacío**: si el formato no matchea entero (un rechazo sin bloque de motivo),
+   se muestra el crudo. Medido contra el agente del lab con comentarios
+   sembrados por CLI, 12/8.
+8. **El interruptor de "pasos internos" es para el ruido, no para las malas
+   noticias.** `block_loop_detected` y `decomposed` suenan a maquinaria y son
+   las dos únicas señales de que el pedido del cliente se rompió: van siempre a
+   la vista. Detrás del interruptor sólo lo que no cambia ninguna decisión
+   (latidos, arranques, esperas, asignaciones).
+9. **Un id de la URL nunca se humaniza para hacerlo pasar por un nombre.**
+   `?conexion=noexiste-xyz` terminaba anunciando "Venís a conectar noexiste
+   xyz": el portal inventándole un producto al cliente. Chequeo de existencia
+   primero, y si no está, `AvisoLinkViejo` + la lista.
 
 ## Estética
 M3 expressive del `tailwind.config.ts`: primary #5B4BE8, surface #FBFAFF,

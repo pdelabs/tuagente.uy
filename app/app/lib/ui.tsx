@@ -157,6 +157,23 @@ export function Modal({ onClose, children, wide = false }: {
   );
 }
 
+/** El link que te mandaron ya no lleva a nada.
+ *
+ *  Pasa solo: una aprobación se aprueba, una tarea se archiva, un archivo se
+ *  renombra. Un link que el agente mandó por mail hace dos días se pone viejo
+ *  sin que nadie haga nada mal. Antes cada pantalla reaccionaba distinto —una
+ *  en silencio, otra clavada en "Abriendo…" para siempre, otra con "No pude
+ *  hablar con tu agente", que además era mentira—. Ahora es siempre lo mismo:
+ *  se dice en criollo y se muestra la lista, que es donde el cliente puede
+ *  seguir. */
+export function AvisoLinkViejo({ children }: { children: ReactNode }) {
+  return (
+    <p className="mb-4 rounded-lg border border-c-amber bg-c-amber/25 px-3 py-2 text-[13px] leading-snug text-c-amber-ink">
+      {children}
+    </p>
+  );
+}
+
 export function EmptyState({ icon: Icon = Hand, title, hint }: {
   icon?: LucideIcon; title: string; hint?: string;
 }) {

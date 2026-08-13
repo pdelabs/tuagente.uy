@@ -13,8 +13,9 @@ import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Clock, Eye, Pause, Play, TriangleAlert, X, Zap } from "lucide-react";
 import { loadConfig, getJobs, jobAction, type PortalConfig } from "../lib/agent";
 import {
-  Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner,
+  AvisoLinkViejo, Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner,
 } from "../lib/ui";
+import { CopiarLink, PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
 
 // ── Tipos (shape real de /api/jobs, verificado contra el agente) ──
 
@@ -365,9 +366,12 @@ function DetalleTarea({ job, detalle, error, onRetry, onClose }: {
             )}
           </div>
         </div>
-        <IconBtn label="Cerrar" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </IconBtn>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <CopiarLink titulo="Copiar el link de esta tarea" />
+          <IconBtn label="Cerrar" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </IconBtn>
+        </div>
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-4">
@@ -488,7 +492,8 @@ export default function TareasPage() {
   const [confirm, setConfirm] = useState<{ id: string; action: Action } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
-  const [abiertoId, setAbiertoId] = useState<string | null>(null);
+  // Cuál está abierta lo dice la URL (`?programada=<id>`).
+  const abiertoId = useParamRuta(PARAM.programada);
   const [detalle, setDetalle] = useState<CronDetail | null>(null);
   const [detalleErr, setDetalleErr] = useState<string | null>(null);
   const pedido = useRef(0); // descarta respuestas de detalles que ya no se ven
@@ -545,13 +550,10 @@ export default function TareasPage() {
     if (abiertoId) cargarDetalle(abiertoId);
   }, [abiertoId, cargarDetalle]);
 
-  // Abrir limpia el detalle en el mismo evento: sin esto, el primer frame del
-  // modal nuevo muestra las corridas de la tarea anterior.
-  const abrir = (id: string) => {
-    setAbiertoId(id);
-    setDetalle(null);
-    setDetalleErr(null);
-  };
+  // Abrir y cerrar es navegar. `cargarDetalle` ya limpia el detalle anterior,
+  // así que el primer frame del modal nuevo no muestra las corridas de la otra.
+  const abrir = (id: string) => abrirEnRuta({ [PARAM.programada]: id });
+  const cerrar = useCallback(() => cerrarEnRuta(PARAM.programada), []);
 
   // Mientras el detalle está abierto también se refresca solo (misma cadencia
   // que la lista): una corrida disparada desde acá aparece sin recargar.
@@ -564,14 +566,14 @@ export default function TareasPage() {
   // Modal: Escape cierra, el fondo no scrollea.
   useEffect(() => {
     if (!abiertoId) return;
-    const fn = (e: KeyboardEvent) => e.key === "Escape" && setAbiertoId(null);
+    const fn = (e: KeyboardEvent) => e.key === "Escape" && cerrar();
     window.addEventListener("keydown", fn);
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", fn);
       document.body.style.overflow = "";
     };
-  }, [abiertoId]);
+  }, [abiertoId, cerrar]);
 
   const ejecutar = async (job: Job, action: Action) => {
     if (!cfg) return;
@@ -616,6 +618,13 @@ export default function TareasPage() {
   return (
     <Shell>
       <PageHeader title="Tareas" subtitle="Lo que tu agente hace solo, y cuándo" />
+
+      {abiertoId && jobs !== null && !jobs.some((j) => j.id === abiertoId) && (
+        <AvisoLinkViejo>
+          Esa tarea programada ya no existe — puede que la hayamos sacado o cambiado de
+          nombre. Abajo están las que tu agente tiene hoy.
+        </AvisoLinkViejo>
+      )}
 
       {notice && (
         <div
@@ -758,7 +767,7 @@ export default function TareasPage() {
           detalle={detalle}
           error={detalleErr}
           onRetry={() => cargarDetalle(abierto.id)}
-          onClose={() => setAbiertoId(null)}
+          onClose={cerrar}
         />
       )}
     </Shell>

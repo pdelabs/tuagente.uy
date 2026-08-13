@@ -17,10 +17,12 @@ import {
   Search, X, type LucideIcon,
 } from "lucide-react";
 import { loadConfig, getFiles, getFileText, getFileBytes, type PortalConfig } from "../lib/agent";
+import { CopiarLink, PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
 import {
-  Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner, inputCls,
+  AvisoLinkViejo, Btn, Card, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader,
+  Spinner, inputCls,
 } from "../lib/ui";
-import { FileBody } from "../lib/EntityViewer";
+import { FileBody, ImagenDelAgente } from "../lib/EntityViewer";
 import Spreadsheet, { CsvPreview } from "../lib/Spreadsheet";
 
 type FileEntry = { path: string; size?: number; mtime?: string | number };
@@ -199,11 +201,31 @@ function entriesFor(files: FileEntry[], dir: string) {
   return { folderList, inDir };
 }
 
+/** La carpeta en la que vive un archivo ("entregables/informe.md" →
+ *  "entregables"). Sirve para que un link a un archivo suelto abra igual la
+ *  carpeta correcta atrás del visor. */
+const quitarPrefijo = (p: string | null) =>
+  p ? p.replace(/^\/?(?:opt\/data\/)?workspace\//, "").replace(/^\.\//, "") : null;
+
+const carpetaDe = (path: string) => {
+  const i = clean(path).lastIndexOf("/");
+  return i === -1 ? "" : clean(path).slice(0, i);
+};
+
 export default function ArchivosPage() {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [files, setFiles] = useState<FileEntry[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [dir, setDir] = useState("");
+  // Dónde está parado el cliente lo dice la URL: `?carpeta=entregables` y
+  // `?archivo=entregables/informe.md`. Así el agente puede mandar el link de un
+  // entregable concreto, y refrescar no lo devuelve a la raíz.
+  const carpetaURL = useParamRuta(PARAM.carpeta);
+  // El agente escribe sus rutas con el prefijo del workspace
+  // (`workspace/entregables/informe.md`) y así las va a citar en un link. El
+  // portal ya sabe sacarlo al detectar entidades; acá también, o el link más
+  // natural que puede armar el agente termina en "no encontré ese archivo".
+  const abiertoPath = quitarPrefijo(useParamRuta(PARAM.archivo));
+  const dir = carpetaURL ?? (abiertoPath ? carpetaDe(abiertoPath) : "");
   const [q, setQ] = useState("");
   const [showInternal, setShowInternal] = useState(false);
   const [viewer, setViewer] = useState<Viewer | null>(null);
@@ -211,6 +233,15 @@ export default function ArchivosPage() {
   const [raw, setRaw] = useState(false);
 
   useEffect(() => { setCfg(loadConfig()); }, []);
+
+  // UN LINK A LO INTERNO PRENDE EL INTERRUPTOR DE LO INTERNO. Sin esto,
+  // `?carpeta=interno` abría una carpeta con ocho archivos adentro y decía
+  // "Esta carpeta está vacía": el filtro de andamiaje se comía todo lo que el
+  // link venía a mostrar, y el cliente veía al portal contradecirse solo. Vale
+  // igual para `?archivo=` de un script suelto, que también es "interno".
+  useEffect(() => {
+    if (isInternal(dir) || (abiertoPath && isInternal(abiertoPath))) setShowInternal(true);
+  }, [dir, abiertoPath]);
 
   const load = useCallback(() => {
     if (!cfg) return;
@@ -223,7 +254,11 @@ export default function ArchivosPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const goTo = (next: string) => { setDir(next); setQ(""); };
+  // Entrar a una carpeta es navegar: cada una tiene su link y "atrás" sube.
+  const goTo = (next: string) => {
+    setQ("");
+    abrirEnRuta({ [PARAM.carpeta]: next || null, [PARAM.archivo]: null });
+  };
 
   const toggleInternal = () => {
     const next = !showInternal;
@@ -243,7 +278,20 @@ export default function ArchivosPage() {
 
   const esPlanilla = (p: string) => ["xlsx", "xls"].includes((p.split(".").pop() ?? "").toLowerCase());
 
-  const openFile = (path: string) => {
+  // Una imagen SE MIRA. Decirle "sin vista previa" al cartel que el agente
+  // acaba de hacer para WhatsApp —y obligarla a bajarlo para saber si está
+  // bien— fue una de las cosas que el QA anotó: "es una imagen, ¿por qué no me
+  // la puede mostrar?".
+  const esFoto = (p: string) =>
+    /\.(jpe?g|png|gif|webp|bmp|svg|ico|heic|avif)$/i.test(p);
+
+  /** Abrir un archivo es navegar: se lleva también la carpeta en la que estás,
+   *  para que el link compartido muestre el mismo fondo que vos. */
+  const openFile = (path: string) =>
+    abrirEnRuta({ [PARAM.archivo]: path, [PARAM.carpeta]: dir || null });
+  const cerrarVisor = useCallback(() => cerrarEnRuta(PARAM.archivo), []);
+
+  const cargarArchivo = useCallback((path: string) => {
     if (!cfg) return;
     setRaw(false);
     // Las planillas SÍ se muestran: el agente entrega pedidos y controles en
@@ -255,7 +303,7 @@ export default function ArchivosPage() {
         .catch((e: Error) => setViewer({ path, text: null, err: e.message || "error", binario: true }));
       return;
     }
-    if (esBinario(path)) {
+    if (esFoto(path) || esBinario(path)) {
       setViewer({ path, text: null, err: null, binario: true });
       return;
     }
@@ -263,7 +311,14 @@ export default function ArchivosPage() {
     getFileText(cfg, path)
       .then((t) => setViewer({ path, text: t, err: null }))
       .catch((e: Error) => setViewer({ path, text: null, err: e.message || "error" }));
-  };
+  }, [cfg]);
+
+  // El visor sigue a la URL, no al revés: por eso un link pegado en otra
+  // pestaña abre el mismo archivo, y "atrás" lo cierra.
+  useEffect(() => {
+    if (!abiertoPath) { setViewer(null); return; }
+    cargarArchivo(abiertoPath);
+  }, [abiertoPath, cargarArchivo]);
 
   const viewerName = viewer ? viewer.path.split("/").pop() || viewer.path : "";
 
@@ -427,7 +482,7 @@ export default function ArchivosPage() {
               const name = f.path.split("/").pop() || f.path;
               const texty = TEXT_EXT.test(name);
               // Se puede ver ADENTRO del portal: texto plano o planilla.
-              const verEnPortal = texty || esPlanilla(name);
+              const verEnPortal = texty || esPlanilla(name) || esFoto(name);
               const Icon = fileIcon(name);
               const meta = [fmtSize(f.size), relTime(toMs(f.mtime))].filter(Boolean).join(" · ");
               return (
@@ -515,10 +570,22 @@ export default function ArchivosPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-6 md:px-8">
-      <PageHeader title="Archivos" subtitle="Todos los archivos que tu agente fue escribiendo" />
+      <PageHeader
+        title="Archivos"
+        subtitle="Todos los archivos que tu agente fue escribiendo"
+        actions={(dir || abiertoPath) ? <CopiarLink titulo="Copiar el link de esta carpeta" /> : undefined}
+      />
+      {/* El link apunta a un archivo que ya no está: se dice y queda la lista. */}
+      {abiertoPath && files !== null
+        && !files.some((f) => clean(f.path) === abiertoPath) && (
+        <AvisoLinkViejo>
+          No encontré ese archivo — puede que tu agente lo haya renombrado o movido.
+          Abajo está todo lo que tenés hoy.
+        </AvisoLinkViejo>
+      )}
       {body()}
-      {viewer && (
-        <Modal wide onClose={() => setViewer(null)}>
+      {viewer && !(viewer.err && /^404/.test(viewer.err)) && (
+        <Modal wide onClose={cerrarVisor}>
           <div className="flex items-start justify-between gap-3 border-b border-black/[0.07] px-4 py-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-ink">{fm?.titulo || viewerName}</p>
@@ -538,6 +605,7 @@ export default function ArchivosPage() {
               )}
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
+              <CopiarLink titulo="Copiar el link de este archivo" />
               <IconBtn label="Descargar" disabled={bajando} onClick={downloadFile}>
                 <Download className="h-4 w-4" />
               </IconBtn>
@@ -549,15 +617,17 @@ export default function ArchivosPage() {
                   {raw ? <FileText className="h-4 w-4" /> : <Code2 className="h-4 w-4" />}
                 </IconBtn>
               )}
-              <IconBtn label="Cerrar" onClick={() => setViewer(null)}>
+              <IconBtn label="Cerrar" onClick={cerrarVisor}>
                 <X className="h-4 w-4" />
               </IconBtn>
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-            {viewer.binario && esPlanilla(viewer.path) ? (
+            {viewer.binario && esFoto(viewer.path) ? (
+              <ImagenDelAgente cfg={cfg!} path={viewer.path} />
+            ) : viewer.binario && esPlanilla(viewer.path) ? (
               viewer.err ? (
-                <ErrorState message={viewer.err} onRetry={() => openFile(viewer.path)} />
+                <ErrorState message={viewer.err} onRetry={() => cargarArchivo(viewer.path)} />
               ) : viewer.hoja ? (
                 <Spreadsheet bytes={viewer.hoja} />
               ) : (
@@ -580,7 +650,7 @@ export default function ArchivosPage() {
             {viewer.err && (
               <ErrorState
                 message={`No pude abrir el archivo (${viewer.err}).`}
-                onRetry={() => openFile(viewer.path)}
+                onRetry={() => cargarArchivo(viewer.path)}
               />
             )}
             {viewer.text !== null && (

@@ -29,6 +29,10 @@ import {
   loadConfig,
   getTickets,
   getTicketDetail,
+  esElCliente,
+  esElSistema,
+  leerComentario,
+  rotuloAutor,
   type PortalConfig,
   type Ticket,
   type TicketComment,
@@ -36,7 +40,9 @@ import {
   type TicketOutcome,
 } from "../lib/agent";
 import { loadAgentName } from "../lib/onboarding";
+import { esEventoDeMaquina, rotuloEvento } from "../lib/palabras";
 import { AgentitoAvatar, loadAgentLook } from "../lib/agentito";
+import { CopiarLink, PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
 import {
   Btn,
   Chip,
@@ -57,45 +63,26 @@ const SIN_TENANT = "__sin_tenant__"; // sentinel para tickets con tenant null
 
 /* ── Autoría ─────────────────────────────────────────────────────────────── */
 
+/** Con qué firma el portal lo que escribe el cliente. */
 const AUTOR_PROPIO = "cliente";
-// `portal` es como firmaba el adapter antes de que existiera el autor por
-// comentario (aprobaciones): también es el cliente.
-const AUTORES_PROPIOS = new Set([AUTOR_PROPIO, "portal"]);
 
-function esPropio(author: string): boolean {
-  return AUTORES_PROPIOS.has((author || "").trim().toLowerCase());
-}
+// QUIÉN ES EL CLIENTE Y CÓMO SE ROTULA UN AUTOR LO DECIDE `lib/agent.ts`, y
+// nadie más. Estaban acá, con su propio conjunto de autores propios y su propio
+// `rotuloAutor`, y las dos cosas se desincronizaron con la lib: `user` era el
+// cliente allá y no acá (el mismo renglón decía «user · Lo rechazaste»), y el
+// rótulo bueno —el que resuelve el nombre de un tercero— existía sólo en esta
+// pantalla mientras Aprobaciones, donde se autoriza, mostraba a un tercero como
+// si fuera el agente.
+const esPropio = esElCliente;
+const rotuloDe = (author: string) => rotuloAutor(author, loadAgentName() || "Tu agente");
 
-// Hermes firma los comentarios del agente con el autor del CLI: "default",
-// "worker" o el nombre del profile según el camino que los escribió. Todos son
-// LA MISMA persona para el cliente: su agente, con el nombre que le puso.
-const FIRMAS_DEL_AGENTE = new Set(["", "default", "worker", "agent", "hermes"]);
-function rotuloAutor(author: string): string {
-  if (esPropio(author)) return "Vos";
-  const a = (author || "").trim();
-  return FIRMAS_DEL_AGENTE.has(a.toLowerCase()) ? (loadAgentName() || "Tu agente") : a;
-}
-
-// Eventos del motor → lo que el cliente entiende. `heartbeat` (el latido de
-// "sigo vivo" del trabajo) y `spawned` (arrancó la sesión interna) no se
-// muestran: son sistema puro, y con `claimed` la historia ya está contada.
-// Un kind desconocido se muestra crudo antes que esconderlo.
-const EVENTOS_OCULTOS = new Set(["heartbeat", "spawned"]);
-function rotuloEvento(kind: string): string {
-  const k = (kind || "").toLowerCase();
-  const MAPA: Record<string, string> = {
-    created: "Creado",
-    claimed: `${loadAgentName() || "Tu agente"} lo tomó`,
-    blocked: "Frenado — espera una respuesta",
-    unblocked: "Destrabado",
-    completed: "Terminado",
-    done: "Terminado",
-    failed: "Falló",
-    comment: "Comentario",
-    status_changed: "Cambió de estado",
-  };
-  return MAPA[k] ?? kind;
-}
+// Los eventos salen del diccionario único del portal (`lib/palabras.ts`): la
+// misma palabra en el historial, en Actividad y en el chat. Acá había una
+// tablita a medias y todo lo que no estaba salía crudo y en inglés —
+// "commented", "dependency_wait", "tip_scratch_workspace" — en el medio de una
+// pantalla en español.
+const rotuloEventoTicket = (kind: string) =>
+  rotuloEvento(kind, loadAgentName() || "Tu agente");
 
 /* ── Escrituras del portal ───────────────────────────────────────────────────
    TODO: estas tres funciones DEBERÍAN GRADUARSE a ../lib/agent.ts, que es el
@@ -252,12 +239,23 @@ function normalizar(s: string): string {
  *  adapter los expone como `outcome`. Mostrarlo acá arriba es lo que evita el
  *  caso feo: un ticket que pasa de "creado" a "listo" sin que el cliente
  *  pueda saber qué se hizo ni dónde quedó. */
-function Resultado({ outcome, cfg }: { outcome: TicketOutcome; cfg: PortalConfig }) {
+function Resultado({ outcome, cfg, status }: {
+  outcome: TicketOutcome; cfg: PortalConfig; status: string;
+}) {
   const cerrado = outcome.kind === "completed";
+  // EL CARTEL NO PUEDE CONTRADECIR LO QUE EL CLIENTE ACABA DE HACER. El evento
+  // de bloqueo queda en el historial para siempre, así que un ticket ya
+  // aprobado seguía mostrando "POR QUÉ SE FRENÓ: Necesito tu aprobación
+  // explícita…" en la columna "Por hacer". El QA lo leyó como "se perdió mi
+  // ok". Si ya no está frenado, eso es historia, no estado: se cuenta en
+  // pasado y sin el tono de alerta.
+  const sigueFrenado = status === "blocked";
   const Icono = cerrado ? CircleCheck : CirclePause;
   const tono = cerrado
     ? "border-c-green bg-c-green/30 text-c-green-ink"
-    : "border-c-amber bg-c-amber/30 text-c-amber-ink";
+    : sigueFrenado
+      ? "border-c-amber bg-c-amber/30 text-c-amber-ink"
+      : "border-black/[0.07] bg-black/[0.02] text-ink-soft";
   // El payload del cierre trae `artifacts` sólo a veces (depende de cómo el
   // agente haya completado). Por eso la fuente principal es el propio resumen:
   // <Markdown> ya convierte las rutas del workspace en chips que abren el
@@ -269,8 +267,13 @@ function Resultado({ outcome, cfg }: { outcome: TicketOutcome; cfg: PortalConfig
       <section className={`mt-6 rounded-xl border px-4 py-3 ${tono}`}>
         <h3 className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide">
           <Icono className="h-3.5 w-3.5" />
-          {cerrado ? "Resultado" : "Por qué se frenó"}
+          {cerrado ? "Resultado" : sigueFrenado ? "Por qué se frenó" : "Estuvo frenada por esto"}
         </h3>
+        {!cerrado && !sigueFrenado && (
+          <p className="mb-1.5 text-[12px] font-medium text-c-green-ink">
+            Ya la destrabaste — esto es lo que había pasado antes.
+          </p>
+        )}
         {outcome.summary ? (
           <div className="text-sm text-ink">
             <Markdown>{outcome.summary}</Markdown>
@@ -340,10 +343,11 @@ export default function PipelinePage() {
   const [tenant, setTenant] = useState<string | null>(null); // null = todos
   const [busqueda, setBusqueda] = useState("");
 
-  // Detalle abierto. Guardo el id (no el ticket) para poder abrir uno recién
-  // creado que el tablero todavía no trajo, y para que el header del modal
-  // refleje el estado fresco que devuelve el detalle tras cada acción.
-  const [abiertoId, setAbiertoId] = useState<string | null>(null);
+  // Detalle abierto: lo dice la URL (`?tarea=t_ab12`), no un estado local. Es
+  // un id y no el ticket entero para poder abrir uno recién creado que el
+  // tablero todavía no trajo, y para que el header del modal refleje el estado
+  // fresco que devuelve el detalle tras cada acción.
+  const abiertoId = useParamRuta(PARAM.tarea);
   const [detalle, setDetalle] = useState<TicketDetail | null>(null);
   const [detalleError, setDetalleError] = useState(false);
   const [detalleCargando, setDetalleCargando] = useState(false);
@@ -368,6 +372,7 @@ export default function PipelinePage() {
   const [accionEnCurso, setAccionEnCurso] = useState<EstadoDestino | null>(null);
   const [accionError, setAccionError] = useState<string | null>(null);
   const [confirmarArchivo, setConfirmarArchivo] = useState(false);
+  const [verMaquina, setVerMaquina] = useState(false);
 
   const enVuelo = useRef(false);
 
@@ -418,25 +423,26 @@ export default function PipelinePage() {
     [cfg],
   );
 
-  // Todo lo que es "por ticket" se resetea acá; ningún otro lugar toca abiertoId.
-  const abrir = useCallback((id: string) => {
-    abiertoRef.current = id;
-    setAbiertoId(id);
+  // Abrir y cerrar es NAVEGAR: cada tarea tiene su link y "atrás" la cierra.
+  const abrir = useCallback((id: string) => abrirEnRuta({ [PARAM.tarea]: id }), []);
+  const cerrar = useCallback(() => cerrarEnRuta(PARAM.tarea), []);
+
+  // Todo lo que es "por ticket" se resetea cuando cambia el de la URL — que es
+  // el único lugar donde vive cuál está abierto. Va ANTES del efecto que trae
+  // el detalle: así `abiertoRef` ya apunta al nuevo id cuando la respuesta
+  // vuelve y decide si todavía se la está mirando.
+  useEffect(() => {
+    abiertoRef.current = abiertoId;
     setDetalle(null);
     setDetalleError(false);
-    setDetalleCargando(true);
+    setDetalleCargando(abiertoId !== null);
     setBorrador("");
     setPendientes([]);
     setComentarError(null);
     setAccionError(null);
     setAccionEnCurso(null);
     setConfirmarArchivo(false);
-  }, []);
-
-  const cerrar = useCallback(() => {
-    abiertoRef.current = null;
-    setAbiertoId(null);
-  }, []);
+  }, [abiertoId]);
 
   // El borrador del alta NO se limpia al cerrar: si el cliente cierra sin
   // querer (click afuera), lo que escribió sigue ahí al volver a abrir.
@@ -814,18 +820,33 @@ export default function PipelinePage() {
                     </span>
                   </div>
                 </>
+              ) : detalleError ? (
+                <h2 className="text-base font-bold leading-snug text-ink">
+                  No encontré esa tarea
+                </h2>
               ) : (
                 <h2 className="text-base font-bold leading-snug text-ink-soft">Abriendo la tarea…</h2>
               )}
             </div>
-            <IconBtn label="Cerrar" onClick={cerrar}>
-              <X className="h-4 w-4" />
-            </IconBtn>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <CopiarLink titulo="Copiar el link de esta tarea" />
+              <IconBtn label="Cerrar" onClick={cerrar}>
+                <X className="h-4 w-4" />
+              </IconBtn>
+            </div>
           </div>
 
           {/* min-w-0: sin esto una tabla o un bloque de código ancho estira el
               modal en vez de scrollear dentro de su propio contenedor. */}
           <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+            {/* El link se puso viejo: la tarea se archivó o se borró. Antes el
+                modal se quedaba en "Abriendo la tarea…" para siempre. */}
+            {!abierto && detalleError && (
+              <p className="text-sm leading-relaxed text-ink-soft">
+                Esa tarea ya no está en el tablero — puede que la hayan archivado o que el
+                link sea viejo. Cerrá esta ventana y vas a ver todo lo que hay hoy.
+              </p>
+            )}
             {abierto?.body?.trim() ? (
               <Markdown>{abierto.body}</Markdown>
             ) : abierto ? (
@@ -835,8 +856,8 @@ export default function PipelinePage() {
             {/* Por qué el ticket quedó así. Sale del evento de cierre, no de
                 que el agente se haya acordado de comentar: un ticket cerrado
                 sin explicación es un ticket que el cliente no puede auditar. */}
-            {detalle?.outcome && (
-              <Resultado outcome={detalle.outcome} cfg={cfg} />
+            {detalle?.outcome && abierto && (
+              <Resultado outcome={detalle.outcome} cfg={cfg} status={abierto.status} />
             )}
 
             <h3 className="mb-2 mt-6 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
@@ -851,6 +872,20 @@ export default function PipelinePage() {
                 {comentarios.map((c, i) => {
                   const propio = esPropio(c.author);
                   const pendiente = c.local != null;
+                  // Firmado `cliente` no quiere decir que lo haya escrito él.
+                  // Rechazar y aprobar-con-corrección dejan en el ticket una
+                  // instrucción para la máquina ("RECHAZADO POR TU CLIENTE. No
+                  // hagas lo que pediste aprobar…") firmada como suya: acá se
+                  // veía en el globo violeta, arriba de "Vos". Se muestra qué
+                  // fue y las palabras del cliente, no el prompt.
+                  //
+                  // EL AUTOR VA SÍ O SÍ: sin él, el mismo filtro se le aplica a
+                  // los comentarios del AGENTE, y como de un rechazo sólo se
+                  // muestra el bloque del motivo —que un comentario del agente
+                  // no tiene—, cualquier cosa que él escriba arrancando con
+                  // "RECHAZADO POR TU CLIENTE." desaparecía entera de la
+                  // pantalla. Ver `leerComentario`.
+                  const { texto, rotulo } = leerComentario(c.body ?? "", c.author);
                   return (
                     <li
                       key={c.local != null ? `l${c.local}` : `s${i}`}
@@ -859,7 +894,7 @@ export default function PipelinePage() {
                       {/* La carita del agente junto a SUS comentarios: el
                           mismo sello estático del chat (Rive por comentario
                           sería costo real en hilos largos). */}
-                      {!propio && (
+                      {!propio && !esElSistema(c.author) && (
                         <AgentitoAvatar look={lookAgente} className="mt-0.5 h-7 w-7 shrink-0" />
                       )}
                       <div
@@ -875,17 +910,20 @@ export default function PipelinePage() {
                               propio ? "text-c-violet-ink" : "text-ink"
                             }`}
                           >
-                            {rotuloAutor(c.author)}
+                            {rotuloDe(c.author)}
                           </span>
+                          {rotulo && (
+                            <span className="text-[11px] font-medium text-ink-soft">{rotulo}</span>
+                          )}
                           <span className="text-[11px] text-ink-soft">
                             {pendiente ? "enviando…" : fmtRelativa(c.created_at)}
                           </span>
                         </div>
-                        {c.body?.trim() ? (
+                        {texto ? (
                           <div className="mt-1 [&>div]:text-[13px]">
-                            <Markdown>{c.body}</Markdown>
+                            <Markdown>{texto}</Markdown>
                           </div>
-                        ) : (
+                        ) : rotulo ? null : (
                           <p className="mt-1 text-sm text-ink-soft">(sin texto)</p>
                         )}
                       </div>
@@ -932,21 +970,33 @@ export default function PipelinePage() {
               </div>
             </div>
 
-            {eventos.filter((e) => !EVENTOS_OCULTOS.has((e.kind || "").toLowerCase())).length > 0 && (
+            {eventos.length > 0 && (
               <>
                 <h3 className="mb-2 mt-6 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
                   Historial
                 </h3>
                 <ul className="flex flex-col gap-1">
-                  {eventos
-                    .filter((e) => !EVENTOS_OCULTOS.has((e.kind || "").toLowerCase()))
+                  {(verMaquina ? eventos : eventos.filter((e) => !esEventoDeMaquina(e.kind)))
                     .map((e, i) => (
                       <li key={i} className="flex items-baseline gap-2 text-[12px] text-ink-soft">
-                        <span className="font-medium">{rotuloEvento(e.kind)}</span>
+                        <span className="font-medium">{rotuloEventoTicket(e.kind)}</span>
                         <span>{fmtRelativa(e.created_at)}</span>
                       </li>
                     ))}
                 </ul>
+                {/* La maquinaria del motor (latidos, arranques, esperas) no le
+                    dice nada al cliente y en fila parece un cuelgue. Queda
+                    detrás de un interruptor, igual que en Archivos. */}
+                {eventos.some((e) => esEventoDeMaquina(e.kind)) && (
+                  <button
+                    onClick={() => setVerMaquina((v) => !v)}
+                    className="mt-1.5 text-[12px] text-ink-soft transition hover:text-ink"
+                  >
+                    {verMaquina
+                      ? "Ocultar los pasos técnicos"
+                      : `Ver los pasos técnicos (${eventos.filter((e) => esEventoDeMaquina(e.kind)).length})`}
+                  </button>
+                )}
               </>
             )}
           </div>

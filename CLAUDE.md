@@ -50,6 +50,12 @@ pipeline, aprobaciones, artefactos y tareas, marcados con TODO).
 - Cada módulo vive en su carpeta bajo `app/app/` y no toca `lib/` ni `layout.tsx`.
 - Bienvenida por pestaña en `app/app/lib/intros/`: una por módulo, cada una con
   su propia ilustración (nada de ocho pantallas iguales).
+- **Todo lo que se abre tiene URL.** El "qué está abierto" se LEE de la URL con
+  `app/app/lib/rutas.tsx` (`useParamRuta` / `abrirEnRuta` / `cerrarEnRuta`), no
+  de un `useState` en paralelo: por eso refrescar restaura la misma vista y el
+  link se puede compartir. Un módulo nuevo agrega su parámetro en `PARAM` y lo
+  documenta en `docs/rutas-portal.md`. Ningún link que arme el portal lleva
+  hash — ahí viaja la credencial.
 
 ## Documentación (leer en este orden)
 
@@ -57,6 +63,7 @@ pipeline, aprobaciones, artefactos y tareas, marcados con TODO).
 |---|---|
 | `docs/COMPACT.md` | estado, endpoints verificados y **lecciones duras**. Empezá acá. |
 | `docs/PENDIENTES.md` | qué quedó abierto y quién lo destraba |
+| `docs/rutas-portal.md` | **el contrato de las URLs**: qué dirección tiene cada cosa (y qué puede citar el agente) |
 | `docs/alta-cliente.md` | runbook de alta de un cliente nuevo, paso a paso |
 | `docs/toolkit-agentes.md` | qué construimos una vez y reusamos en cada agente |
 | `docs/roadmap-portal.md` | features por pestaña + temas grandes por definir |

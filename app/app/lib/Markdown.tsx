@@ -17,7 +17,7 @@ import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { Image as ImageIcon } from "lucide-react";
-import { detectEntity, EntityChip } from "./entities";
+import { detectEntity, EntityChip, EXT_ARCHIVO } from "./entities";
 import Artifact from "./Artifact";
 import CodeBlock from "./CodeBlock";
 import Mermaid from "./Mermaid";
@@ -100,8 +100,13 @@ function isFetchable(src: string): boolean {
 // backticks. El \b va DENTRO de cada alternativa: si estuviera antes del
 // prefijo opcional /opt/data/, nunca casaría (el `/` no es carácter de
 // palabra) y el prefijo quedaría suelto como texto al lado del chip.
-const INLINE_ENTITY_RE =
-  /(\bt_[0-9a-f]{6,16}\b|\bconexi[oó]n:[a-z0-9][a-z0-9-]*\b|(?:\/opt\/data\/)?\bworkspace\/[\w./-]+\.(?:md|txt|csv|json|ya?ml|log|py|ts|tsx|js|sh|sql|html)\b)/gi;
+// `capacidad:` va acá también: el SOUL le enseña al agente a escribirlo solo en
+// una línea, pero lo escribe en prosa la mitad de las veces.
+const INLINE_ENTITY_RE = new RegExp(
+  "(\\bt_[0-9a-f]{6,16}\\b" +
+  "|\\bconexi[oó]n:[a-z0-9][a-z0-9-]*\\b" +
+  "|\\bcapacidad:[a-z0-9][a-z0-9-]*\\b" +
+  `|(?:/opt/data/)?\\bworkspace/[\\w./-]+\\.(?:${EXT_ARCHIVO})\\b)`, "gi");
 
 function linkify(children: ReactNode): ReactNode {
   return Children.map(children, (child) => {
@@ -126,16 +131,35 @@ function makeComponents(streaming: boolean): Components {
     p: ({ children }) => (
       <p className="my-2 leading-relaxed first:mt-0 last:mb-0">{linkify(children)}</p>
     ),
-    a: ({ href, children }) => (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-medium text-primary underline underline-offset-2 hover:text-primary-dark"
-      >
-        {children}
-      </a>
-    ),
+    // Un href que no se puede pedir NO puede ser un link.
+    //
+    // El agente escribe rutas de su propio workspace y remark las convierte en
+    // `<a href="workspace/entregables/cartel.jpg">`. Tocarlo navegaba a
+    // /app/workspace/… y el cliente recibía "404: This page could not be
+    // found" por un archivo que su agente acababa de hacer bien. Si la ruta es
+    // una entidad conocida se dibuja el chip que la abre de verdad; si no,
+    // queda como texto — feo, pero nunca miente.
+    a: ({ href, children }) => {
+      const url = typeof href === "string" ? href : "";
+      if (url && !isFetchable(url) && !url.startsWith("/") && !url.startsWith("#")) {
+        const entity = detectEntity(url);
+        const texto = Children.toArray(children).every((c) => typeof c === "string")
+          ? Children.toArray(children).join("")
+          : "";
+        if (entity) return <EntityChip entity={entity} label={texto.trim() || url} />;
+        return <>{children}</>;
+      }
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-primary underline underline-offset-2 hover:text-primary-dark"
+        >
+          {children}
+        </a>
+      );
+    },
     ul: ({ children }) => <ul className="my-2 ml-5 list-disc space-y-1">{children}</ul>,
     ol: ({ children }) => <ol className="my-2 ml-5 list-decimal space-y-1">{children}</ol>,
     li: ({ children, className }) => (

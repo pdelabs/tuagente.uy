@@ -12,10 +12,15 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  loadConfig, clearConfig, getManifest, getApprovals,
+  loadConfig, clearConfig, getManifest, getApprovals, EVENTO_APROBACIONES,
+  esPedidoDelCliente,
   type PortalConfig, type Manifest,
 } from "./lib/agent";
 import { Btn, SOPORTE, Soporte, Spinner, inputCls } from "./lib/ui";
+import {
+  avisarRuta, limpiarCredencialDeLaURL, urlApuntaADetalle, useApuntaADetalle,
+  volverAlaPestania,
+} from "./lib/rutas";
 import { INTROS, useIntroGate } from "./lib/intros";
 import Onboarding, { loadAgentName } from "./lib/onboarding";
 import {
@@ -53,6 +58,12 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
 function Login({ onReady }: { onReady: () => void }) {
   const [link, setLink] = useState("");
   const [err, setErr] = useState("");
+  // Quien llega por un link compartido (a un entregable, a una tarea) y no
+  // tiene sesión en ESTE browser caía en un login que no explicaba nada: se
+  // veía como el portal equivocado. Le decimos que el link es bueno y que
+  // apenas entre lo llevamos ahí — y es cierto: `reload()` conserva la ruta.
+  const [venia, setVenia] = useState(false);
+  useEffect(() => { setVenia(urlApuntaADetalle()); }, []);
   // "magic link" era jerga: un cliente de prueba leyó "link mágico" y no supo
   // qué pegar, porque el único link que tenía era con el que ya había entrado.
   const enter = () => {
@@ -69,6 +80,12 @@ function Login({ onReady }: { onReady: () => void }) {
       <div className="w-full max-w-md rounded-xl border border-black/[0.07] bg-white p-8">
         <AgentitoAvatar className="mb-3 h-14 w-14" />
         <h1 className="text-xl font-bold tracking-tight text-ink">tuagente</h1>
+        {venia && (
+          <p className="mt-1 rounded-lg border border-c-violet bg-c-violet/40 px-3 py-2 text-[13px] leading-snug text-c-violet-ink">
+            Este link lleva a algo que está adentro de tu portal. Entrá y te dejo
+            justo ahí.
+          </p>
+        )}
         <p className="mb-6 mt-1 text-sm text-ink-soft">
           Pegá acá el link que te dimos para entrar. Es el que te mandamos cuando dimos
           de alta a tu agente — largo y con un código al final.
@@ -118,17 +135,42 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   //
   // Se lee de window y no con useSearchParams: ese hook obliga a envolver todo
   // el layout en un <Suspense> para que Next prerenderice, y no vale la pena
-  // por un parámetro que solo importa después de montar.
+  // por un parámetro que solo importa después de montar. `useApuntaADetalle`
+  // hace justamente eso, y además se entera de los cambios de URL.
+  //
+  // Cuenta como intención CUALQUIER link a algo concreto, no solo el `?p=` del
+  // chat: si el agente te manda el link de un entregable y esa pestaña nunca la
+  // abriste, la bienvenida del módulo se te pone adelante de lo que viniste a
+  // ver. Un link compartido tiene que abrir la cosa, no la portada.
+  //
+  // Se PEGA mientras no cambies de pestaña, y esa es la parte importante: el
+  // chat borra su `?p=` de la URL apenas manda el mensaje, y si esto lo
+  // siguiera al pie, la bienvenida volvería a aparecer arriba de la
+  // conversación que el cliente acaba de empezar (el bug del 11/8).
+  const apuntaADetalle = useApuntaADetalle(pathname);
   const [conIntencion, setConIntencion] = useState(false);
-  useEffect(() => {
-    setConIntencion(new URLSearchParams(window.location.search).has("p"));
-  }, [pathname]);
+  useEffect(() => { setConIntencion(false); }, [pathname]);
+  useEffect(() => { if (apuntaADetalle) setConIntencion(true); }, [apuntaADetalle, pathname]);
   const moduloActual = MODULES.find((m) => pathname.startsWith(m.path));
+
+  // La credencial viaja en el hash y se queda pegada en la barra de
+  // direcciones. Con "copiar link" en cada pantalla, eso pasa de ser feo a ser
+  // peligroso: el cliente copia la URL a mano y comparte su clave. Se limpia
+  // apenas está guardada. En un timeout porque el parche de history de Next se
+  // instala en un efecto del router, que corre DESPUÉS de los efectos de sus
+  // hijos: sin esperar un tick, el replaceState se lo comería el original.
   useEffect(() => {
-    if (conIntencion && moduloActual && seen && !seen[moduloActual.key]) {
-      dismiss(moduloActual.key);
-    }
-  }, [conIntencion, moduloActual, seen, dismiss]);
+    const t = setTimeout(limpiarCredencialDeLaURL, 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Un `<Link>` de Next hacia la pestaña donde ya estás no dispara popstate, así
+  // que las pantallas no se enterarían de que la URL cambió.
+  useEffect(() => { avisarRuta(); }, [pathname]);
+  // OJO: entrar por un link NO marca la bienvenida como vista. Antes sí, y el
+  // cliente que estrenaba el portal con el link de un entregable se quedaba sin
+  // conocer nunca esa pestaña. Alcanza con no mostrarla ahora (`showIntro` ya
+  // mira `conIntencion`, que se mantiene mientras siga en esa pestaña).
 
   // Si este browser no conoce al agente pero el agente sí se conoce a sí mismo
   // (el cliente lo bautizó desde otra máquina), el portal se lo copia.
@@ -174,12 +216,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       getManifest(cfg).then((m) => { setManifest(m); setOnline(true); })
         .catch(() => setOnline(false));
       getApprovals(cfg)
-        .then((r) => setPending(r.approvals?.length ?? 0))
+        // El badge cuenta lo que ESPERA TU OK. Los pedidos que hizo el propio
+        // cliente ("conectame el correo") están en la misma lista pero son
+        // nuestros: su tarjeta dice "no tenés que hacer nada" y el menú, al
+        // mismo tiempo, le marcaba un pendiente. Contar eso es pedirle algo
+        // que no tiene que hacer. El MISMO filtro que Inicio y Aprobaciones:
+        // uno solo, en `lib/agent.ts`.
+        .then((r) => setPending(
+          (r.approvals ?? []).filter((a: { body?: string }) => !esPedidoDelCliente(a?.body)).length,
+        ))
         .catch(() => setPending(0));
     };
     tick();
     const id = setInterval(tick, 60_000);
-    return () => clearInterval(id);
+    // Y cuando el cliente resuelve una aprobación, ya: esperar hasta un minuto
+    // con el "1" puesto le hace creer que su clic no llegó. El segundo tick es
+    // porque destrabar el ticket tarda un segundo del lado del agente y el
+    // primero puede llegar a leer la cola todavía sin actualizar.
+    const alResolver = () => { tick(); setTimeout(tick, 2500); };
+    window.addEventListener(EVENTO_APROBACIONES, alResolver);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener(EVENTO_APROBACIONES, alResolver);
+    };
   }, [state, cfg]);
 
   if (state === "loading") return <main className="app-shell min-h-screen bg-surface"><Spinner /></main>;
@@ -244,6 +303,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Link
         key={m.key}
         href={m.path}
+        // Tocar la pestaña en la que ya estás cierra el detalle abierto. Sin
+        // esto el `<Link>` cambia la URL, Next no navega a ningún lado (mismo
+        // path) y el modal queda abierto sobre una URL que ya no lo nombra.
+        onClick={(e) => {
+          if (pathname === m.path && window.location.search) {
+            e.preventDefault();
+            volverAlaPestania();
+          }
+        }}
         // relative: el badge se posiciona sobre el ícono en el riel.
         title={m.label}
         className={`relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition max-md:justify-center max-md:px-0 ${

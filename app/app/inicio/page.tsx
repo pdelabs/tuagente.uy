@@ -26,6 +26,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
+  esPedidoDelCliente,
   getActivity, getApprovals, getArtifacts, getConnections, getFiles, getFlujos, getManifest,
   getTickets, getUsage, loadConfig,
   type ArtifactMeta, type Connection, type Flujo, type HttpError, type Manifest,
@@ -47,7 +48,11 @@ const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
 const ENTREGABLES = "entregables/"; // lo que el agente produce PARA el cliente
 
-type Approval = { id: string; title: string; summary?: string; created_at: string | number };
+type Approval = {
+  id: string; title: string; summary?: string; created_at: string | number;
+  /** Hace falta para distinguir lo que espera TU ok de lo que pediste vos. */
+  body?: string;
+};
 type Evento = { ts: string; kind: string; label: string; status: string };
 type Archivo = { path: string; size?: number; mtime?: string | number };
 type Uso = { available?: boolean; sessions?: number; cost_usd?: number; period?: string };
@@ -482,8 +487,17 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
           // Solo hace falta pedirlas si el adapter dice que hay pendientes.
           pedir(on("connections") && (m?.conexiones_pendientes ?? 0) > 0, "las conexiones",
             () => getConnections(cfg).then((r) => arr<Connection>(r?.conexiones)), setConexiones),
+          // LO QUE ESPERA TU OK, no todo lo que hay en la cola. Los pedidos que
+          // hizo el propio cliente ("conectame el correo") viven en la misma
+          // lista y están esperándonos a NOSOTROS: su tarjeta dice "no tenés
+          // que hacer nada". El filtro se agregó en el badge del sidebar y no
+          // acá, y quedó la portada diciendo "3 cosas esperando tu ok" con el
+          // menú marcando 2, en la misma pantalla. Es el mismo filtro, una sola
+          // vez, en `lib/agent.ts`.
           pedir(on("approvals"), "las aprobaciones",
-            () => getApprovals(cfg).then((r) => arr<Approval>(r?.approvals)), setAprob),
+            () => getApprovals(cfg)
+              .then((r) => arr<Approval>(r?.approvals).filter((a) => !esPedidoDelCliente(a.body))),
+            setAprob),
           pedir(on("kanban"), "el tablero",
             () => getTickets(cfg).then((r) => arr<Ticket>(r?.tickets)), setTareas),
           pedir(on("activity"), "la actividad",
@@ -688,7 +702,12 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <Metrica valor={tablero.porHacer} label="Por hacer" tone="neutral" />
                   <Metrica valor={tablero.curso} label="En curso" tone="amber" />
-                  <Metrica valor={tablero.esperando} label="Esperando tu ok" tone="violet" />
+                  {/* "Esperando tu ok" NO: esta cuenta son las tareas frenadas
+                      del tablero, y ahí adentro también están las que pediste
+                      vos (una conexión) — esas nos esperan a NOSOTROS. Con ese
+                      rótulo, la misma pantalla decía "Hay 2 cosas esperando tu
+                      ok" arriba y "3" acá abajo. Frenada es cierto siempre. */}
+                  <Metrica valor={tablero.esperando} label="Frenadas" tone="violet" />
                   <Metrica valor={tablero.hechas} label="Completadas" tone="green" />
                 </div>
               )}

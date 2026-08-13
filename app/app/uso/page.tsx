@@ -16,6 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 import { BarChart3, RefreshCw } from "lucide-react";
 import { loadConfig, getUsage, type HttpError, type PortalConfig } from "../lib/agent";
 import { Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
+import { rotuloCanal } from "../lib/palabras";
 
 type DailyUsage = {
   date?: string;
@@ -69,16 +70,10 @@ function periodLabel(period?: string): string | null {
   return m ? `últimos ${m[1]} días` : period;
 }
 
-// Canales crudos del motor → cómo los nombra el cliente. Uno desconocido se
-// muestra tal cual: mejor eso que esconderlo o inventarle un nombre.
-const CANALES: Record<string, string> = {
-  telegram: "Telegram",
-  api_server: "Portal",
-  cron: "Tareas programadas",
-  kanban: "Tablero",
-  "kanban-research": "Tablero (investigación)",
-  tui: "Consola",
-};
+// Los canales salen del diccionario único del portal. Acá faltaba `cli` —el
+// dispatcher del kanban trabajando un ticket solo— y la pantalla de la plata le
+// mostraba a la clienta "cli · 28 sesiones". Su nota: "es la pantalla de la
+// plata y no entiendo la mitad".
 
 type Day = {
   key: string;
@@ -270,7 +265,7 @@ export default function UsoPage() {
     const valor = (d: Day) => (porCosto ? d.cost : d.input + d.output);
     const max = Math.max(...days.map(valor), 0);
 
-    const canales = filas(usage.by_channel, (n) => CANALES[n] ?? n, true);
+    const canales = filas(usage.by_channel, rotuloCanal, true);
     const modelos = filas(usage.by_model, (n) => n, false);
     
     return (

@@ -85,7 +85,7 @@ function FaltaConexion({ ids, conexiones }: {
         </p>
       )}
       <Link
-        href={`/app/conexiones#c=${encodeURIComponent(ids[0])}`}
+        href={`/app/conexiones?conexion=${encodeURIComponent(ids[0])}`}
         className="mt-2.5 inline-flex h-9 w-fit items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
       >
         Conectar {nombres[0]}

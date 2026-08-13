@@ -23,6 +23,7 @@ import { useOpenEntity } from "../lib/entities";
 import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, SOPORTE, Spinner, inputCls,
 } from "../lib/ui";
+import { esEventoDeMaquina, rotuloEvento } from "../lib/palabras";
 
 type ActivityEvent = { ts: string; kind: string; label: string; status: string };
 /** Los status crudos del adapter son muchos; para filtrar alcanzan tres. */
@@ -39,32 +40,10 @@ const KIND_LABEL: Record<string, string> = {
   ticket: "Tarea",
 };
 
-// El estado viene crudo del motor y en inglés (`commented`, `failed`…). Lo
-// mostrábamos tal cual en medio de una pantalla en español: un cliente de
-// prueba lo miró y pasó de largo ("yo esto no lo leo"). Lo que no está en la
-// tabla se muestra igual, crudo: preferimos una palabra rara a esconder un
-// estado nuevo que todavía no conocemos.
-const ESTADO_LABEL: Record<string, string> = {
-  created: "creada",
-  claimed: "la agarró",
-  running: "trabajando",
-  in_progress: "trabajando",
-  commented: "comentó",
-  blocked: "esperándote",
-  unblocked: "destrabada",
-  completed: "lista",
-  done: "lista",
-  failed: "falló",
-  error: "falló",
-  cancelled: "cancelada",
-  canceled: "cancelada",
-  archived: "archivada",
-  skipped: "salteada",
-  timeout: "se pasó de tiempo",
-  delivered: "entregada",
-  sent: "enviada",
-};
-const estadoLabel = (s: string) => ESTADO_LABEL[(s || "").toLowerCase()] ?? s;
+// El estado viene crudo del motor y en inglés. Ahora sale del diccionario
+// único del portal (`lib/palabras.ts`), el mismo que usan el historial del
+// ticket y el chat: una sola palabra por cosa en todo el producto.
+const estadoLabel = (s: string) => rotuloEvento(s);
 
 const GRUPOS: { key: Grupo; label: string; dot: [string, string] }[] = [
   // dot: [inactivo, activo] — sobre el chip activo (fondo ink) va el tono claro.
@@ -183,7 +162,9 @@ function Caption({ children }: { children: ReactNode }) {
 }
 
 /** Una línea del historial. Con ticketId, toda la fila abre el detalle. */
-function Fila({ ev, ticketId }: { ev: ActivityEvent; ticketId?: string }) {
+function Fila({ ev, ticketId, veces = 1 }: {
+  ev: ActivityEvent; ticketId?: string; veces?: number;
+}) {
   const open = useOpenEntity();
   const cuerpo = (
     <>
@@ -194,7 +175,12 @@ function Fila({ ev, ticketId }: { ev: ActivityEvent; ticketId?: string }) {
       <p className="min-w-0 flex-1 truncate text-sm text-ink">{ev.label}</p>
       <span className="flex shrink-0 items-center gap-2">
         <Chip>{KIND_LABEL[ev.kind] ?? ev.kind}</Chip>
-        {ev.status && <span className="text-[11px] text-ink-soft">{estadoLabel(ev.status)}</span>}
+        {ev.status && (
+          <span className="text-[11px] text-ink-soft">
+            {estadoLabel(ev.status)}
+            {veces > 1 && <span className="ml-1 tabular-nums text-ink-soft/70">×{veces}</span>}
+          </span>
+        )}
       </span>
     </>
   );
@@ -250,6 +236,7 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
   const [busqueda, setBusqueda] = useState("");
   const [rango, setRango] = useState<RangoKey>("todo");
   const [limite, setLimite] = useState(PAGINA);
+  const [verTecnico, setVerTecnico] = useState(false);
 
   const load = useCallback((silent = false) => {
     if (!silent) { setEvents(null); setErr(null); }
@@ -301,9 +288,19 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
   // Al cambiar cualquier filtro, volvemos a la primera tanda.
   useEffect(() => { setLimite(PAGINA); }, [kind, grupo, busqueda, rango]);
 
-  const ordenados = useMemo(
+  // LA PANTALLA DECÍA "todo lo que tu agente hizo, en orden" y mostraba doce
+  // renglones idénticos de la misma tarea con `dependency_wait / spawned /
+  // promoted / heartbeat`. El QA lo leyó como "se colgó, y encima no entiendo
+  // nada". Los pasos de máquina quedan detrás de un interruptor.
+  const todos = useMemo(
     () => [...(events ?? [])].sort((a, b) => msDe(b.ts) - msDe(a.ts)),
     [events],
+  );
+  const tecnicos = useMemo(
+    () => todos.filter((e) => esEventoDeMaquina(e.status)).length, [todos]);
+  const ordenados = useMemo(
+    () => (verTecnico ? todos : todos.filter((e) => !esEventoDeMaquina(e.status))),
+    [todos, verTecnico],
   );
 
   // Tipos disponibles: los que realmente vinieron, ordenados por rótulo.
@@ -350,13 +347,24 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
   const filtrando = kind !== null || grupo !== null || busqueda.trim() !== "" || rango !== "todo";
   const limpiar = () => { setKind(null); setGrupo(null); setBusqueda(""); setRango("todo"); };
 
+  // Y lo repetido se junta: la misma tarea con el mismo estado seguido son un
+  // renglón con "×3", no tres renglones que parecen un bucle.
   const grupos = useMemo(() => {
-    const out: { key: string; label: string; items: ActivityEvent[] }[] = [];
+    const out: { key: string; label: string; items: { ev: ActivityEvent; veces: number }[] }[] = [];
     for (const ev of mostrados) {
       const key = dayKey(ev.ts);
-      const last = out[out.length - 1];
-      if (last && last.key === key) last.items.push(ev);
-      else out.push({ key, label: dayLabel(ev.ts), items: [ev] });
+      let last = out[out.length - 1];
+      if (!last || last.key !== key) {
+        out.push({ key, label: dayLabel(ev.ts), items: [] });
+        last = out[out.length - 1];
+      }
+      const previo = last.items[last.items.length - 1];
+      if (previo && previo.ev.label === ev.label && previo.ev.status === ev.status
+          && previo.ev.kind === ev.kind) {
+        previo.veces += 1;
+      } else {
+        last.items.push({ ev, veces: 1 });
+      }
     }
     return out;
   }, [mostrados]);
@@ -540,14 +548,34 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
                     </h2>
                     <Card className="overflow-hidden !p-0">
                       <ul className="divide-y divide-black/[0.06]">
-                        {g.items.map((ev, i) => (
-                          <Fila key={`${ev.ts}-${ev.status}-${i}`} ev={ev} ticketId={idDe(ev)} />
+                        {g.items.map(({ ev, veces }, i) => (
+                          <Fila
+                            key={`${ev.ts}-${ev.status}-${i}`}
+                            ev={ev}
+                            veces={veces}
+                            ticketId={idDe(ev)}
+                          />
                         ))}
                       </ul>
                     </Card>
                   </section>
                 ))}
               </div>
+
+              {/* Los pasos internos del motor: existen, no se esconden, pero
+                  no compiten con lo que el cliente vino a ver. */}
+              {tecnicos > 0 && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    onClick={() => setVerTecnico((v) => !v)}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] text-ink-soft transition hover:bg-black/[0.04] hover:text-ink"
+                  >
+                    {verTecnico
+                      ? "Ocultar los pasos internos"
+                      : `Ver los pasos internos de tu agente (${tecnicos})`}
+                  </button>
+                </div>
+              )}
 
               <div className="mt-6 flex flex-col items-center gap-2">
                 {mostrados.length < visibles.length ? (

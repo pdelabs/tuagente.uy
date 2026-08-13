@@ -25,6 +25,9 @@ import {
 import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner,
 } from "../lib/ui";
+import {
+  CopiarLink, PARAM, abrirEnRuta, cerrarEnRuta, traerALaVista, useParamRuta,
+} from "../lib/rutas";
 
 type Falla = { status?: number; message: string };
 
@@ -121,7 +124,15 @@ function EditorSkill({ cfg, name, onCerrar, onGuardada }: {
         setContenido(cuerpo);
         setOriginal(cuerpo);
       })
-      .catch((e: HttpError) => { if (vivo) setErr(e.message || "No pude abrir la habilidad."); });
+      // Red de seguridad: si igual llegamos acá con una que el adapter no
+      // sirve, el cliente NO lee «esa habilidad no existe o no es editable»
+      // sobre algo que la pantalla acaba de decirle que se edita.
+      .catch((e: HttpError) => {
+        if (!vivo) return;
+        setErr(e?.status === 404
+          ? "Esta habilidad no se puede editar desde acá. Escribinos y la cambiamos nosotros."
+          : e.message || "No pude abrir la habilidad.");
+      });
     return () => { vivo = false; };
   }, [cfg, name]);
 
@@ -185,7 +196,16 @@ export default function CapacidadesPage() {
   const [err, setErr] = useState<Falla | null>(null);
   const [cargando, setCargando] = useState(false);
   const [ultima, setUltima] = useState<Date | null>(null);
-  const [editando, setEditando] = useState<string | null>(null);
+  // A qué habilidad apunta la URL (`?habilidad=<nombre>`). El nombre ES legible
+  // ("armado-de-reportes"), así que el link se entiende solo.
+  //
+  // OJO: apuntar no es lo mismo que EDITAR. Las del sistema no tienen texto que
+  // mostrar —el adapter solo sirve el contenido de las editables, el resto da
+  // 404— así que el link a una de ellas la trae a la vista y la resalta, que es
+  // toda la información que existe. Antes el parámetro no hacía absolutamente
+  // nada con ellas, que son las únicas que tiene un agente recién instalado: el
+  // link caía en la portada sin decir palabra.
+  const elegida = useParamRuta(PARAM.habilidad);
   const [verSistema, setVerSistema] = useState(false);
 
   useEffect(() => { setCfg(loadConfig()); }, []);
@@ -219,17 +239,59 @@ export default function CapacidadesPage() {
         name: s.name,
         nombre: (s.label || "").trim() || legible(s.name),
         resumen: resumir(s.summary),
-        // Adapter viejo (<0.21) no manda `editable`: caemos a "origen propia",
-        // y el editor avisará si el endpoint no está.
-        editable: s.editable ?? norm(String(s.origen ?? "")) === "propia",
+        // SOLO un `editable: true` explícito. Antes, si el campo faltaba, se
+        // deducía de `origen === "propia"` — y hay habilidades propias que el
+        // adapter NO puede editar: las que viven adentro de una carpeta de
+        // categoría (`skills/contenido/contenido-para-redes/`) se listan como
+        // propias pero sin `editable`, y `GET /portal/skills/{name}` sólo
+        // resuelve las de primer nivel. Resultado: la pantalla decía "esta la
+        // podés editar", el botón Editar aparecía, y al tocarlo contestaba
+        // «esa habilidad no existe o no es editable», que es la máquina
+        // desdiciéndose a sí misma en la cara del cliente. Deducir de menos
+        // (no ofrecer editar algo editable) es un botón que falta; deducir de
+        // más es una promesa rota.
+        editable: s.editable === true,
         origen: norm(String(s.origen ?? "")),
         cat: typeof s.categoria === "string" ? s.categoria.trim() : "",
       }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
   }, [data]);
 
-  const propias = useMemo(() => skills.filter((s) => s.editable), [skills]);
-  const sistema = useMemo(() => skills.filter((s) => !s.editable), [skills]);
+  // DE QUIÉN ES una habilidad y SI SE PUEDE EDITAR son dos preguntas, y acá
+  // eran la misma (`propias = las editables`). Hay habilidades hechas para este
+  // cliente que el adapter no sirve para editar —las que viven adentro de una
+  // carpeta de categoría—: metiéndolas en "Comunes del sistema" se arreglaba el
+  // botón roto diciendo otra mentira, que no son suyas. Se agrupan por origen y
+  // el botón Editar aparece sólo donde de verdad se puede.
+  const propias = useMemo(() => skills.filter((s) => s.origen === "propia"), [skills]);
+  const sistema = useMemo(() => skills.filter((s) => s.origen !== "propia"), [skills]);
+
+  const habilidadElegida = useMemo(
+    () => (elegida ? skills.find((s) => s.name === elegida) ?? null : null), [elegida, skills]);
+  // El editor abre solo para las que se pueden editar.
+  const editando = habilidadElegida?.editable ? habilidadElegida.name : null;
+
+  // Si la que viene por link vive en el cajón cerrado, el cajón se abre. Va por
+  // efecto y no derivado para que el cliente después la pueda volver a plegar.
+  useEffect(() => {
+    if (habilidadElegida && habilidadElegida.origen !== "propia") setVerSistema(true);
+  }, [habilidadElegida]);
+
+  // Y se la trae a la vista — mismo helper que Conexiones. Antes era un
+  // `setTimeout` de 150 ms con scroll suave y NO TRAÍA NADA: la fila quedaba a
+  // 823 px con la ventana en 813 y `scrollY` en 0, o sea justo abajo del
+  // pliegue. El porqué (y por qué ahora va `instant`) está en `traerALaVista`.
+  //
+  // Las dependencias son el NOMBRE y un booleano, no el objeto: la lista se
+  // refresca sola cada minuto y con el objeto en las deps el efecto volvía a
+  // correr en cada refresco. Con el scroll suave eso no se notaba (no movía
+  // nada); ahora que mueve, sería la página saltando sola cada 60 segundos
+  // mientras el cliente lee otra cosa.
+  const hayElegida = Boolean(habilidadElegida);
+  useEffect(() => {
+    if (!hayElegida) return;
+    return traerALaVista(".habilidad-elegida");
+  }, [elegida, hayElegida, verSistema]);
 
   // Las del sistema agrupadas: primero las del producto tuagente (sostienen
   // pantallas del portal), después las del motor por categoría.
@@ -292,13 +354,24 @@ export default function CapacidadesPage() {
 
     return (
       <>
+        {/* Un link a una habilidad que ya no está (la renombramos, la sacamos)
+            no puede quedar en silencio: el cliente aprieta y no pasa nada. */}
+        {elegida && !habilidadElegida && (
+          <p className="mb-4 rounded-lg border border-c-amber bg-c-amber/25 px-3 py-2 text-[13px] leading-snug text-c-amber-ink">
+            No encontré la habilidad que buscabas. Puede que le hayamos cambiado el nombre
+            o que ya no esté; abajo está todo lo que tu agente sabe hacer hoy.
+          </p>
+        )}
+
         <section>
           <div className="mb-3">
             <h2 className="text-sm font-bold tracking-tight text-ink">Hechas para vos</h2>
+            {/* El texto prometía editar TODAS. Las que tienen Editar se
+                cambian acá; las otras se piden igual que cualquier cambio. */}
             <p className="mt-0.5 text-[13px] leading-snug text-ink-soft">
               Las armamos para tu operación, y son tuyas: si querés que algo se haga
-              distinto, decíselo a tu agente por el chat — o editá el texto directo
-              acá. Los cambios los toma solo, en unos minutos.
+              distinto, decíselo a tu agente por el chat. Las que dicen Editar las podés
+              cambiar acá mismo, y los cambios los toma solo en unos minutos.
             </p>
           </div>
 
@@ -310,12 +383,19 @@ export default function CapacidadesPage() {
           ) : (
             <div className="flex flex-col gap-2">
               {propias.map((s) => (
-                <Card key={s.name}>
+                <Card
+                  key={s.name}
+                  className={elegida === s.name
+                    ? "habilidad-elegida ring-2 ring-primary/25" : ""}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <p className="break-words text-sm font-semibold text-ink">{s.nombre}</p>
                         {s.cat && <Chip tone="violet">{categoriaEs(s.cat)}</Chip>}
+                        {editando === s.name && (
+                          <CopiarLink titulo="Copiar el link de esta habilidad" />
+                        )}
                       </div>
                       {s.resumen && (
                         <p className="mt-0.5 break-words text-[13px] leading-snug text-ink-soft">
@@ -323,8 +403,16 @@ export default function CapacidadesPage() {
                         </p>
                       )}
                     </div>
-                    {cfg && editando !== s.name && (
-                      <Btn kind="ghost" size="sm" onClick={() => setEditando(s.name)}>
+                    {/* Sólo donde de verdad se puede: un botón que contesta
+                        "esa habilidad no existe o no es editable" sobre algo
+                        que la pantalla dice que es tuyo es peor que no
+                        ofrecerlo. */}
+                    {cfg && s.editable && editando !== s.name && (
+                      <Btn
+                        kind="ghost"
+                        size="sm"
+                        onClick={() => abrirEnRuta({ [PARAM.habilidad]: s.name })}
+                      >
                         <Pencil className="h-3.5 w-3.5" />
                         Editar
                       </Btn>
@@ -334,7 +422,7 @@ export default function CapacidadesPage() {
                     <EditorSkill
                       cfg={cfg}
                       name={s.name}
-                      onCerrar={() => setEditando(null)}
+                      onCerrar={() => cerrarEnRuta(PARAM.habilidad)}
                       onGuardada={() => load(true)}
                     />
                   )}
@@ -386,16 +474,40 @@ export default function CapacidadesPage() {
                     </div>
                     <Card className="overflow-hidden !p-0">
                       <ul className="divide-y divide-black/[0.06]">
-                        {g.items.map((s) => (
-                          <li key={s.name} className="px-4 py-3">
-                            <p className="break-words text-sm font-semibold text-ink">{s.nombre}</p>
-                            {s.resumen && (
-                              <p className="mt-0.5 break-words text-[13px] leading-snug text-ink-soft">
-                                {s.resumen}
-                              </p>
-                            )}
-                          </li>
-                        ))}
+                        {g.items.map((s) => {
+                          // La que vino por link: resaltada y con su propio
+                          // link a mano. No hay editor porque no hay qué
+                          // editar; decirlo es más honesto que un panel vacío.
+                          const señalada = elegida === s.name;
+                          return (
+                            <li
+                              key={s.name}
+                              className={`px-4 py-3 ${
+                                señalada ? "habilidad-elegida bg-c-violet/40" : ""}`}
+                            >
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <p className="break-words text-sm font-semibold text-ink">
+                                  {s.nombre}
+                                </p>
+                                {señalada && (
+                                  <CopiarLink titulo="Copiar el link de esta habilidad" />
+                                )}
+                              </div>
+                              {s.resumen && (
+                                <p className="mt-0.5 break-words text-[13px] leading-snug text-ink-soft">
+                                  {s.resumen}
+                                </p>
+                              )}
+                              {señalada && (
+                                <p className="mt-1.5 text-[12px] leading-snug text-ink-soft/80">
+                                  Esta viene con el sistema y es igual para todos: la mantenemos
+                                  nosotros y no se edita. Si querés que tu agente trabaje distinto,
+                                  decíselo por el chat.
+                                </p>
+                              )}
+                            </li>
+                          );
+                        })}
                       </ul>
                     </Card>
                   </div>

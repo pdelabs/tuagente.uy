@@ -186,3 +186,370 @@ queda en "Más" como vista cruda del workspace.
     número es descartable; una cuenta de marca no lo es.
 
   El razonamiento largo está en `hermes-kit/connections/instagram/README.md`.
+
+## Rechazar una aprobación — CERRADO el 12/8, y por qué importa el detalle
+
+**Estado: hecho de los dos lados.** Queda anotado acá porque el camino corto
+—el que parece obvio— mata pedidos, y alguien lo va a volver a proponer.
+
+El contrato: **rechazar es UN comentario firmado `cliente` y el estado del
+ticket NO se toca.** El ticket sigue `blocked`, sigue en la pestaña, y el
+desbloqueo se gasta una sola vez en toda la negociación: al aprobar.
+
+**Por qué no se desbloquea, que es lo contrario de lo que parece obvio.** Un
+ticket tiene un solo `unblock` útil: `block_recurrences` sube cada vez que se
+re-bloquea por la misma causa después de un desbloqueo, y a las dos
+(`BLOCK_RECURRENCE_LIMIT`, hardcodeado en `kanban_db.py`) el ticket se va a
+`triage`, donde Aprobar contesta 409 y ningún verbo del CLI lo trae de vuelta.
+Rechazar destrabando gastaba ese único desbloqueo en el primer "no": el agente
+re-proponía, volvía a bloquear, saltaba el límite y el pedido moría. Con el
+auto-decomposer prendido era peor: partía el ticket usando el **cuerpo viejo** y
+le dejaba a la clienta en la cola una tarea que decía "usá el pedido preparado
+de 8 bisagras" cuando ella ya había corregido a 20. Está en el lab, en
+`t_b1fb02ad`: `blocked → unblocked → blocked → unblocked → block_loop_detected →
+decomposed`.
+
+- **Kit** (`portal_adapter.py`, `_rechazar`): `POST /portal/approvals/{id}/reject`
+  hace una sola escritura —el comentario `cliente` que arranca con "RECHAZADO
+  POR TU CLIENTE"—, avisa al agente con `notify_agent_of_comment` y devuelve
+  `{ok, estado, desbloqueado:false, en_aprobaciones, avisado, block_recurrences}`.
+- **Portal** (`app/app/aprobaciones/page.tsx`, `doReject`): una sola llamada a
+  ese endpoint y nada más. Antes eran tres, no atómicas: si la última fallaba,
+  el comentario ya estaba puesto y la pantalla decía "no se pudo" —y reintentar
+  comentaba dos veces—. La tarjeta **no desaparece**: se queda con el aviso "Le
+  dijiste que no" adentro, y ahí mismo aparece la respuesta del agente.
+
+Verificado en el navegador contra el agente del lab (12/8): status sigue
+`blocked`, un solo comentario nuevo por rechazo, ningún evento `unblocked` ni
+`decomposed`, y el agente contestó en el mismo ticket.
+
+**Lo que NO hay que volver a hacer:** ni `setTicketStatus(ready)` ni
+`hermes kanban unblock` en el camino del rechazo, ni acá ni en el kit. Y el
+texto que el adapter escribe es para la máquina: el portal lo muestra filtrado
+(`leerComentario` en `lib/agent.ts`) porque va firmado `cliente` y sin eso la
+clienta lee "RECHAZADO POR TU CLIENTE. No hagas lo que pediste aprobar…" arriba
+de un "Vos" — un prompt que nunca escribió.
+
+## Habilidades propias que el adapter no puede editar
+
+**Quién lo destraba:** quien toque `portal_adapter.py`.
+
+`GET /portal/capabilities` lista como `origen: "propia"` las habilidades que
+viven adentro de una carpeta de categoría (`skills/contenido/contenido-para-redes/`)
+pero **no les pone `editable`**, y `GET /portal/skills/{name}` sólo resuelve las
+de primer nivel: contesta 404 «esa habilidad no existe o no es editable».
+
+El portal ya no promete de más (el botón Editar aparece sólo con
+`editable === true`, y siguen agrupadas como suyas, que es lo cierto). Pero el
+cliente tiene habilidades hechas para él que no puede tocar y nada le explica
+por qué. El arreglo de fondo es del adapter: que `_skill_editable` también
+resuelva un nivel de categoría, o que la lista mande `editable: false` explícito
+para que al menos sea una decisión y no un descuido.
+
+
+## Privilegio: los caminos del agente hacia algo que corre con más permiso (12/8)
+
+Dos estaban abiertos y **los dos quedaron cerrados**; queda uno de defensa en
+profundidad. Se anota entero porque el razonamiento equivocado nos duró un día:
+creíamos que sacar el código del adapter de `data/` cerraba "los dos saltos", y
+no: seguían siendo dos saltos con otra llave.
+
+**CERRADO — el código del adapter.** Vivía en `data/scripts/`, que es del
+agente, y el contenedor lo ejecutaba como root con `politica/` montada rw. Ahora
+vive en `kit-adapter/`, montada `:ro`, y el adapter corre como uid 10000.
+
+**CERRADO — `data/.env` como `env_file` de los dos servicios.** Esto no era
+"puede redirigir directorios": era **ejecución de código arbitrario adentro del
+adapter**. La cadena, medida con la imagen real, el adapter como uid 10000 y su
+código montado `:ro`:
+
+```
+el agente es dueño de data/ (y adentro de su contenedor corre como root)
+  → escribe data/.env con PYTHONPATH=/opt/data/evil
+  → docker inyecta esa variable al arrancar el adapter
+  → /opt/data/evil/json.py tapa un módulo del stdlib
+  → "CODIGO DEL AGENTE EJECUTADO ADENTRO DEL ADAPTER"
+  → ese proceso tiene politica/ en RW:
+      · reescribe hooks/puerta.py            (la puerta, para que deje pasar todo)
+      · reescribe cont-init-parches.sh       (que hermes monta como
+        /etc/cont-init.d/03-parches y s6 corre COMO ROOT en cada arranque)
+```
+
+Cerrado sacando los secretos a `<agente>/secretos.env`, root:root 600, en la
+raíz del agente, que no monta ningún contenedor. El PoC repetido después del
+cambio ya no ejecuta nada. Y si alguien recrea `data/.env` a mano, el compose no
+lo nombra: queda inerte (verificado con `docker compose config`).
+
+**CERRADO — `data/config.yaml`, el segundo consumidor.** Estaba `:ro` para
+hermes pero **rw para el adapter**, que lo tenía por el montaje de `./data`. El
+adapter solo lo LEE (modelo por defecto, skills apagadas, preámbulo), así que
+ahora lo monta `:ro` también.
+
+**ABIERTO (defensa en profundidad) — el adapter puede reescribir los guardrails
+que tiene al lado.** Escribe `politica/politica.json` y
+`politica/capacidades/pedidos.jsonl`, y para reemplazar el primero de forma
+atómica (tmp + rename) necesita permiso de escritura **sobre el directorio**
+`politica/` — el mismo donde están `guardia.py`, `hooks/`, `tools/`, `mcp/` y
+`capacidades/catalogo.json`. Quien puede escribir el directorio puede borrar
+cualquier cosa adentro; probado. **El bit sticky no alcanza**: protege de borrar
+archivos ajenos salvo al dueño del directorio, y el dueño es justamente él. Hoy
+ya no hay camino desde el agente hasta ese proceso (su código es `:ro` y las
+variables no salen de `data/`), así que es defensa en profundidad y no un agujero
+abierto. Se cierra sacando los dos archivos que el adapter escribe a una carpeta
+propia —`estado/`, montada rw solo para él— y dejando `politica/` `:ro` también
+para el adapter. Toca: `PORTAL_POLITICA_DIR` en el adapter, la ruta que lee
+`mcp-guardia/guardia.py`, los dos composes, `install.sh` y una migración.
+
+
+## Aprobaciones y comentarios — lo que quedó abierto tras la tanda del 12/8
+
+**Quién lo destraba:** el portal, salvo donde diga otra cosa.
+
+Lo que se cerró en esa tanda está en el código y en `docs/rutas-portal.md`: el
+filtro de comentarios ya mira **quién firma** antes de aplicar los formatos de
+máquina (`leerComentario` en `lib/agent.ts`), un rechazo sin bloque de motivo
+muestra el crudo en vez de vaciarse, el motivo ya no se corta en la primera
+comilla, la casilla de **cerrar el pedido** manda `{"definitivo": true}`, y el
+estado de la negociación se lee del hilo. Lo que sigue abierto:
+
+- **El recuadro de la propuesta puede seguir siendo la versión vieja.**
+  `elegirPropuesta` toma la última propuesta que trae **cuadro markdown**, y al
+  agente no se le puede exigir que lo use: si contesta en prosa, arriba queda lo
+  que la clienta ya rechazó. Se tapó el agujero grande —la pantalla ya **no
+  afirma** que eso es lo vigente: cuando la propuesta es anterior al último "no"
+  aparece "Le dijiste que no a esto"— pero elegir bien la versión nueva sigue
+  sin resolverse. El arreglo de fondo es del kit: que la skill `aprobacion`
+  vuelva a proponer siempre con el mismo formato, o que el adapter marque cuál
+  es la propuesta vigente en vez de dejar que el portal la adivine por la forma
+  del texto.
+- **El "le dijiste que no" derivado sólo aparece con la tarjeta desplegada**,
+  porque el detalle del ticket se trae al desplegar (una llamada por pedido).
+  Alcanza para el caso que importa —los botones también están adentro— pero la
+  lista plegada no distingue un pedido que está en plena negociación de uno
+  virgen. Si algún día se quiere ese chip, sale de que `/portal/approvals` diga
+  si el último comentario es un rechazo del cliente, no de N llamadas al detalle.
+- **`separarPropuesta` se lleva el epílogo del agente al editor.** Corta después
+  de la última fila de tabla, así que si el agente escribe algo después del
+  texto mandable ("avisame si querés que lo mande hoy"), eso entra en "Corregir
+  y aprobar" como si fuera parte del mail. Es la misma clase de acoplamiento
+  que el resto: el portal parseando la forma libre del agente.
+- **`loadAgentName()` vacío = dos nombres en la misma pantalla.** El sidebar
+  dice "Tero" (sale del manifiesto) y las frases nuevas dicen "Tu agente" (sale
+  del localStorage, que está vacío si el cliente no bautizó desde ESTE browser).
+  Mientras siga así conviene escribir las frases nuevas sin interpolar el nombre
+  —la casilla de cerrar el pedido quedó así a propósito— porque interpolado
+  aparece con mayúscula en medio de una oración ("y Tu agente no lo vuelve a
+  traer"). El arreglo real es que el nombre salga del manifiesto en todos lados.
+- **`block_loop_detected` no dice qué hacer.** `palabras.ts` lo traduce, pero a
+  diferencia de `triage` no trae la línea de "y ahora qué": es justo el evento
+  que aparece cuando el pedido se murió, y ahí el cliente necesita saber que
+  tiene que pedirlo de nuevo.
+
+### G-4 (el cartel de "no existe" en Conexiones) — NO SE REPRODUCE, medido
+
+Quedaba anotado que `?conexion=<algo>` mostraba "No tengo ninguna conexión que
+se llame «correo»" en el primer frame contra un agente lento. **No pasa.**
+Medido en el navegador el 12/8 retrasando a mano la respuesta de
+`/portal/connections` 5 segundos: al segundo y medio la pantalla muestra el
+spinner, el cartel no aparece, y cuando llega la respuesta sale el aviso
+correcto ("Venís a conectar…"). La guarda existe y es el `return` temprano
+`if (conexiones === null) return <Spinner/>`, que hace lo mismo que el
+`X !== null` explícito de Archivos, Tareas y Entregas. No hay nada que arreglar;
+queda escrito para que nadie lo vuelva a cazar.
+
+## Instaladores del kit — dos huecos que la auditoría dejó abiertos (12/8)
+
+(Esta sección ya se había escrito una vez y se perdió en una escritura
+concurrente del archivo; va de nuevo.)
+
+Contexto: `desplegar-remoto.sh` dejó de tener su propia lista de archivos y le
+corre `install.sh` a un staging, con un manifiesto (`.kit-instalado`, ruta +
+sha256) que es lo único que habilita a borrar algo. Dos cosas quedaron abiertas
+a propósito:
+
+- **El aviso de "lo dejo" es de una sola vez.** Cuando el kit deja de traer un
+  archivo y el cliente lo tenía editado, no se borra y se avisa — bien. Pero el
+  manifiesto nuevo ya no lo nombra, así que desde la corrida siguiente ese
+  huérfano no vuelve a aparecer nunca: ni en `install.sh`, ni en `--diff`, ni en
+  el despliegue. Una skill que sacamos del kit y el cliente había tocado puede
+  quedar indexada para siempre sin rastro (y una skill en `data/skills/` tapa a
+  la de `kit-skills/`, que es un bug que ya nos costó una tanda). Falta llevar
+  los huérfanos a una lista aparte —`.kit-huerfanos`, o que los mire
+  `agente-check.py`— para que el aviso se repita hasta que alguien decida.
+
+- **Los dos composes no los compara nadie.**
+  `tools/comparar-instaladores.sh` prueba que un agente local y uno remoto
+  reciben los mismos archivos, pero `docker-compose.example.yml` y
+  `docker-compose.remoto.yml` siguen siendo dos plantillas a mano. La auditoría
+  le borró `HERMES_DASHBOARD=0` al remoto —el bug del crash-loop 27×/min— y el
+  chequeo quedó verde. Falta comparar las claves que tienen que ser iguales en
+  los dos (`HERMES_DASHBOARD`, `HERMES_ACCEPT_HOOKS`, el `user:` del adapter,
+  los montajes de `politica/`, `kit-skills/`, `kit-adapter/` y el `env_file`, el
+  tag del motor) y listar las que difieren a propósito.
+
+Detalle de la misma familia: los chequeos recorren el árbol con `find -type f`,
+que **no ve los symlinks**, así que un symlink que el agente deje en una ruta del
+kit no aparece en ninguna comparación.
+
+## Auditoría del 12/8 — tres cosas que encontró y quedaron arregladas, y una que falta
+
+Se anotan porque ninguna estaba escrita y las tres son de la misma familia: un
+dato que escribe el agente termina consumido por algo que corre con más permiso.
+
+- **P1 — inyección de comandos como root en la VPS (CERRADO).**
+  `tools/observabilidad.sh` leía el `default:` de `data/config.yaml` —que escribe
+  el agente— y lo interpolaba **sin comillas** en la cadena que va a `ssh`. Con
+  un `default: modelo'; touch /tmp/RAIZ-EN-LA-VPS; echo 'x` el comando inyectado
+  se ejecutó. Cadena: el agente escribe su config → el operador corre una
+  herramienta documentada del kit → comando arbitrario en el shell root del
+  servidor. **Es el primer camino que salió del contenedor y llegó al host.**
+  Cerrado con validación de forma (`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,80}$`) más
+  paso del valor por `printf %q` a un script que entra por stdin, sin `sed`.
+  Barrido hecho: es la única interpolación de ese tipo en el kit (lo demás que
+  se lee de un agente se usa en `echo` local).
+
+- **P2 — el desplegador reabría `data/config.yaml` en cada corrida (CERRADO).**
+  Un `sed` comentaba las dos líneas `:ro` "para el primer arranque", así que el
+  agente podía escribir su propio config hasta que alguien corriera
+  `cerrar-config.sh` a mano. El compose dice qué habilita eso ("podía devolverse
+  cronjob y registrar un MCP salteando la guardia; solo tenía que esperar un
+  reinicio") y además era lo que le daba de comer a P1. La precaución era de un
+  motor viejo: con v2026.7.30 arranca bien con el archivo `:ro` desde el primer
+  arranque, verificado. `cerrar-config.sh` queda solo para agentes viejos.
+
+- **P3 — la migración de secretos destruía configuración del cliente (CERRADO).**
+  La primera versión movía solo las variables de una lista blanca y borraba
+  `data/.env`: descartaba `TELEGRAM_ALLOWED_USERS` —que crea el propio kit y es
+  la lista blanca del bot— y el valor no quedaba en ningún lado. Sin esa
+  variable el bot no le contesta a nadie o le contesta a cualquiera. Ahora es
+  lista **negra** (solo se quedan afuera `PYTHONPATH`, `LD_PRELOAD` y familia),
+  el archivo se mueve **entero y sin reescribir** cuando no hay nada peligroso
+  —así no se parte un valor multilínea, como una clave PEM— y si hay que filtrar,
+  el original queda en `data/.env.sin-migrar` en vez de borrarse.
+
+- **FALTA — el guard remoto de la migración del adapter falla ABIERTO.** En
+  `desplegar-remoto.sh`, para no borrar `data/scripts/portal_adapter.py` mientras
+  el contenedor todavía lo ejecuta, se pregunta por ssh
+  `docker inspect … | grep /opt/data/scripts`. Cualquier error —docker que no
+  responde, contenedor con otro nombre, ssh que se corta— se lee como "ya está
+  migrado" y la ruta vieja se saca igual: un `docker restart` posterior deja el
+  portal en crash-loop. Y no lo ejercita nadie: el comparador no habla ssh y el
+  juez (`tools/probar-despliegue-ssh.sh`) tiene un `docker` de mentira que hace
+  `exit 0`. Falta distinguir "el contenedor no usa la ruta vieja" de "no pude
+  averiguarlo" —ante la duda, conservar— y cubrirlo en el juez con un `docker`
+  falso que devuelva el entrypoint viejo.
+
+## El patrón detrás de las últimas tres vueltas, y qué construir (12/8)
+
+Siete bugs de tres vueltas seguidas son **el mismo bug**: *un archivo que el
+agente puede escribir termina siendo interpretado por algo que corre con más
+permiso que él* — el código del adapter, `data/.env`, `data/config.yaml`, el
+`cont-init` que corre s6, el manifiesto del limpiador, el `default:` que
+`observabilidad.sh` metía en un `ssh` root.
+
+La propuesta era un **inventario de consumidores**: una tabla *quién lee X · con
+qué privilegio · quién puede escribir X*, y un chequeo que falle cuando el
+escritor tiene menos privilegio que el lector. Sigue en pie, con tres
+correcciones que salieron de la auditoría y que son el verdadero aprendizaje:
+
+1. **Le falta una cuarta columna: CON QUÉ GRAMÁTICA LO LEE.** Es literalmente el
+   bug de hoy. `data/.env` ya estaba en la tabla, ya sabíamos quién lo lee y con
+   qué privilegio, y el guardrail falló igual: el kit lo parseaba con un regex de
+   bash (`^NOMBRE=`) y el consumidor con godotenv, que acepta `export` y recorta
+   espacios. `export PYTHONPATH=/opt/data/evil` era invisible para el nuestro y
+   perfectamente visible para el suyo. **Un chequeo de tres columnas habría dado
+   VERDE sobre el archivo envenenado.**
+
+2. **Validar con el parser del consumidor, no con el nuestro.** Para
+   `secretos.env` ya está implementado y es barato: después de migrar,
+   `migrar-secretos.sh` corre `docker compose config` y verifica que ninguna
+   variable peligrosa llegue al entorno de los servicios; si llega, deshace la
+   mudanza. La regla general: cuando un chequeo nuestro afirma algo sobre un
+   archivo que lee otro programa, la afirmación vale lo que valga nuestro parser
+   — así que hay que preguntarle al que lo lee.
+
+3. **El inventario tiene que incluir los consumidores que NO están en el
+   servidor.** `observabilidad.sh` corre en la Mac del operador y fue el primer
+   camino a root en la VPS; `foto-bot.sh` y `avatar-bot.py` también leen datos
+   del agente fuera del contenedor. Una tabla armada desde los montajes del
+   compose no los ve.
+
+Y una advertencia que tiene que salir **impresa por el chequeo**, no vivir sólo
+acá: *el chequeo puede afirmar que la tabla está completa respecto de los
+montajes declarados, pero NO que enumere todos los consumidores — eso sigue
+siendo trabajo humano.* Que nadie lea "0 fallas" como "no hay más caminos".
+
+## Menor: el config del kit nace viejo para el motor
+
+`compose/config.base.yaml` no declara `_config_version`, y el motor loguea en
+cada arranque que el config "predates version 12 (~2 years old)" y que ya no lo
+puede auto-migrar. No rompe el arranque —cae a defaults compatibles y las
+perillas se aplican, verificado— pero es el tipo de cosa que en un bump del motor
+deja de ser benigna en silencio y en todos los clientes a la vez. Falta decidir
+el número, ponerlo, y que `agente-check.py` lo exija.
+
+## Los últimos cinco de la tanda del 12/8 — cerrados, y lo que dejaron abierto
+
+**Quién lo destraba:** el portal.
+
+Cerrados y medidos contra el agente del lab (Tero), no de memoria:
+
+- **"Corregir y aprobar" apagaba el aviso y precargaba el texto rechazado.** El
+  aviso tenía `!correcting` en la condición, así que desaparecía justo al tocar
+  el botón contra el que advertía; y el borrador salía de `mandable`, que sale
+  del recuadro viejo. Aprobar con corrección manda ese texto como "usá
+  exactamente esta versión", o sea que era peor que Aprobar a secas. Ahora el
+  aviso sigue puesto mientras corrige (con otro texto), la caja **arranca
+  vacía** cuando lo único que hay para copiar es lo que ella rechazó, y "Lo que
+  hablaron" —donde vive la re-propuesta en prosa— **queda a la vista mientras
+  edita**, que antes se escondía.
+- **El rótulo de autor mentía en la pantalla donde se aprueba.** Aprobaciones
+  tenía un ternario binario (`esDelCliente ? "Vos" : "Tu agente"`) y el
+  comentario del fundador se leía «Tu agente». `rotuloAutor()` subió a
+  `lib/agent.ts` y lo usan las **tres** pantallas (Aprobaciones, Tablero y el
+  visor de entidades, que era una tercera copia y la más desviada: mostraba
+  `portal` como "Portal").
+- **Había tres definiciones de "el cliente".** Quedó una:
+  `esElCliente = /^(cliente|portal)$/i` en `lib/agent.ts`. `user`/`usuario`
+  salieron del conjunto **confiable** —el que decide qué contenido se esconde—
+  y entraron en el de **rótulos** (`FIRMAS_DEL_AGENTE`), porque `user` es el
+  default de `hermes kanban comment` y mostrar esa palabra en pantalla es un
+  identificador de máquina en la cara del cliente. Medido: un comentario firmado
+  `user` con "RECHAZADO POR TU CLIENTE…" ya no sale como «user · Lo rechazaste»
+  con el cuerpo escondido, sino como un comentario del agente **con su texto
+  entero a la vista**.
+- **`?pedido=` no traía la tarjeta a la vista.** Una llamada a `traerALaVista()`.
+  De paso el helper aprendió algo que le faltaba a todos sus usuarios: **lo que
+  no entra en la ventana no se centra, se alinea arriba.** La tarjeta del pedido
+  mide 1208 px con una ventana de 806, y `block: "center"` la dejaba arrancando
+  en −201 — con el título y el "Le dijiste que no" arriba del borde.
+- **`docs/rutas-portal.md` decía lo contrario del código** (rAF donde el código
+  usa `setTimeout` a propósito, y "dos causas" donde hay tres). Corregido, con
+  el porqué escrito para que nadie lo "arregle" de vuelta.
+
+Lo que **sigue abierto** después de esta tanda:
+
+- **`contesto` no distingue al agente de un tercero.** En Aprobaciones,
+  `estadoDeLaNegociacion` da por contestado el "no" en cuanto comenta cualquiera
+  que no sea el cliente, así que un comentario del fundador hace que la pantalla
+  diga "Tu agente ya te contestó" cuando el agente no dijo nada. Ahora que el
+  rótulo distingue terceros, esta es la última pieza que no. No se arregla con
+  una lista de nombres: hace falta que el adapter diga qué comentario es del
+  agente. Lo mismo vale para `elegirPropuesta`, que podría elegir como propuesta
+  vigente el comentario de un tercero si trae una tabla.
+- **El motivo con una comilla sin cerrar sale con la de apertura pegada.**
+  `motivoDelRechazo` corta hasta la ÚLTIMA comilla de cierre; si el cliente
+  escribe una sola comilla de apertura, esa comilla queda adentro de la cita.
+  Cosmético, pero es texto suyo entre comillas.
+- **Cerrar un pedido no pide confirmación.** La casilla "esto no va más" +
+  Enter en el input alcanzan para cerrarlo, y cerrar es la única acción de esa
+  pantalla que no se puede deshacer desde ahí (hay que volver a pedirlo por el
+  chat). Debería confirmar, como Archivar en el Tablero.
+- **`BLOCKED:` se filtra en Aprobaciones y se muestra en el Tablero**, donde
+  además repite lo que ya dice el cartel "POR QUÉ SE FRENÓ" tres renglones más
+  arriba. `esMarcador()` vive en `aprobaciones/page.tsx`: tiene que subir a la
+  lib y usarse también en el Tablero.
+- **En Tareas el mismo renglón muestra dos horas distintas** ("Los lunes a las
+  09:00" y "Próxima lun 17 ago a las 06:00"): el cron viene en la zona horaria
+  del agente y la hora se formatea con la del browser. Mientras las dos no salgan
+  de la misma zona, el renglón se contradice solo.

@@ -17,10 +17,11 @@ import {
   Download, ImageOff, LayoutDashboard, RefreshCw, Search, SearchX, Trash2, X,
 } from "lucide-react";
 import { loadConfig, type PortalConfig } from "../lib/agent";
+import { CopiarLink, PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
 import EntregablesPorFlujo from "../lib/EntregablesPorFlujo";
 import ArtifactView from "../lib/Artifact";
 import {
-  Btn, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner, inputCls,
+  AvisoLinkViejo, Btn, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
 import {
   deleteArtifact, getArtifact, listArtifacts, messageOf, statusOf,
@@ -205,7 +206,11 @@ export default function ArtefactosPage() {
   const [kind, setKind] = useState<string | null>(null); // null = todos
   const [busqueda, setBusqueda] = useState("");
 
-  const [abierto, setAbierto] = useState<ArtifactMeta | null>(null);
+  // Cuál está abierta lo dice la URL (`?visualizacion=art_…`): así se comparte,
+  // se refresca y "atrás" la cierra.
+  const abiertoId = useParamRuta(PARAM.visualizacion);
+  const abrir = useCallback((id: string) => abrirEnRuta({ [PARAM.visualizacion]: id }), []);
+  const cerrar = useCallback(() => cerrarEnRuta(PARAM.visualizacion), []);
   const [detalle, setDetalle] = useState<ArtifactDetail | null>(null);
   const [detalleErr, setDetalleErr] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
@@ -246,34 +251,34 @@ export default function ArtefactosPage() {
   // HTML del artefacto abierto (normalmente ya cacheado por la miniatura).
   // El contador descarta la respuesta de un artefacto que ya se cerró.
   const pedido = useRef(0);
-  const cargarDetalle = useCallback((a: ArtifactMeta) => {
+  const cargarDetalle = useCallback((id: string) => {
     if (!cfg) return;
     const n = ++pedido.current;
     setDetalle(null);
     setDetalleErr(null);
-    getArtifact(cfg, a.id)
+    getArtifact(cfg, id)
       .then((d) => { if (pedido.current === n) setDetalle(d); })
       .catch((e) => { if (pedido.current === n) setDetalleErr(messageOf(e)); });
   }, [cfg]);
 
   useEffect(() => {
-    if (!abierto) return;
+    if (!abiertoId) return;
     setConfirmando(false);
     setBorrarErr(null);
-    cargarDetalle(abierto);
-  }, [abierto, cargarDetalle]);
+    cargarDetalle(abiertoId);
+  }, [abiertoId, cargarDetalle]);
 
   // Modal: Escape cierra, el fondo no scrollea.
   useEffect(() => {
-    if (!abierto) return;
-    const fn = (e: KeyboardEvent) => e.key === "Escape" && setAbierto(null);
+    if (!abiertoId) return;
+    const fn = (e: KeyboardEvent) => e.key === "Escape" && cerrar();
     window.addEventListener("keydown", fn);
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", fn);
       document.body.style.overflow = "";
     };
-  }, [abierto]);
+  }, [abiertoId, cerrar]);
 
   // Kinds presentes en los datos (nunca hardcodeados), ordenados por rótulo.
   const kinds = useMemo(() => {
@@ -291,6 +296,14 @@ export default function ArtefactosPage() {
     });
   }, [items, kind, busqueda]);
 
+  // Lo que se ve en el encabezado del modal. El detalle YA trae la ficha
+  // completa, así que un link compartido abre bien aunque la grilla todavía no
+  // haya llegado (o aunque esa visualización esté filtrada de la vista).
+  const abierto = useMemo<ArtifactMeta | null>(() => {
+    if (!abiertoId) return null;
+    return detalle ?? (items ?? []).find((x) => x.id === abiertoId) ?? null;
+  }, [abiertoId, detalle, items]);
+
   const descargar = () => {
     if (!detalle || !abierto) return;
     const url = URL.createObjectURL(new Blob([detalle.html], { type: "text/html" }));
@@ -304,13 +317,13 @@ export default function ArtefactosPage() {
   };
 
   const borrar = async () => {
-    if (!cfg || !abierto) return;
+    if (!cfg || !abiertoId) return;
     setBorrando(true);
     setBorrarErr(null);
     try {
-      await deleteArtifact(cfg, abierto.id);
-      setItems((prev) => (prev ?? []).filter((x) => x.id !== abierto.id));
-      setAbierto(null);
+      await deleteArtifact(cfg, abiertoId);
+      setItems((prev) => (prev ?? []).filter((x) => x.id !== abiertoId));
+      cerrar();
     } catch (e) {
       setBorrarErr(messageOf(e));
     } finally {
@@ -369,7 +382,7 @@ export default function ArtefactosPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibles.map((a) => (
-              <Tarjeta key={a.id} cfg={cfg} a={a} onOpen={() => setAbierto(a)} />
+              <Tarjeta key={a.id} cfg={cfg} a={a} onOpen={() => abrir(a.id)} />
             ))}
           </div>
         )}
@@ -406,6 +419,14 @@ export default function ArtefactosPage() {
         }
       />
 
+      {/* Un link a una visualización borrada: se avisa y queda la grilla. */}
+      {abiertoId && detalleErr && (
+        <AvisoLinkViejo>
+          Esa visualización ya no está — tu agente la reemplazó o la borró. Abajo está
+          todo lo que produjo.
+        </AvisoLinkViejo>
+      )}
+
       {err && items !== null && (
         <p className="mb-4 inline-flex items-center rounded-lg border border-c-coral bg-c-coral/40 px-3 py-1.5 text-[12px] font-medium text-c-coral-ink">
           No pude actualizar recién ({err.message}). Te muestro lo último que tengo.
@@ -421,23 +442,32 @@ export default function ArtefactosPage() {
       </h2>
       {cuerpo()}
 
-      {abierto && (
-        <Modal wide onClose={() => setAbierto(null)}>
+      {abiertoId && !detalleErr && (
+        <Modal wide onClose={cerrar}>
           <div className="flex items-start justify-between gap-4 border-b border-black/[0.07] px-5 py-4">
             <div className="min-w-0">
-              <h2 className="text-base font-bold leading-snug text-ink">{abierto.title}</h2>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <Chip tone={kindTone(abierto.kind)}>{kindLabel(abierto.kind)}</Chip>
-                <span className="text-[11px] text-ink-soft">
-                  {[fmtRelativa(abierto.created_at), fmtBytes(abierto.bytes)]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              </div>
+              {/* El título humano manda; el id crudo de la URL no se muestra
+                  nunca. Mientras la ficha no llegó, se dice que está abriendo. */}
+              <h2 className="text-base font-bold leading-snug text-ink">
+                {abierto ? abierto.title : "Abriendo la visualización…"}
+              </h2>
+              {abierto && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <Chip tone={kindTone(abierto.kind)}>{kindLabel(abierto.kind)}</Chip>
+                  <span className="text-[11px] text-ink-soft">
+                    {[fmtRelativa(abierto.created_at), fmtBytes(abierto.bytes)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+              )}
             </div>
-            <IconBtn label="Cerrar" onClick={() => setAbierto(null)}>
-              <X className="h-4 w-4" />
-            </IconBtn>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <CopiarLink titulo="Copiar el link de esta visualización" />
+              <IconBtn label="Cerrar" onClick={cerrar}>
+                <X className="h-4 w-4" />
+              </IconBtn>
+            </div>
           </div>
 
           {/* min-w-0: sin esto un artefacto ancho estira el modal. */}
@@ -446,7 +476,7 @@ export default function ArtefactosPage() {
               <div className="py-6">
                 <ErrorState
                   message={`No pude abrir la visualización (${detalleErr}).`}
-                  onRetry={() => cargarDetalle(abierto)}
+                  onRetry={() => cargarDetalle(abiertoId)}
                 />
               </div>
             ) : detalle ? (
