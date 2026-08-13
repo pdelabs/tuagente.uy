@@ -127,6 +127,30 @@ export function agentDisplayName(manifest: Manifest | null): string {
   return loadAgentName() || manifest?.agent || "tu agente";
 }
 
+/** ¿ESTE AGENTE YA PASÓ POR EL ALTA? Lo contesta EL AGENTE, no el browser.
+ *
+ *  El alta se decidía con lo que este navegador se acordaba, y lo del browser
+ *  se borra entero al cambiar de agente (`olvidarAgente`). O sea que entrar con
+ *  el link de un agente ya configurado —desde otra máquina, en incógnito, o
+ *  simplemente cambiando de agente— le volvía a correr el alta completa. Y el
+ *  último paso, "¿Por dónde te aviso?", no es una pantalla informativa:
+ *  contestarla ESCRIBE en el agente (`guardarIdentidad`) y le pisa el canal que
+ *  ya tenía configurado.
+ *
+ *  Dos datos y los dos vienen del manifiesto:
+ *  - `bautizado`: el cliente ya le puso nombre alguna vez.
+ *  - `aviso`: ya contestó por dónde quiere que le avisen. `"ninguno"` ES una
+ *    respuesta ("ahora no"), y la que hace que `AvisoSinCanal` se lo vuelva a
+ *    ofrecer adentro del portal: no es lo mismo que no haber contestado nunca.
+ *
+ *  Ausente (`null`/`undefined`) es "todavía no contestó" — y también lo que
+ *  manda un adapter viejo que no publica el campo. En los dos casos se prefiere
+ *  preguntar: el precio de preguntar de más es una pantalla; el de no preguntar
+ *  es un cliente sin canal de aviso, que es lo que este alta vino a arreglar. */
+export function altaYaContestada(manifest: Manifest | null | undefined): boolean {
+  return Boolean(manifest?.bautizado) && (manifest?.aviso ?? "").trim() !== "";
+}
+
 // Qué contamos en el paso 2: solo lo que el manifest habilita.
 const PUNTOS = [
   {

@@ -60,8 +60,10 @@ import {
 } from "../lib/eventos";
 
 type ActivityEvent = EventoAgente;
-/** Los status crudos del adapter son muchos; para filtrar alcanzan tres. */
-type Grupo = "ok" | "error" | "curso";
+/** Los status crudos del adapter son muchos; para filtrar alcanzan tres… más
+ *  `sin`, que es donde caen los eventos que no tienen resultado (un documento
+ *  escrito, una conversación). Ver `GRUPOS`. */
+type Grupo = "ok" | "error" | "curso" | "sin";
 type RangoKey = "hoy" | "7d" | "30d" | "todo";
 
 const REFRESH_MS = 30_000;
@@ -84,11 +86,18 @@ const KIND_LABEL: Record<string, string> = {
 // todavía no lo había bautizado.
 const estadoLabel = (s: string, nombreAgente: string) => rotuloEvento(s, nombreAgente);
 
+// LOS CUATRO SUMAN EL TOTAL, Y ESA ES LA GRACIA DEL CUARTO. La fila decía
+// «Todos 41 · Bien 9 · Con error 2 · En curso 3» y 9+2+3 no da 41: los 27 que
+// faltaban son los eventos que no tienen resultado —lo que escribió, las
+// conversaciones—, que no entraban en ningún chip y por eso parecían perdidos.
+// Un contador que no cierra es un contador en el que el cliente deja de creer.
 const GRUPOS: { key: Grupo; label: string; dot: [string, string] }[] = [
   // dot: [inactivo, activo] — sobre el chip activo (fondo ink) va el tono claro.
   { key: "ok", label: "Bien", dot: ["bg-c-green-ink", "bg-c-green"] },
   { key: "error", label: "Con error", dot: ["bg-c-coral-ink", "bg-c-coral"] },
   { key: "curso", label: "En curso", dot: ["bg-c-amber-ink", "bg-c-amber"] },
+  // El mismo gris que le pone `dotCls` a estos eventos en la lista.
+  { key: "sin", label: "Sin estado", dot: ["bg-ink-soft/50", "bg-white/60"] },
 ];
 
 const RANGOS: { key: RangoKey; label: string; dias: number | null }[] = [
@@ -99,13 +108,18 @@ const RANGOS: { key: RangoKey; label: string; dias: number | null }[] = [
 ];
 
 /** Estado crudo → uno de los tres grupos, o ninguno (eventos informativos). */
-function grupoDe(status: string): Grupo | null {
+function grupoDe(status: string): Exclude<Grupo, "sin"> | null {
   const s = (status || "").toLowerCase();
   if (/(^ok$|complet|success|done|deliver|sent|unblock|resolv|entregad|listo)/.test(s)) return "ok";
   if (/(fail|error|timeout|cancel|reject|rechaz)/.test(s)) return "error";
   if (/(run|progress|pend|claim|start|queue|block|curso|proceso)/.test(s)) return "curso";
   return null;
 }
+
+/** El mismo criterio, pero SIN agujero: los eventos que no tienen resultado
+ *  caen en `sin` en vez de en ningún lado. Es lo único que hace que los chips
+ *  de la fila sumen el total que dice su propio "Todos". */
+const grupoFiltro = (status: string): Grupo => grupoDe(status) ?? "sin";
 
 // Puntito de estado: verde OK · coral falla · ámbar en curso ·
 // violeta evento de ticket neutral · gris resto.
@@ -481,7 +495,7 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
   }, [ordenados]);
 
   const gruposPresentes = useMemo(() => {
-    const set = new Set(ordenados.map((e) => grupoDe(e.status)).filter(Boolean));
+    const set = new Set(ordenados.map((e) => grupoFiltro(e.status)));
     return GRUPOS.filter((g) => set.has(g.key));
   }, [ordenados]);
 
@@ -495,8 +509,17 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
     });
   }, [ordenados, rango, busqueda]);
 
+  // QUÉ CUENTA CADA NÚMERO. Cada chip dice cuántos eventos vas a ver SI LO
+  // TOCÁS: por eso la fila "Tipo" se cuenta sobre lo que dejó pasar el filtro de
+  // estado y viceversa. Eso está bien y se queda —tocar un chip no puede llevar
+  // a una lista de otro tamaño que el que anunciaba—, pero dejaba dos lecturas
+  // sueltas y ninguna era la lista de abajo: con "Hoy" + "Con error" convivían
+  // «TIPO: Todos 2» y «ESTADO: Todos 41» sobre dos filas en pantalla, y la
+  // clienta no sabía cuál de los dos números era el suyo. Se arregla sin
+  // mentirle a ninguno: los grupos suman (ver `grupoFiltro`) y arriba de todo va
+  // dicho, con todas las letras, cuántos eventos está mirando.
   const porGrupo = useMemo(
-    () => (grupo ? base.filter((e) => grupoDe(e.status) === grupo) : base),
+    () => (grupo ? base.filter((e) => grupoFiltro(e.status) === grupo) : base),
     [base, grupo],
   );
   const porKind = useMemo(
@@ -506,7 +529,7 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
   const visibles = useMemo(
     () =>
       base.filter(
-        (e) => (!kind || e.kind === kind) && (!grupo || grupoDe(e.status) === grupo),
+        (e) => (!kind || e.kind === kind) && (!grupo || grupoFiltro(e.status) === grupo),
       ),
     [base, kind, grupo],
   );
@@ -642,6 +665,19 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
               </div>
             </div>
 
+            {/* EL NÚMERO QUE ES EL SUYO, DICHO UNA VEZ. Los chips cuentan cada
+                uno lo que pasaría si lo tocaras; esta línea cuenta lo que hay
+                abajo, ahora. Aparece sólo cuando hay algo filtrando de verdad
+                —si no, repetiría el total tres veces—. */}
+            {visibles.length !== base.length && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Caption>En pantalla</Caption>
+                <span className="text-[11px] font-semibold tabular-nums text-ink">
+                  {visibles.length} de {base.length} eventos
+                </span>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               {kinds.length > 1 && (
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -675,7 +711,7 @@ function Actividad({ cfg }: { cfg: PortalConfig }) {
                         key={g.key}
                         activo={activo}
                         onClick={() => setGrupo(activo ? null : g.key)}
-                        count={porKind.filter((e) => grupoDe(e.status) === g.key).length}
+                        count={porKind.filter((e) => grupoFiltro(e.status) === g.key).length}
                       >
                         <span className={`h-1.5 w-1.5 rounded-full ${g.dot[activo ? 1 : 0]}`} />
                         {g.label}

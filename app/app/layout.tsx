@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest, getApprovals, EVENTO_APROBACIONES,
-  esPedidoDelCliente, CLAVE_CONFIG, configGuardada, credencialEnLaURL, mismaSesion,
+  esPedidoDelCliente, aprenderHusoDelAgente, CLAVE_CONFIG, configGuardada,
+  credencialEnLaURL, mismaSesion,
   type PortalConfig, type Manifest,
 } from "./lib/agent";
 import { Btn, SOPORTE, Soporte, Spinner, inputCls } from "./lib/ui";
@@ -22,7 +23,9 @@ import {
   volverAlaPestania,
 } from "./lib/rutas";
 import { INTROS, useIntroGate } from "./lib/intros";
-import Onboarding, { AvisoSinCanal, loadAgentName, saveAgentName } from "./lib/onboarding";
+import Onboarding, {
+  AvisoSinCanal, altaYaContestada, loadAgentName, saveAgentName,
+} from "./lib/onboarding";
 import {
   AgentitoAvatar, hayLookGuardado, loadAgentLook, lookDesdeAgente, saveAgentLook,
 } from "./lib/agentito";
@@ -225,12 +228,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (suyo) { saveAgentLook(suyo); setLookAgente(suyo); }
   };
 
+  // EN QUÉ RELOJ VIVE EL NEGOCIO, ANTES DE PINTAR NADA. Todas las pantallas
+  // muestran las fechas en el huso del agente, pero sólo tres lo aprendían:
+  // entrar derecho a cualquiera de las otras ocho —el primer día de un cliente,
+  // o con Inicio caído— dejaba el portal contando las horas con el reloj del
+  // browser sin avisar. Se pide una vez, en el arranque, y vale para todas.
+  const conocerElReloj = (c: PortalConfig, m: Manifest) => {
+    aprenderHusoDelAgente(c, m).catch(() => { /* sin huso se sigue como antes */ });
+  };
+
   const boot = () => {
     const c = loadConfig();
     if (!c) { setState("login"); return; }
     setCfg(c);
     getManifest(c)
-      .then((m) => { setManifest(m); aprenderDelAgente(m); setOnline(true); setState("ok"); })
+      .then((m) => {
+        setManifest(m); aprenderDelAgente(m); conocerElReloj(c, m);
+        setOnline(true); setState("ok");
+      })
       .catch(() => setState("error"));
   };
   useEffect(boot, []);
@@ -247,7 +262,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!c) { setState("login"); listo(); return; }
     setCfg(c);
     getManifest(c)
-      .then((m) => { setManifest(m); aprenderDelAgente(m); setOnline(true); setState("ok"); })
+      .then((m) => {
+        setManifest(m); aprenderDelAgente(m); conocerElReloj(c, m);
+        setOnline(true); setState("ok");
+      })
       .catch(() => setState("error"))
       .finally(listo);
   };
@@ -350,7 +368,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Onboarding: antes que cualquier módulo, el cliente bautiza a su agente y
   // el agente se presenta. Completa la bienvenida general, así que también
   // marca la intro de "home" (si no, hay dos pantallas de bienvenida seguidas).
-  if (seen && !seen.onboarding) {
+  //
+  // QUIÉN DECIDE SI EL ALTA VA ES EL AGENTE, NO EL BROWSER. Se decidía sólo con
+  // lo que este navegador se acordaba, y cambiar de agente borra todo lo del
+  // anterior (`olvidarAgente`): entrar con el link de un agente ya bautizado y
+  // configurado le volvía a correr el alta entera —incluido "¿Por dónde te
+  // aviso?"— y contestarla le ESCRIBE al agente, pisándole el canal que ya
+  // tenía. Le pasó a un auditor con un agente configurado hacía rato: tuvo que
+  // saltear la pregunta a mano para no escribirle. El manifiesto ya dice
+  // `bautizado` y `aviso`: si el agente contestó, no se le vuelve a preguntar.
+  // Un agente nuevo (sin bautizar) sigue viendo el alta completa, y uno
+  // bautizado al que le falta el canal la ve desde la presentación —que es
+  // donde `Onboarding` arranca cuando `bautizado` es true—.
+  if (seen && !seen.onboarding && !altaYaContestada(manifest)) {
     return (
       <Onboarding
         manifest={manifest}

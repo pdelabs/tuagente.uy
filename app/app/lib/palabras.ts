@@ -471,8 +471,15 @@ export function cuandoVa(iso: string | null | undefined): string {
 // ninguno se cae al reloj del browser, que es lo único que se puede suponer —y
 // es exactamente lo que hacían todas antes.
 //
+// QUIÉN LO APRENDE NO ES CADA PANTALLA. Lo hace `lib/agent.ts`, que es por donde
+// pasan todas las respuestas del agente: cualquier fecha con huso que llegue por
+// cualquier endpoint lo enseña, y el arranque del portal lo va a buscar aunque
+// el cliente haya entrado por una pantalla que no trae fechas con huso. Que el
+// reloj del portal dependiera de por qué pestaña entró el cliente era el bug.
+//
 // PENDIENTE: lo correcto sería que el manifiesto publique el huso del agente y
-// no tener que deducirlo. Está anotado en `docs/PENDIENTES.md`.
+// no tener que deducirlo. Está anotado en `docs/PENDIENTES.md`; el portal ya
+// lee el campo si aparece (ver `husoDelManifiesto` en `lib/agent.ts`).
 
 const HUSO_KEY = "tuagente_huso";
 /** undefined = todavía no lo buscamos; null = no hay ninguno aprendido. */
@@ -499,19 +506,67 @@ export function husoDelNegocio(): number {
   return husoAprendido ?? -new Date().getTimezoneOffset();
 }
 
+/** ¿Ya sabemos en qué reloj vive el negocio, o estamos cayendo al del browser?
+ *
+ *  LO PREGUNTA `lib/agent.ts` PARA NO ENTRAR A NINGUNA PANTALLA SIN SABERLO.
+ *  Sólo tres pantallas llamaban a `aprenderHuso` (Inicio, Actividad y Tareas) y
+ *  las otras ocho lo consumían: entrando derecho a /app/pipeline con el browser
+ *  en -06 y sin nada guardado, el sello decía «Actualizado 10:51» donde un
+ *  minuto después —pasando por Inicio— decía 13:52. Medido el 13/8 contra el
+ *  agente del lab. */
+export function hayHusoAprendido(): boolean {
+  if (husoAprendido === undefined) husoAprendido = leerHusoGuardado();
+  return husoAprendido !== null;
+}
+
+/** El offset de HOY de una zona IANA ("America/Montevideo" → -180).
+ *
+ *  Es para el día que el manifiesto publique la zona del agente en vez de que
+ *  el portal la deduzca de las fechas (ver `docs/PENDIENTES.md`). El nombre de
+ *  la zona es mejor dato que el offset porque sabe de horario de verano; el
+ *  portal, que trabaja con offsets, se queda con el de hoy. */
+export function husoDeZona(zona: string | null | undefined): number | null {
+  const z = (zona ?? "").trim();
+  if (!z) return null;
+  try {
+    // Una zona inventada tira RangeError acá mismo: no hace falta validarla
+    // antes, y validarla con un `includes("/")` dejaba afuera "UTC".
+    const partes = new Intl.DateTimeFormat("en-US", { timeZone: z, timeZoneName: "longOffset" })
+      .formatToParts(new Date());
+    const texto = partes.find((p) => p.type === "timeZoneName")?.value ?? "";
+    // "GMT-03:00", "GMT+5:30" y "GMT" (que es UTC, o sea 0).
+    if (/^GMT$/i.test(texto.trim())) return 0;
+    const m = /GMT([+-])(\d{1,2}):?(\d{2})?/.exec(texto);
+    if (!m) return null;
+    const min = Number(m[2]) * 60 + Number(m[3] ?? 0);
+    return m[1] === "-" ? -min : min;
+  } catch {
+    return null; // zona inventada: no se supone nada
+  }
+}
+
 /** Aprende el huso de la primera fecha que lo traiga. Lo llaman las pantallas
  *  que piden datos con huso (Inicio, Actividad, Tareas); las demás lo usan. */
 export function aprenderHuso(...fechas: (string | null | undefined)[]): number {
   for (const f of fechas) {
     const o = husoDe(f);
     if (o === null) continue;
-    if (o !== husoAprendido) {
-      husoAprendido = o;
-      try { localStorage.setItem(HUSO_KEY, String(o)); } catch { /* modo privado */ }
-    }
+    fijarHuso(o);
     break;
   }
   return husoDelNegocio();
+}
+
+/** El mismo dato, ya en minutos. Lo usa `lib/agent.ts`, que extrae el offset de
+ *  la respuesta (o del manifiesto) y no tiene una fecha para pasar: armar un
+ *  ISO de mentira sólo para que se vuelva a parsear acá era dar dos vueltas. */
+export function fijarHuso(minutos: number): number {
+  if (!Number.isFinite(minutos) || Math.abs(minutos) > 900) return husoDelNegocio();
+  if (minutos !== husoAprendido) {
+    husoAprendido = minutos;
+    try { localStorage.setItem(HUSO_KEY, String(minutos)); } catch { /* modo privado */ }
+  }
+  return minutos;
 }
 
 /** Cualquier fecha del agente —epoch en segundos o en ms, string numérica, o

@@ -13,6 +13,7 @@ import {
   deleteSession, renameSession, type PortalConfig,
 } from "../lib/agent";
 import { esConversacionHumana } from "../lib/eventos";
+import { momentoDe } from "../lib/palabras";
 import { ErrorState, Spinner, inputCls } from "../lib/ui";
 
 export type SessionSummary = {
@@ -37,11 +38,18 @@ export function sessionTitle(s: SessionSummary): string {
   return s.title?.trim() || s.preview?.trim() || "Conversación";
 }
 
+/** EL DÍA ES EL DEL NEGOCIO, NO EL DEL BROWSER. Esto contaba los días con
+ *  `new Date()` local mientras Actividad —que lista las mismas conversaciones—
+ *  los contaba con el reloj del agente. Medido el 13/8 en el agente de una
+ *  veterinaria con el browser en -06: la conversación de las 02:40 de
+ *  Montevideo caía en el chat bajo "AYER" y en Actividad bajo "HOY". El cliente
+ *  encontraba la charla de esta mañana archivada en ayer, en la pantalla que
+ *  más usa. `momentoDe` es la puerta única del portal: acepta el epoch en
+ *  segundos y devuelve los días ya contados allá (0 hoy, -1 ayer). */
 function dayGroup(epochSeconds: number): string {
-  const d = new Date(epochSeconds * 1000);
-  const today = new Date();
-  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diff = Math.round((startOf(today) - startOf(d)) / 86400000);
+  const m = momentoDe(epochSeconds);
+  if (!m) return "Anteriores";
+  const diff = -m.dias;
   if (diff <= 0) return "Hoy";
   if (diff === 1) return "Ayer";
   if (diff < 7) return "Últimos 7 días";

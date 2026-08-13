@@ -743,10 +743,29 @@ export default function PipelinePage() {
             >
               {columnas.map((col) => (
                 <section key={col.key} className="rounded-xl bg-black/[0.02] p-2">
-                  <div className="flex items-center gap-2 px-2 pb-2 pt-1.5">
-                    <span className={`h-1.5 w-1.5 rounded-full ${col.dot}`} />
-                    <h2 className="text-[12px] font-semibold text-ink">{col.label}</h2>
-                    <span className="text-[12px] text-ink-soft">{porColumna[col.key].length}</span>
+                  {/* UNA SOLA LÍNEA, SIEMPRE LA MISMA ALTURA. Con cinco
+                      columnas y la ventana entre ~1280 y ~1378 px, "Esperando
+                      aprobación" no entraba y se partía en dos renglones: esa
+                      cabecera medía 50 px contra 32 de las otras cuatro, la
+                      fila de encabezados quedaba desalineada y la primera
+                      tarjeta de esa columna arrancaba 18 px más abajo que las
+                      demás (medido el 13/8 con las columnas en 186 px). Alto
+                      fijo y el título recortado antes que partido; el rótulo
+                      entero queda en el `title`. */}
+                  <div className="flex h-8 items-center gap-1.5 px-2">
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${col.dot}`} />
+                    {/* `min-w-0` y nada de `flex-1`: el título se encoge sólo
+                        cuando hace falta y el número se queda pegado a él, como
+                        estaba, en vez de irse al borde derecho de la columna. */}
+                    <h2
+                      title={col.label}
+                      className="min-w-0 truncate text-[12px] font-semibold tracking-tight text-ink"
+                    >
+                      {col.label}
+                    </h2>
+                    <span className="shrink-0 text-[12px] tabular-nums text-ink-soft">
+                      {porColumna[col.key].length}
+                    </span>
                   </div>
                   {porColumna[col.key].length === 0 ? (
                     <p className="px-2 py-3 text-center text-[12px] text-ink-soft">Sin tareas</p>

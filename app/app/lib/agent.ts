@@ -4,6 +4,8 @@
 //   /app#endpoint=https://...&adapter=https://...&key=...
 // Defaults locales para desarrollo contra el agente fixture.
 
+import { fijarHuso, hayHusoAprendido, husoDe, husoDeZona } from "./palabras";
+
 export type PortalConfig = {
   endpoint: string; // api server del agente (:8642)
   adapter: string;  // adapter sidecar (:8643)
@@ -31,7 +33,29 @@ export type Manifest = {
    *  "mandame un hola" y nunca a dónde: sin esto el paso es imposible de
    *  completar salvo que el cliente ya sepa el handle. null si no tiene bot. */
   telegram_bot?: string | null;
+  /** EN QUÉ RELOJ VIVE EL NEGOCIO. TODAVÍA NO EXISTE: es el punto 4 de
+   *  `docs/PENDIENTES.md` («El huso horario del agente, declarado»), y está
+   *  declarado acá para que el día que el adapter lo publique el portal lo use
+   *  sin tocar nada más. Se aceptan los dos nombres que se barajaron y las dos
+   *  formas: la zona IANA (`"America/Montevideo"` — el dato bueno, sabe de
+   *  horario de verano) o el offset en minutos. Mientras no venga, el portal lo
+   *  deduce de las fechas que sí traen huso — ver `aprenderHusoDelAgente`. */
+  zona?: string | null;
+  timezone?: string | null;
+  huso?: number | null;
+  utc_offset?: number | null;
 };
+
+/** El huso que declara el manifiesto, si lo declara. Le gana a lo deducido:
+ *  es el agente diciendo dónde vive, no nosotros adivinándolo. */
+export function husoDelManifiesto(m: Manifest | null | undefined): number | null {
+  if (!m) return null;
+  const porZona = husoDeZona(m.zona ?? m.timezone);
+  if (porZona !== null) return porZona;
+  const crudo = m.huso ?? m.utc_offset;
+  const n = typeof crudo === "number" ? crudo : Number(crudo);
+  return Number.isFinite(n) && Math.abs(n) <= 900 ? n : null;
+}
 
 export type Ticket = {
   id: string;
@@ -164,10 +188,98 @@ async function failure(res: Response, path: string): Promise<HttpError> {
   return httpError(res.status, path, detail);
 }
 
+/* ── En qué reloj vive el negocio ─────────────────────────────────────────────
+   El portal muestra TODAS las fechas en el huso del agente, no en el de quien
+   mira (ver la nota larga de `lib/palabras.ts`). Ese huso se deduce de las
+   fechas que sí lo traen… y hasta ahora lo aprendían tres pantallas de once:
+   Inicio, Actividad y Tareas. Las otras ocho lo CONSUMEN, y sin nada guardado
+   caían al reloj del browser sin decir nada. Medido el 13/8 con el browser en
+   -06: borrando `tuagente_huso` y entrando derecho a /app/pipeline, el sello
+   decía «Actualizado 10:51»; pasando antes por Inicio, «Actualizado 13:52».
+   Mismo agente, mismo minuto, dos relojes.
+
+   Se llega ahí por dos caminos reales: el primer día de un cliente y cualquier
+   falla del fetch de Inicio. Así que aprenderlo deja de ser tarea de las
+   pantallas y pasa a ser de acá, que es por donde pasan TODAS las respuestas
+   del agente: cualquier fecha con huso que llegue por cualquier endpoint lo
+   enseña, sin importar por qué pestaña entró el cliente.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+// SÓLO ESTAS CLAVES. Alcanzaría con barrer el JSON entero buscando algo con
+// pinta de fecha, pero entonces el reloj del portal lo podría fijar el TEXTO de
+// un ticket (los cuerpos son markdown que escribe el modelo, y una fecha con
+// huso adentro de una tabla no dice dónde vive el negocio). Estas son las que
+// escriben el motor y el adapter: `ts` en /portal/activity, `next_run_at` y
+// `last_run_at` en /api/jobs, `claimed_at`/`started_at`/`finished_at` en las
+// corridas de un cron, `cuando` en la última corrida de un flujo.
+const CLAVES_CON_HUSO = new Set([
+  "ts", "next_run_at", "last_run_at", "paused_at", "claimed_at",
+  "started_at", "finished_at", "created_at", "updated_at", "cuando",
+]);
+
+/** El primer huso que traiga una respuesta del agente, o null. Con presupuesto:
+ *  `/api/sessions` y `/portal/tickets` son listas largas y esto corre en cada
+ *  respuesta. */
+function husoEnRespuesta(valor: unknown, presupuesto = { nodos: 3000 }): number | null {
+  if (presupuesto.nodos-- <= 0 || valor === null || typeof valor !== "object") return null;
+  if (Array.isArray(valor)) {
+    for (const v of valor) {
+      const o = husoEnRespuesta(v, presupuesto);
+      if (o !== null) return o;
+    }
+    return null;
+  }
+  for (const [k, v] of Object.entries(valor as Record<string, unknown>)) {
+    if (typeof v === "string" && CLAVES_CON_HUSO.has(k)) {
+      // Una fecha en `Z` NO enseña nada. Dice el instante, no dónde vive el
+      // negocio: es lo que sale de serializar en UTC. Hoy ni el motor ni el
+      // adapter mandan ninguna así —verificado endpoint por endpoint contra el
+      // lab el 13/8: todas vienen `-03:00`—, pero el día que alguna aparezca,
+      // aprender "el agente vive en UTC" le correría la hora al portal entero.
+      // Sin huso deducible se sigue con el reloj del browser, como antes.
+      const o = /[zZ]$/.test(v.trim()) ? null : husoDe(v);
+      if (o !== null) return o;
+      continue;
+    }
+    if (v !== null && typeof v === "object") {
+      const o = husoEnRespuesta(v, presupuesto);
+      if (o !== null) return o;
+    }
+  }
+  return null;
+}
+
+function aprenderDeLaRespuesta(data: unknown) {
+  const o = husoEnRespuesta(data);
+  if (o !== null) fijarHuso(o);
+}
+
+/** Que el portal sepa en qué reloj vive el negocio ANTES de pintar la primera
+ *  pantalla, entre por donde entre el cliente. Lo llama el arranque del layout.
+ *
+ *  Orden: lo que el agente declara de sí mismo (el manifiesto, cuando el kit lo
+ *  publique) le gana a lo que el portal deduce. Y si ya lo sabe, no pide nada.
+ *  Las dos fuentes deducidas son las únicas que traen fechas CON huso; si el
+ *  agente no tiene ni actividad ni tareas —el primer día de un cliente— no hay
+ *  nada que aprender y se sigue con el reloj del browser, igual que antes. */
+export async function aprenderHusoDelAgente(cfg: PortalConfig, manifest?: Manifest | null) {
+  const declarado = husoDelManifiesto(manifest);
+  if (declarado !== null) { fijarHuso(declarado); return; }
+  if (hayHusoAprendido()) return;
+  // De a una y en orden: la actividad es la fuente más fresca, las tareas
+  // programadas la que existe aunque el agente todavía no haya hecho nada.
+  // `get` aprende solo de lo que devuelvan; acá sólo hay que provocarlas.
+  await getActivity(cfg).catch(() => null);
+  if (hayHusoAprendido()) return;
+  await getJobs(cfg).catch(() => null);
+}
+
 async function get<T>(base: string, path: string, cfg: PortalConfig): Promise<T> {
   const res = await fetch(base + path, { headers: headers(cfg) });
   if (!res.ok) throw await failure(res, path);
-  return res.json();
+  const data = await res.json();
+  aprenderDeLaRespuesta(data);
+  return data as T;
 }
 
 async function post<T>(base: string, path: string, cfg: PortalConfig, body?: unknown): Promise<T> {

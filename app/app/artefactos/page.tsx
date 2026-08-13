@@ -138,7 +138,19 @@ function Miniatura({ cfg, id }: { cfg: PortalConfig; id: string }) {
           <ImageOff className="h-5 w-5 text-ink-soft/40" />
         </div>
       ) : (
-        <div className="h-full w-full animate-pulse bg-black/[0.03]" />
+        // QUE SE VEA QUE ESTÁ CARGANDO. Era un `bg-black/[0.03]` a pantalla
+        // completa: sobre blanco, un 3% de negro es indistinguible de una
+        // tarjeta vacía. La miniatura sólo se pide cuando la tarjeta entra en
+        // viewport, así que hay un rato —y en una pestaña que el browser no
+        // está dibujando, todo el rato que haga falta— en el que el cliente
+        // mira tres recuadros en blanco y concluye que se rompió. Con renglones
+        // se lee como "viene en camino", que es lo que está pasando.
+        <div className="flex h-full flex-col gap-2 p-4" aria-label="Cargando la vista previa">
+          <div className="h-3 w-2/5 animate-pulse rounded bg-black/[0.07]" />
+          <div className="h-2 w-4/5 animate-pulse rounded bg-black/[0.05]" />
+          <div className="h-2 w-3/5 animate-pulse rounded bg-black/[0.05]" />
+          <div className="mt-1 flex-1 animate-pulse rounded bg-black/[0.04]" />
+        </div>
       )}
       {/* Velo inferior: el corte de la miniatura se ve intencional. */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-white/80" />
