@@ -17,6 +17,7 @@ onboarding/                 la primera tarea del agente (brief de la empresa)
 compose/                    plantilla de docker-compose
 tools/agente-check.py       revisa el data/ de un agente sin prenderlo (offline)
 tools/portal-check.py       verifica que un agente cumpla el contrato del portal
+tools/resetear-agente.sh    deja un agente en cero (--entrega: el paso final del alta)
 tools/instalar-soul.sh      pone el bloque de SOUL en un agente que no lo tiene
 tools/limpiar-obsoletos.sh  saca del agente lo que el kit dejo de traer, y nada mas
 tools/comparar-instaladores.sh  ¿un agente local y uno remoto reciben el mismo kit?
@@ -72,6 +73,8 @@ los bloques— le instala el kit y hace el primer commit. Después, a mano:
 4. `docker compose up -d`
 5. `python3 tools/portal-check.py --key <API_SERVER_KEY>` → **0 fallas o no se
    entrega.**
+6. `tools/resetear-agente.sh --local <ruta> --entrega` → **dejalo en cero**, y
+   `portal-check.py --entrega` para verificarlo (ver abajo).
 
 **El cuarto argumento es el puerto del gateway en el host** (el adapter va en el
 siguiente). Por defecto 8642/8643, que es lo correcto cuando el cliente tiene su
@@ -79,6 +82,30 @@ propia VPS; en un host donde ya vive otro agente hay que moverlo. El script
 verifica que los dos puertos estén libres **antes de crear nada**: el choque
 solía aparecer recién en el `up -d` —los nombres de contenedor llevan el slug y
 no chocan—, o sea con el SOUL ya escrito y las claves ya cargadas.
+
+### El alta termina en cero
+
+Verificar ensucia: el circuito que vende el producto es hablarle, pedirle un
+artefacto y aprobarle algo. Si eso no se limpia, **el cliente abre su portal el
+primer día y encuentra una conversación nuestra y gasto en la pestaña de Uso.**
+
+```bash
+tools/resetear-agente.sh --local <ruta-del-agente> --entrega
+python3 tools/portal-check.py --key <API_SERVER_KEY> --entrega \
+    --endpoint http://127.0.0.1:<puerto> --adapter http://127.0.0.1:<puerto+1>
+```
+
+El reset `--entrega` borra la huella (conversaciones, uso, tablero,
+aprobaciones, entregables, artefactos, memorias, bautizo y la foto del bot) y
+**conserva lo que se escribió para este cliente**: el SOUL —menos el bloque
+`portal:identidad`, que lo escribe el bautizo—, los flujos y sus tareas
+programadas. Sin `--entrega` el reset es el completo de siempre, que se lleva
+también el SOUL: ese es para reciclar un agente, no para entregarlo.
+
+`portal-check.py --entrega` es lo que hace que no dependa de acordarse: si queda
+una conversación, un ticket, un archivo, gasto o el bautizo puesto, **falla** y
+dice el comando para arreglarlo. Sin la bandera no cambia nada — contra un
+agente en producción tener conversaciones es lo esperable.
 
 El runbook completo, con los canales (Telegram, WhatsApp oficial vs puente QR) y
 los tiempos reales, está en `tuagente.uy/docs/alta-cliente.md`.

@@ -217,6 +217,14 @@ Lo que falta, en orden:
   6. Primera tarea del agente: que investigue la web de la empresa y entregue
      su brief — ver onboarding/brief-empresa.md. Sale un borrador para revisar,
      y de ahí salen 3-4 líneas para el SOUL.
+  7. DEJALO EN CERO, que es lo último que se hace y lo que más se olvida:
+     $KIT/tools/resetear-agente.sh --local $DESTINO --entrega
+     Los pasos 5 y 6 ensucian —conversaciones, gasto en Uso, entregables de
+     prueba— y el cliente abre su portal el primer día. Esto borra esa huella
+     y conserva lo que escribiste: el SOUL, los flujos y las tareas.
+  8. python3 $KIT/tools/portal-check.py --key <API_SERVER_KEY> --entrega \\
+       --endpoint http://127.0.0.1:$PUERTO --adapter http://127.0.0.1:$PUERTO_ADAPTER
+     0 fallas = cumple el contrato Y llega en cero. Recién ahí se manda el link.
 
 Runbook completo (canales, WhatsApp, tiempos): tuagente.uy/docs/alta-cliente.md
 FIN

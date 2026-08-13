@@ -90,6 +90,10 @@ def main():
     ap.add_argument("--endpoint", default="http://localhost:8642")
     ap.add_argument("--origin", default="http://localhost:8090")
     ap.add_argument(
+        "--entrega", action="store_true",
+        help="además del contrato, exige que el agente esté EN CERO: es el "
+             "chequeo del último paso de un alta, antes de mandar el link")
+    ap.add_argument(
         "--intentos", type=int, default=INTENTOS, metavar="N",
         help=f"veces que se corre CADA chequeo (por defecto {INTENTOS}). Subilo "
              "cuando sospeches algo intermitente: con 10 se ve la tasa real "
@@ -230,6 +234,51 @@ def main():
         )
 
     check("Convención de entregables", _entregables, required=False)
+
+    # --- el agente que se entrega arranca en cero ---
+    #
+    # No es cosmético: el primer día es cuando el cliente decide qué es esto.
+    # Si abre su portal y encuentra una conversación nuestra —la de la
+    # verificación— y gasto en la pestaña de Uso, lo primero que aprende es que
+    # su agente ya venía usado. Verificar ensucia por definición (el circuito
+    # que vende el producto es hablarle, pedirle un artefacto y aprobarle algo),
+    # así que lo que no puede depender de la memoria de nadie es LIMPIARLO
+    # después: esto es lo que se planta si no se hizo, con el comando al lado.
+    #
+    # Solo con --entrega: contra un agente en producción, tener conversaciones
+    # es exactamente lo que se espera.
+    if args.entrega:
+        def _en_cero():
+            rastro = []
+            sesiones = len(jget(f"{E}/api/sessions", K)[0]["data"])
+            if sesiones:
+                rastro.append(f"{sesiones} conversación(es)")
+            if mods.get("kanban"):
+                n = len(jget(f"{A}/portal/tickets", K)[0]["tickets"])
+                if n:
+                    rastro.append(f"{n} ticket(s) en el tablero")
+            if mods.get("artifacts"):
+                n = len(jget(f"{A}/portal/artifacts", K)[0]["artifacts"])
+                if n:
+                    rastro.append(f"{n} artefacto(s)")
+            if mods.get("files"):
+                n = len(jget(f"{A}/portal/files", K)[0]["files"])
+                if n:
+                    rastro.append(f"{n} archivo(s) en el workspace")
+            if mods.get("usage"):
+                uso = jget(f"{A}/portal/usage", K)[0]
+                if uso.get("available") and (uso.get("cost_usd") or 0) > 0:
+                    rastro.append(f"USD {uso['cost_usd']:.2f} de gasto en Uso")
+            if manifest.get("bautizado"):
+                rastro.append("ya está bautizado (el cliente no vería el onboarding)")
+            if rastro:
+                raise AssertionError(
+                    "el agente llega con huella nuestra: " + " · ".join(rastro)
+                    + " — dejalo en cero con  tools/resetear-agente.sh --local "
+                      "<ruta> --entrega  (o --entrega por ssh) y volvé a correr esto")
+            return "sin conversaciones, sin tablero, sin archivos, sin gasto y sin bautizar"
+
+        check("Entrega: el agente está en cero", _en_cero)
 
     print(f"\nAgente: {manifest.get('agent')} — {manifest.get('portal_plugin')}\n")
     for estado, nombre, detalle in results:
