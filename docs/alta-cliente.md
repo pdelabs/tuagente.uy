@@ -88,11 +88,24 @@ Es el canal para arrancar, para pilotos y para el equipo interno. Verificado.
 
 ## Fase 2 — Levantar el agente
 
-Copiar el `docker-compose.yml` del fixture. Dos servicios, **uno por cliente**,
-cada uno con su volumen y su clave — nunca compartidos:
+El compose **no se copia a mano**: lo genera `hermes-kit/nuevo-agente.sh`, con el
+slug, el nombre y los puertos ya resueltos.
 
-- `hermes` — gateway, puertos 8642 (API) y 9119 (dashboard), **solo loopback**.
+```bash
+./nuevo-agente.sh acme "Acme SA" ~/Desktop/Luis/Projects/agente-acme [8642]
+```
+
+Dos servicios, **uno por cliente**, cada uno con su volumen y su clave — nunca
+compartidos:
+
+- `hermes` — gateway, 8642 (API) y 9119 (dashboard, apagado), **solo loopback**.
 - `portal-adapter` — nuestro sidecar, 8643, misma imagen y mismo volumen.
+
+**Los puertos son los del host y se pasan como cuarto argumento** (el adapter va
+en el siguiente). Por defecto 8642/8643, que es lo correcto con una VPS por
+cliente; si en ese host ya vive otro agente hay que moverlo (8742, 8842…). El
+script verifica que estén libres antes de crear nada: antes quedaban literales
+en la plantilla y el choque aparecía recién en el `up -d`, con el SOUL ya escrito.
 
 Variables que si faltan rompen algo silenciosamente:
 
@@ -103,12 +116,21 @@ Variables que si faltan rompen algo silenciosamente:
 | `PORTAL_CORS_ORIGINS` | adapter | ídem |
 | `TZ` | ambos | las tareas corren a la hora equivocada |
 
+**Los dos CORS llevan las dos escrituras del loopback** —`http://localhost:8090`
+y `http://127.0.0.1:8090`—, y ya vienen así en la plantilla. Para el browser son
+orígenes distintos: con uno solo, `curl` anda (no manda `Origin`) y el portal
+muestra "No pude hablar con tu agente". Es el clásico "anda por curl y no anda en
+el navegador", y lo verifica `portal-check.py` cuando el `--origin` es loopback.
+
 ---
 
 ## Fase 3 — Instalar el kit
 
-Copiar a `data/skills/`: `artifact`, `entregable`, `aprobacion`.
-Copiar `data/scripts/portal_adapter.py`.
+No se copia nada a mano: lo pone `hermes-kit/install.sh <ruta>/data` (y
+`nuevo-agente.sh` ya lo corrió). Las skills del kit y el código del adapter
+**viven afuera de `data/`** —en `kit-skills/` y `kit-adapter/`, montadas de solo
+lectura—, porque `data/` es del agente y podía reescribirlas. Para ver qué
+difiere entre un agente instalado y el kit: `install.sh <ruta>/data --diff`.
 
 **Cada `SKILL.md` tiene que tener frontmatter con `name` y `description`.** Es lo
 único que el agente lee para decidir si abre la skill; sin frontmatter se indexa
@@ -165,6 +187,44 @@ python3 tools/portal-check.py --key <API_SERVER_KEY> \
 4. Corregir y aprobar → se destraba con tu versión asentada.
 5. Crear una tarea desde el tablero y comentarla → el agente la ve.
 6. Programar un recordatorio → **llega al canal** (ver Fase 5).
+
+---
+
+## Fase 6b — Dejarlo en cero (el paso que faltaba)
+
+**La Fase 6 ensucia el agente, y el cliente abre su portal el primer día.** Si no
+se limpia, lo primero que ve es *una conversación nuestra* en el chat, gasto en
+la pestaña de Uso y los entregables de prueba en Archivos: aprende que su agente
+ya venía usado. No se arregla verificando menos — el circuito de la Fase 6 es
+justo lo que hay que probar —, se arregla limpiando después:
+
+```bash
+# agente local
+hermes-kit/tools/resetear-agente.sh --local <ruta-del-agente> --entrega
+# agente en la VPS
+hermes-kit/tools/resetear-agente.sh <host-ssh> [slug] --entrega
+```
+
+Borra la huella (conversaciones, uso, tablero, aprobaciones, entregables,
+artefactos, memorias, el bautizo y la foto del bot) y **conserva lo que se
+escribió para este cliente**: el SOUL —menos el bloque `portal:identidad`, que lo
+escribe el bautizo—, los flujos y sus tareas programadas. Deja un respaldo antes
+de tocar nada. Sin `--entrega` el reset es el completo, que se lleva también el
+SOUL: ese es para reciclar un agente, no para entregarlo.
+
+Y se verifica, para que no dependa de acordarse:
+
+```bash
+python3 hermes-kit/tools/portal-check.py --key <API_SERVER_KEY> --entrega \
+    --endpoint http://<host>:<puerto> --adapter http://<host>:<puerto+1>
+```
+
+Con `--entrega`, si queda una conversación, un ticket, un archivo, gasto o el
+bautizo puesto, **falla** y dice cómo arreglarlo. **0 fallas o no se entrega.**
+
+Del lado del browser: abrir el portal en una ventana de incógnito. El
+`localStorage` se acuerda del nombre y del look aunque el agente ya no, y sin eso
+parece que el reset no funcionó.
 
 ---
 
