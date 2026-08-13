@@ -7,7 +7,6 @@
 import json
 import os
 import re
-import shutil
 import sqlite3
 import subprocess
 import threading
@@ -17,6 +16,10 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
+
+from flows import FlowStore
+from kanban import KanbanStore
+from workspace import MAX_FILE_BYTES, WorkspaceStore
 
 VERSION = "0.37.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
@@ -31,7 +34,7 @@ STATE_DB = DATA / "state.db"
 CRON_JOBS = DATA / "cron" / "jobs.json"
 CRON_EXEC_DB = DATA / "cron" / "executions.db"
 WORKSPACE = DATA / "workspace"
-ARTIFACTS = WORKSPACE / "artifacts"
+WORKSPACE_STORE = WorkspaceStore(WORKSPACE)
 CONFIG = DATA / "config.yaml"
 # Nombre y pinta que el cliente le puso a su agente desde el portal. Vive en el
 # volumen del agente, no en el browser: si entra desde otra maquina, su agente
@@ -48,14 +51,12 @@ SOUL = DATA / "SOUL.md"
 SOUL_INICIO = "<!-- portal:identidad -->"
 SOUL_FIN = "<!-- /portal:identidad -->"
 
-MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 # Todo lo que sube el cliente cae acá: una sola puerta, confinada.
 INBOX = WORKSPACE / "entrada"
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 # Mismo alfabeto que genera skills/artifact/create_artifact.py. OJO: ".." y "."
 # tambien matchean, asi que el confinamiento real lo hace artifact_dir().
-ART_ID_RE = re.compile(r"^[\w.-]+$")
 
 # --- Autorias que usa el adapter (una por camino, y todas != la del agente) ---
 # El agente firma sus comentarios con su profile (en este deploy: "default").
@@ -312,15 +313,7 @@ def blocked_count(db=None):
     lista `approvals()`: si contara solo los `blocked`, un pedido escalado a
     triage apagaria la pestaña y el cliente no tendria donde aprobarlo.
     """
-    try:
-        conn = ro(db or KANBAN_DB)
-        n = conn.execute(
-            f"SELECT COUNT(*) FROM tasks WHERE {_pendiente_where(conn)}"
-        ).fetchone()[0]
-        conn.close()
-        return n
-    except sqlite3.Error:
-        return 0
+    return KANBAN_STORE.pending_count(db)
 
 
 def manifest():
@@ -354,7 +347,7 @@ def manifest():
             "files": WORKSPACE.is_dir(),
             # true con que exista la carpeta (aunque este vacia): asi el cliente
             # ve la pestaña y su explicacion antes del primer artefacto.
-            "artifacts": ARTIFACTS.is_dir(),
+            "artifacts": WORKSPACE_STORE.artifacts.is_dir(),
             "usage": STATE_DB.exists(),
             "activity": CRON_EXEC_DB.exists() or CRON_JOBS.exists(),
             "crons": CRON_JOBS.exists(),
@@ -770,68 +763,7 @@ def _falta_de(regla):
     return falta
 
 
-# ---------- flujos: los trabajos del cliente, con nombre y resultados ----------
-# Un flujo es la unidad que el cliente entiende ("cada entrevista termina en
-# zocalos"), y es METADATA sobre piezas que ya existen: el cron es su gatillo,
-# las skills sus pasos, entregables/<slug>/ su salida. El archivo
-# flujos/<slug>/FLUJO.md es el contrato: frontmatter plano para el portal,
-# cuerpo con instrucciones para el agente. Nada nuevo corre: el gatillo es
-# dato tipado que HOY compila a cron y maniana puede compilar a webhook sin
-# tocar el flujo (decision del 7/8 con Luis: gatillo estructurado si, entidad
-# "monitoring" separada recien cuando exista el segundo mecanismo real).
-
 FLUJOS_DIR = DATA / "flujos"
-FLUJO_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,48}$")
-
-
-def _frontmatter_plano(md_path):
-    """Frontmatter `clave: valor` de un FLUJO.md. Plano a proposito: sin YAML
-    anidado no hace falta ninguna libreria y el agente no puede romperlo con
-    una indentacion."""
-    try:
-        lines = md_path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return {}
-    if not lines or lines[0].strip() != "---":
-        return {}
-    campos = {}
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        m = re.match(r'^([a-z_]+):\s*["\']?(.*?)["\']?\s*$', line)
-        if m:
-            campos[m.group(1)] = m.group(2)
-    return campos
-
-
-# "ninguna" es la respuesta valida a `--conexiones` cuando el flujo no toca
-# ninguna. El script la filtra al escribir el frontmatter, pero la skill invita
-# a EDITAR el FLUJO.md a mano — y ahi el centinela entra tal cual al archivo.
-# Sin esto, el adapter lo lee como el id de una conexion que no existe y marca
-# el flujo "incompleto: le falta ninguna". Paso el 8/8 con dos flujos.
-_SIN_CONEXION = {"ninguna", "ninguno", "none", "n/a", "-", "—"}
-
-
-def _lista(valor):
-    return [x.strip() for x in (valor or "").split(",")
-            if x.strip() and x.strip().lower() not in _SIN_CONEXION]
-
-
-def _ultima_corrida(job_id):
-    """Fin de la ultima ejecucion del cron del flujo (o None)."""
-    if not job_id or not CRON_EXEC_DB.exists():
-        return None
-    try:
-        db = ro(CRON_EXEC_DB)
-        row = db.execute(
-            "SELECT finished_at, status FROM executions WHERE job_id = ? "
-            "ORDER BY rowid DESC LIMIT 1", (job_id,)).fetchone()
-        db.close()
-        return {"cuando": row[0], "status": row[1]} if row else None
-    except sqlite3.Error:
-        return None
-
-
 def _conexiones_conectadas():
     """Ids del catalogo cuya deteccion de presencia da 'conectado'."""
     try:
@@ -842,80 +774,15 @@ def _conexiones_conectadas():
             if not _falta_de(c.get("detecta", {}))}
 
 
+FLOW_STORE = FlowStore(ro, FLUJOS_DIR, WORKSPACE, CRON_EXEC_DB, _conexiones_conectadas)
+
+
 def flujos(limite_resultados=20):
-    if not FLUJOS_DIR.is_dir():
-        return {"disponible": False, "flujos": []}
-    conectadas = _conexiones_conectadas()
-    salida = []
-    for carpeta in sorted(FLUJOS_DIR.iterdir()):
-        md = carpeta / "FLUJO.md"
-        if not carpeta.is_dir() or not md.is_file() or not FLUJO_SLUG_RE.match(carpeta.name):
-            continue
-        f = _frontmatter_plano(md)
-        necesita = _lista(f.get("conexiones"))
-        faltan = ([] if conectadas is None
-                  else [c for c in necesita if c not in conectadas])
-        estado = f.get("estado", "activo")
-        # "incompleto" SIEMPRE se deriva, nunca se guarda: la verdad esta en
-        # las conexiones, no en lo que el archivo se acuerde de decir.
-        if estado == "activo" and faltan:
-            estado = "incompleto"
-        resultados_dir = WORKSPACE / (f.get("resultados") or f"entregables/{carpeta.name}").replace("entregables/", "entregables/", 1)
-        try:
-            resultados = sorted(
-                (p for p in resultados_dir.iterdir() if p.is_file()),
-                key=lambda p: p.stat().st_mtime, reverse=True,
-            ) if resultados_dir.is_dir() else []
-        except OSError:
-            resultados = []
-        salida.append({
-            "slug": carpeta.name,
-            "nombre": f.get("nombre") or carpeta.name,
-            "para_cliente": f.get("para_cliente", ""),
-            "gatillo_tipo": f.get("gatillo_tipo", "pedido"),
-            "gatillo": f.get("gatillo_detalle", ""),
-            "estado": estado,
-            "conexiones_faltan": faltan,
-            "ultima_corrida": _ultima_corrida(f.get("gatillo_job")),
-            "resultados": [
-                {"path": str(p.relative_to(WORKSPACE)), "mtime": p.stat().st_mtime}
-                for p in resultados[:limite_resultados]
-            ],
-            "resultados_total": len(resultados),
-        })
-    # Los que le piden algo al cliente, arriba; despues los activos.
-    salida.sort(key=lambda x: (x["estado"] != "incompleto", x["estado"] != "activo", x["nombre"]))
-    return {"disponible": True, "flujos": salida}
+    return FLOW_STORE.list(limite_resultados)
 
 
 def flujo_detalle(slug):
-    """Un flujo con todo: sus resultados completos y su 'cómo trabajo'.
-
-    El cuerpo del FLUJO.md se muestra al cliente a propósito: que pueda leer
-    cómo su agente trabaja SU flujo es transparencia barata — el archivo ya
-    está escrito sin jerga porque el agente se lo cuenta a sí mismo delante
-    del portal.
-    """
-    if not slug or not FLUJO_SLUG_RE.match(slug):
-        return None
-    base = next((f for f in flujos(limite_resultados=500)["flujos"]
-                 if f["slug"] == slug), None)
-    if base is None:
-        return None
-    try:
-        texto = (FLUJOS_DIR / slug / "FLUJO.md").read_text(encoding="utf-8")
-        partes = texto.split("---", 2)
-        como = partes[2].strip() if len(partes) >= 3 else ""
-    except OSError:
-        como = ""
-    # El cuerpo tiene dos publicos: los pasos (cliente) y las "Notas tecnicas"
-    # del final (skills exactas, flags — solo para el agente). El portal
-    # muestra lo primero y recorta lo segundo; los comentarios HTML (auditoria
-    # de cambios) tampoco se muestran.
-    como = re.split(r"\n##\s+Notas?\s+t[eé]cnicas?\b", como, flags=re.IGNORECASE)[0]
-    como = re.sub(r"<!--.*?-->", "", como, flags=re.DOTALL)
-    base["como"] = como.strip()
-    return base
+    return FLOW_STORE.detail(slug)
 
 
 # ---------- telegram: la mitad del cliente ----------
@@ -1025,19 +892,8 @@ def _requeridas():
             ids |= {str(i) for i in crudo}
     except (OSError, ValueError):
         pass
-    for f in flujos(limite_resultados=0)["flujos"]:
-        if f.get("estado") != "pausado":
-            ids |= set(_lista_flujo_conexiones(f))
+    ids |= FLOW_STORE.required_connection_ids()
     return ids
-
-
-def _lista_flujo_conexiones(f):
-    """Los ids que declara un flujo, ya saneados por _lista()."""
-    md = FLUJOS_DIR / f["slug"] / "FLUJO.md"
-    try:
-        return _lista(_frontmatter_plano(md).get("conexiones"))
-    except OSError:
-        return []
 
 
 WHATSAPP_BRIDGE = os.environ.get("WHATSAPP_BRIDGE_URL", "http://whatsapp-bridge:8080")
@@ -1385,116 +1241,27 @@ def conexiones_pendientes():
 # (verificado creando y borrando uno de prueba, 2026-08-04).
 
 BOARDS_DIR = DATA / "kanban" / "boards"
-BOARD_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,48}$")
+KANBAN_STORE = KanbanStore(ro, KANBAN_DB, BOARDS_DIR, WORKSPACE)
 
 
 def board_db(slug):
-    """Ruta de la db de un board. None si el slug no existe."""
-    if not slug or slug == "default":
-        return KANBAN_DB
-    if not BOARD_SLUG_RE.match(slug):
-        return None
-    db = BOARDS_DIR / slug / "kanban.db"
-    return db if db.exists() else None
+    return KANBAN_STORE.board_database(slug)
 
 
 def boards():
-    out = [{"slug": "default", "name": "Principal", "archived": False}]
-    if BOARDS_DIR.is_dir():
-        for folder in sorted(BOARDS_DIR.iterdir()):
-            meta_file = folder / "board.json"
-            if not (folder / "kanban.db").exists():
-                continue
-            meta = {}
-            try:
-                meta = json.loads(meta_file.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                pass
-            if meta.get("archived"):
-                continue
-            out.append({
-                "slug": meta.get("slug") or folder.name,
-                "name": meta.get("name") or folder.name,
-                "archived": False,
-                # Link opcional a un Project de Hermes (repos/carpetas).
-                "project_id": meta.get("project_id"),
-            })
-    return out
+    return KANBAN_STORE.boards()
 
-
-# ---------- kanban (lectura) ----------
 
 def tickets(db=None):
-    conn = ro(db or KANBAN_DB)
-    rows = conn.execute(
-        "SELECT id, title, body, status, tenant, created_at FROM tasks "
-        "WHERE status != 'archived' ORDER BY created_at DESC LIMIT 100"
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def _summary(body, title):
-    for line in (body or "").splitlines():
-        if line.strip():
-            return line.strip()
-    return title
-
-
-# UN PEDIDO DE PERMISO SIGUE VIVO AUNQUE EL MOTOR LO MUEVA. El agente bloquea
-# con `needs_input`, pero si el ticket se re-bloquea dos veces el motor lo manda
-# a `triage` "for a human-in-the-loop decision" (kanban_db.py, BLOCK_RECURRENCE_LIMIT
-# = 2, hardcodeado: no hay perilla). Preguntando solo por `blocked` el pedido
-# desaparecia de la pestaña —y si era el unico, la pestaña entera— justo cuando
-# mas hacia falta que el cliente lo viera. `block_kind` sobrevive a la mudanza,
-# asi que un `triage` con needs_input es exactamente eso: un permiso sin
-# resolver. Los demas triage (tareas nuevas sin clasificar) no entran.
-PENDIENTE_SQL = "(status = 'blocked' OR (status = 'triage' AND block_kind = 'needs_input'))"
-PENDIENTE_SQL_VIEJO = "status = 'blocked'"
-
-
-def _pendiente_where(conn):
-    """El filtro de pedidos sin resolver, según lo que tenga esta base.
-
-    `block_kind` lo agrega una migración del motor; en una base vieja la
-    columna no está y preguntar por ella tira error. Ahí se cae al filtro de
-    siempre en vez de romper la pestaña.
-    """
-    try:
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(tasks)")}
-    except sqlite3.Error:
-        return PENDIENTE_SQL_VIEJO
-    return PENDIENTE_SQL if "block_kind" in cols else PENDIENTE_SQL_VIEJO
+    return KANBAN_STORE.tickets(db)
 
 
 def approvals(db=None):
-    conn = ro(db or KANBAN_DB)
-    rows = conn.execute(
-        "SELECT id, title, body, created_at, status FROM tasks "
-        f"WHERE {_pendiente_where(conn)} ORDER BY created_at DESC LIMIT 100"
-    ).fetchall()
-    conn.close()
-    return [
-        {
-            "id": r["id"],
-            "title": r["title"],
-            "summary": _summary(r["body"], r["title"]),
-            "body": r["body"],
-            "created_at": r["created_at"],
-            # `blocked` es el pedido normal; `triage` es el que el motor escaló
-            # solo. El portal lo puede usar para avisar; si lo ignora, el
-            # pedido igual se ve, que es lo que importa.
-            "estado": r["status"],
-        }
-        for r in rows
-    ]
+    return KANBAN_STORE.approvals(db)
 
 
 def task_status(task_id):
-    conn = ro(KANBAN_DB)
-    row = conn.execute("SELECT status FROM tasks WHERE id = ?", (task_id,)).fetchone()
-    conn.close()
-    return row["status"] if row else None
+    return KANBAN_STORE.task_status(task_id)
 
 
 def _ultimo_comentario_id(task_id):
@@ -1558,103 +1325,11 @@ def _ya_esta_dicho(task_id, desde, respuesta):
 
 
 def _block_recurrences(task_id):
-    """Cuántas veces se re-bloqueó por la misma causa. A las 2 el motor lo manda
-    a `triage` y el pedido deja de poder aprobarse: es el contador que la
-    negociación NO tiene que hacer subir. Columna vieja en agentes viejos."""
-    conn = ro(KANBAN_DB)
-    try:
-        row = conn.execute(
-            "SELECT block_recurrences FROM tasks WHERE id = ?", (task_id,)).fetchone()
-    except sqlite3.Error:
-        return None
-    finally:
-        conn.close()
-    return row["block_recurrences"] if row else None
-
-
-def _ws_relative(path):
-    """/opt/data/workspace/entregables/x.md -> entregables/x.md (como los sirve
-    el modulo de archivos). Lo de afuera del workspace se descarta."""
-    try:
-        return str(Path(str(path)).resolve().relative_to(WORKSPACE.resolve()))
-    except (ValueError, OSError, TypeError):
-        return None
-
-
-def event_detail(kind, payload):
-    """Lo que un humano necesita de un evento; el resto del payload es interno.
-
-    El motivo de cierre de un ticket vive ACA, no en un comentario: cuando el
-    agente termina, Hermes guarda `summary` + `artifacts` en el evento
-    `completed`. Si no lo devolvemos, el cliente ve un ticket que pasó de
-    creado a cerrado sin ninguna explicación, aunque la explicación exista.
-    """
-    if not payload:
-        return {}
-    try:
-        data = json.loads(payload)
-    except (ValueError, TypeError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    out = {}
-    texto = data.get("summary") or data.get("reason") or data.get("error")
-    if isinstance(texto, str) and texto.strip():
-        out["summary"] = texto.strip()[:2000]
-    archivos = [
-        rel
-        for rel in (_ws_relative(a) for a in (data.get("artifacts") or []) if a)
-        if rel
-    ]
-    if archivos:
-        out["files"] = archivos[:20]
-    # Por qué quedó bloqueado (needs_input, gave_up, ...) — el cliente lo lee
-    # para saber si la pelota está de su lado.
-    if kind in ("blocked", "unblocked") and isinstance(data.get("kind"), str):
-        out["blocked_kind"] = data["kind"][:60]
-    return out
+    return KANBAN_STORE.block_recurrences(task_id)
 
 
 def ticket_detail(task_id, db=None):
-    conn = ro(db or KANBAN_DB)
-    t = conn.execute(
-        "SELECT id, title, body, status, tenant, created_at FROM tasks WHERE id = ?",
-        (task_id,),
-    ).fetchone()
-    if t is None:
-        conn.close()
-        return None
-    comments = conn.execute(
-        "SELECT author, body, created_at FROM task_comments "
-        "WHERE task_id = ? ORDER BY created_at LIMIT 200",
-        (task_id,),
-    ).fetchall()
-    events = conn.execute(
-        "SELECT kind, payload, created_at FROM task_events "
-        "WHERE task_id = ? ORDER BY created_at DESC LIMIT 50",
-        (task_id,),
-    ).fetchall()
-    conn.close()
-
-    salida, desenlace = [], None
-    for e in events:
-        item = {"kind": e["kind"], "created_at": e["created_at"]}
-        item.update(event_detail(e["kind"], e["payload"]))
-        salida.append(item)
-        # `events` viene del mas nuevo al mas viejo: el primero que cierre o
-        # bloquee es el desenlace vigente del ticket.
-        if desenlace is None and e["kind"] in ("completed", "blocked", "gave_up", "failed"):
-            if item.get("summary") or item.get("files"):
-                desenlace = {k: item[k] for k in ("kind", "summary", "files", "created_at") if k in item}
-
-    return {
-        "ticket": dict(t),
-        # Por qué está como está, listo para mostrar arriba de todo. Sale del
-        # evento, no de que el agente se haya acordado de comentar.
-        "outcome": desenlace,
-        "comments": [dict(c) for c in comments],
-        "events": salida,
-    }
+    return KANBAN_STORE.ticket_detail(task_id, db)
 
 
 # ---------- kanban (escritura via CLI, jamas SQL) ----------
@@ -2218,123 +1893,6 @@ def activity():
     return events[:80]
 
 
-# ---------- files (confinado al workspace) ----------
-
-def files_list():
-    base = WORKSPACE.resolve()
-    out = []
-    for path in base.rglob("*"):
-        rel = path.relative_to(base)
-        if any(part.startswith(".") for part in rel.parts):
-            continue
-        # Los artefactos tienen su propia pestaña: listarlos aca los duplica.
-        if rel.parts and rel.parts[0] == "artifacts":
-            continue
-        if not path.is_file():
-            continue
-        st = path.stat()
-        out.append({
-            "path": path.relative_to(base).as_posix(),
-            "size": st.st_size,
-            "mtime": int(st.st_mtime),
-        })
-        if len(out) >= 1000:
-            break
-    out.sort(key=lambda f: f["mtime"], reverse=True)
-    return out
-
-
-def file_resolve(rel):
-    # Path-confined: resolve() + relative_to; nunca escapar del workspace.
-    if not rel or rel.startswith("/") or "\x00" in rel:
-        return None
-    base = WORKSPACE.resolve()
-    target = (base / rel).resolve()
-    try:
-        target.relative_to(base)
-    except ValueError:
-        return None
-    return target if target.is_file() else None
-
-
-# ---------- artifacts ----------
-# Los escribe skills/artifact/create_artifact.py en workspace/artifacts/<id>/
-# (index.html + meta.json). El adapter solo lista, lee y borra. El HTML viaja
-# DENTRO del JSON como string: el portal lo dibuja en un iframe aislado y el
-# adapter jamas lo sirve como text/html (regla anti-XSS del proyecto).
-
-def artifact_dir(art_id):
-    # Path-confined, mismo patron que file_resolve() + una vuelta de tuerca:
-    # exigimos que el padre sea exactamente la carpeta de artefactos. ".." y "."
-    # pasan el regex de id, y sin este chequeo "." resolveria a la carpeta raiz
-    # (un DELETE se llevaria puestos TODOS los artefactos).
-    if not art_id or not ART_ID_RE.match(art_id):
-        return None
-    base = ARTIFACTS.resolve()
-    target = (base / art_id).resolve()
-    try:
-        target.relative_to(base)
-    except ValueError:
-        return None
-    if target.parent != base:
-        return None
-    return target if target.is_dir() else None
-
-
-def _art_ts(meta):
-    try:
-        return float(meta.get("created_at") or 0)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def artifact_meta(folder):
-    try:
-        meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(meta, dict):
-        return None
-    meta.setdefault("id", folder.name)
-    return meta
-
-
-def artifacts_list():
-    if not ARTIFACTS.is_dir():
-        return []
-    out = []
-    for folder in ARTIFACTS.iterdir():
-        if not folder.is_dir():
-            continue
-        meta = artifact_meta(folder)
-        if meta is None:
-            continue  # meta.json ausente o roto: salteamos, la lista no se cae
-        out.append(meta)
-    out.sort(key=_art_ts, reverse=True)
-    return out
-
-
-def artifact_detail(art_id):
-    folder = artifact_dir(art_id)
-    if folder is None:
-        return None
-    try:
-        html = (folder / "index.html").read_text(encoding="utf-8")
-    except OSError:
-        return None  # sin index.html no hay artefacto que mostrar
-    # meta best-effort: si esta roto igual devolvemos el HTML, con lo minimo.
-    meta = artifact_meta(folder) or {"id": folder.name}
-    return {**meta, "html": html}
-
-
-def artifact_delete(art_id):
-    folder = artifact_dir(art_id)
-    if folder is None:
-        return False
-    shutil.rmtree(folder)
-    return True
-
-
 # ---------- usage ----------
 
 def usage(days=30):
@@ -2534,19 +2092,19 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/portal/activity":
                 return self._send(200, {"events": activity()})
             if path == "/portal/files":
-                return self._send(200, {"files": files_list()})
+                return self._send(200, {"files": WORKSPACE_STORE.list_files()})
             if path.startswith("/portal/files/"):
-                target = file_resolve(path[len("/portal/files/"):])
+                target = WORKSPACE_STORE.resolve_file(path[len("/portal/files/"):])
                 if target is None:
                     return self._send(404, {"error": "not found"})
                 if target.stat().st_size > MAX_FILE_BYTES:
                     return self._send(413, {"error": "file too large"})
                 return self._send_text(200, target.read_bytes())
             if path == "/portal/artifacts":
-                return self._send(200, {"artifacts": artifacts_list()})
+                return self._send(200, {"artifacts": WORKSPACE_STORE.list_artifacts()})
             m = re.match(r"^/portal/artifacts/([^/]+)$", path)
             if m:
-                detail = artifact_detail(m.group(1))
+                detail = WORKSPACE_STORE.artifact_detail(m.group(1))
                 if detail is None:
                     return self._send(404, {"error": "artifact not found"})
                 return self._send(200, detail)
@@ -2564,7 +2122,7 @@ class Handler(BaseHTTPRequestHandler):
         if not m:
             return self._send(404, {"error": "not found"})
         try:
-            if not artifact_delete(m.group(1)):
+            if not WORKSPACE_STORE.delete_artifact(m.group(1)):
                 return self._send(404, {"error": "artifact not found"})
         except OSError as exc:
             return self._send(500, {"error": str(exc)})
