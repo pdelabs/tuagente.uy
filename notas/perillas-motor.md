@@ -653,6 +653,63 @@ volver a persistir después de transformar.
 
 ---
 
+## 8b. Una respuesta puede tardar 20 minutos y llegar a un stream muerto.
+
+Es el bug B del 13/8/2026 ("le mande 8 contratos y el chat no me contesto
+nunca"), y **no es lo que parece**: el agente contesto. Lo que fallo es el
+tiempo y el cano. La linea del turno, sacada de `logs/agent.log`:
+
+```
+14:37:54  la clienta manda los 8 contratos
+14:51:06  deliver.py guarda el informe en workspace/entregables/…     ← ya existia
+14:51:11  ultimo resultado de tool del turno
+14:58:14  API call #13 … latency=422.4s   ← SIETE MINUTOS en una sola llamada
+14:58:14  Turn ended … response_len=1541  ← la respuesta, completa
+```
+
+En el medio, a las 14:57:36, la clienta escribio "por que no me avisaste" —y
+esa pregunta la contesto un turno NUEVO, a las 14:58:07, con una disculpa
+inventada ("omiti el aviso en el chat"): no lo habia omitido, estaba en vuelo.
+Es la misma enfermedad que el bug A, del otro lado: afirmar sobre el mundo sin
+mirarlo, incluso para acusarse.
+
+Dos cosas del motor, con archivo y linea:
+
+1. **El SSE del api_server manda `: keepalive` cada 30 s y nada mas**
+   (`gateway/platforms/api_server.py:127` y `:3645-3660`). No hay forma de
+   avisarle al cliente "sigo pensando, van 7 minutos" ni de decirle que ya hay
+   un entregable guardado. A las 14:58:12 la conexion se cayo
+   (`ClientConnectionResetError: Cannot write to closing transport`) y la
+   respuesta llego 2 segundos despues: quedo en `state.db` —el portal la
+   muestra al recargar— pero nadie la vio llegar.
+2. **El ledger de entregas no cubre este camino.** `gateway/delivery_ledger.py`
+   existe justo para "la respuesta se genero y no se confirmo la entrega", pero
+   lo usan las plataformas de mensajeria (`gateway/platforms/base.py:6038`),
+   no el stream del api_server.
+
+No hay perilla que arregle esto y **no hay que ponerle un timeout**: el modelo
+corre con `reasoning_effort: max` y esos 422 s son 2.073 tokens de salida a
+~5 tok/s, o sea lento, no colgado. Cortarlo cambiaria "tarda" por "se rompe".
+Lo que hace falta es de producto: que el portal muestre que el turno sigue vivo
+y que lo que ya quedo guardado se vea sin esperar al final.
+
+**Y un hallazgo nuestro en el mismo tramo, que es lo mas serio de todo esto:**
+
+```
+14:45:50 WARNING agent.shell_hooks: shell hook timed out after 25.54s
+         (event=pre_tool_call command=/opt/politica/hooks/puerta.py)
+```
+
+La puerta esta declarada con `timeout: 10` y aun asi la maquina cargada la dejo
+afuera — y un hook que vence **falla abierto**: `agent/shell_hooks.py:509-515`
+loguea el warning, devuelve `None`, y la tool corre igual. O sea que bajo carga
+la puerta deja de ser una puerta, en silencio, y el unico rastro es esa linea de
+log que no mira nadie. No se puede cerrar desde el config (lo decide el motor).
+Mitigacion barata si vuelve a pasar: que `puerta.py` no importe nada caro y
+salga rapido; el arreglo de verdad es upstream (fail-closed opcional por hook).
+
+---
+
 ## 9. Memoria entre conversaciones: la hay, pero el que escribe es el modelo.
 
 Verificado el 13/8/2026 sobre el mismo agente. Los bloques están prendidos por

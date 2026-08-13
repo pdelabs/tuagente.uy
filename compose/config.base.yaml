@@ -160,6 +160,14 @@ display:
 # timeout, la tool corre igual con un logger.warning que nadie mira). Por eso
 # `agente-check.py` chequea que este declarado, que el script exista, que sea
 # ejecutable y que de verdad bloquee.
+#
+# Y NO ES TEORICO: el 13/8/2026, con la maquina cargada, se midio
+#   WARNING agent.shell_hooks: shell hook timed out after 25.54s
+#           (event=pre_tool_call command=/opt/politica/hooks/puerta.py)
+# con `timeout: 10` declarado. `agent/shell_hooks.py:509-515` devuelve None y la
+# tool corre. O sea: bajo carga la puerta deja de ser puerta, en silencio.
+# Por eso `puerta.py` no importa nada caro ni toca la red — cuanto mas rapido
+# sale, menos ventanas de estas hay. El arreglo de verdad es upstream.
 hooks_auto_accept: true
 hooks:
   pre_tool_call:
