@@ -12,7 +12,7 @@ con fecha vieja no es un problema; una fila que dice algo que ya no es cierto s�
 
 | Agente | Host | SOUL | Motor | Último check |
 |---|---|---|---|---|
-| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v11** (13/8: el bloque del host tiene el mismo sha256 que `soul/versiones/v11.md`) | `v2026.7.30` (verificado con `docker ps`, no solo con el compose) | 13/8: **25 ok · 1 aviso · 1 falla** — la falla es `SOUL: identidad`, y es real: quedó **sin identidad artesanal** (ver abajo) |
+| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v11** (13/8: el bloque del host tiene el mismo sha256 que `soul/versiones/v11.md`) | `v2026.7.30` (verificado con `docker ps`, no solo con el compose) | 13/8 (2ª vuelta, con el adapter partido): **24 ok · 2 avisos · 1 falla** — la falla es `SOUL: identidad`, y es real: quedó **sin identidad artesanal** (ver abajo). `portal-check --entrega`: 14 ok · 0 fallas |
 | East Comunicación | `east` → `/opt/agentes/east` | TODO | TODO | TODO |
 
 **Mr.Wobble quedó en cero y al día el 13/8/2026** — reset TOTAL por decisión de
@@ -100,6 +100,29 @@ instala el SOUL—, las cuatro perillas que faltaban a mano en el `config.yaml`,
 y `docker compose up -d hermes portal-adapter`, que es lo que toma el montaje
 nuevo de `politica/plugins`. Sale con 0 fallas de `portal-check.py`, en cero
 verificado con `--entrega`, y 1 falla de `agente-check.py`: la identidad.
+
+**Segunda vuelta el mismo día, ya con el adapter partido.** Mismo procedimiento
+(reset COMPLETO → `desplegar-remoto.sh` → reponer `MODELO_DEL_AGENTE` →
+`up -d` → `restart`), y salió `portal-check` 13 ok · 0 fallas y `--entrega`
+14 ok · 0 fallas. Tres cosas que aparecieron y valen para el próximo:
+
+- **`install.sh` subía el adapter como UN archivo.** El split lo dejó
+  importando `flows`/`kanban`/`workspace` y la lista del instalador seguía
+  teniendo una sola línea: el despliegue habría dejado un adapter que no
+  arranca, con el kit diciendo "instalado". Arreglado — la lista se arma desde
+  el directorio, como los hooks. Es el mismo modo de falla que el README ya
+  describe, y van cinco.
+- **`docker compose up -d` NO recarga el adapter.** Los archivos de
+  `kit-adapter/` cambian adentro de un bind mount, así que el compose no ve
+  nada que recrear y deja el proceso viejo corriendo con el código viejo en
+  memoria. Dice `Running` y parece que actualizó. Hace falta un `restart`
+  explícito del `portal-adapter` después de subir el kit.
+- **`agente-check.py` sobre un `data/` rsyncado miente**, y feo: mira
+  `politica/`, `kit-skills/` y `secretos.env`, que viven al lado de `data/` y
+  no adentro. Sincronizando solo `data/` —que es lo que dice el paso 3 del
+  despliegue— reporta 8 fallas inventadas (la puerta abierta, sin guardia, sin
+  credenciales). Corrélo en el host, o sincronizá el árbol entero. Y necesita
+  `tools/capacidad-catalogo.py` al lado o inventa una novena.
 
 Dos cosas de este agente que valen para cualquier otro que corra en un host
 compartido con más servicios nuestros:
