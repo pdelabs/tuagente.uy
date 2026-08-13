@@ -18,21 +18,42 @@ compose/                    plantilla de docker-compose
 tools/agente-check.py       revisa el data/ de un agente sin prenderlo (offline)
 tools/portal-check.py       verifica que un agente cumpla el contrato del portal
 tools/instalar-soul.sh      pone el bloque de SOUL en un agente que no lo tiene
+tools/limpiar-obsoletos.sh  saca del agente lo que el kit dejo de traer, y nada mas
+tools/comparar-instaladores.sh  ¿un agente local y uno remoto reciben el mismo kit?
+tools/probar-despliegue-ssh.sh  despliega contra un sshd de verdad (rsync de GNU)
 tools/perilla-skills.py     genera la lista de skills del motor a apagar
 tools/reemplazar-bloque.py  cambia el bloque kit:base de un SOUL sin tocar el resto
 flota.md                    qué agente corre dónde, con qué SOUL y qué motor
 ```
 
-Un agente instalado queda así: `data/` es del agente (ahí escribe),
-`kit-skills/` son las skills del kit, montadas de **solo lectura** para que ni
-el agente ni el curator del motor las toquen, y `politica/` es lo que el agente
-puede ejecutar pero no editar — la puerta (`hooks/`), la guardia de los MCP con
-el permiso de cada conexión, el parche del mensaje de pairing que s6 corre en
-cada arranque, y el catálogo de capacidades con su registro de pedidos
-(`capacidades/`), que es texto que el cliente lee y el agente no puede
-reescribir. Todo eso lo pone `install.sh` en un agente local y
-`desplegar-remoto.sh` en uno de la VPS; `install.sh --diff` compara las dos
-carpetas contra el kit. El porqué está en `notas/perillas-aplicadas.md`.
+Un agente instalado queda así:
+
+```
+data/           del AGENTE: ahí escribe, y todo lo que viva acá lo puede
+                reescribir (adentro de su contenedor corre como root).
+politica/       lo que el agente ejecuta pero NO puede editar: la puerta
+                (`hooks/`), la guardia de los MCP con el permiso de cada
+                conexión, el parche del pairing que s6 corre en cada arranque, y
+                el catálogo de capacidades con su registro de pedidos. Lo
+                protege el montaje `:ro` de su contenedor —verificado: adentro
+                da "Read-only file system" hasta para root—, no el dueño.
+kit-skills/     las skills del kit, `:ro` en los dos servicios, para que ni el
+                agente las reescriba ni el curator del motor las archive.
+kit-adapter/    el CÓDIGO del adapter, `:ro`. Vivía en `data/scripts/` y eso era
+                una escalada de privilegio: el agente reescribía el archivo y el
+                contenedor del adapter lo ejecutaba **como root** sobre
+                `politica/`. Hoy el adapter además corre como uid 10000.
+secretos.env    las claves. root:root 600 y FUERA de data/: era el `env_file`
+                de los dos servicios, así que con las claves adentro de data/ el
+                agente se escribía un `PYTHONPATH` y ejecutaba código suyo
+                adentro del adapter (medido). No lo monta nadie.
+.kit-instalado  qué archivos puso el kit y con qué sha256 (ver más abajo).
+```
+
+Todo eso lo pone `install.sh` en un agente local y `desplegar-remoto.sh` en uno
+de la VPS —que le corre el mismo `install.sh` a un staging—; `install.sh --diff`
+compara lo instalado contra el kit. El porqué de cada montaje está en
+`notas/perillas-aplicadas.md` y en los comentarios de `compose/`.
 
 ## Alta de un cliente nuevo
 
@@ -64,6 +85,43 @@ los tiempos reales, está en `tuagente.uy/docs/alta-cliente.md`.
 Dice qué archivos difieren entre el kit y un agente ya instalado. **El kit es la
 fuente de la verdad**: si arreglaste algo dentro de un agente, copialo al kit
 antes de reinstalar o lo vas a pisar. Correlo antes de cada actualización.
+
+## Un solo instalador
+
+`install.sh` es el único lugar donde se decide qué instala el kit.
+`desplegar-remoto.sh` **no tiene su propia lista**: arma un agente de mentira en
+`/tmp`, le corre `install.sh`, y sube eso. Antes eran dos listas a mano y
+divergieron cuatro veces sin que nada fallara —el catálogo de capacidades no
+llegó a ningún agente remoto, el parche del pairing a ninguno local—: nada rompe,
+nadie se entera, el cliente recibe una versión peor.
+
+```bash
+tools/comparar-instaladores.sh     # ¿los dos caminos ponen lo mismo? 0 = sí
+tools/probar-despliegue-ssh.sh     # despliega contra un sshd de verdad (docker)
+```
+
+El primero arma los dos agentes y los compara archivo por archivo: correlo
+cuando toques cualquiera de los dos scripts. **No valida el protocolo de rsync**
+—usa el modo local, y el rsync de la Mac es openrsync, no el GNU de la VPS—, así
+que **cualquier opción de rsync se prueba con el segundo**, que levanta un
+alpine con sshd y despliega de verdad. `--no-implied-dirs` pasó el primero con
+"29 archivos idénticos" y rompía el despliegue remoto al 100%.
+
+**Lo que el kit deja de traer se saca por manifiesto, nunca espejando carpetas.**
+Cada agente tiene un `.kit-instalado` (ruta + sha256 de cada archivo que pusimos
+nosotros). Para que un archivo se borre tienen que darse **las tres**:
+
+1. estar en la **lista de rutas que el kit puede poseer**
+   (`PUEDE_SER_NUESTRO`, en `tools/limpiar-obsoletos.sh`) — son archivos
+   exactos, salvo `politica/hooks|tools|mcp/` y `kit-skills/`, que son carpetas
+   enteramente nuestras. `politica/` a secas **no** está: adentro viven
+   `politica.json` y `capacidades/pedidos.jsonl`, que los escribe el cliente;
+2. estar en el manifiesto anterior y ya no en el nuevo;
+3. seguir teniendo el sha256 que escribimos nosotros.
+
+Un archivo del cliente falla la 1 aunque alguien lo agregue a mano al
+manifiesto — probado. Y si alguien editó un archivo nuestro que ya no traemos,
+falla la 3: se avisa y se deja.
 
 ## Mirar las bases de un agente
 

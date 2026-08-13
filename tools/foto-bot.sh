@@ -44,7 +44,17 @@ scp -q "$HOST:$DIR/data/bot_avatar.png" "$tmp/avatar.png" 2>/dev/null || {
   echo "no hay bot_avatar.png en $HOST — el cliente todavia no bautizo a su agente" >&2
   exit 1
 }
-ssh "$HOST" "grep '^TELEGRAM_BOT_TOKEN=' $DIR/data/.env" > "$tmp/tg.env"
+# El token sale de secretos.env Y DE NINGUN OTRO LADO. Estuvo un rato con
+# `$DIR/data/.env` de respaldo y eso es dejar que el agente elija con que token
+# se autentica una herramienta del operador: data/ es suya. Si el agente no
+# migro todavia, esto falla y se corre `install.sh`, que mueve las claves.
+ssh "$HOST" "grep -h '^TELEGRAM_BOT_TOKEN=' $DIR/secretos.env 2>/dev/null | head -1" > "$tmp/tg.env"
+[[ -s "$tmp/tg.env" ]] || {
+  echo "no hay TELEGRAM_BOT_TOKEN en $DIR/secretos.env." >&2
+  echo "Si este agente todavia tiene las claves en data/.env, corré install.sh:" >&2
+  echo "las mueve (y explica por que no pueden vivir ahi)." >&2
+  exit 1
+}
 chmod 600 "$tmp/tg.env"
 
 "$VENV" "$KIT/tools/avatar-bot.py" --png "$tmp/avatar.png" --env "$tmp/tg.env"

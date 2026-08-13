@@ -74,7 +74,9 @@ services:
       - PHOENIX_COLLECTOR_ENDPOINT=http://otel-collector:4318
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
     env_file:
-      - ./data/.env
+      # Las claves viven afuera de data/ (ver el compose principal): data/ es
+      # del agente y este archivo entra como entorno de un proceso nuestro.
+      - ./secretos.env
     depends_on:
       - otel-collector
 

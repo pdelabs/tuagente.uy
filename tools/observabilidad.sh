@@ -57,11 +57,34 @@ case "$ACCION" in
 
     # El modelo sale de la config del agente: litellm no lo manda en el span
     # util y sin el la traza no dice a que le hablaste.
+    #
+    # ⚠️ ESE VALOR LO ESCRIBE EL AGENTE. `data/config.yaml` vive en su volumen, y
+    # hasta hoy esto lo pegaba SIN COMILLAS adentro de la cadena que va a `ssh`:
+    # con un `default:` como  modelo'; touch /tmp/RAIZ; echo 'x  el comando se
+    # ejecutaba EN EL SHELL ROOT DE LA VPS. Reproducido. Era el primer camino que
+    # salia del contenedor y llegaba al host: el agente escribe su config, el
+    # operador corre una herramienta del kit, y listo.
+    #
+    # Ahora: se valida que tenga forma de modelo y NO SE INTERPOLA — el valor
+    # viaja como argumento con `printf %q` a un script que entra por stdin, y del
+    # otro lado se usa citado, sin sed.
     MODELO="$(ssh "$HOST" "grep -E '^\s*default:' $DIR/data/config.yaml | head -1 | sed 's/.*default:[[:space:]]*//'" | tr -d '\r')"
+    MODELO="${MODELO%\"}"; MODELO="${MODELO#\"}"; MODELO="${MODELO%\'}"; MODELO="${MODELO#\'}"
+    if [[ -n "$MODELO" && ! "$MODELO" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]{0,80}$ ]]; then
+      echo "→ OJO: el modelo del config del agente no tiene forma de modelo" >&2
+      echo "   ($(printf '%q' "$MODELO")). No lo uso: la traza va a decir 'desconocido'," >&2
+      echo "   pero un valor asi adentro de un comando remoto es ejecucion de codigo." >&2
+      MODELO=""
+    fi
     echo "→ modelo del agente: ${MODELO:-desconocido}"
-    ssh "$HOST" "grep -q '^MODELO_DEL_AGENTE=' $DIR/.env 2>/dev/null \
-      && sed -i 's|^MODELO_DEL_AGENTE=.*|MODELO_DEL_AGENTE=${MODELO}|' $DIR/.env \
-      || echo 'MODELO_DEL_AGENTE=${MODELO}' >> $DIR/.env"
+    ssh "$HOST" "bash -s -- $(printf '%q' "$DIR") $(printf '%q' "$MODELO")" <<'REMOTO'
+set -eu
+DIR="$1"; MODELO="${2:-}"
+tmp="$DIR/.env.nuevo"
+{ [ -f "$DIR/.env" ] && grep -v '^MODELO_DEL_AGENTE=' "$DIR/.env" || true; } > "$tmp"
+[ -n "$MODELO" ] && printf 'MODELO_DEL_AGENTE=%s\n' "$MODELO" >> "$tmp"
+mv "$tmp" "$DIR/.env"
+REMOTO
 
     echo "→ levantando phoenix y litellm"
     compose "up -d phoenix otel-collector litellm" >/dev/null 2>&1

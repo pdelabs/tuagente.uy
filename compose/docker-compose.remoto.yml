@@ -108,8 +108,14 @@ services:
       # 10/8/2026 con East: los dos servicios respondían 200 por curl y el
       # portal no arrancaba. Se deja el viejo por si queda algún link.
       - API_SERVER_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy
+    # LOS SECRETOS NO VIVEN EN data/, y es una cadena de escalada, no un gusto:
+    # `data/` es del agente, este archivo es el env_file de los DOS servicios, y
+    # con una variable como PYTHONPATH el agente ejecuta codigo suyo adentro de
+    # este contenedor —medido— y de ahi llega a politica/ y al cont-init que s6
+    # corre como root. Vive afuera, root:root 600, sin ningun montaje que lo
+    # exponga al agente.
     env_file:
-      - ./data/.env
+      - ./secretos.env
     deploy:
       resources:
         limits:
@@ -120,7 +126,25 @@ services:
     image: nousresearch/hermes-agent:v2026.7.30
     container_name: ${CLIENTE}-portal-adapter
     restart: unless-stopped
-    entrypoint: ["python3", "/opt/data/scripts/portal_adapter.py"]
+    # EL CODIGO DEL ADAPTER NO SALE DE data/. `data/` es del agente (la tiene rw y
+    # adentro de su contenedor corre como root), asi que podia reescribir el
+    # archivo que este servicio ejecuta. Ahora viene de kit-adapter/, montada :ro.
+    #
+    # QUE CIERRA Y QUE NO, para que nadie lea de mas: cierra que el agente elija
+    # DIRECTAMENTE el codigo del adapter, y que ese codigo corra como root (ver
+    # `user:`). NO cerraba, por si solo, el camino por el env_file: mientras los
+    # secretos vivieron en `data/.env` —del agente— un `PYTHONPATH=/opt/data/...`
+    # le hacia ejecutar codigo suyo ADENTRO de este contenedor igual, y desde ahi
+    # llegaba a `politica/`: la puerta y el `cont-init` que s6 corre como root en
+    # hermes. Medido con la imagen real. Por eso los secretos salieron de data/
+    # (ver `env_file`): hacen falta LAS DOS cosas, y ninguna sirve sola.
+    entrypoint: ["python3", "/opt/kit/adapter/portal_adapter.py"]
+    # Y NO CORRE COMO ROOT. Verificado en el lab con el adapter real:
+    # portal-check 14/14, y escribe politica.json y capacidades/pedidos.jsonl
+    # igual (uid 10000 es el dueño de data/ y de politica/). De paso deja de
+    # sembrar archivos de root adentro de data/, que es lo que rompio el primer
+    # despliegue.
+    user: "10000:10000"
     expose:
       - "8643"
     volumes:
@@ -130,6 +154,14 @@ services:
       # Las mismas skills del kit: el adapter las lista en la pestaña de
       # habilidades del portal, y sin este montaje desaparecerian de ahi.
       - ./kit-skills:/opt/kit/skills:ro
+      # El codigo del adapter, de SOLO LECTURA: es lo que este contenedor
+      # ejecuta, y no puede vivir en un lugar que el agente pueda escribir.
+      - ./kit-adapter:/opt/kit/adapter:ro
+      # El config del agente, de SOLO LECTURA: el adapter lo LEE (el modelo por
+      # defecto, las skills apagadas, el preambulo) y no lo escribe nunca. Sin
+      # esta linea lo tenia rw por el montaje de ./data, y era el segundo camino
+      # para tocar algo que el motor lee con mas privilegio.
+      - ./data/config.yaml:/opt/data/config.yaml:ro
     environment:
       - TZ=America/Montevideo
       - PORTAL_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy
@@ -143,8 +175,14 @@ services:
       # apuntara a otro lado, la línea no iba a hacer nada y el adapter iba a
       # seguir hablándole a `hermes:8642` sin decir una palabra.
       - AGENT_API_BASE=http://hermes:8642
+    # LOS SECRETOS NO VIVEN EN data/, y es una cadena de escalada, no un gusto:
+    # `data/` es del agente, este archivo es el env_file de los DOS servicios, y
+    # con una variable como PYTHONPATH el agente ejecuta codigo suyo adentro de
+    # este contenedor —medido— y de ahi llega a politica/ y al cont-init que s6
+    # corre como root. Vive afuera, root:root 600, sin ningun montaje que lo
+    # exponga al agente.
     env_file:
-      - ./data/.env
+      - ./secretos.env
     deploy:
       resources:
         limits:
@@ -161,7 +199,7 @@ volumes:
 #   DOMINIO_PORTAL=east-portal.agentes.tuagente.uy
 #   EMAIL_TLS=soporte@tuagente.uy      para los avisos de Let's Encrypt
 #
-# data/.env (tampoco se commitea):
+# secretos.env, en la raíz del agente (tampoco se commitea, root:root 600):
 #   API_SERVER_KEY=          openssl rand -hex 32, única por cliente
 #   OPENROUTER_API_KEY=
 #   TELEGRAM_BOT_TOKEN=

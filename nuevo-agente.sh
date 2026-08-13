@@ -41,8 +41,12 @@ cd "$DESTINO"
 sed -e "s/\${CLIENTE}/$SLUG/g" -e "s/\${AGENT_NAME}/$NOMBRE/g" \
     "$KIT/compose/docker-compose.example.yml" > docker-compose.yml
 
-cat > data/.env.example <<'ENV'
-# Copiar a data/.env y completar. NUNCA se commitea.
+# LAS CLAVES VAN AFUERA DE data/. `data/` es del agente —la tiene rw y adentro
+# corre como root—, y este archivo es el env_file de los dos servicios: con las
+# claves ahi adentro, el agente se escribe un PYTHONPATH y ejecuta codigo suyo
+# adentro del adapter. Medido. Vive en la raiz del agente, que no monta nadie.
+cat > secretos.env <<'ENV'
+# Las claves del agente. NUNCA se commitea. root:root 600 en el servidor.
 API_SERVER_KEY=          # openssl rand -hex 32 — única por cliente
 OPENROUTER_API_KEY=      # o la del proveedor de modelos que uses
 TELEGRAM_BOT_TOKEN=      # de @BotFather
@@ -50,8 +54,9 @@ TELEGRAM_ALLOWED_USERS=  # ids autorizados; sin esto le escribe cualquiera
 # SMTP_USER=
 # SMTP_APP_PASSWORD=
 ENV
+chmod 600 secretos.env
 
-printf 'data/.env\ndata/*.db*\ndata/cache/\ndata/logs/\n__pycache__/\n.DS_Store\n' > .gitignore
+printf 'secretos.env\ndata/.env\ndata/*.db*\ndata/cache/\ndata/logs/\n__pycache__/\n.DS_Store\n' > .gitignore
 
 # Config: la MISMA que usa el despliegue remoto, sin copia paralela. Antes esto
 # era un heredoc con el config repetido acá adentro, y ya habia empezado a
@@ -112,7 +117,8 @@ Lo que falta, en orden:
   1. data/SOUL.md — está el borrador con TODOS los placeholders <ASÍ> sin
      completar. Es el trabajo real: quién es, qué hace, qué NO hace y qué
      requiere aprobación. Sin esto el agente tiene herramientas y ninguna regla.
-  2. cp data/.env.example data/.env  y completar las claves.
+  2. completar las claves en secretos.env (está en la raíz del agente,
+     NO adentro de data/: ahí el agente las podría leer y reescribir).
      (data/config.yaml ya viene con el modelo, el api server y las tools
       nativas de kanban — revisalo si el cliente usa otro proveedor.)
   3. python3 $KIT/tools/agente-check.py $DESTINO/data

@@ -20,6 +20,18 @@ if [[ ! -d "$DATA" ]]; then
   echo "No existe $DATA — ¿es el data/ de un agente?" >&2
   exit 2
 fi
+# NORMALIZAR LA RUTA NO ES COSMETICA: ES EL BUG MAS CARO QUE TUVO ESTE SCRIPT.
+# `AGENTE` sale de un `cd && pwd`, o sea que viene limpia; `DATA` venia tal cual
+# la tipeo la persona. Con la barra final que agrega el tab-completion
+# (`install.sh <agente>/data/`) las rutas del manifiesto salian con doble barra
+# —`data//scripts/portal_adapter.py`—, y a la corrida siguiente sin barra el
+# limpiador veia esa ruta como obsoleta, la resolvia al archivo recien instalado
+# (el doble slash lo colapsa el sistema de archivos), le daba el sha correcto
+# —es el mismo byte a byte— y LO BORRABA. En silencio y con rc=0. Se llevaba
+# puesto el adapter del portal y el catalogo de conexiones: el servicio :8643
+# entero, o sea tickets, aprobaciones, entregables, archivos, actividad, uso y
+# capacidades. Pasaba en las dos direcciones y no se curaba solo.
+DATA="$(cd "$DATA" && pwd)"
 
 # LAS SKILLS DEL KIT YA NO VAN ADENTRO DE data/. Van a <agente>/kit-skills/,
 # que el compose monta :ro en /opt/kit/skills y que config.yaml declara en
@@ -46,8 +58,24 @@ KIT_SKILLS="$AGENTE/kit-skills"
 # misma carpeta es la forma de que uno quede atrás; ahora los dos ponen lo
 # mismo y `--diff` lo controla.
 POLITICA="$AGENTE/politica"
+# EL CODIGO DEL ADAPTER NO VIVE MAS ADENTRO DE data/, Y ES UNA ESCALADA DE
+# PRIVILEGIO, NO UNA prolijidad. `data/` es del agente (uid 10000, montada rw en
+# su contenedor), asi que el agente podia REESCRIBIR
+# `data/scripts/portal_adapter.py`. Y ese archivo es el que el contenedor
+# `portal-adapter` ejecuta, hasta hoy como root, con `./politica` montada rw:
+# adentro estan `politica.json` (los permisos que cargo el cliente),
+# `hooks/puerta.py` (la puerta) y el catalogo de capacidades. O sea que el
+# agente llegaba a todos los guardrails en dos saltos —escribir el archivo,
+# esperar un reinicio—, justo lo que el compose dice que no se puede ("un
+# guardrail que el guardado puede cambiar no es un guardrail").
+#
+# Ahora vive en `<agente>/kit-adapter/`, hermano de `kit-skills/` y `politica/`,
+# que el compose monta :ro para el adapter. Y el adapter corre como uid 10000,
+# no como root: verificado en el lab, portal-check 14/14 y escribiendo
+# politica.json y pedidos.jsonl igual.
+KIT_ADAPTER="$AGENTE/kit-adapter"
 ARCHIVOS=(
-  "adapter/portal_adapter.py:$DATA/scripts/portal_adapter.py"
+  "adapter/portal_adapter.py:$KIT_ADAPTER/portal_adapter.py"
   "connections/catalogo.json:$DATA/connections/catalogo.json"
   # EL CATALOGO DE CAPACIDADES VA A politica/, NO A data/. Es el texto de la
   # tarjeta que ve el cliente: en data/ el agente —que corre como root— podia
@@ -64,6 +92,19 @@ ARCHIVOS=(
   # configurada en config.yaml apunta a un archivo que no existe.
   "mcp-guardia/guardia.py:$POLITICA/guardia.py"
 )
+# LA RUTA VIEJA SE SIGUE INSTALANDO MIENTRAS EL COMPOSE LA USE. Si sacaramos
+# `data/scripts/portal_adapter.py` con el compose todavia apuntando ahi, el
+# proceso vivo sigue andando (tiene el archivo abierto) pero un `docker restart`
+# —sin `compose up -d`— arranca con el entrypoint viejo sobre un archivo que ya
+# no existe: crash-loop del portal, y el cliente sin tablero ni aprobaciones.
+# Mientras esta en la lista tambien esta en el manifiesto, asi que el limpiador
+# no la ve como obsoleta. Cuando el compose apunte al lugar nuevo, deja de
+# instalarse, pasa a ser obsoleta y recien ahi se va sola.
+COMPOSE_AGENTE="$AGENTE/docker-compose.yml"
+if [[ -f "$COMPOSE_AGENTE" ]] && grep -q '/opt/data/scripts/portal_adapter.py' "$COMPOSE_AGENTE"; then
+  ARCHIVOS+=("adapter/portal_adapter.py:$DATA/scripts/portal_adapter.py")
+fi
+
 # Los hooks se ARMAN desde el directorio, como las skills: el día que haya un
 # segundo hook, una lista a mano lo deja afuera y la puerta queda a medias.
 while IFS= read -r f; do
@@ -85,6 +126,28 @@ done < <(find "$KIT/skills" -type f \( -name "*.md" -o -name "*.py" \) | sort)
 
 corta() { echo "${1#"$AGENTE"/}"; }        # rutas legibles en los mensajes
 
+# El manifiesto de lo instalado: <ruta relativa al agente><TAB><sha256>. Es la
+# lista de los archivos QUE ESCRIBIMOS NOSOTROS, y existe para una sola cosa:
+# poder sacar los que el kit dejó de traer sin poder tocar nada más.
+#
+# Es la diferencia entre "borrá todo lo que no esté en el origen" —que es como
+# se le borra el trabajo a un cliente— y "borrá lo que pusiste vos y ya no
+# traés". Un archivo del cliente NUNCA está en el manifiesto, así que no hay
+# forma de que entre en el conjunto de candidatos a borrar: no es que lo
+# excluimos, es que no puede estar. Y aun estando, solo se borra si su sha256
+# sigue siendo el que escribimos: si alguien lo editó, se avisa y se deja.
+#
+# `politica/politica.json` es el ejemplo de por qué: vive en una carpeta 100%
+# nuestra pero lo escribe el cliente (sus permisos), igual que
+# `politica/capacidades/pedidos.jsonl`. Ninguno de los dos está en el
+# manifiesto y por eso ninguno de los dos corre riesgo.
+MANIFIESTO="$AGENTE/.kit-instalado"
+
+sha() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+
 if [[ "$MODO" == "--diff" ]]; then
   distintos=0
   for par in "${ARCHIVOS[@]}"; do
@@ -101,6 +164,19 @@ if [[ "$MODO" == "--diff" ]]; then
     vieja="$DATA/skills/$(basename "$s")"
     [[ -d "$vieja" ]] && { echo "SOBRA    data/skills/$(basename "$s") — copia vieja, tapa a la del kit"; distintos=$((distintos+1)); }
   done
+  # Lo que el kit instaló alguna vez y ya no trae: la instalación lo va a
+  # quitar (si sigue igual a como lo dejamos) o a avisar (si alguien lo editó).
+  if [[ -f "$MANIFIESTO" ]]; then
+    esperados="$(mktemp)"
+    { for par in "${ARCHIVOS[@]}"; do echo "${par##*:}" | sed "s|^$AGENTE/||"; done
+      echo "data/skills/.kit_manifest"; } | sort > "$esperados"
+    while IFS=$'\t' read -r ruta _; do
+      [[ -n "${ruta:-}" && -f "$AGENTE/$ruta" ]] || continue
+      echo "OBSOLETO $ruta — el kit ya no lo trae; la instalación lo quita"
+      distintos=$((distintos+1))
+    done < <(awk -F'\t' 'NR==FNR { esta[$0]=1; next } !($1 in esta)' "$esperados" "$MANIFIESTO")
+    rm -f "$esperados"
+  fi
   if [[ $distintos -eq 0 ]]; then
     echo "El agente está al día con el kit."
   else
@@ -111,9 +187,45 @@ if [[ "$MODO" == "--diff" ]]; then
   exit 0
 fi
 
+# NADA SE COPIA QUE NO PUEDA SER NUESTRO, y se valida ANTES de escribir el
+# primer archivo: si esto abortara a mitad del bucle, el agente quedaría con
+# medio kit instalado. La lista de prefijos vive en el limpiador —el que después
+# borra— y se le pide una sola vez, para que no haya dos copias que se separen.
+PREFIJOS="$("$KIT/tools/limpiar-obsoletos.sh" --prefijos)"
+for par in "${ARCHIVOS[@]}"; do
+  ruta="${par##*:}"; ruta="${ruta#"$AGENTE"/}"
+  ok=0
+  while IFS= read -r pref; do
+    case "$pref" in
+      */) [[ "$ruta" == "$pref"* ]] && { ok=1; break; } ;;
+      *)  [[ "$ruta" == "$pref"  ]] && { ok=1; break; } ;;
+    esac
+  done <<< "$PREFIJOS"
+  if [[ $ok -eq 0 ]]; then
+    echo "El kit iba a instalar '$ruta', que no es una ruta que el kit pueda" >&2
+    echo "poseer. Dos causas, y la primera es la más común:" >&2
+    echo "  · la ruta del agente está mal escrita — mirá que '$DATA' sea de verdad" >&2
+    echo "    el data/ del agente (ojo con mayúsculas: en la Mac 'Data' y 'data'" >&2
+    echo "    son el mismo directorio y esto sale distinto);" >&2
+    echo "  · el kit empezó a instalar en un lugar nuevo, y entonces la ruta va" >&2
+    echo "    (con su motivo) en PUEDE_SER_NUESTRO, en tools/limpiar-obsoletos.sh." >&2
+    echo "No instalé nada." >&2
+    exit 1
+  fi
+done
+
 for par in "${ARCHIVOS[@]}"; do
   origen="$KIT/${par%%:*}"; destino="${par##*:}"
   mkdir -p "$(dirname "$destino")"
+  # EL DESTINO SE BORRA ANTES DE COPIAR, y no es por prolijidad: `cp` SIGUE el
+  # symlink del destino y escribe del otro lado. El agente corre como root con
+  # /opt/data de escritura, asi que le alcanza con dejar
+  # `data/scripts/portal_adapter.py -> data/state.db` para que el proximo
+  # install le escriba el codigo del adapter ADENTRO de su propia base de datos.
+  # Probado: pasa. (El camino remoto es inmune porque rsync reemplaza el
+  # symlink; el local no lo era.) `cp --remove-destination` no existe en la Mac
+  # y `install -T` tampoco, asi que se borra a mano, que anda en los dos lados.
+  rm -f "$destino"
   cp "$origen" "$destino"
   echo "instalado $(corta "$destino")"
 done
@@ -143,9 +255,25 @@ for s in "$KIT"/skills/*/; do
     [[ -f "$vieja/SKILL.md" ]] || continue
     rel="${vieja#"$DATA"/skills/}"
     mkdir -p "$APARTADAS_DIR/$(dirname "$rel")"
-    rm -rf "${APARTADAS_DIR:?}/$rel"
-    mv "$vieja" "$APARTADAS_DIR/$rel"
-    echo "apartada  data/skills/$rel → skills-reemplazadas/$rel (tapaba a la del kit)"
+    # APARTAR NUNCA PISA ALGO YA APARTADO. Acá había un `rm -rf` del destino, y
+    # con eso la SEGUNDA colisión del mismo nombre destruía lo que la primera
+    # había salvado: el agente vuelve a crear `data/skills/entregable`, el
+    # install la aparta, y el trabajo de meses que estaba apartado ahí abajo se
+    # va sin dejar rastro en ningún lado del árbol. Medido. Si el lugar está
+    # ocupado, la copia nueva va al lado con la fecha, y si hasta eso choca,
+    # no se toca nada y se avisa: perder trabajo no es una opción, tener dos
+    # carpetas sí.
+    aparte="$APARTADAS_DIR/$rel"
+    if [[ -e "$aparte" ]]; then
+      aparte="$APARTADAS_DIR/$rel.$(date +%Y%m%d-%H%M%S)"
+    fi
+    if [[ -e "$aparte" ]]; then
+      echo "OJO: no aparté data/skills/$rel — ya hay una apartada y otra con la"
+      echo "     misma fecha. Miralas en skills-reemplazadas/ y sacá la que sobre."
+      continue
+    fi
+    mv "$vieja" "$aparte"
+    echo "apartada  data/skills/$rel → $(corta "$aparte") (tapaba a la del kit)"
     apartadas=$((apartadas+1))
   done < <(find "$DATA/skills" \
              \( -name .archive -o -name .git -o -name .github -o -name .hub \
@@ -191,6 +319,52 @@ fi
 mkdir -p "$DATA/skills"
 ls -1 "$KIT/skills" > "$DATA/skills/.kit_manifest"
 echo "instalado data/skills/.kit_manifest"
+
+# El manifiesto de lo que instalamos, y la limpieza de lo que el kit dejó de
+# traer. Se arma DESPUÉS de copiar todo, con los sha256 de lo que quedó escrito.
+# `data/skills/.kit_manifest` entra también: lo generamos nosotros y si algún día
+# dejara de generarse, tiene que irse con lo demás.
+{
+  for par in "${ARCHIVOS[@]}"; do
+    destino="${par##*:}"
+    printf '%s\t%s\n' "${destino#"$AGENTE"/}" "$(sha "$destino")"
+  done
+  printf '%s\t%s\n' "data/skills/.kit_manifest" "$(sha "$DATA/skills/.kit_manifest")"
+} | sort > "$MANIFIESTO.nuevo"
+
+# (Las rutas ya se validaron contra PUEDE_SER_NUESTRO antes de copiar nada.)
+"$KIT/tools/limpiar-obsoletos.sh" "$AGENTE"
+
+# Y las claves salen de data/, que es del agente. El script no hace nada si ya
+# estan afuera, y no las mueve si el compose todavia las nombra ahi (dejaria al
+# agente sin arrancar): en ese caso avisa y migra en la pasada siguiente.
+"$KIT/tools/migrar-secretos.sh" "$AGENTE"
+
+# EL COMPOSE DE UN AGENTE QUE YA EXISTE NO LO ACTUALIZA NADIE. El remoto sí —el
+# despliegue lo vuelve a subir de la plantilla en cada corrida—, pero el de un
+# agente local es una copia que se hizo el día del alta. Si todavía arranca el
+# adapter desde data/, este install le acaba de sacar ese archivo de ahí y el
+# contenedor se va a morir en el próximo reinicio. Se avisa con lo que hay que
+# cambiar, textual.
+COMPOSE="$AGENTE/docker-compose.yml"
+if [[ -f "$COMPOSE" ]] && grep -q '/opt/data/scripts/portal_adapter.py' "$COMPOSE"; then
+  cat <<AVISO
+
+OJO: $COMPOSE todavía arranca el adapter desde data/, que es del agente. El
+código ya no está ahí (ahora vive en kit-adapter/, que se monta de solo
+lectura), así que el contenedor se muere en el próximo reinicio. Cambiá en el
+servicio portal-adapter:
+
+    entrypoint: ["python3", "/opt/kit/adapter/portal_adapter.py"]
+    user: "10000:10000"
+    volumes:
+      - ./kit-adapter:/opt/kit/adapter:ro     ← agregar
+
+y después: docker compose up -d portal-adapter
+
+(Está así en compose/docker-compose.example.yml, con el porqué al lado.)
+AVISO
+fi
 
 if [[ $apartadas -gt 0 ]]; then
   cat <<AVISO

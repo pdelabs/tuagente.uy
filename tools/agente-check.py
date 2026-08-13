@@ -104,6 +104,12 @@ MOTIVO_MINIMO = 10
 DEL_KIT_SKILLS = {"artifact", "entregable", "aprobacion"}
 
 DEL_KIT = [
+    # El adapter ya NO vive en data/scripts/: eso era una escalada de privilegio
+    # (data/ es del agente, y el contenedor del adapter ejecutaba ese archivo
+    # como root sobre politica/). Ahora esta en <agente>/kit-adapter/, montada
+    # :ro. Se sigue aceptando la ruta vieja para no dar falla en un agente que
+    # todavia no se actualizo — lo reporta `install.sh --diff`, que sabe cual es
+    # la buena.
     "scripts/portal_adapter.py",
     "skills/artifact/SKILL.md",
     "skills/entregable/SKILL.md",
@@ -540,6 +546,9 @@ def main():
             candidatas = [os.path.join(data, r)]
             if r.startswith("skills/"):
                 candidatas.append(os.path.join(kit_skills_dir(data), r[len("skills/"):]))
+            if r == "scripts/portal_adapter.py":
+                candidatas.append(os.path.join(
+                    os.path.dirname(os.path.abspath(data)), "kit-adapter", "portal_adapter.py"))
             if not any(os.path.isfile(c) for c in candidatas):
                 faltan.append(r)
         if faltan:
@@ -1447,13 +1456,33 @@ def main():
         return "carpetas del workspace"
 
     def _env():
-        ruta = os.path.join(data, ".env")
+        """Las claves, que YA NO viven adentro de data/.
+
+        `data/` es del agente —la tiene rw y adentro de su contenedor corre como
+        root— y ese archivo es el `env_file` de los dos servicios: con las claves
+        ahí, un `PYTHONPATH=/opt/data/...` le hace ejecutar código suyo adentro
+        del adapter, y desde ese proceso se llega a `politica/` (la puerta) y al
+        `cont-init` que s6 corre como root. Medido con la imagen real. Ahora van
+        en `<agente>/secretos.env`, root:root 600, que no monta nadie.
+        """
+        raiz = os.path.dirname(os.path.abspath(data))
+        nueva = os.path.join(raiz, "secretos.env")
+        vieja = os.path.join(data, ".env")
+        ruta = nueva if os.path.isfile(nueva) else vieja
         if not os.path.isfile(ruta):
-            raise AssertionError("no existe .env")
+            raise AssertionError("no existe secretos.env (ni el data/.env viejo)")
         with open(ruta, encoding="utf-8", errors="replace") as fh:
             claves = {l.split("=", 1)[0].strip() for l in fh if "=" in l and not l.startswith("#")}
         if "API_SERVER_KEY" not in claves:
             raise AssertionError("falta API_SERVER_KEY — el portal no tiene con qué autenticarse")
+        if ruta == vieja:
+            raise AssertionError(
+                "las claves están en data/.env, que el agente puede reescribir — y ese "
+                "archivo es el env_file de los dos servicios, o sea ejecución de código "
+                "adentro del adapter. Corré install.sh (las mueve a secretos.env) "
+                "después de apuntar el compose ahí")
+        if os.path.isfile(vieja):
+            return f"{len(claves)} variables · OJO: quedó un data/.env que ya no lee nadie, borralo"
         return f"{len(claves)} variables"  # nunca imprimimos valores
 
     check("workspace", _workspace)
