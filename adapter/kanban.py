@@ -100,15 +100,24 @@ class KanbanStore:
             connection.close()
 
     def pending_count(self, database=None):
-        connection = self.connect(database or self.default_database)
+        """Cuenta los pedidos sin resolver, y ante CUALQUIER falla de sqlite
+        devuelve 0 en vez de reventar.
+
+        El abrir la base va adentro del try a proposito: enciende la pestaña
+        Aprobaciones desde `manifest()`, y si una base que existe no se puede
+        abrir —permisos, WAL trabado, disco— el manifiesto entero se cae y el
+        cliente se queda sin portal, no sin un numerito.
+        """
         try:
-            return connection.execute(
-                f"SELECT COUNT(*) FROM tasks WHERE {self._pending_where(connection)}"
-            ).fetchone()[0]
+            connection = self.connect(database or self.default_database)
+            try:
+                return connection.execute(
+                    f"SELECT COUNT(*) FROM tasks WHERE {self._pending_where(connection)}"
+                ).fetchone()[0]
+            finally:
+                connection.close()
         except sqlite3.Error:
             return 0
-        finally:
-            connection.close()
 
     def task_status(self, task_id: str):
         connection = self.connect(self.default_database)

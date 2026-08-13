@@ -67,6 +67,12 @@ class KanbanStoreTests(unittest.TestCase):
         self.assertEqual(self.store.task_status("t_blocked"), "blocked")
         self.assertEqual(self.store.block_recurrences("t_triage"), 2)
 
+    def test_pending_count_degrades_to_zero_when_the_database_cannot_be_opened(self):
+        """`manifest()` llama a esto: una base ilegible tiene que costar el
+        contador, no el manifiesto entero."""
+        unreadable = Path(self.temporary_directory.name) / "no-existe" / "kanban.db"
+        self.assertEqual(self.store.pending_count(unreadable), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
