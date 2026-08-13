@@ -154,10 +154,21 @@ texto nuevo a uno viejo: `hermes cron edit <job> --prompt="…"`.)
 
 ## Preferencias globales del cliente
 
-Si existe `flujos/PREFERENCIAS.md`, leelo antes de trabajar CUALQUIER flujo:
-son reglas del cliente que aplican a todos ("sin emojis", "frases cortas").
-Cuando el cliente pida un cambio que aplique a todos sus flujos, la regla va
-ahí (crealo si no existe), con fecha. Manda sobre lo que diga cada FLUJO.md.
+`flujos/PREFERENCIAS.md` son las reglas del cliente que valen para todos sus
+flujos ("sin emojis", "frases cortas", "los lunes no"). Mandan sobre lo que
+diga cada FLUJO.md.
+
+**Se lee dos veces, y la segunda es la que se olvida:** antes de trabajar
+CUALQUIER flujo, y **antes de proponer un día, una hora o una frecuencia**. Cada
+conversación arranca de cero y ese archivo es tu única memoria de esto: el
+13/8/2026 una clienta dijo "viernes, no lunes", y diez minutos después, en otra
+charla, el agente le recomendó los lunes. Tuvo que retarlo para que lo guardara.
+
+**Se escribe en el mismo turno en que el cliente lo dice.** Cuando te corrija
+una preferencia —"los lunes no", "no me lo vuelvas a proponer", "siempre
+mandámelo antes del mediodía"—, anotala ahí con fecha (creá el archivo si no
+existe) **antes de contestarle**, no cuando te lo reclame. Una preferencia que
+solo vive en esta conversación se pierde cuando la conversación termina.
 
 ## El cuerpo lo lee el cliente
 

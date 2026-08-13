@@ -653,6 +653,31 @@ volver a persistir después de transformar.
 
 ---
 
+## 9. Memoria entre conversaciones: la hay, pero el que escribe es el modelo.
+
+Verificado el 13/8/2026 sobre el mismo agente. Los bloques están prendidos por
+default (`hermes_cli/config_defaults.py:1531-1554`: `memory_enabled` y
+`user_profile_enabled` en `true`), y `USER.md` se inyecta en el system prompt de
+cada sesión (`agent/system_prompt.py:503-512`). Funciona: cuando el agente llamó
+a la tool `memory`, la línea apareció en `data/memories/USER.md` y la sesión
+siguiente ya la traía.
+
+**Lo que NO existe es extracción automática.** No hay perilla que haga que el
+motor saque una preferencia dicha al pasar y la guarde: `memory.*` solo tiene
+`memory_enabled`, `user_profile_enabled`, `write_approval`, los dos límites de
+caracteres y `provider`. La escritura depende de que el modelo decida llamar a
+la tool. Medido: la clienta dijo "viernes de mañana, no lunes" a las 14:22 y
+nadie escribió nada; a las 14:29, en otra conversación, el agente le recomendó
+los lunes; recién cuando ella lo retó (14:31) guardó las dos cosas —`USER.md` y
+`flujos/PREFERENCIAS.md`— en el mismo turno.
+
+O sea que "acordarse" es hoy una regla de prosa, no una garantía. Lo único
+duro que se puede hacer desde el kit es del lado de la LECTURA (un archivo
+nuestro que el agente tiene orden de abrir, y que un `pre_llm_call` podría
+inyectar siempre); el lado de la ESCRITURA no tiene dónde agarrarse.
+
+---
+
 ## Lo que no se puede cerrar sin encender el motor
 
 Todo lo de arriba sale de código, config o del prompt ya guardado. Estas cinco
