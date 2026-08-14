@@ -55,12 +55,6 @@ set -euo pipefail
 # dos no son candidatos porque nunca los nombramos.
 PUEDE_SER_NUESTRO=(
   "kit-adapter/"                      # el codigo del adapter del portal
-  # El motor de piezas (skills/post-image). El kit pone SOLO el package.json con
-  # las versiones fijas; los node_modules los instala tools/instalar-render.sh
-  # en el destino, porque son binarios nativos y install.sh puede estar corriendo
-  # en otra plataforma. Por eso este directorio tiene un archivo nuestro y el
-  # resto no, y por eso el limpiador no tiene que tocar lo de al lado.
-  "kit-render/package.json"
   # Donde vivia el adapter hasta el 12/8. Sigue en la lista PARA PODER SACARLO:
   # el agente podia reescribirlo (data/ es suya) y el contenedor lo corria como
   # root con politica/ montada rw. La migracion de los agentes que ya existen es

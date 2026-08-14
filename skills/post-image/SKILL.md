@@ -1,106 +1,77 @@
 ---
 titulo: Piezas para redes
-para_cliente: "Arma las placas de tus posteos —portadas, slides, datos y citas— con tus colores y tu tipografía."
+para_cliente: "Genera las imágenes de tus posteos con tu identidad y con el estilo de las referencias que le pasaste."
 name: post-image
-description: "Genera la imagen de un posteo en PNG con los colores y la tipografia de la marca: portada, slide de carrusel, placa de dato y placa de cita, en 4:5 o 9:16. Usala cuando el posteo necesite una pieza con texto encima. Necesita el kit de marca. NO usa IA de imagen para nada que lleve palabras."
-version: 1.0.0
+description: "Genera la imagen de un posteo de Instagram con IA, usando el kit de marca y las referencias de estilo del cliente. Arma el brief con build_prompt.py, genera con image_gen y VERIFICA la imagen mirandola antes de mostrarla. Usala cuando el posteo necesite una pieza visual: feed, carrusel, historia o portada de reel."
+version: 2.0.0
 license: MIT
 ---
 
-# post-image — la placa del posteo, con la marca puesta
+# post-image — la pieza del posteo
+
+Tres pasos y ninguno es opcional. El tercero es el que evita publicar un error.
+
+## 1. Armá el brief
 
 ```bash
-echo '{"plantilla":"portada","titulo":"Te pidieron dos sueldos de garantía",
-       "bajada":"Hay otra forma.","pie":"Deslizá"}' \
-| node /opt/kit/skills/post-image/scripts/render.mjs \
-    --formato feed --out /opt/data/workspace/piezas/tapa.png
+python3 /opt/kit/skills/post-image/scripts/build_prompt.py \
+  --formato historia \
+  --titulo "Tu agente contesta a las 23:40" \
+  --bajada "Con tus precios, no con inventos." \
+  --cta "Agendá una demo" \
+  --idea "corte diagonal: arriba de día, abajo de noche con alguien durmiendo"
 ```
 
-Devuelve JSON con el archivo, las medidas, el contraste medido y los avisos.
+Devuelve el `prompt` con los colores y la tipografía **exactos** del kit, la
+lista de `referencias` de estilo, y la lista de `verificar`.
 
-## Texto con palabras NO se genera con IA
+El brief lo arma el script y no vos, por una razón: si escribís los hex de
+memoria, cada tanto se te escapa uno y el feed deja de parecer de una sola
+marca. **Usá el prompt tal como sale.**
 
-Los modelos de imagen escriben mal. Una placa con una falta de ortografía en 96pt
-es peor que no publicar, y la clienta la ve después que sus seguidores.
+Sin `brand.json` corta y te da la pregunta para ofrecerle armar el kit.
 
-- **Lleva palabras** → esta skill. Determinista, con su tipografía real.
-- **Es una foto o una ilustración** → ahí sí IA de imagen (capacidad `imagenes`),
-  o una foto del cliente.
-- **Las dos cosas** → la foto de fondo por IA, el texto por acá encima.
+## 2. Generá
 
-## Vos componés; el script garantiza
+Con `image_gen`, pasando el `prompt` y **adjuntando las `referencias`** como
+imágenes de entrada. Las referencias son lo que más mueve el resultado: el
+estilo se muestra, no se describe.
 
-**La maqueta la decidís vos.** Las plantillas son un punto de partida, no una
-jaula: si diez posteos salen con la misma pinta, el feed se lee como un posteo
-repetido. Variá.
+Si `sin_referencias` viene en `true`, pedíselas al cliente antes o después —
+dos o tres posteos que le gusten— y guardalas en `brand/referencias/`. A partir
+de ahí todas las piezas se parecen entre sí, que es lo que hace que un feed se
+lea como un sistema y no como diez posteos sueltos.
 
-Vos decidís: los bloques y su orden, la escala, el peso, la alineación, qué rol
-de color usa cada cosa, el aire y el fondo.
+## 3. MIRÁ lo que salió. Siempre.
 
-El script decide, y no lo podés romper: el tamaño del lienzo, los márgenes
-seguros, **que todo lo que se pinta se lea**, y que los colores y la tipografía
-salgan del kit de marca y de ningún otro lado.
+**No muestres una imagen que no miraste.** Abrila y recorré la lista de
+`verificar` que devolvió el script:
 
-### Componer libre
+- ¿Cada texto está **completo y sin una letra cambiada**?
+- ¿Hay algún texto **de más**? Fechas, dominios inventados, subtítulos en inglés,
+  marcas de agua.
+- ¿Alguna palabra con letras rotas?
+- ¿Los colores se parecen a la marca?
+- Si es historia: ¿queda algo importante debajo de los botones de Instagram?
 
-```bash
-echo '{"fondo":"fondo","alineacion":"centro","alinear":"centro","bloques":[
-  {"tipo":"barra","color":"primario","alto":12,"ancho":120},
-  {"tipo":"espacio","alto":48},
-  {"tipo":"texto","texto":"Un chatbot responde.","escala":"titulo","color":"texto"},
-  {"tipo":"texto","texto":"Un agente trabaja.","escala":"titulo","color":"primario"}
-]}' | node /opt/kit/skills/post-image/scripts/render.mjs --formato historia --out ...
-```
+Si algo falla, **regenerá**. Hasta dos veces. Si a la tercera sigue mal, mostrale
+al cliente lo que tenés y decile qué no pudiste resolver — no lo entregues como
+si estuviera bien.
 
-| Cosa | Valores |
-|---|---|
-| `tipo` | `texto` · `espacio` (con `alto`) · `barra` (con `alto`, `ancho`) |
-| `escala` | `gigante` · `titulo` · `subtitulo` · `bajada` · `pie` (o `factor` para afinar) |
-| `color` | `primario` · `secundario` · `acento` · `fondo` · `texto` · `apagado`, o un `#hex` |
-| `peso` | 400 a 800 · `italica`: true · `interlinea`: número |
-| `alineacion` | `arriba` · `centro` · `abajo` (vertical) |
-| `alinear` | `izquierda` · `centro` · `derecha` (horizontal) |
-| `fondo` | un rol o un `#hex` |
+El detalle de qué mirar está en `references/verificar.md`.
 
-### Los cuatro presets
+## Por qué este paso existe
 
-Sirven para arrancar rápido; después cambiales lo que quieras o mandá `bloques`.
+El modelo escribe bien **casi siempre**, y "casi" no alcanza cuando la pieza sale
+al Instagram de la clienta con un precio adentro. Un error acá lo ve ella después
+que sus seguidores.
 
-| Plantilla | Para qué | Campos |
-|---|---|---|
-| `portada` | tapa de carrusel, placa de feed | `titulo`, `bajada`, `pie` |
-| `slide` | slide interna de carrusel | `numero`, `total`, `titulo`, `bajada` |
-| `dato` | un número que golpea | `numero`, `titulo` |
-| `cita` | testimonio, frase de cliente | `titulo`, `bajada` (quién lo dijo) |
+Ya vimos salir: `"Autormate station for the autonmozer AI Agent"`,
+`"WWW.REALLYGREATSITE.COM"` en lugar del dominio real, y los códigos hex del
+propio brief pintados adentro del dibujo. Todo eso pasa la mirada distraída y no
+pasa la lista.
 
-Formatos: `feed` y `carrusel` salen 1080×1350 (4:5, la que más pantalla ocupa);
-`historia` y `reel` salen 1080×1920 con **250 px de margen seguro** arriba y
-abajo, que es donde Instagram pone sus botones.
+## Publicar no es tu decisión
 
-Podés forzar `fondo` y `tinta` en el spec. Si no, el fondo es el color primario
-de la marca y la tinta se elige sola.
-
-## Lo que decide el script y vos no tenés que pensar
-
-- **La tinta** sale de medir el contraste contra el fondo: blanco o negro, el que
-  se lea. La pieza puede quedar fuera de estilo; ilegible, no.
-- **El acento también se valida.** Si el acento de la marca no llega a 3:1 contra
-  el fondo, lo reemplaza y te lo dice en `avisos`. Un coral claro sobre blanco da
-  1,25:1 y el número grande desaparece.
-- **Las tipografías** salen de `brand/fonts/`, que las bajó `brand-kit`.
-
-**Leé los `avisos`.** Salen con `ok: true` a propósito: la pieza se generó, pero
-hay algo que la clienta querría saber.
-
-## Cuidado con los glifos raros
-
-Muchos sitios sirven la tipografía **recortada**: sólo los caracteres que esa
-página usaba. Los acentos y la ñ entran; una flecha `→`, un emoji o un símbolo
-raro **puede salir como un cuadradito**. Si el título los necesita, miralo antes
-de entregarlo, o escribilo con palabras.
-
-## Después de generar
-
-La pieza va al workspace y el cliente la ve en Archivos. Mostrasela **antes** de
-publicar nada — junto con el pie que escribió `social-content`, porque se aprueban
-juntos: el pie y la imagen son un solo posteo.
+Mostrá la pieza **y** el pie exacto que la acompaña, juntos: son un solo posteo y
+se aprueban juntos. Esperá el sí.

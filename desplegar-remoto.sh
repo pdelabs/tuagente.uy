@@ -178,7 +178,7 @@ fi
 # Y las carpetas raiz: cada una tiene un dueño distinto alla (data/ es del
 # agente, uid 10000; politica/ y kit-skills/ quedan de root porque se montan
 # :ro). Una raiz nueva no puede pasar de largo sin que alguien decida de quien es.
-CONOCIDAS="data politica kit-skills kit-adapter kit-render"
+CONOCIDAS="data politica kit-skills kit-adapter"
 while IFS= read -r raiz; do
   [[ " $CONOCIDAS " == *" $raiz "* ]] && continue
   echo "DERIVA: install.sh creó la carpeta '$raiz/', que este despliegue no sabe" >&2
@@ -336,7 +336,7 @@ fi
 # implica `-o -g` y les aplicaba el dueño del emisor, o sea que en la VPS
 # quedaban `501:staff` — el uid de una Mac, que en el servidor no es nadie.
 #
-#   kit-skills/, kit-adapter/ y kit-render/ → root. Nadie las escribe nunca: los tres
+#   kit-skills/ y kit-adapter/  → root. Nadie las escribe nunca: los dos
 #                                 servicios las montan :ro.
 #   politica/                   → del ADAPTER (uid 10000), y a proposito: ahi
 #                                 escribe `politica.json` (los permisos del
@@ -355,9 +355,9 @@ fi
 if [[ -n "$LOCAL" ]]; then
   echo "→ permisos: (simulacion local: los chown necesitan root, los salteo)"
 else
-  echo "→ permisos: data/ y politica/ del agente (uid 10000); kit-skills/, kit-adapter/ y kit-render/ de root"
+  echo "→ permisos: data/ y politica/ del agente (uid 10000); kit-skills/ y kit-adapter/ de root"
   ssh "$SERVIDOR" "chown -R 10000:10000 $REMOTO/data $REMOTO/politica && \
-                   chown -R root:root $REMOTO/kit-skills $REMOTO/kit-adapter $REMOTO/kit-render && \
+                   chown -R root:root $REMOTO/kit-skills $REMOTO/kit-adapter && \
                    chown root:root $REMOTO/.kit-instalado $REMOTO/secretos.env && \
                    chmod 600 $REMOTO/.kit-instalado $REMOTO/secretos.env"
 fi

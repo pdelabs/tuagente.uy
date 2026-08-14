@@ -388,6 +388,11 @@ def build_gaps(kit):
     gaps.append("logo.usos_indebidos — que no se hace nunca con la marca")
     gaps.append("imagenes.estilo — fotos reales, ilustracion o producto; y que NO va")
     gaps.append("voz.tono — de vos o de usted, que tono, y tres palabras que la marca no usa nunca")
+    # Las referencias son lo que mas mueve el resultado de post-image: el estilo
+    # se muestra, no se describe. Un kit sin referencias produce piezas correctas
+    # y desconocidas entre si.
+    gaps.append("referencias — 2 o 3 posteos que le gusten, para guardar en brand/referencias/ "
+                "(el estilo se muestra, no se describe)")
     if not kit["identity"]["tagline"]:
         gaps.append("identidad.bajada — la frase que explica a que se dedica")
     return gaps

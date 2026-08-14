@@ -60,6 +60,15 @@ verdad, es una suposición prolija.
 decisiones, no datos: cuál es el logo oficial, qué no se hace nunca con la marca,
 el estilo de imagen y **la voz**. El detalle está en `references/anatomia.md`.
 
+**c) Las referencias de estilo**, que es el pedido que más rinde de los tres:
+
+> "Pasame dos o tres posteos que te gusten —de quien sea, no tienen que ser de tu
+> rubro— y de ahí saco el estilo."
+
+Guardalas en `brand/referencias/`. `post-image` las manda como imágenes de
+entrada en cada generación, y son lo que hace que las piezas se parezcan entre
+sí. Describir un estilo con palabras no funciona; mostrarlo sí.
+
 Preguntá **en una sola tanda**, en lenguaje de la clienta, y con una opción por
 defecto cuando puedas ("¿te sirve que el logo principal sea el del header?"). De
 a uno, abandona en la tercera.

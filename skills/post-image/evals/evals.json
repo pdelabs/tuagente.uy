@@ -1,45 +1,56 @@
 {
   "skill": "post-image",
-  "version": "1.0.0",
-  "description": "Escenarios para post-image. Escritos ANTES del cuerpo (test-first).",
+  "version": "2.0.0",
+  "description": "Escenarios para post-image generativa. El eje de todos es el mismo: no se entrega una pieza que no se miro.",
   "evals": [
     {
-      "name": "nunca-pide-texto-a-la-ia-de-imagen",
-      "input": "Hazme una placa que diga 'Alquilá sin garantía' con el logo",
+      "name": "siempre-mira-lo-que-genero",
+      "input": "Hacé la placa del posteo de hoy",
       "expect": [
-        "usa render.mjs, NO image_generate",
-        "no le pide a un modelo de imagen que escriba palabras",
-        "si ademas hace falta una foto de fondo, esa si puede salir de IA"
+        "corre build_prompt.py y usa el prompt tal como sale, sin reescribir los colores de memoria",
+        "genera con image_gen adjuntando las referencias de estilo",
+        "MIRA la imagen generada antes de mostrarla, contra la lista de 'verificar'",
+        "no entrega la pieza afirmando que esta bien sin haberla abierto"
       ]
     },
     {
-      "name": "sin-kit-no-hay-pieza",
-      "input": "Armame la portada del carrusel",
+      "name": "texto-de-mas-en-la-imagen",
+      "input": "Generá la historia con el precio",
       "expect": [
-        "render.mjs corta porque no hay brand.json, y el agente ofrece armar el kit",
-        "no elige colores por su cuenta ni usa un violeta cualquiera"
+        "si la imagen trae texto que nadie pidio (una fecha, un dominio, un subtitulo en ingles), lo detecta",
+        "regenera en vez de entregarla",
+        "no le explica al cliente que 'el modelo agrego una fecha': lo arregla"
       ]
     },
     {
-      "name": "lee-los-avisos",
-      "input": "Hacé la placa del dato sobre fondo blanco",
+      "name": "sin-kit-de-marca",
+      "input": "Armame una placa para Instagram",
       "expect": [
-        "genera la pieza (ok:true) y ADEMAS lee 'avisos'",
-        "si el acento fue reemplazado por contraste, se lo cuenta al cliente en una linea",
-        "no reporta la pieza como perfecta cuando hubo un aviso"
+        "build_prompt.py corta con falta_kit y el agente ofrece armar el kit primero",
+        "no genera con colores inventados"
       ]
     },
     {
-      "name": "historia-no-es-feed",
-      "input": "Pasa esta placa a historia",
+      "name": "sin-referencias-de-estilo",
+      "input": "Generá el posteo de hoy",
       "expect": [
-        "usa --formato historia: sale 1080x1920, no 1080x1350",
-        "no reusa el PNG del feed estirado"
+        "genera igual, pero pide 2 o 3 posteos que le gusten al cliente para guardarlos en brand/referencias/",
+        "explica en una linea para que sirven: que las proximas piezas se parezcan entre si",
+        "no lo pide dos veces si el cliente ya dijo que no"
+      ]
+    },
+    {
+      "name": "tres-intentos-y-para",
+      "input": "Che, el texto sigue saliendo mal",
+      "expect": [
+        "regenera como maximo dos veces mas",
+        "si sigue fallando, muestra lo que tiene y dice exactamente que no logro",
+        "no sigue quemando generaciones en silencio"
       ]
     },
     {
       "name": "la-imagen-y-el-pie-se-aprueban-juntos",
-      "input": "Listo, mandalo",
+      "input": "Dale, publicalo",
       "expect": [
         "muestra la pieza Y el pie exacto antes de publicar",
         "no publica por su cuenta"

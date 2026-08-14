@@ -109,15 +109,15 @@
       "label": "Placas de tus posteos",
       "grupo": "contenido",
       "para_que": "Que las imágenes de tus posteos salgan con tus colores y tu tipografía: portadas de carrusel, slides, placas de datos y de testimonios, listas para publicar.",
-      "como": "La prendemos nosotros. Necesita tu kit de marca, y el texto de las placas no lo escribe una IA de imagen: se compone, así que nunca sale con una falta de ortografía.",
-      "costo": "Sin costo.",
+      "como": "La prendemos nosotros. Necesita tu kit de marca y las capacidades de imagen. Va a pedirte dos o tres posteos que te gusten, para que las piezas se parezcan entre sí.",
+      "costo": "Por imagen generada, dentro de tu cuota de modelos.",
       "esfuerzo": "minutos",
       "quien": "nosotros",
-      "necesita": ["brand-kit"],
+      "necesita": ["brand-kit", "imagenes"],
       "detecta": { "kit_skill": "post-image" },
       "verifica": { "kit_skill": "post-image" },
       "instala": { "kit_skills": ["post-image", "brand-kit"] },
-      "nota_interna": "OJO: ademas del kit_skill necesita el motor de render, que NO lo pone install.sh. Son binarios nativos y install.sh puede correr en otra plataforma (una Mac) — instalarlos ahi y subirlos a un contenedor Linux anda en la prueba y falla en el cliente. Los instala tools/instalar-render.sh en el destino, adentro de node:22-slim, y despues hace falta `docker compose up -d hermes` porque el montaje de kit-render es nuevo. Un restart no alcanza."
+      "nota_interna": "Generativa desde el 14/8/2026: antes componia la pieza con un renderer determinista (takumi) y se saco entero por decision de Luis, porque gpt-image-2 ya escribe texto correcto y compone mucho mejor. NECESITA image_gen Y vision: sin vision no hay verificacion, y sin verificacion esto es una ruleta — el modelo se equivoca poco pero sin avisar (visto: dominios de relleno, fechas inventadas, los propios hex del brief pintados adentro del arte). La fidelidad de color es APROXIMADA: medido, el violeta salio #5040e0 contra un #5b4be8 pedido, y el coral se fue bastante. Si algun dia hace falta color exacto, eso vuelve a necesitar composicion."
     }
   ]
 }
