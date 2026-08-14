@@ -28,7 +28,43 @@ es peor que no publicar, y la clienta la ve después que sus seguidores.
   o una foto del cliente.
 - **Las dos cosas** → la foto de fondo por IA, el texto por acá encima.
 
-## Las cuatro plantillas
+## Vos componés; el script garantiza
+
+**La maqueta la decidís vos.** Las plantillas son un punto de partida, no una
+jaula: si diez posteos salen con la misma pinta, el feed se lee como un posteo
+repetido. Variá.
+
+Vos decidís: los bloques y su orden, la escala, el peso, la alineación, qué rol
+de color usa cada cosa, el aire y el fondo.
+
+El script decide, y no lo podés romper: el tamaño del lienzo, los márgenes
+seguros, **que todo lo que se pinta se lea**, y que los colores y la tipografía
+salgan del kit de marca y de ningún otro lado.
+
+### Componer libre
+
+```bash
+echo '{"fondo":"fondo","alineacion":"centro","alinear":"centro","bloques":[
+  {"tipo":"barra","color":"primario","alto":12,"ancho":120},
+  {"tipo":"espacio","alto":48},
+  {"tipo":"texto","texto":"Un chatbot responde.","escala":"titulo","color":"texto"},
+  {"tipo":"texto","texto":"Un agente trabaja.","escala":"titulo","color":"primario"}
+]}' | node /opt/kit/skills/post-image/scripts/render.mjs --formato historia --out ...
+```
+
+| Cosa | Valores |
+|---|---|
+| `tipo` | `texto` · `espacio` (con `alto`) · `barra` (con `alto`, `ancho`) |
+| `escala` | `gigante` · `titulo` · `subtitulo` · `bajada` · `pie` (o `factor` para afinar) |
+| `color` | `primario` · `secundario` · `acento` · `fondo` · `texto` · `apagado`, o un `#hex` |
+| `peso` | 400 a 800 · `italica`: true · `interlinea`: número |
+| `alineacion` | `arriba` · `centro` · `abajo` (vertical) |
+| `alinear` | `izquierda` · `centro` · `derecha` (horizontal) |
+| `fondo` | un rol o un `#hex` |
+
+### Los cuatro presets
+
+Sirven para arrancar rápido; después cambiales lo que quieras o mandá `bloques`.
 
 | Plantilla | Para qué | Campos |
 |---|---|---|
