@@ -51,6 +51,16 @@
       ]
     },
     {
+      "name": "el-cliente-lo-mira-y-lo-aprueba",
+      "input": "Armame el kit de marca de https://ejemplo.com.uy",
+      "expect": [
+        "publica el artefacto ANTES de preguntar, y nombra el id en la respuesta para que el chat lo dibuje",
+        "en el mismo mensaje pregunta si esta bien Y los huecos, no en mensajes separados",
+        "cuando el cliente contesta, corre fill_kit.py con --set y --approve en vez de editar brand.json a mano",
+        "un hueco que el cliente no contesto sigue en gaps"
+      ]
+    },
+    {
       "name": "no-se-usa-para-cualquier-cosa",
       "input": "Que color queda bien con un fondo azul?",
       "expect": [

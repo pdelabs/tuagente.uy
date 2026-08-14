@@ -74,6 +74,20 @@
       "verifica": { "kit_skill": "formato-redes" },
       "instala": { "kit_skills": ["formato-redes"] },
       "nota_interna": "Todavia no escrita: es la entrada que prueba que el catalogo tambien cubre capacidades que el motor no conoce. Cuando exista, va al kit y llega a todos con install.sh."
+    },
+    {
+      "id": "brand-kit",
+      "label": "Kit de marca",
+      "grupo": "contenido",
+      "para_que": "Que tu agente sepa de qué color es tu empresa: lee tu web y arma el kit —colores, tipografías y logo— así todo lo que te entrega sale con tu identidad y no con la de nadie.",
+      "como": "La prendemos nosotros. El agente lee tu sitio, te muestra el kit y te pregunta lo que no se puede deducir: cuál es el logo oficial y cómo le hablás a tu cliente.",
+      "costo": "Sin costo.",
+      "esfuerzo": "minutos",
+      "quien": "nosotros",
+      "detecta": { "kit_skill": "brand-kit" },
+      "verifica": { "kit_skill": "brand-kit" },
+      "instala": { "kit_skills": ["brand-kit"] },
+      "nota_interna": "No necesita la capacidad busqueda-web: el script baja el sitio con urllib por terminal, no con el toolset web, asi que anda igual en un agente con la busqueda apagada. Si necesita salida a internet desde el contenedor. Es la materia prima de social-content: sin brand.json cada pieza sale con un criterio distinto."
     }
   ]
 }

@@ -36,22 +36,7 @@ huecos.
 no estén en el archivo, ni "mejores" los hex. Si el sitio no se pudo leer, decilo
 y ofrecé armarlo a mano con lo que te pase el cliente — no inventes una paleta.
 
-## 2. Preguntar los huecos, todos juntos
-
-`gaps` trae lo que un sitio no puede contestar porque son decisiones, no datos:
-cuál es el logo oficial, qué no se hace nunca con la marca, el estilo de imagen y
-**la voz**. El detalle de cada uno está en `references/anatomia.md`.
-
-Preguntalos **en una sola tanda**, en lenguaje de la clienta, y con una opción
-por defecto cuando puedas ("¿te sirve que el logo principal sea el del header?").
-De a uno, abandona en la tercera.
-
-Lo que conteste va a `brand.json` en su campo, y el hueco sale de `gaps`. **Un
-hueco sin respuesta se queda como hueco**: un kit que afirma algo que nadie
-decidió es peor que uno incompleto, porque después alguien lo usa creyendo que
-está acordado.
-
-## 3. Publicarlo
+## 2. Mostrarlo ANTES de preguntar
 
 ```bash
 python3 /opt/kit/skills/brand-kit/scripts/render_kit.py \
@@ -60,7 +45,41 @@ python3 /opt/kit/skills/brand-kit/scripts/render_kit.py \
       --summary "Colores, tipografías, contraste y qué falta decidir"
 ```
 
-Decile el `id` al cliente: el portal lo convierte en chip clicable.
+Nombrá el `id` que devuelve **en tu respuesta**: el chat dibuja la visualización
+ahí mismo, abajo del mensaje. El cliente ve sus colores y su tipografía sin irse
+a ninguna pestaña, y recién ahí las preguntas son sobre algo concreto.
+
+## 3. Preguntar en el chat, todo junto
+
+Dos cosas en el mismo mensaje, después de mostrarlo:
+
+**a) ¿Está bien?** Es lo primero. Un kit que nadie miró no es una fuente de
+verdad, es una suposición prolija.
+
+**b) Los huecos.** `gaps` trae lo que un sitio no puede contestar porque son
+decisiones, no datos: cuál es el logo oficial, qué no se hace nunca con la marca,
+el estilo de imagen y **la voz**. El detalle está en `references/anatomia.md`.
+
+Preguntá **en una sola tanda**, en lenguaje de la clienta, y con una opción por
+defecto cuando puedas ("¿te sirve que el logo principal sea el del header?"). De
+a uno, abandona en la tercera.
+
+## 4. Anotar lo que contestó
+
+```bash
+python3 /opt/kit/skills/brand-kit/scripts/fill_kit.py \
+  --set "voz.tono=de vos, directo y sin marketinés" \
+  --set "logo.principal=logos/icon.svg" \
+  --approve --by "Cata"
+```
+
+`--approve` o `--reject --note "..."` guarda la firma; cada `--set` llena su
+campo y **saca ese hueco de `gaps`**, así "qué falta" sigue siendo cierto sin que
+nadie se acuerde de actualizarlo.
+
+No edites `brand.json` a mano. Y **un hueco sin respuesta se queda como hueco**:
+un kit que afirma algo que nadie decidió es peor que uno incompleto, porque
+después alguien lo usa creyendo que está acordado.
 
 ## El contraste no es un detalle estético
 
