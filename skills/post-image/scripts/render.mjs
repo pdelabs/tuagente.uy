@@ -219,6 +219,67 @@ function main() {
         backgroundColor: paint(color), borderRadius: Math.round((b.alto || 10) / 2),
       }, children: [] });
     }
+    /* MOCKUP DE CONVERSACION. Es el bloque que mas trabaja de todos, y no por
+     * lindo: MUESTRA AL PRODUCTO HACIENDO LA COSA, que es lo unico que separa
+     * una pieza que frena el scroll de un color plano con una frase encima.
+     * Va acá y no como foto generada porque son cajas con texto: sale exacto,
+     * sin faltas de ortografia y con los colores de la marca. Una captura de
+     * chat inventada por un modelo de imagen sale con las letras rotas. */
+    if (b.tipo === "chat") {
+      /* OJO CON CONTRA QUE SE MIDE. Una burbuja NO se apoya en el fondo de la
+       * pieza: se apoya en el marco del chat. Medir contra la pieza es como
+       * salio la primera version — el violeta de marca contra el violeta de
+       * fondo da 1:1, la garantia lo reemplazaba por blanco, y quedaban
+       * burbujas blancas sobre marco blanco: invisibles, con ok:true. */
+      const marcoChat = resolve(b.fondo_chat, roles.background || "#ffffff");
+      const mezcla = (a, c, t) => {
+        const [ar, ag, ab] = hexToRgba(a), [cr, cg, cb] = hexToRgba(c);
+        const v = (x, y) => Math.round(x + (y - x) * t);
+        return `#${[v(ar, cr), v(ag, cg), v(ab, cb)].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+      };
+      // La del cliente es un tono apenas separado del marco; la del agente es
+      // la marca. Si el agente eligio un color que se confunde con el marco,
+      // se avisa en vez de dibujar algo que no se ve.
+      const tintaMarco = ratio("#ffffff", marcoChat) >= ratio("#111111", marcoChat) ? "#ffffff" : "#111111";
+      const burbujaCliente = resolve(b.color_cliente, mezcla(marcoChat, tintaMarco, 0.07));
+      const burbujaAgente = resolve(b.color_agente, roles.primary || tintaMarco);
+      for (const [nombre, c] of [["cliente", burbujaCliente], ["agente", burbujaAgente]]) {
+        if (ratio(c, marcoChat) < 1.12)
+          warnings.push(`la burbuja del ${nombre} (${c}) casi no se distingue del marco del chat (${marcoChat})`);
+      }
+      const burbujas = (b.mensajes || []).map((m) => {
+        const delAgente = m.de === "agente";
+        const fondoBurbuja = delAgente ? burbujaAgente : burbujaCliente;
+        const tintaBurbuja = ratio("#ffffff", fondoBurbuja) >= ratio("#111111", fondoBurbuja)
+          ? "#ffffff" : "#111111";
+        const cuerpo = Math.round(canvas.width * 0.032 * escalaVertical);
+        return container({
+          style: {
+            display: "flex", flexDirection: "column",
+            alignSelf: delAgente ? "flex-end" : "flex-start",
+            maxWidth: "82%", marginBottom: Math.round(cuerpo * 0.55),
+            paddingTop: Math.round(cuerpo * 0.6), paddingBottom: Math.round(cuerpo * 0.6),
+            paddingLeft: Math.round(cuerpo * 0.85), paddingRight: Math.round(cuerpo * 0.85),
+            backgroundColor: paint(fondoBurbuja),
+            borderRadius: Math.round(cuerpo * 1.1),
+          },
+          children: [text(String(m.texto ?? ""), {
+            fontSize: cuerpo, lineHeight: 1.35, color: paint(tintaBurbuja),
+            fontFamily: font, fontWeight: 400,
+          })],
+        });
+      });
+      return container({
+        style: {
+          display: "flex", flexDirection: "column", width: "100%",
+          padding: Math.round(canvas.width * 0.035),
+          backgroundColor: paint(marcoChat),
+          borderRadius: Math.round(canvas.width * 0.045),
+        },
+        children: burbujas,
+      });
+    }
+
     const escala = SCALES[b.escala] || SCALES.bajada;
     const size = Math.round(canvas.width * escala * escalaVertical * (b.factor || 1));
     const grande = size >= Math.round(canvas.width * 0.05);
