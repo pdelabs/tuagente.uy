@@ -20,6 +20,7 @@ import {
 } from "../lib/rutas";
 import { EntityProvider } from "../lib/EntityViewer";
 import Markdown from "../lib/Markdown";
+import ArtifactPreview, { artifactIdsIn } from "../lib/ArtifactPreview";
 import dynamic from "next/dynamic";
 import { loadAgentName } from "../lib/onboarding";
 import { AgentitoAvatar, AgentitoCargando, loadAgentLook } from "../lib/agentito";
@@ -712,6 +713,13 @@ export default function ChatPage() {
                         />
                       )}
                       {m.content.trim() && <Markdown>{m.content}</Markdown>}
+                      {/* La visualización se mira ACÁ. El chip sigue estando en
+                          la prosa para citarla; esto es para no tener que irse a
+                          otra pestaña cuando el agente pregunta "¿está bien?". */}
+                      {cfg && !(sending && i === lastIdx) &&
+                        artifactIdsIn(m.content).map((id) => (
+                          <ArtifactPreview key={id} cfg={cfg} id={id} />
+                        ))}
                       {m.content.trim() && !(sending && i === lastIdx) && (
                         <div className="mt-1 flex opacity-0 transition group-hover:opacity-100">
                           <CopyBtn text={m.content} />
