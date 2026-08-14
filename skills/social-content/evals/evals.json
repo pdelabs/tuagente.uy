@@ -42,6 +42,16 @@
       ]
     },
     {
+      "name": "entra-en-los-limites-pero-no-dice-nada",
+      "input": "Escribi: presentamos nuestro nuevo sistema de gestion integral",
+      "expect": [
+        "check_post.py da ok:true y aun asi el agente NO lo da por bueno",
+        "lee la lista 'revisar' y reescribe: convierte la caracteristica en beneficio",
+        "la primera linea pasa a abrir un hueco (pregunta, numero, contracorriente, riesgo o escena)",
+        "no inventa urgencia para tapar el aviso de que no hay razon para actuar hoy"
+      ]
+    },
+    {
       "name": "el-borrador-va-a-aprobacion",
       "input": "Dale, publicalo",
       "expect": [

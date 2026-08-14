@@ -35,6 +35,30 @@ OPENERS = [
      "carraspea antes de decir algo"),
 ]
 
+MAX_WORDS_PER_SENTENCE = 30      # duro: arriba de esto no se escanea
+SOFT_WORDS_PER_SENTENCE = 22     # blando: promedio recomendable
+
+# Beneficio = que gana el que lee. Caracteristica = que es el producto. Se
+# detecta por como le habla al lector, que en rioplatense es bastante marcado.
+BENEFIT_RE = re.compile(
+    r"\b(ahorr[aá]\w*|te ahorra|dej[aá]s de|ya no ten[eé]s|sin tener que|para que (?:no )?\w+|"
+    r"vas a \w+|pod[eé]s \w+|en \d+ (?:minutos|horas|d[ií]as)|te (?:queda|sale|contesta|evita)|"
+    r"sin (?:pagar|esperar|complicarte|planillas?))\b", re.I)
+
+# Una razon para actuar hoy. Su ausencia no es un error: es una pregunta.
+URGENCY_RE = re.compile(
+    r"\b(hasta el \d|hasta ma[ñn]ana|quedan \d|[uú]ltimo[s]? (?:d[ií]a|lugar|cupo)|cupos?|"
+    r"desde el \d|solo por|esta semana|vence|cierra el|arranca el|nuevo|reci[eé]n)\b", re.I)
+
+# Formas de gancho que abren un hueco. De references/oficio.md.
+HOOK_SHAPES = {
+    "pregunta": r"^[¿?]|\?\s*$",
+    "numero": r"\b\d+\s*%|\b(tres|cuatro|cinco|\d+)\s+(cosas|razones|errores|formas|motivos)\b",
+    "contracorriente": r"\b(peor|no sirve|dej[aá] de|mito|nadie te (?:cuenta|dice)|est[aá]s? (?:pagando|perdiendo))\b",
+    "riesgo": r"\b(si no|te est[aá] costando|en contra|antes de que)\b",
+    "escena": r"\b(son las \d|es lunes|acab[aá]s de|te acord[aá]s)\b",
+}
+
 # Un pedido por posteo. Dos se parten la accion y no funciona ninguno.
 CTA_PATTERNS = {
     "guardar": r"\bguard[aá](lo|te|en)?\b|\bguardate\b",
@@ -72,7 +96,7 @@ def main():
 
     caption = sys.stdin.read()
     stripped = caption.strip()
-    problems, notes = [], []
+    problems, review, notes = [], [], []
 
     if not stripped:
         print(json.dumps({"ok": False, "problemas": ["el pie vino vacio"]}, ensure_ascii=False))
@@ -110,6 +134,38 @@ def main():
     elif not found_ctas:
         notes.append("no se detecto ningun pedido; si es a proposito, esta bien")
 
+    # ── Escaneabilidad: medible, asi que es problema y no sugerencia ──────────
+    body = HASHTAG_RE.sub("", caption)
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?…])\s+", body) if s.strip()]
+    lengths = [len(s.split()) for s in sentences]
+    if lengths:
+        longest = max(lengths)
+        if longest > MAX_WORDS_PER_SENTENCE:
+            problems.append(
+                f"hay una oracion de {longest} palabras (maximo {MAX_WORDS_PER_SENTENCE}): partila en dos")
+        average = sum(lengths) / len(lengths)
+        if average > SOFT_WORDS_PER_SENTENCE:
+            review.append(f"las oraciones promedian {average:.0f} palabras: cuesta escanearlo")
+        notes.append(f"{len(sentences)} oraciones, la mas larga de {longest} palabras")
+
+    paragraphs = [p for p in re.split(r"\n\s*\n", body.strip()) if p.strip()]
+    if len(body.strip()) > 400 and len(paragraphs) < 2:
+        problems.append("es un bloque de texto sin respiro: cortalo en parrafos")
+
+    # ── Oficio: heuristico. Va a `revisar`, nunca a `problemas` ───────────────
+    shapes = [name for name, pattern in HOOK_SHAPES.items() if re.search(pattern, first_line, re.I)]
+    if shapes:
+        notes.append(f"gancho: {', '.join(shapes)}")
+    else:
+        review.append("la primera linea no abre ningun hueco reconocible "
+                      "(pregunta, numero, contracorriente, riesgo o escena): ver references/oficio.md")
+
+    if not BENEFIT_RE.search(body):
+        review.append("no se detecta un beneficio para el que lee, solo descripcion: "
+                      "preguntate 'y eso a mi que me da?'")
+    if not URGENCY_RE.search(body):
+        review.append("no hay ninguna razon para actuar hoy; si el posteo no la necesita, esta bien")
+
     haystack = strip_accents(caption).lower()
     hits = [w for w in banned_words(args.brand_dir)
             if re.search(r"\b" + re.escape(strip_accents(w).lower()) + r"\b", haystack)]
@@ -126,6 +182,7 @@ def main():
     print(json.dumps({
         "ok": not problems,
         "problemas": problems,
+        "revisar": review,
         "datos": {
             "caracteres": len(caption),
             "primera_linea": len(first_line),
