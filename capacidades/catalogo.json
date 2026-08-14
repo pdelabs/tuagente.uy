@@ -88,6 +88,21 @@
       "verifica": { "kit_skill": "brand-kit" },
       "instala": { "kit_skills": ["brand-kit"] },
       "nota_interna": "No necesita la capacidad busqueda-web: el script baja el sitio con urllib por terminal, no con el toolset web, asi que anda igual en un agente con la busqueda apagada. Si necesita salida a internet desde el contenedor. Es la materia prima de social-content: sin brand.json cada pieza sale con un criterio distinto."
+    },
+    {
+      "id": "social-content",
+      "label": "Contenido para Instagram",
+      "grupo": "contenido",
+      "para_que": "Que te escriba los posteos con tu voz y con las medidas de hoy: feed, carrusel, reel o historia, cada uno con su estructura y sin pasarse de los límites.",
+      "como": "La prendemos nosotros. Necesita tu kit de marca primero; si no lo tenés, el agente te ofrece armarlo.",
+      "costo": "Sin costo.",
+      "esfuerzo": "minutos",
+      "quien": "nosotros",
+      "necesita": ["brand-kit"],
+      "detecta": { "kit_skill": "social-content" },
+      "verifica": { "kit_skill": "social-content" },
+      "instala": { "kit_skills": ["social-content", "brand-kit"] },
+      "nota_interna": "Depende de brand-kit y el script lo verifica solo: sin brand/brand.json corta con falta_kit y la pregunta ya escrita, en vez de escribir con un tono inventado. Los limites viven en scripts/new_post.py y references/formatos.md, verificados el 13/8/2026 — OJO que Instagram bajo los hashtags de 30 a 5 en diciembre de 2025 y el carrusel es 20 en la app pero 10 por API. Revisar esos numeros cada tanto."
     }
   ]
 }
