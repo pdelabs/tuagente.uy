@@ -12,7 +12,7 @@ con fecha vieja no es un problema; una fila que dice algo que ya no es cierto s�
 
 | Agente | Host | SOUL | Motor | Último check |
 |---|---|---|---|---|
-| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v11** (13/8: el bloque del host tiene el mismo sha256 que `soul/versiones/v11.md`) | `v2026.7.30` (verificado con `docker ps`, no solo con el compose) | 13/8 (2ª vuelta, con el adapter partido): **24 ok · 2 avisos · 1 falla** — la falla es `SOUL: identidad`, y es real: quedó **sin identidad artesanal** (ver abajo). `portal-check --entrega`: 14 ok · 0 fallas |
+| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v11** (13/8: el bloque del host tiene el mismo sha256 que `soul/versiones/v11.md`) | `v2026.7.30` (verificado con `docker ps`, no solo con el compose) | **14/8: skills de negocio (brand-kit · social-content · post-image) + kit-render, probadas adentro del contenedor. `portal-check` 14 ok · 0 fallas.** 13/8: **24 ok · 2 avisos · 1 falla** — la falla es `SOUL: identidad`, y es real: quedó **sin identidad artesanal** (ver abajo). `portal-check --entrega`: 14 ok · 0 fallas |
 | East Comunicación | `east` → `/opt/agentes/east` | TODO | TODO | TODO |
 
 **Mr.Wobble quedó en cero y al día el 13/8/2026** — reset TOTAL por decisión de
@@ -100,6 +100,28 @@ instala el SOUL—, las cuatro perillas que faltaban a mano en el `config.yaml`,
 y `docker compose up -d hermes portal-adapter`, que es lo que toma el montaje
 nuevo de `politica/plugins`. Sale con 0 fallas de `portal-check.py`, en cero
 verificado con `--entrega`, y 1 falla de `agente-check.py`: la identidad.
+
+**14/8/2026 — las tres skills de negocio, andando contra el agente vivo.**
+`brand-kit`, `social-content` y `post-image` desplegadas, más el motor de piezas
+en `kit-render/`. Probado adentro del contenedor, no en una Mac: el escaneo de un
+sitio real devuelve los roles correctos, el validador de pies agarra los
+problemas, y el render saca un PNG de 1080×1350 con la tipografía y los colores
+del kit. `portal-check`: 14 ok · 1 aviso · 0 fallas.
+
+Dos cosas de este despliegue:
+
+- **`kit-render/` es un montaje NUEVO**, así que hizo falta `up -d` y no un
+  `restart` — los contenedores se recrearon, que es como se sabe que lo tomó.
+- **El motor de render NO lo instala `install.sh`**, y es a propósito: son
+  binarios nativos, y `install.sh` corre en un staging que puede ser una Mac.
+  Lo instala `tools/instalar-render.sh` en el destino, adentro de `node:22-slim`.
+  Verificado que quedó `core-linux-x64-gnu` y no el de darwin.
+- **`desplegar-remoto.sh` se volvió a llevar `MODELO_DEL_AGENTE`**, por tercera
+  vez. Repuesto a mano. Ya no es una sorpresa: es un paso del procedimiento.
+
+**Mr.Wobble YA NO ESTÁ EN CERO.** Las pruebas le dejaron `brand/` (el kit de
+tuagente.uy), `piezas/` y algunas conversaciones. Es un entorno de demo, no un
+agente a entregar: antes de dárselo a alguien va `resetear-agente.sh --entrega`.
 
 **Segunda vuelta el mismo día, ya con el adapter partido.** Mismo procedimiento
 (reset COMPLETO → `desplegar-remoto.sh` → reponer `MODELO_DEL_AGENTE` →
