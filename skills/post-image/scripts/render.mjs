@@ -164,6 +164,16 @@ function main() {
 
   const pad = Math.round(canvas.width * 0.09);
   const safe = SAFE_MARGIN[args.formato] || 0;
+  const esVertical = canvas.height / canvas.width > 1.5;   // 9:16
+
+  /* EN 9:16 EL CONTENIDO VA AL CENTRO, NO ABAJO. Alinear al pie es correcto en
+   * una placa 4:5, donde el bloque de texto ocupa media pieza. En una historia
+   * el mismo criterio, sumado a los 250px de margen seguro, deja el texto en una
+   * franja entre el 61% y el 82% de la altura: el 61% de arriba queda muerto y
+   * abajo queda un hueco. Se ve como una diapositiva mal pegada, que es
+   * exactamente como se veian las dos primeras historias que salieron.
+   * Ademas el ojo y el pulgar del que mira estan en el medio, no en el pie. */
+  const alineacion = (esVertical || spec.plantilla === "dato") ? "center" : "flex-end";
   const font = fonts.family || undefined;
   const paint = (hex) => rgba(...hexToRgba(hex));
 
@@ -180,7 +190,8 @@ function main() {
   });
 
   const children = [];
-  const titleSize = Math.round(canvas.width * (spec.plantilla === "dato" ? 0.075 : 0.085));
+  const escala = esVertical ? 1.12 : 1;
+  const titleSize = Math.round(canvas.width * (spec.plantilla === "dato" ? 0.075 : 0.085) * escala);
 
   if (spec.plantilla === "slide" && spec.numero) {
     children.push(line(`${spec.numero}${spec.total ? `/${spec.total}` : ""}`,
@@ -199,7 +210,7 @@ function main() {
     { style: spec.plantilla === "cita" ? { fontStyle: "italic" } : {} }));
 
   if (spec.bajada) {
-    children.push(line(spec.bajada, Math.round(canvas.width * 0.038),
+    children.push(line(spec.bajada, Math.round(canvas.width * 0.038 * escala),
       { weight: 400, lineHeight: 1.35, style: { marginTop: 28, opacity: 0.92 } }));
   }
   if (spec.pie) {
@@ -210,7 +221,7 @@ function main() {
   const node = container({
     style: {
       width: canvas.width, height: canvas.height, display: "flex", flexDirection: "column",
-      justifyContent: spec.plantilla === "dato" ? "center" : "flex-end",
+      justifyContent: alineacion,
       paddingLeft: pad, paddingRight: pad,
       paddingTop: pad + safe, paddingBottom: pad + safe,
       backgroundColor: paint(background),
