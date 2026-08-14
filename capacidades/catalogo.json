@@ -103,6 +103,21 @@
       "verifica": { "kit_skill": "social-content" },
       "instala": { "kit_skills": ["social-content", "brand-kit"] },
       "nota_interna": "Depende de brand-kit y el script lo verifica solo: sin brand/brand.json corta con falta_kit y la pregunta ya escrita, en vez de escribir con un tono inventado. Los limites viven en scripts/new_post.py y references/formatos.md, verificados el 13/8/2026 — OJO que Instagram bajo los hashtags de 30 a 5 en diciembre de 2025 y el carrusel es 20 en la app pero 10 por API. Revisar esos numeros cada tanto."
+    },
+    {
+      "id": "post-image",
+      "label": "Placas de tus posteos",
+      "grupo": "contenido",
+      "para_que": "Que las imágenes de tus posteos salgan con tus colores y tu tipografía: portadas de carrusel, slides, placas de datos y de testimonios, listas para publicar.",
+      "como": "La prendemos nosotros. Necesita tu kit de marca, y el texto de las placas no lo escribe una IA de imagen: se compone, así que nunca sale con una falta de ortografía.",
+      "costo": "Sin costo.",
+      "esfuerzo": "minutos",
+      "quien": "nosotros",
+      "necesita": ["brand-kit"],
+      "detecta": { "kit_skill": "post-image" },
+      "verifica": { "kit_skill": "post-image" },
+      "instala": { "kit_skills": ["post-image", "brand-kit"] },
+      "nota_interna": "OJO: ademas del kit_skill necesita el motor de render, que NO lo pone install.sh. Son binarios nativos y install.sh puede correr en otra plataforma (una Mac) — instalarlos ahi y subirlos a un contenedor Linux anda en la prueba y falla en el cliente. Los instala tools/instalar-render.sh en el destino, adentro de node:22-slim, y despues hace falta `docker compose up -d hermes` porque el montaje de kit-render es nuevo. Un restart no alcanza."
     }
   ]
 }

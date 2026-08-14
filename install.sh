@@ -103,6 +103,12 @@ ARCHIVOS=(
   # La guardia de los MCP y el permiso de cada conexión: sin esto, una conexión
   # configurada en config.yaml apunta a un archivo que no existe.
   "mcp-guardia/guardia.py:$POLITICA/guardia.py"
+  # Solo la RECETA del motor de piezas, con las versiones fijas. Los
+  # node_modules NO se instalan aca: install.sh corre en un staging que puede
+  # ser otra plataforma (una Mac), y npm bajaria el binario nativo equivocado
+  # para despues subirlo a un contenedor Linux. Andaria en la prueba y fallaria
+  # en el cliente. Los instala tools/instalar-render.sh, en el destino.
+  "render/package.json:$AGENTE/kit-render/package.json"
 )
 for m in "${ADAPTER_PY[@]}"; do
   ARCHIVOS+=("adapter/$m:$KIT_ADAPTER/$m")
@@ -150,7 +156,14 @@ done < <(find "$KIT"/connections/*/mcp -type f ! -path "*/__pycache__/*" 2>/dev/
 while IFS= read -r f; do
   rel="${f#"$KIT"/}"                       # skills/entregable/SKILL.md
   ARCHIVOS+=("$rel:$KIT_SKILLS/${rel#skills/}")
-done < <(find "$KIT/skills" -type f \( -name "*.md" -o -name "*.py" \) | sort)
+done < <(find "$KIT/skills" -type f \
+  \( -name "*.md" -o -name "*.py" -o -name "*.mjs" -o -name "*.js" \) \
+  ! -path "*/evals/*" | sort)
+# .mjs entra desde que post-image renderiza con node: sin eso viajaba el SKILL.md
+# solo y la skill quedaba explicando como usar un script que no existe. Es el
+# mismo agujero que tenia el adapter, con otra extension.
+# Los evals/ NO viajan a proposito: son nuestros, para probar la skill antes de
+# soltarla. Adentro del agente no los corre nadie y solo ocupan prompt y disco.
 
 corta() { echo "${1#"$AGENTE"/}"; }        # rutas legibles en los mensajes
 
@@ -347,6 +360,7 @@ fi
 mkdir -p "$DATA/skills"
 ls -1 "$KIT/skills" > "$DATA/skills/.kit_manifest"
 echo "instalado data/skills/.kit_manifest"
+
 
 # El manifiesto de lo que instalamos, y la limpieza de lo que el kit dejó de
 # traer. Se arma DESPUÉS de copiar todo, con los sha256 de lo que quedó escrito.

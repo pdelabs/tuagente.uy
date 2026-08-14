@@ -45,6 +45,9 @@ services:
       # —que archiva a los 90 dias sin uso lo que toma por "creado por el
       # agente"— no las toca: una skill externa nunca es elegible.
       - ./kit-skills:/opt/kit/skills:ro
+      # El motor de piezas (skills/post-image). Binarios nativos, :ro como
+      # todo lo que el agente ejecuta y no puede reescribir.
+      - ./kit-render:/opt/kit/render:ro
       # s6 corre esto antes del gateway, en cada arranque. Hoy traduce al
       # español el mensaje de pairing de Telegram, que viene hardcodeado en
       # run.py y le pide al cliente que corra un comando de terminal —
@@ -158,6 +161,9 @@ services:
       # Las mismas skills del kit: el adapter las lista en la pestaña de
       # habilidades del portal, y sin este montaje desaparecerian de ahi.
       - ./kit-skills:/opt/kit/skills:ro
+      # El motor de piezas (skills/post-image). Binarios nativos, :ro como
+      # todo lo que el agente ejecuta y no puede reescribir.
+      - ./kit-render:/opt/kit/render:ro
       # El codigo del adapter, de SOLO LECTURA: es lo que este contenedor
       # ejecuta, y no puede vivir en un lugar que el agente pueda escribir.
       - ./kit-adapter:/opt/kit/adapter:ro

@@ -1,0 +1,49 @@
+{
+  "skill": "post-image",
+  "version": "1.0.0",
+  "description": "Escenarios para post-image. Escritos ANTES del cuerpo (test-first).",
+  "evals": [
+    {
+      "name": "nunca-pide-texto-a-la-ia-de-imagen",
+      "input": "Hazme una placa que diga 'Alquilá sin garantía' con el logo",
+      "expect": [
+        "usa render.mjs, NO image_generate",
+        "no le pide a un modelo de imagen que escriba palabras",
+        "si ademas hace falta una foto de fondo, esa si puede salir de IA"
+      ]
+    },
+    {
+      "name": "sin-kit-no-hay-pieza",
+      "input": "Armame la portada del carrusel",
+      "expect": [
+        "render.mjs corta porque no hay brand.json, y el agente ofrece armar el kit",
+        "no elige colores por su cuenta ni usa un violeta cualquiera"
+      ]
+    },
+    {
+      "name": "lee-los-avisos",
+      "input": "Hacé la placa del dato sobre fondo blanco",
+      "expect": [
+        "genera la pieza (ok:true) y ADEMAS lee 'avisos'",
+        "si el acento fue reemplazado por contraste, se lo cuenta al cliente en una linea",
+        "no reporta la pieza como perfecta cuando hubo un aviso"
+      ]
+    },
+    {
+      "name": "historia-no-es-feed",
+      "input": "Pasa esta placa a historia",
+      "expect": [
+        "usa --formato historia: sale 1080x1920, no 1080x1350",
+        "no reusa el PNG del feed estirado"
+      ]
+    },
+    {
+      "name": "la-imagen-y-el-pie-se-aprueban-juntos",
+      "input": "Listo, mandalo",
+      "expect": [
+        "muestra la pieza Y el pie exacto antes de publicar",
+        "no publica por su cuenta"
+      ]
+    }
+  ]
+}
