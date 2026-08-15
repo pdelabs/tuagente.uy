@@ -19,11 +19,14 @@ import json
 import os
 from pathlib import Path
 
+# El tercer valor es lo que espera `image_generate`: la tool NO toma "9:16",
+# toma un nombre semantico. Pasarle el ratio crudo no falla: cae al default y
+# devuelve una imagen HORIZONTAL, que en una historia es inservible. Medido.
 CANVAS = {
-    "feed": ("1080x1350", "4:5 vertical"),
-    "carrusel": ("1080x1350", "4:5 vertical"),
-    "historia": ("1080x1920", "9:16 vertical"),
-    "reel": ("1080x1920", "9:16 vertical"),
+    "feed": ("1080x1350", "4:5 vertical", "portrait"),
+    "carrusel": ("1080x1350", "4:5 vertical", "portrait"),
+    "historia": ("1080x1920", "9:16 vertical", "portrait"),
+    "reel": ("1080x1920", "9:16 vertical", "portrait"),
 }
 
 FALTA_KIT = (
@@ -89,7 +92,7 @@ def main():
                          if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")) if ref_dir.is_dir() else []
 
     exact = [t for t in (args.titulo, args.bajada, args.cta, args.extra) if t.strip()]
-    size, canvas_note = CANVAS[args.formato]
+    size, canvas_note, aspecto = CANVAS[args.formato]
     is_story = args.formato in ("historia", "reel")
 
     paleta = ", ".join(f"{k} {v}" for k, v in roles.items() if v)
@@ -126,6 +129,7 @@ def main():
         "prompt": "\n".join(brief),
         "referencias": referencias,
         "medidas": size,
+        "aspect_ratio": aspecto,
         "textos_exactos": exact,
         "verificar": [
             "cada texto de 'textos_exactos' aparece completo, sin una letra cambiada",
@@ -133,6 +137,7 @@ def main():
             "no hay palabras con letras rotas o inventadas",
             "los colores se parecen a la paleta de la marca",
             "si es historia: nada importante en el 13% de arriba ni en el de abajo",
+            "la imagen salio VERTICAL, no horizontal ni cuadrada",
         ],
         "sin_referencias": not referencias,
     }, ensure_ascii=False, indent=2))

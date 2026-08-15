@@ -31,29 +31,31 @@ marca. **Usá el prompt tal como sale.**
 
 Sin `brand.json` corta y te da la pregunta para ofrecerle armar el kit.
 
-## 2. Generá
+## 2. Generá con `image_generate`
 
-```bash
-python3 .../build_prompt.py --formato historia --titulo "..." ... \
-  | python3 -c 'import json,sys;print(json.load(sys.stdin)["prompt"])' \
-  | python3 /opt/kit/skills/post-image/scripts/generate.py \
-      --formato historia --out /opt/data/workspace/piezas/story-01.jpg \
-      --referencias /opt/data/workspace/brand/referencias/*
+```
+image_generate(
+  prompt              = el `prompt` que devolvió build_prompt.py, tal cual
+  aspect_ratio        = el `aspect_ratio` que devolvió build_prompt.py
+  reference_image_urls = las `referencias`, si hay
+)
 ```
 
-**Con `generate.py`, no con la tool `image_generate` del motor.** El plugin del
-motor habla `/chat/completions`, y por ahí los modelos de imagen o rechazan el
-pedido (Seedream contesta 500) o **ignoran la relación de aspecto y devuelven un
-cuadrado**, que para una historia no sirve. `generate.py` usa la Images API, que
-toma `aspect_ratio` como parámetro de verdad.
+**El `aspect_ratio` va con el nombre que devuelve el script (`portrait`), no
+como "9:16".** La tool toma nombres semánticos —`square`, `landscape`,
+`portrait`— y si le pasás el ratio crudo **no falla**: cae al default y devuelve
+una imagen **horizontal**. Medido: `"9:16"` dio 1280×720; `"portrait"` dio
+720×1280. Una historia horizontal es inservible y el error no avisa.
 
-Las referencias van como `input_references` y son lo que más mueve el resultado:
-el estilo se muestra, no se describe.
+La tool corre adentro del motor, que es el único que tiene la clave del
+proveedor. **No intentes llamar a la API por terminal**: el motor borra las
+claves del entorno justamente para que la shell del agente no las tenga, así que
+un script propio falla con "falta OPENROUTER_API_KEY" y no hay forma de
+arreglarlo desde acá — ni hay que buscarla, porque esa clave paga toda la
+inferencia.
 
-Si `sin_referencias` viene en `true`, pedíselas al cliente antes o después —
-dos o tres posteos que le gusten— y guardalas en `brand/referencias/`. A partir
-de ahí todas las piezas se parecen entre sí, que es lo que hace que un feed se
-lea como un sistema y no como diez posteos sueltos.
+Las referencias son lo que más mueve el resultado: el estilo se muestra, no se
+describe.
 
 ## 3. MIRÁ lo que salió. Siempre.
 
