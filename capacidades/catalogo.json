@@ -117,7 +117,7 @@
       "detecta": { "kit_skill": "post-image" },
       "verifica": { "kit_skill": "post-image" },
       "instala": { "kit_skills": ["post-image", "brand-kit"] },
-      "nota_interna": "Generativa desde el 14/8/2026: antes componia la pieza con un renderer determinista (takumi) y se saco entero por decision de Luis, porque gpt-image-2 ya escribe texto correcto y compone mucho mejor. NECESITA image_gen Y vision: sin vision no hay verificacion, y sin verificacion esto es una ruleta — el modelo se equivoca poco pero sin avisar (visto: dominios de relleno, fechas inventadas, los propios hex del brief pintados adentro del arte). La fidelidad de color es APROXIMADA: medido, el violeta salio #5040e0 contra un #5b4be8 pedido, y el coral se fue bastante. Si algun dia hace falta color exacto, eso vuelve a necesitar composicion."
+      "nota_interna": "Generativa desde el 14/8/2026. MODELO: bytedance-seed/seedream-5-0-pro por OPENROUTER_IMAGE_MODEL. NO usa la tool image_generate del motor: ese plugin habla /chat/completions y por ahi los modelos de imagen o dan 500 (Seedream) o ignoran el aspecto y devuelven un cuadrado (gpt-5.4-image-2, verificado). scripts/generate.py usa POST /api/v1/images, que toma aspect_ratio e input_references de verdad. MEDIDO el 14/8 con el mismo brief: seedream $0.045 y 9:16 correcto contra gpt-5.4-image-2 $0.2266 y cuadrada — 5x mas barato. Necesita vision para el paso de verificacion: sin renderer de respaldo, mirar la imagen es lo unico que separa un posteo de un error publicado"
     }
   ]
 }

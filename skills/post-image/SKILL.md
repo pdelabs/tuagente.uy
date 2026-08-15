@@ -33,9 +33,22 @@ Sin `brand.json` corta y te da la pregunta para ofrecerle armar el kit.
 
 ## 2. Generá
 
-Con `image_gen`, pasando el `prompt` y **adjuntando las `referencias`** como
-imágenes de entrada. Las referencias son lo que más mueve el resultado: el
-estilo se muestra, no se describe.
+```bash
+python3 .../build_prompt.py --formato historia --titulo "..." ... \
+  | python3 -c 'import json,sys;print(json.load(sys.stdin)["prompt"])' \
+  | python3 /opt/kit/skills/post-image/scripts/generate.py \
+      --formato historia --out /opt/data/workspace/piezas/story-01.jpg \
+      --referencias /opt/data/workspace/brand/referencias/*
+```
+
+**Con `generate.py`, no con la tool `image_generate` del motor.** El plugin del
+motor habla `/chat/completions`, y por ahí los modelos de imagen o rechazan el
+pedido (Seedream contesta 500) o **ignoran la relación de aspecto y devuelven un
+cuadrado**, que para una historia no sirve. `generate.py` usa la Images API, que
+toma `aspect_ratio` como parámetro de verdad.
+
+Las referencias van como `input_references` y son lo que más mueve el resultado:
+el estilo se muestra, no se describe.
 
 Si `sin_referencias` viene en `true`, pedíselas al cliente antes o después —
 dos o tres posteos que le gusten— y guardalas en `brand/referencias/`. A partir
