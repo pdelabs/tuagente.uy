@@ -840,3 +840,35 @@ Nada de esto se destraba solo: mientras Uso esté escondida no molesta a nadie,
 pero **el día que se decida el modelo de cobro, esto es lo primero que hay que
 arreglar** — y si se prende la pantalla sin arreglarlo, el cliente planifica con
 un número 9 veces más chico que su factura.
+
+## El proxy se plantaba en el medio, y el deploy no lo alcanza (16/8)
+
+Reseteando Mr.Wobble, el primer mensaje despues del alta volvio asi:
+
+```
+HTTP 400: litellm.UnsupportedParamsError: openrouter does not support
+parameters: ['reasoning_effort'], for model=hermes-agent
+```
+
+Hermes manda `reasoning_effort` en cada request y litellm, en vez de sacar el
+parametro que el proveedor no entiende, devuelve 400. **Arreglado** con
+`drop_params: true` en `compose/litellm.yaml` (kit). Es la misma regla que ya
+estaba escrita ahi para los callbacks: la observabilidad se metio en el camino
+de la inferencia, asi que nunca puede ser ella la que corta.
+
+**Lo que queda abierto: ese arreglo no viaja con un despliegue normal.**
+`desplegar-remoto.sh` no toca `litellm.yaml` — el proxy lo instala y lo levanta
+`tools/observabilidad.sh`, con su propio compose. Consecuencias:
+
+- El compose del agente **no conoce el servicio**: `docker compose up -d
+  --force-recreate litellm` en `/opt/agentes/<slug>` responde `no such service`
+  y **no falla ruidosamente si uno silencia stderr** — parece que reinicio y no
+  reinicio nada. Se reinicia con `docker restart <slug>-litellm` o por
+  `observabilidad.sh`.
+- **Los otros agentes con observabilidad prendida siguen con el 400.** Hay que
+  pasarles `observabilidad.sh` o copiar el yaml y reiniciar el proxy. Mr.Wobble
+  ya esta.
+
+Vale la pena que `desplegar-remoto.sh` sincronice `litellm.yaml` cuando el
+agente tiene el proxy levantado: hoy un arreglo del proxy depende de que alguien
+se acuerde de correr otro script.
