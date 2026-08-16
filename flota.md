@@ -12,7 +12,7 @@ con fecha vieja no es un problema; una fila que dice algo que ya no es cierto s�
 
 | Agente | Host | SOUL | Motor | Último check |
 |---|---|---|---|---|
-| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v11** (13/8: el bloque del host tiene el mismo sha256 que `soul/versiones/v11.md`) | `v2026.7.30` (verificado con `docker ps`, no solo con el compose) | **14/8: skills de negocio (brand-kit · social-content · post-image) + kit-render, probadas adentro del contenedor. `portal-check` 14 ok · 0 fallas.** 13/8: **24 ok · 2 avisos · 1 falla** — la falla es `SOUL: identidad`, y es real: quedó **sin identidad artesanal** (ver abajo). `portal-check --entrega`: 14 ok · 0 fallas |
+| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v12** (16/8, ya bautizado por el portal) | ~~v11~~ (13/8: el bloque del host tiene el mismo sha256 que `soul/versiones/v11.md`) | `v2026.7.30` (verificado con `docker ps`, no solo con el compose) | **14/8: skills de negocio (brand-kit · social-content · post-image) + kit-render, probadas adentro del contenedor. `portal-check` 14 ok · 0 fallas.** 13/8: **24 ok · 2 avisos · 1 falla** — la falla es `SOUL: identidad`, y es real: quedó **sin identidad artesanal** (ver abajo). `portal-check --entrega`: 14 ok · 0 fallas |
 | East Comunicación | `east` → `/opt/agentes/east` | TODO | TODO | TODO |
 
 **Mr.Wobble quedó en cero y al día el 13/8/2026** — reset TOTAL por decisión de
@@ -100,6 +100,37 @@ instala el SOUL—, las cuatro perillas que faltaban a mano en el `config.yaml`,
 y `docker compose up -d hermes portal-adapter`, que es lo que toma el montaje
 nuevo de `politica/plugins`. Sale con 0 fallas de `portal-check.py`, en cero
 verificado con `--entrega`, y 1 falla de `agente-check.py`: la identidad.
+
+
+**16/8/2026 — SOUL v12: "no digas que no podés sin haberlo intentado".**
+
+El agente reporto dos dias seguidos que no podia generar imagenes. La capacidad
+estaba puesta y verificada: `image_generate` en su lista de 27 tools,
+`capacidad:imagenes` activa, `modelos-auxiliares` conectada. Nunca lo intento.
+
+NO FUE LA MEMORIA —MEMORY.md estaba vacio, cero lineas—. La creencia viajo por
+sus propios entregables: el 15/8 concluyo "falta la conexion", lo escribio en el
+entregable y en el titulo de un ticket que cerro como `done`, y el 16/8 el cron
+disparo el mismo flujo, leyo la carpeta del flujo y se cito a si mismo.
+
+Es peor que una memoria mala por tres razones: es invisible (nadie piensa en los
+entregables como estado), se refuerza sola (cada dia agrega otra copia), y
+borrar la memoria no lo arregla.
+
+La regla nueva es el espejo de la que ya existia ("frases que no podes escribir
+sin haberlo hecho"): decir que NO PODES es una afirmacion sobre el mundo igual
+que decir que ya lo hiciste, y el cliente actua sobre ella —deja de pedirlo, o
+paga algo que ya tenia—. Y su complemento: lo que podes hacer SE LEE, no se
+recuerda; lo que escribiste ayer es historia, no estado.
+
+OJO: es una regla, no una garantia. La guardia de las promesas existe porque las
+reglas solas no alcanzaron para el caso simetrico. Si esto se repite despues del
+v12, lo que sigue es un hook, no otra regla.
+
+Aplicado con `tools/reemplazar-bloque.py`, que confirmo que no habia nada
+escrito a mano adentro del bloque y que el `portal:identidad` quedaba intacto.
+SIN reiniciar contenedores: el SOUL se lee al armar cada sesion, asi que las
+nuevas ya lo toman.
 
 **14/8/2026 — las tres skills de negocio, andando contra el agente vivo.**
 `brand-kit`, `social-content` y `post-image` desplegadas, más el motor de piezas
