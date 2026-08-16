@@ -31,6 +31,7 @@ import {
   createTicket,
   commentTicket,
   setTicketStatus,
+  approve,
   getTickets,
   getTicketDetail,
   esElCliente,
@@ -562,10 +563,23 @@ export default function PipelinePage() {
   const cambiarEstado = async (status: EstadoDestino) => {
     if (!cfg || !abiertoId || accionEnCurso) return;
     const id = abiertoId;
+    const detalle = abierto;
+    // APROBAR NO ES DESTRABAR, aunque el botón diga lo mismo en las dos
+    // pestañas. `setTicketStatus(..., "ready")` termina en un `unblock` pelado:
+    // el ticket se libera y el agente se despierta SIN NINGÚN comentario de
+    // aprobación. Y el agente hace lo correcto con eso — no gasta plata porque
+    // alguien le sacó el freno sin decirle que sí—, así que cierra el pedido
+    // sin ejecutarlo y el cliente ve un "Aprobar" que no aprobó nada.
+    // Pasó: un pedido para generar 3 imágenes (US$0,135) se cerró sin hacerse.
+    // El endpoint de aprobaciones deja "Aprobado desde el portal" firmado antes
+    // de destrabar, que es lo que el agente busca. Es el mismo que usa la
+    // pestaña Aprobaciones: un solo camino para una sola palabra.
+    const esAprobacion = status === "ready" && detalle?.status === "blocked";
     setAccionEnCurso(status);
     setAccionError(null);
     try {
-      await setTicketStatus(cfg, id, status);
+      if (esAprobacion) await approve(cfg, id);
+      else await setTicketStatus(cfg, id, status);
       cargar();
       if (status === "archived") cerrar(); // ya no está en el tablero
       else await cargarDetalle(id);
