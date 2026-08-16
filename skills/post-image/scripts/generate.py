@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 """Generate one piece with OpenRouter's Images API.
 
+NO LO CORRE EL AGENTE. Necesita OPENROUTER_API_KEY en el entorno y la terminal
+del agente no la tiene: probado dos veces contra el agente vivo, falla con
+"falta OPENROUTER_API_KEY". La skill le dice que use la tool `image_generate`
+del motor, que corre adentro del proceso que si tiene la clave.
+
+Esto queda para correrlo NOSOTROS (docker exec, con el entorno del contenedor),
+y para el dia que Seedream entre por la tool: por aca sale US$0,045 contra
+US$0,2266, y toma aspect_ratio y referencias sin traducciones.
+
 NOT the engine's image_generate tool, and the difference matters: that plugin
 talks to /chat/completions with `modalities`, which the image-first models reject
 (Seedream answers 500 there, and gpt-image-class models ignore the aspect ratio

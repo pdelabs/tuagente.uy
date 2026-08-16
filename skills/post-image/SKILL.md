@@ -31,28 +31,27 @@ marca. **Usá el prompt tal como sale.**
 
 Sin `brand.json` corta y te da la pregunta para ofrecerle armar el kit.
 
-## 2. Generá
+## 2. Generá con `image_generate`
 
-```bash
-python3 .../build_prompt.py --formato historia --titulo "..." --cta "..." \
-  | python3 -c 'import json,sys;print(json.load(sys.stdin)["prompt"])' \
-  | python3 /opt/kit/skills/post-image/scripts/generate.py \
-      --formato historia --out /opt/data/workspace/piezas/story-01.jpg \
-      --referencias /opt/data/workspace/brand/referencias/*
+```
+image_generate(
+  prompt               = el `prompt` que devolvió build_prompt.py, tal cual
+  aspect_ratio         = el `aspect_ratio` que devolvió build_prompt.py
+  reference_image_urls = las `referencias`, si hay
+)
 ```
 
-`generate.py` usa la **Images API** de OpenRouter, que toma `aspect_ratio` e
-`input_references` como parámetros de verdad. Con Seedream sale a **US$0,045**
-por pieza; el camino alternativo cuesta 5x más. Verificado el 14/8/2026.
+**El `aspect_ratio` va con el nombre que devuelve el script (`portrait`), no
+como "9:16".** La tool toma nombres semánticos —`square`, `landscape`,
+`portrait`— y con el ratio crudo **no falla**: cae al default y devuelve una
+imagen **horizontal**, que en una historia es inservible. Medido: `"9:16"` dio
+1280×720; `"portrait"` dio 720×1280.
 
-**Si `generate.py` falla**, tenés la tool `image_generate` del motor como
-respaldo. Dos avisos si la usás:
-
-- El `aspect_ratio` va como **`portrait`**, no como `"9:16"` — build_prompt.py te
-  lo devuelve en el campo `aspect_ratio`. Con el ratio crudo **no falla**: cae al
-  default y devuelve una imagen **horizontal**. Medido: 1280×720 contra 720×1280.
-- No llega a Seedream: el plugin manda `modalities: image+text` y Seedream sólo
-  devuelve `image` (404). Queda en el modelo caro.
+Es el único camino. Hay un `scripts/generate.py` en esta carpeta que usa la
+Images API —más barato y con más control— pero **necesita la clave del proveedor
+en el entorno y tu terminal no la tiene**: falla con "falta OPENROUTER_API_KEY" y
+no hay forma de arreglarlo desde tu lado. No lo uses; está ahí para que lo
+corramos nosotros.
 
 Las referencias son lo que más mueve el resultado: el estilo se muestra, no se
 describe.
