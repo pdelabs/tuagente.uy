@@ -12,21 +12,19 @@ con fecha vieja no es un problema; una fila que dice algo que ya no es cierto s�
 
 | Agente | Host | SOUL | Motor | Último check |
 |---|---|---|---|---|
-| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v12** (16/8, ya bautizado por el portal) | ~~v11~~ (13/8: el bloque del host tiene el mismo sha256 que `soul/versiones/v11.md`) | `v2026.7.30` (verificado con `docker ps`, no solo con el compose) | **14/8: skills de negocio (brand-kit · social-content · post-image) + kit-render, probadas adentro del contenedor. `portal-check` 14 ok · 0 fallas.** 13/8: **24 ok · 2 avisos · 1 falla** — la falla es `SOUL: identidad`, y es real: quedó **sin identidad artesanal** (ver abajo). `portal-check --entrega`: 14 ok · 0 fallas |
+| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v12** (16/8/2026; ya bautizado por el portal, el bloque `portal:identidad` existe) | `v2026.7.30` (verificado con `docker ps`, no solo con el compose) | **16/8: SOUL v12 aplicado, `agente-check` OK en las seis lineas de SOUL.** 14/8: skills de negocio + `portal-check` 15 ok · 0 fallas |
 | East Comunicación | `east` → `/opt/agentes/east` | TODO | TODO | TODO |
 
 **Mr.Wobble quedó en cero y al día el 13/8/2026** — reset TOTAL por decisión de
-Luis, así que se fue también el SOUL y con él el bautizo. Tiene v11, la guardia
+Luis, así que se fue también el SOUL y con él el bautizo. Tiene v12 (era v11
+hasta el 16/8), la guardia
 de las promesas (probada contra el agente vivo, no solo instalada), la puerta en
 código, el adapter fuera de `data/`, los secretos en `secretos.env` y el
-`config.yaml` con las cuatro perillas. **Lo único que le falta para servir es la
-identidad**, que es lo que `agente-check.py` reporta: el SOUL no dice quién es ni
-para quién trabaja, así que hoy contesta como el asistente genérico del motor.
-Se cierra de una de dos formas: que el cliente lo bautice en el portal (escribe
-el bloque `portal:identidad`) o que una persona escriba `00-identidad.md`. Hasta
-entonces la fila dice 1 falla a propósito: no se tapa con un texto de relleno.
+`config.yaml` con las cuatro perillas. **Eso ya se cerró**: el 16/8 el SOUL tiene bloque `portal:identidad`, escrito
+por el bautizo del portal, y `agente-check` lo reporta OK. Era la única falla
+que quedaba abierta de ese reset.
 
-**Queda atrás con v11 East** (bloque del 13/8/2026: las frases que no se pueden
+**Queda atrás East, ahora dos versiones** (bloque del 13/8/2026: las frases que no se pueden
 escribir sin haberlo hecho — "queda definido", "queda armado", "todos los
 viernes a las 9:30 te dejo X"; y desde v10, rechazo que no desbloquea y
 vocabulario). De East no sabemos ni la versión, que es peor que saberla vieja:
@@ -34,7 +32,7 @@ no entiende todavía qué es un rechazo, así que **rechazar desde el portal le 
 el ticket bloqueado y el agente no sabe qué hacer con eso**. Migrarlo es una
 corrida de `tools/reemplazar-bloque.py` con `soul/versiones/v11.md`, mirando
 antes el diff de lo que esté escrito a mano. Sin agentes locales de cliente hoy:
-cualquiera creado con `nuevo-agente.sh` nace en v11.
+cualquiera creado con `nuevo-agente.sh` nace en v12.
 
 **Y a East le falta la guardia de las promesas** (`politica/plugins/promesas/`,
 del 13/8/2026), que es lo único que impide que un agente diga "queda definido:
