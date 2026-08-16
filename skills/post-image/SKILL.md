@@ -31,6 +31,19 @@ marca. **Usá el prompt tal como sale.**
 
 Sin `brand.json` corta y te da la pregunta para ofrecerle armar el kit.
 
+### Si vuelve `sin_referencias: true`, pedilas antes de generar
+
+El campo `pedir_referencias` trae el pedido ya escrito. **Mandáselo y esperá.**
+
+No es un trámite: las referencias son lo que más mueve el resultado. Sin
+ninguna, cada pieza sale correcta y **desconocida de la anterior** — el feed
+termina pareciendo de cinco marcas distintas, que es exactamente el problema que
+esta skill existe para resolver.
+
+Si te dice que no tiene o que sigas igual, seguí: una pieza hoy vale más que un
+kit perfecto la semana que viene. Pero preguntá **una vez**, y guardá lo que te
+pase en `brand/referencias/`.
+
 ## 2. Generá con `image_generate`
 
 ```

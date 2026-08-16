@@ -120,12 +120,17 @@ def main():
         brief.append(f"Tipografia de la marca: {tipografia}, o una sans-serif geometrica muy parecida.")
     if voz.get("tono"):
         brief.append(f"Tono de la marca: {voz['tono']}.")
+    # OJO CON LO QUE ENTRA AL BRIEF: todo lo que se agregue a `brief` termina
+    # adentro del prompt que lee el GENERADOR DE IMAGENES. El aviso de que
+    # faltan referencias es una instruccion para el AGENTE —"pedile al cliente
+    # posteos que le gusten"— y estaba aca adentro: viajaba en el prompt, o sea
+    # que el unico que lo leia era el modelo de imagen, que no puede pedirle
+    # nada a nadie. Ahora sale por `pedir_referencias`, que si lee el agente.
     if referencias:
-        brief.append(f"Segui el estilo visual de las {len(referencias)} imagenes de referencia adjuntas: "
+        cuantas = "la imagen" if len(referencias) == 1 else f"las {len(referencias)} imagenes"
+        brief.append(f"Segui el estilo visual de {cuantas} de referencia adjunta"
+                     f"{'' if len(referencias) == 1 else 's'}: "
                      "composicion, densidad, uso del color y tipo de ilustracion.")
-    else:
-        brief.append("No hay referencias de estilo cargadas: pedile al cliente 2 o 3 posteos que le gusten "
-                     "y guardalos en brand/referencias/ para que las proximas piezas sean consistentes.")
     brief.append("")
     brief.append("REGLAS:")
     brief.extend(f"  {i + 1}. {r}" for i, r in enumerate(rules(exact, canvas_note, is_story)))
@@ -146,6 +151,13 @@ def main():
             "la imagen salio VERTICAL, no horizontal ni cuadrada",
         ],
         "sin_referencias": not referencias,
+        # El pedido, ya redactado y en el idioma del cliente. Va como campo y no
+        # en el prompt: es trabajo del agente, no del generador.
+        "pedir_referencias": (
+            "Antes de seguir con las piezas: pasame dos o tres posteos que te gusten "
+            "—de quien sea, no tienen que ser de tu rubro— y de ahi saco el estilo. "
+            "Describir un estilo con palabras no funciona; mostrarlo si."
+        ) if not referencias else None,
     }, ensure_ascii=False, indent=2))
     return 0
 
