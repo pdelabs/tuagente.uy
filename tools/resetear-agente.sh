@@ -115,11 +115,34 @@ BORRAR="portal_identidad.json bot_avatar.png \
   logs image_cache audio_cache sandboxes \
   cron/executions.db cron/executions.db-shm cron/executions.db-wal cron/output \
   cron/ticker_heartbeat cron/ticker_last_success"
+# LA PLATA DEL CLIENTE ANTERIOR. `costos.jsonl` es el registro de lo que gastó
+# —modelo por modelo, llamada por llamada— y no estaba en la lista: sobrevivía
+# a los dos modos. En un alta significa que el cliente nuevo abre su portal y ve
+# el consumo del anterior; en un reciclado, que la facturación de una empresa
+# queda en el disco de otra.
+BORRAR="$BORRAR costos.jsonl costos.jsonl.1 .portal_notify_session"
+
 # Lo que se escribió para ESTE cliente. En un alta es el trabajo del día; en un
 # reciclado es justamente lo que hay que sacar.
 (( ENTREGA )) || BORRAR="$BORRAR SOUL.md flujos cron"
 # shellcheck disable=SC2086
 correr "cd '$DIR/data' && rm -rf $BORRAR 2>/dev/null || true"
+
+# LOS RESPALDOS QUE DEJAMOS NOSOTROS, que es el resto que quedaba. Cada
+# herramienta del kit guarda una copia antes de tocar algo —`SOUL.md.v11-…`,
+# `config.yaml.antes-de-la-guardia`, `config.yaml.bak-20260812`— y esas copias
+# no las borraba nadie. Medido el 16/8 sobre Mr.Wobble tras un reset COMPLETO:
+# quedaron el SOUL entero del cliente anterior y cuatro configs viejos.
+#
+# Borrar `SOUL.md` y dejar `SOUL.md.v11-…` al lado no es dejar el agente en
+# cero: es dejarlo en cero para el motor, que lee un solo archivo, y NO para el
+# agente, que puede leer su propio directorio.
+#
+# Sólo en modo completo: en una entrega el config vigente se conserva, y sus
+# respaldos son la red por si hay que volver atrás ese mismo día.
+if (( ! ENTREGA )); then
+  correr "cd '$DIR/data' && rm -f SOUL.md.v*-* SOUL.md.bak* config.yaml.bak-* config.yaml.antes-* 2>/dev/null || true"
+fi
 
 if (( ENTREGA )); then
   # El bautizo escribe un bloque `portal:identidad` DENTRO del SOUL, además de
