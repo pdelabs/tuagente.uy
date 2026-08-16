@@ -12,6 +12,23 @@ model_list:
       api_key: os.environ/OPENROUTER_API_KEY
 
 litellm_settings:
+  # EL AGENTE NO CONTESTABA NADA SIN ESTO. Hermes manda `reasoning_effort` en
+  # cada request; litellm valida los parametros contra lo que declara el
+  # proveedor y devuelve HTTP 400 en vez de sacar el que sobra:
+  #
+  #   litellm.UnsupportedParamsError: openrouter does not support parameters:
+  #   ['reasoning_effort'], for model=hermes-agent
+  #
+  # No es un error del cliente ni del modelo: es el proxy plantandose en el
+  # medio. Y no falla de a ratos, falla SIEMPRE — el chat entero queda mudo.
+  # Medido el 16/8 reseteando Mr.Wobble, con el primer "hola" despues del alta.
+  #
+  # `drop_params` hace que el parametro que el proveedor no entiende se caiga y
+  # la llamada siga. Es la misma regla que la de abajo: la observabilidad se
+  # metio en el camino de la inferencia, asi que nunca puede ser ella la que
+  # corta. Un agente que responde un poco distinto es un problema; uno que
+  # devuelve 400 a todo no es un agente.
+  drop_params: true
   # Manda prompts, respuestas, tokens y costo a Phoenix por OTLP.
   # Phoenix para las trazas, y el nuestro para el COSTO. El segundo existe
   # porque meter este proxy en el medio obligo a `provider: custom` en Hermes,
