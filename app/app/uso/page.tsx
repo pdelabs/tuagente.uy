@@ -130,7 +130,7 @@ function buildDays(daily: DailyUsage[]): { days: Day[]; hasData: boolean } {
   return { days, hasData: days.some((d) => d.cost > 0) };
 }
 
-type Fila = { key: string; label: string; meta: string | null; cost: number };
+type Fila = { key: string; label: string; meta: string | null; cost: number | null };
 
 // Filas de un desglose, de mayor a menor gasto. Las entradas sin nombre se
 // descartan: una barra anónima no dice nada.
@@ -144,20 +144,26 @@ function filas(items: unknown, label: (name: string) => string, conSesiones: boo
         key: `${r.name}-${i}`,
         label: label(r.name as string),
         meta: conSesiones && s != null ? sesiones(s) : null,
-        cost: num(r.cost_usd) ?? 0,
+        // null NO es cero: es "no lo sabemos". El costo por canal no existe
+        // —el canal lo sabe Hermes y el precio lo sabe el proxy, y nadie tiene
+        // las dos mitades—, y antes del primer registro tampoco hay dato.
+        // Dibujar "US$ 0,00" ahí le diría a la clienta que no gastó nada.
+        cost: num(r.cost_usd),
       };
     })
-    .sort((a, b) => b.cost - a.cost);
+    .sort((a, b) => (b.cost ?? -1) - (a.cost ?? -1));
 }
 
 function Desgloses({ title, rows }: { title: string; rows: Fila[] }) {
-  const max = Math.max(...rows.map((r) => r.cost), 0);
+  const max = Math.max(...rows.map((r) => r.cost ?? 0), 0);
   return (
     <Card>
       <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{title}</p>
       <ul className="mt-3 space-y-3">
         {rows.map((r) => {
-          const pct = max > 0 ? Math.max(Math.round((r.cost / max) * 100), r.cost > 0 ? 2 : 0) : 0;
+          // Sin dato no hay barra: una barra en cero se lee como "gastó cero".
+          const c = r.cost ?? 0;
+          const pct = max > 0 ? Math.max(Math.round((c / max) * 100), c > 0 ? 2 : 0) : 0;
           return (
             <li key={r.key}>
               <div className="flex items-baseline justify-between gap-3">
@@ -166,7 +172,7 @@ function Desgloses({ title, rows }: { title: string; rows: Fila[] }) {
                   {r.meta && <span className="text-ink-soft"> · {r.meta}</span>}
                 </p>
                 <span className="shrink-0 text-[13px] font-semibold tabular-nums text-ink">
-                  {usd(r.cost)}
+                  {r.cost == null ? "—" : usd(r.cost)}
                 </span>
               </div>
               <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/[0.05]">
