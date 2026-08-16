@@ -22,7 +22,9 @@
 // eso rompe la pantalla: la sección sin datos no se dibuja.
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { BarChart3, RefreshCw } from "lucide-react";
+import { MODULOS_OCULTOS } from "../layout";
 import { loadConfig, getUsage, type HttpError, type PortalConfig } from "../lib/agent";
 import { Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
 import { horaDe, husoDelNegocio, isoConHuso, momentoDe, rotuloCanal } from "../lib/palabras";
@@ -187,6 +189,14 @@ function Desgloses({ title, rows }: { title: string; rows: Fila[] }) {
 }
 
 export default function UsoPage() {
+  // OCULTA (16/8/2026). Sacarla del nav no alcanza: la ruta queda viva en los
+  // favoritos y `docs/rutas-portal.md` la declara citable, así que el agente
+  // puede mandarte acá en un mensaje. Mientras el total sea falso, esta puerta
+  // también se cierra. Se abre sola cuando "usage" sale de MODULOS_OCULTOS.
+  const oculta = MODULOS_OCULTOS.has("usage");
+  const router = useRouter();
+  useEffect(() => { if (oculta) router.replace("/app/inicio"); }, [oculta, router]);
+
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [err, setErr] = useState<Falla | null>(null);
@@ -198,7 +208,7 @@ export default function UsoPage() {
   // silent: el refresh automático no vacía la pantalla ni tapa con un error
   // datos que todavía sirven; a lo sumo avisa arriba.
   const load = useCallback((silent = false) => {
-    if (!cfg) return;
+    if (!cfg || oculta) return;
     if (!silent) { setUsage(null); setErr(null); }
     setCargando(true);
     getUsage(cfg)
@@ -376,6 +386,10 @@ export default function UsoPage() {
       </>
     );
   };
+
+  // Nada en el ínterin: un flash del número falso antes de redirigir sería
+  // exactamente lo que estamos evitando.
+  if (oculta) return null;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-6 md:px-8">

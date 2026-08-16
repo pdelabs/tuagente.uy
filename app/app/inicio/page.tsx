@@ -35,6 +35,7 @@ import {
 // El MISMO cruce flujo ↔ tarea programada que usa Flujos: si cada pantalla
 // eligiera la suya, volveríamos a tener dos respuestas para "¿cuándo corre?".
 import { cruzarTarea } from "../flujos/corridas";
+import { MODULOS_OCULTOS } from "../layout";
 import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
 import {
   COLUMNAS_TABLERO, aprenderHuso, cadenciaDeCron, columnaDeTarea, cuandoVa, horaDe,
@@ -570,7 +571,11 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
         tuvoManifest.current = true;
         setManifest(m);
         setFatal(null);
-        const on = (k: string) => Boolean(m?.modules?.[k]);
+        // Un módulo oculto se trata como si el agente no lo expusiera: ni se
+        // pide ni se dibuja. `pedir(false, …)` lo deja en "off", así que no
+        // queda un esqueleto cargando para siempre esperando datos que nadie
+        // fue a buscar.
+        const on = (k: string) => !MODULOS_OCULTOS.has(k) && Boolean(m?.modules?.[k]);
         return Promise.allSettled([
           // Solo hace falta pedirlas si el adapter dice que hay pendientes.
           pedir(on("connections") && (m?.conexiones_pendientes ?? 0) > 0, "las conexiones",

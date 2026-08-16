@@ -36,6 +36,19 @@ import {
 // El nav principal es lo que el cliente usa a diario: sus flujos, su chat,
 // sus trabajos en curso. "Tareas" (crons) se fue del nav: era la vista de
 // máquina que Flujos reemplaza (la ruta sigue viva para nosotros).
+// Módulos que el agente declara pero que el portal NO muestra todavía. Es un
+// interruptor, no un borrado: la pantalla, su ruta y su bienvenida siguen
+// enteras, y sacar la clave de acá las devuelve al nav.
+//
+// `usage` está oculto desde el 16/8/2026 porque el número que muestra es FALSO
+// y falso para abajo, que es la peor dirección: sólo ve lo que pasa por
+// litellm, y la generación de imágenes le pega directo al proveedor. Medido ese
+// día contra la cuenta real de OpenRouter: la pestaña decía US$ 0,17 y el
+// proveedor había cobrado US$ 1,52 — 9x. Un cliente que planifica con eso se
+// entera del gasto real cuando le llega la factura. Vuelve cuando el total
+// salga de lo que el proveedor cobró y no de lo que nosotros vimos pasar.
+export const MODULOS_OCULTOS = new Set<string>(["usage"]);
+
 export const MODULES: { key: string; path: string; label: string; icon: LucideIcon; sec?: boolean }[] = [
   { key: "home", path: "/app/inicio", label: "Inicio", icon: Home },
   { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
@@ -396,7 +409,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const enabled = MODULES.filter(
-    (m) => m.key === "home" || m.key === "capabilities" || manifest.modules[m.key]);
+    (m) => !MODULOS_OCULTOS.has(m.key)
+      && (m.key === "home" || m.key === "capabilities" || manifest.modules[m.key]));
   // Bienvenida por módulo: se ve una sola vez, hasta que el cliente da "Ok".
   const current = moduloActual;
   const Intro = current ? INTROS[current.key] : undefined;

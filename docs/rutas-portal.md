@@ -35,11 +35,17 @@ lo dejamos ahí).
 | Conexiones | `/app/conexiones` |
 | Actividad | `/app/actividad` |
 | Archivos | `/app/archivos` |
-| Uso | `/app/uso` |
+| Uso | `/app/uso` | **oculta** — redirige a `/app/inicio` |
 | Habilidades | `/app/habilidades` |
 | Tareas programadas | `/app/tareas` |
 
 `/app` a secas redirige a `/app/inicio`.
+
+**Uso está oculta desde el 16/8/2026** y no se puede citar: el total que muestra
+sólo ve lo que pasa por litellm, y la generación de imágenes le pega directo al
+proveedor. Medido ese día: la pantalla decía US$ 0,17 y OpenRouter había cobrado
+US$ 1,52. Vuelve cuando el número salga de lo que el proveedor cobró. El
+interruptor es `MODULOS_OCULTOS` en `app/app/layout.tsx`.
 
 ## El detalle
 
