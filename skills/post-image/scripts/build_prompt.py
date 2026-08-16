@@ -22,9 +22,15 @@ from pathlib import Path
 # El tercer valor es lo que espera `image_generate`: la tool NO toma "9:16",
 # toma un nombre semantico. Pasarle el ratio crudo no falla: cae al default y
 # devuelve una imagen HORIZONTAL, que en una historia es inservible. Medido.
+# EL FEED NO PUEDE SER 4:5 Y NO HAY QUE PEDIRLO. `image_generate` solo entiende
+# tres aspectos —square (1:1), landscape (16:9), portrait (9:16)—, asi que 4:5
+# no existe por este camino. Pedir "portrait" para el feed devolvia una pieza
+# 9:16: el agente la reviso, vio que no era el formato pedido y se nego a
+# entregarla, con razon. 1:1 es un formato valido de feed y es el que si se
+# puede cumplir; prometer 4:5 en el brief era prometer algo que no llega.
 CANVAS = {
-    "feed": ("1080x1350", "4:5 vertical", "portrait"),
-    "carrusel": ("1080x1350", "4:5 vertical", "portrait"),
+    "feed": ("1080x1080", "1:1 cuadrado", "square"),
+    "carrusel": ("1080x1080", "1:1 cuadrado", "square"),
     "historia": ("1080x1920", "9:16 vertical", "portrait"),
     "reel": ("1080x1920", "9:16 vertical", "portrait"),
 }
