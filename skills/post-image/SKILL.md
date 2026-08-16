@@ -56,7 +56,21 @@ corramos nosotros.
 Las referencias son lo que más mueve el resultado: el estilo se muestra, no se
 describe.
 
-## 3. MIRÁ lo que salió. Siempre.
+## 3. Sacala del caché o no existe
+
+`image_generate` devuelve una **ruta adentro del caché del motor**
+(`/opt/data/cache/images/...`). Ese lugar **no lo ve nadie**: no es Archivos, no
+es un entregable, y se limpia solo. Una pieza que se queda ahí es una pieza que
+tu cliente nunca va a ver, por linda que haya salido.
+
+Copiala al workspace con un nombre que se entienda —`instagram/stories/<fecha>-<tema>/story-01.png`—
+y adjuntala al entregable del flujo. Recién ahí existe.
+
+**Y entregá lo que está bien, aunque falte una pieza.** Si de tres salieron dos,
+esas dos se entregan y se explica qué pasó con la tercera. Guardarte las buenas
+porque una falló deja a tu cliente con nada, que es peor que con dos.
+
+## 4. MIRÁ lo que salió. Siempre.
 
 **No muestres una imagen que no miraste.** Abrila y recorré la lista de
 `verificar` que devolvió el script:
@@ -74,7 +88,7 @@ si estuviera bien.
 
 El detalle de qué mirar está en `references/verificar.md`.
 
-## Por qué este paso existe
+## Por qué el paso de mirar existe
 
 El modelo escribe bien **casi siempre**, y "casi" no alcanza cuando la pieza sale
 al Instagram de la clienta con un precio adentro. Un error acá lo ve ella después
