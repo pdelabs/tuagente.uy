@@ -1917,7 +1917,8 @@ def costo_registrado(days=30):
     if not COSTOS_JSONL.exists():
         return None
     desde = time.time() - days * 86400
-    total, por_dia, lineas = 0.0, {}, 0
+    total, por_dia, por_modelo, lineas = 0.0, {}, {}, 0
+    primero = None
     try:
         with open(COSTOS_JSONL, "r", encoding="utf-8", errors="replace") as f:
             for linea in f:
@@ -1932,12 +1933,17 @@ def costo_registrado(days=30):
                 total += costo
                 dia = time.strftime("%Y-%m-%d", time.localtime(ts))
                 por_dia[dia] = por_dia.get(dia, 0.0) + costo
+                modelo = fila.get("modelo") or ""
+                if modelo:
+                    por_modelo[modelo] = por_modelo.get(modelo, 0.0) + costo
+                primero = ts if primero is None else min(primero, ts)
                 lineas += 1
     except OSError:
         return None
     if not lineas:
         return None
-    return {"total": round(total, 6), "por_dia": por_dia, "llamadas": lineas}
+    return {"total": round(total, 6), "por_dia": por_dia, "por_modelo": por_modelo,
+            "llamadas": lineas, "desde": primero}
 
 
 # ---------- usage ----------
@@ -1999,9 +2005,25 @@ def usage(days=30):
         pass
     real = costo_registrado(days)
     if real:
+        # Antes del primer registro no sabemos cuanto se gasto, y CERO ES UNA
+        # MENTIRA DISTINTA de "no se". El portal dibuja "—" con null y "US$ 0,00"
+        # con 0; el segundo le diria al cliente que no gasto nada.
+        desde_dia = time.strftime("%Y-%m-%d", time.localtime(real["desde"])) if real.get("desde") else None
         for d in daily:
-            if d.get("date") in real["por_dia"]:
-                d["cost_usd"] = round(real["por_dia"][d["date"]], 6)
+            fecha = d.get("date")
+            if fecha in real["por_dia"]:
+                d["cost_usd"] = round(real["por_dia"][fecha], 6)
+            elif desde_dia and fecha < desde_dia:
+                d["cost_usd"] = None
+        for m in by_model:
+            nombre = m.get("name") or ""
+            m["cost_usd"] = (round(real["por_modelo"][nombre], 6)
+                             if nombre in real["por_modelo"] else None)
+        # El canal (chat, cron, terminal) no viaja hasta litellm: solo lo sabe
+        # Hermes, y Hermes no sabe el costo. Nadie tiene las dos mitades, asi
+        # que se muestra el uso por canal sin precio en vez de un cero falso.
+        for c in by_channel:
+            c["cost_usd"] = None
     return {
         "available": True,
         "sessions": row["sessions"],
