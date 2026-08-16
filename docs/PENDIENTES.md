@@ -788,3 +788,55 @@ trabajo del día sobre la puerta.
 - **La escritura de la memoria depende de que el modelo llame a la tool**: no
   hay perilla de extracción automática (`config_defaults.py:1531-1554`). Se
   arregló el lado de la lectura, que era hueco nuestro.
+
+## Uso escondido, y la plata que no vemos (16/8, decidido por Luis)
+
+**La pestaña Uso y el bloque "Consumo" de Inicio están fuera del portal.** El
+bloque de Inicio se borró; la pestaña está detrás de un interruptor
+(`MODULOS_OCULTOS` en `app/app/layout.tsx`), que además redirige `/app/uso` a
+`/app/inicio` — sacarla del nav no alcanzaba, la ruta vivía en favoritos y en
+`rutas-portal.md`.
+
+Dos motivos, y el primero es el que manda:
+
+**1. Todavía no está decidido cómo le cobramos al cliente.** Mostrarle un gasto
+en dólares antes de eso le contesta una pregunta que nadie le hizo, y peor:
+sugiere que le vamos a cobrar el consumo, que es justo lo que no está resuelto.
+
+**2. El número estaba mal, y mal para abajo.** Medido el 16/8 sobre Mr.Wobble:
+
+| | |
+|---|---|
+| litellm registró (141 llamadas) | US$ 0,1675 |
+| OpenRouter cobró ese día | US$ 1,5152 |
+| **sin registrar** | **US$ 1,3477 — 9x** |
+
+La diferencia es **entera de generación de imágenes**. La causa es estructural,
+no un bug de la pantalla:
+
+- `image_generate` es un plugin del motor (`/opt/hermes/plugins/image_gen/openrouter/`)
+  que le pega **directo** a OpenRouter. No pasa por litellm, que es de donde
+  sale todo lo que registramos en `costos.jsonl`.
+- Y el plugin **descarta el `usage` que OpenRouter le devuelve**: no lo loguea
+  ni lo incluye en el resultado de la tool (verificado, no hay una sola
+  mención a `usage` ni a `cost` en su código). Desde adentro del agente esa
+  plata es invisible.
+
+**El camino que sirve, ya probado:** `GET https://openrouter.ai/api/v1/key`
+devuelve `usage_daily`, `usage_weekly` y `usage_monthly` de la key. Es lo que el
+proveedor **cobró**, no una estimación nuestra, y como cada agente tiene su
+propia key el número ya viene aislado por cliente. Probado desde el contenedor
+el 16/8: anda.
+
+Quedaría un cron corto que lo lee y lo guarda, con el total real de titular y el
+desglose por modelo de litellm abajo (que el endpoint de la key no da).
+
+**El que NO hay que tomar sin probar en un agente descartable:** apuntarle el
+`base_url` del plugin de imágenes a litellm. El resolver de providers ya rompió
+un agente en vivo esta semana, y `resolve_runtime_provider` resuelve por nombre
+de provider, no por lo que diga la config de `image_gen`.
+
+Nada de esto se destraba solo: mientras Uso esté escondida no molesta a nadie,
+pero **el día que se decida el modelo de cobro, esto es lo primero que hay que
+arreglar** — y si se prende la pantalla sin arreglarlo, el cliente planifica con
+un número 9 veces más chico que su factura.

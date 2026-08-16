@@ -21,14 +21,14 @@ import {
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
-  Activity, ArrowRight, BarChart3, CheckCircle2, ChevronRight, Clock, Columns3,
+  Activity, ArrowRight, CheckCircle2, ChevronRight, Clock, Columns3,
   FolderOpen, Hand, LayoutDashboard, MessageSquare, Plug, Plus, RefreshCw, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
   esPedidoDelCliente,
   getActivity, getApprovals, getArtifacts, getConnections, getFiles, getFlujos, getJobs,
-  getManifest, getSessions, getTickets, getUsage, loadConfig,
+  getManifest, getSessions, getTickets, loadConfig,
   type ArtifactMeta, type Connection, type CronJob, type Flujo, type HttpError,
   type Manifest, type PortalConfig, type Ticket,
 } from "../lib/agent";
@@ -64,7 +64,6 @@ type Approval = {
 };
 type Evento = { ts: string; kind: string; label: string; status: string };
 type Archivo = { path: string; size?: number; mtime?: string | number };
-type Uso = { available?: boolean; sessions?: number; cost_usd?: number; period?: string };
 
 /** Estado de una fuente: apagada en el manifest / 404 son lo mismo para el cliente. */
 type Slot<T> =
@@ -78,16 +77,6 @@ type Setter<T> = Dispatch<SetStateAction<Slot<T>>>;
 // ── formato ───────────────────────────────────────────────────────────────
 
 const nf = new Intl.NumberFormat("es-UY");
-const cf = new Intl.NumberFormat("es-UY", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-/** Un consumo real que redondea a cero se marca; "US$ 0,00" sería mentira. */
-const usd = (v: number): string => (v > 0 && v < 0.005 ? `< ${cf.format(0.01)}` : cf.format(v));
-
 const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 
 const num = (v: unknown): number | null =>
@@ -150,15 +139,6 @@ function cuando(ts: string): string {
   if (m.dias === -1) return `ayer ${m.hora}`;
   return `${m.diaMes} ${m.hora}`;
 }
-
-/** "30d" → "últimos 30 días"; cualquier otro formato se muestra crudo. */
-function periodo(p?: string): string | null {
-  if (!p || typeof p !== "string") return null;
-  const m = /^(\d+)\s*d$/i.exec(p.trim());
-  return m ? `últimos ${m[1]} días` : p;
-}
-
-const sesiones = (n: number) => `${nf.format(n)} ${n === 1 ? "sesión" : "sesiones"}`;
 
 /** ["el tablero", "el consumo"] → "el tablero y el consumo" */
 function enumerar(xs: string[]): string {
@@ -520,7 +500,6 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
   const [eventos, setEventos] = useState<Slot<Evento[]>>({ t: "cargando" });
   const [artefactos, setArtefactos] = useState<Slot<ArtifactMeta[]>>({ t: "cargando" });
   const [archivos, setArchivos] = useState<Slot<Archivo[]>>({ t: "cargando" });
-  const [uso, setUso] = useState<Slot<Uso>>({ t: "cargando" });
   const [flujos, setFlujos] = useState<Slot<Flujo[]>>({ t: "cargando" });
   // Las tareas programadas del motor: son las únicas que saben cuándo corre de
   // verdad cada trabajo. Ver `cuandoCorre`.
@@ -538,7 +517,6 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
       setEventos({ t: "cargando" });
       setArtefactos({ t: "cargando" });
       setArchivos({ t: "cargando" });
-      setUso({ t: "cargando" });
       setFlujos({ t: "cargando" });
       setJobs({ t: "cargando" });
       setCharlas({ t: "cargando" });
@@ -605,8 +583,6 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
             () => getArtifacts(cfg).then((r) => arr<ArtifactMeta>(r?.artifacts)), setArtefactos),
           pedir(on("files"), "los archivos",
             () => getFiles(cfg).then((r) => arr<Archivo>(r?.files)), setArchivos),
-          pedir(on("usage"), "el consumo",
-            () => getUsage(cfg).then((r) => (r ?? {}) as Uso), setUso),
           pedir(on("flujos"), "tus trabajos",
             () => getFlujos(cfg).then((r) => arr<Flujo>(r?.flujos)), setFlujos),
           // Cuándo corre cada trabajo. Es del gateway nativo, no del adapter:
@@ -699,13 +675,6 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
       .slice(0, 3);
   }, [archivos]);
 
-  const costo = useMemo(() => {
-    if (uso.t !== "listo" || uso.data.available === false) return null;
-    const c = num(uso.data.cost_usd);
-    if (c === null) return null;
-    return { costo: c, sesiones: num(uso.data.sessions), periodo: periodo(uso.data.period) };
-  }, [uso]);
-
   /** "última actividad hace 5 min", contando TODO lo que el agente hizo: el
    *  tablero, las corridas y las conversaciones.
    *
@@ -762,7 +731,7 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
 
   if (!manifest) return <div className={WRAP}><Spinner /></div>;
 
-  const slots = [aprob, tareas, eventos, artefactos, archivos, uso, flujos];
+  const slots = [aprob, tareas, eventos, artefactos, archivos, flujos];
   // Las charlas no arman bloque propio, pero la señal de vida las espera: sin
   // esto la línea se queda muda un instante en vez de decir que está buscando.
   const esperando = slots.some((s) => s.t === "cargando") || charlas.t === "cargando";
@@ -929,22 +898,10 @@ function Inicio({ cfg }: { cfg: PortalConfig }) {
             </div>
           )}
 
-          {/* 5 · Cuánto costó el período */}
-          {uso.t === "cargando" && <Esqueleto filas={1} />}
-          {costo && (
-            <Seccion titulo="Consumo" icon={BarChart3} href="/app/uso" ver="Ver el detalle">
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <p className="text-[32px] font-extrabold leading-none tabular-nums text-ink">
-                  {usd(costo.costo)}
-                </p>
-                <p className="text-[12px] text-ink-soft">
-                  {costo.sesiones !== null && sesiones(costo.sesiones)}
-                  {costo.sesiones !== null && costo.periodo ? " · " : ""}
-                  {costo.periodo}
-                </p>
-              </div>
-            </Seccion>
-          )}
+          {/* Acá vivía "Consumo". Se fue el 16/8/2026: todavía no sabemos cómo
+              le vamos a cobrar al cliente, y mostrarle un gasto en dólares
+              antes de haber definido eso le contesta una pregunta que nadie le
+              hizo — con un número que además estaba mal (ver PENDIENTES). */}
         </div>
       )}
 
