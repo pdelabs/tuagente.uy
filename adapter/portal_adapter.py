@@ -1893,6 +1893,53 @@ def activity():
     return events[:80]
 
 
+# ---------- costo real, el que anota litellm ----------
+
+COSTOS_JSONL = DATA / "costos.jsonl"
+
+
+def costo_registrado(days=30):
+    """Lo que el proveedor COBRO de verdad, por dia y en total.
+
+    Hermes no puede precificar cuando `model.provider` es `custom`, y con el
+    proxy de observabilidad en el medio esa es la unica configuracion posible:
+    la ruta de facturacion queda cableada en "no se el precio" y la pestania de
+    Uso muestra $0. Medido: el agente anterior, sin proxy, registraba costo por
+    sesion; desde que se agrego, ninguno.
+
+    litellm si tiene el numero —OpenRouter lo devuelve en usage.cost— y lo anota
+    en costos.jsonl. Esto lo lee. Es el cobro real, no una estimacion contra una
+    tabla de precios que habria que mantener al dia.
+
+    Si el archivo no esta, devuelve None y el portal muestra lo de Hermes: no se
+    inventa un cero, que es justamente el error que estamos arreglando.
+    """
+    if not COSTOS_JSONL.exists():
+        return None
+    desde = time.time() - days * 86400
+    total, por_dia, lineas = 0.0, {}, 0
+    try:
+        with open(COSTOS_JSONL, "r", encoding="utf-8", errors="replace") as f:
+            for linea in f:
+                try:
+                    fila = json.loads(linea)
+                    ts = float(fila["ts"])
+                    costo = float(fila["costo_usd"])
+                except (ValueError, KeyError, TypeError):
+                    continue          # una linea rota no puede tapar el total
+                if ts < desde:
+                    continue
+                total += costo
+                dia = time.strftime("%Y-%m-%d", time.localtime(ts))
+                por_dia[dia] = por_dia.get(dia, 0.0) + costo
+                lineas += 1
+    except OSError:
+        return None
+    if not lineas:
+        return None
+    return {"total": round(total, 6), "por_dia": por_dia, "llamadas": lineas}
+
+
 # ---------- usage ----------
 
 def usage(days=30):
@@ -1950,14 +1997,22 @@ def usage(days=30):
         conn.close()
     except sqlite3.Error:
         pass
+    real = costo_registrado(days)
+    if real:
+        for d in daily:
+            if d.get("date") in real["por_dia"]:
+                d["cost_usd"] = round(real["por_dia"][d["date"]], 6)
     return {
         "available": True,
         "sessions": row["sessions"],
         "input_tokens": row["input_tokens"],
         "output_tokens": row["output_tokens"],
         "total_tokens": row["input_tokens"] + row["output_tokens"],
-        # Estimado del propio Hermes (estimated_cost_usd), no un calculo nuestro.
-        "cost_usd": row["cost_usd"],
+        # El cobro REAL que anoto litellm cuando lo hay; si no, el estimado de
+        # Hermes. `cost_source` dice cual de los dos esta mirando el cliente.
+        "cost_usd": (real["total"] if real else row["cost_usd"]),
+        "cost_source": ("proveedor" if real else "estimado"),
+        "cost_calls": (real["llamadas"] if real else None),
         "period": f"{days}d",
         "daily": daily,
         "by_channel": by_channel,

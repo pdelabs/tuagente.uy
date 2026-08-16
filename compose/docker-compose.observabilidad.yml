@@ -66,6 +66,10 @@ services:
       - "4000"
     volumes:
       - ./litellm.yaml:/app/config.yaml:ro
+      # El callback de costo, y data/ para poder escribir costos.jsonl: es el
+      # unico volumen que este proxy comparte con el adapter, que es quien lo lee.
+      - ./litellm-costo.py:/app/litellm-costo.py:ro
+      - ./data:/opt/data
     environment:
       # OJO: la clave NO va acá. `environment` PISA a `env_file`, y como
       # ${OPENROUTER_API_KEY} se interpola del .env del compose (que no la

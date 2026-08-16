@@ -13,7 +13,11 @@ model_list:
 
 litellm_settings:
   # Manda prompts, respuestas, tokens y costo a Phoenix por OTLP.
-  callbacks: ["arize_phoenix"]
+  # Phoenix para las trazas, y el nuestro para el COSTO. El segundo existe
+  # porque meter este proxy en el medio obligo a `provider: custom` en Hermes,
+  # y esa ruta esta cableada a "no se el precio": la pestania de Uso quedo en
+  # $0. litellm si sabe el numero real, asi que lo anota y el adapter lo lee.
+  callbacks: ["arize_phoenix", "litellm-costo.registro_de_costo"]
   # Si el callback falla, la llamada al modelo SIGUE: la observabilidad nunca
   # puede voltear al agente. Es la diferencia entre una herramienta nuestra y
   # un punto de falla del cliente.

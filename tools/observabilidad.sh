@@ -53,6 +53,9 @@ case "$ACCION" in
     echo "→ subiendo el overlay"
     rsync -a "$KIT/compose/docker-compose.observabilidad.yml" "$HOST:$DIR/"
     rsync -a "$KIT/compose/litellm.yaml" "$HOST:$DIR/"
+    # El callback que anota el costo real. Va junto con el yaml que lo nombra:
+    # si viaja uno sin el otro, litellm arranca con un callback que no existe.
+    rsync -a "$KIT/compose/litellm-costo.py" "$HOST:$DIR/"
     rsync -a "$KIT/compose/otel-collector.yaml" "$HOST:$DIR/"
 
     # El modelo sale de la config del agente: litellm no lo manda en el span
