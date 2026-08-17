@@ -979,7 +979,7 @@ def guardar_politica(conexion_id, cambios):
     return politica_de(conexion_id)
 
 
-def _rol_instalado(rol_id):
+def _role_installed(role_id):
     """A role is hired when its profile exists on disk. Nothing else.
 
     By presence and not by a flag: a flag has to be kept current and drifts
@@ -987,60 +987,63 @@ def _rol_instalado(rol_id):
     the flag, and the portal keeps showing a team they no longer pay for. The
     directory does not lie.
     """
-    return (PROFILES_DIR / rol_id).is_dir()
+    return (PROFILES_DIR / role_id).is_dir()
 
 
-def _identidad_del_rol(rol_id):
-    """The role's name and face, from the role.json its distribution shipped.
+def _role_identity(role_id, catalog_identity):
+    """The role's name and face.
 
-    The client may rename it, which is why this reads the installed profile and
-    not the catalog -- the catalog only holds the default it arrived with.
+    An installed profile wins over the catalog, because the client may rename
+    theirs and that has to survive. A role on offer has no profile to read, so
+    it falls back to the default identity it ships with -- otherwise the four
+    roles on the roster would be four identical grey shapes, which defeats the
+    entire point of giving them faces.
 
-    A hired role without a role.json is a broken install, and it should read as
-    one: no name, no face, loudly missing on screen.
+    A hired role without a role.json is a broken install and reads as one: it
+    falls through to the catalog default, and the name the client set is gone.
     """
-    manifest_file = PROFILES_DIR / rol_id / "role.json"
-    if not manifest_file.is_file():
-        return {}
-    identidad = json.loads(manifest_file.read_text(encoding="utf-8")).get("identidad") or {}
-    return {k: identidad[k] for k in ("nombre", "look") if k in identidad}
+    manifest_file = PROFILES_DIR / role_id / "role.json"
+    identity = catalog_identity
+    if manifest_file.is_file():
+        identity = json.loads(manifest_file.read_text(encoding="utf-8")).get("identity") or identity
+    return {k: identity[k] for k in ("name", "look") if k in (identity or {})}
 
 
 def roles():
     """The team: who is hired, who is on offer, and what each one is called.
 
     PORTAL CONTRACT:
-      GET /portal/roles -> {disponible, roles:[{id, label, hace, jamas,
-                            contratado, nombre, look, necesita, flujos}]}
+      GET /portal/roles -> {available, roles:[{id, label, does, never, hired,
+                            name, look, needs, flows, state}]}
 
-    What does NOT come out of here: `ruteo` and `nota_interna`. `ruteo` is the
-    description the decomposer reads to route tasks -- our machinery, and
+    What does NOT come out of here: `routing` and `internal_note`. `routing` is
+    the description the decomposer reads to route tasks -- our machinery, and
     putting it on a commercial screen is showing the client a prompt.
     """
     # No catalog means no team: the portal keeps working as the single-role
     # agent it has been until today. `manifest()` gates the tab on the same
     # file, so this only answers a client that asked anyway.
     if not ROLES_CATALOG.is_file():
-        return {"disponible": False, "roles": []}
-    catalogo = json.loads(ROLES_CATALOG.read_text(encoding="utf-8"))
+        return {"available": False, "roles": []}
+    catalog = json.loads(ROLES_CATALOG.read_text(encoding="utf-8"))
 
-    salida = []
-    for rol in catalogo.get("roles", []):
-        rol_id = rol.get("id") or ""
-        contratado = _rol_instalado(rol_id)
-        fila = {
-            "id": rol_id,
-            "label": rol.get("label"),
-            "hace": rol.get("hace"),
-            "jamas": rol.get("jamas"),
-            "contratado": contratado,
-            "necesita": rol.get("necesita") or [],
-            "flujos": rol.get("flujos") or [],
-            "estado": rol.get("estado"),
+    out = []
+    for role in catalog.get("roles", []):
+        role_id = role["id"]
+        hired = _role_installed(role_id)
+        row = {
+            "id": role_id,
+            "label": role.get("label"),
+            "does": role.get("does"),
+            "never": role.get("never"),
+            "hired": hired,
+            "needs": role.get("needs") or [],
+            "flows": role.get("flows") or [],
+            "state": role.get("state"),
         }
-        fila.update(_identidad_del_rol(rol_id) if contratado else {})
-        salida.append(fila)
-    return {"disponible": True, "roles": salida}
+        row.update(_role_identity(role_id, role.get("identity") or {}))
+        out.append(row)
+    return {"available": True, "roles": out}
 
 
 def capacidades():

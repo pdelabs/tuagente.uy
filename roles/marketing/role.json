@@ -15,19 +15,6 @@
     "un punto CLARAMENTE distinto del espacio: la cara es como se distingue",
     "quien hizo que en una lista de veinte tarjetas."
   ],
-  "identidad": {
-    "nombre": "Vera",
-    "look": {
-      "tono": 0,
-      "antena": 5,
-      "accesorio": 1,
-      "pupila": 1,
-      "boca": 1,
-      "piel": 0,
-      "traje": 0,
-      "cejas": 1
-    }
-  },
   "skills": [
     "brand-kit",
     "social-content",
@@ -38,21 +25,48 @@
     "flujo",
     "capacidad"
   ],
-  "capacidades": [
+  "env_requires": [
+    {
+      "name": "OPENROUTER_API_KEY",
+      "description": "Generates the images for the posts",
+      "required": true
+    }
+  ],
+  "_comment": [
+    "Identity and packaging for ONE role: what the client sees (name and face)",
+    "and what the role needs to work (skills, connections, keys).",
+    "",
+    "THE NAME AND FACE SHIP PRESET on purpose. Hiring a role has to be one click:",
+    "opening a character editor before the agent does anything puts an aesthetic",
+    "decision in front of the value. Renaming is optional and comes later, once",
+    "the client grows fond of it.",
+    "",
+    "`look` are the character axes from app/app/lib/agentito.tsx (tone, antenna,",
+    "accessory, pupil, mouth, skin, suit, brows). Each role starts at a CLEARLY",
+    "different point in that space: the face is how you tell who did what in a",
+    "list of twenty cards."
+  ],
+  "identity": {
+    "look": {
+      "tono": 0,
+      "antena": 5,
+      "accesorio": 1,
+      "pupila": 1,
+      "boca": 1,
+      "piel": 0,
+      "traje": 0,
+      "cejas": 1
+    },
+    "name": "Vera"
+  },
+  "capabilities": [
     "imagenes",
     "brand-kit",
     "social-content",
     "post-image"
   ],
-  "conexiones": [],
-  "env_requires": [
-    {
-      "name": "OPENROUTER_API_KEY",
-      "description": "Genera las imagenes de los posteos",
-      "required": true
-    }
-  ],
-  "flujos": [
+  "connections": [],
+  "flows": [
     "contenido-instagram-diario"
   ]
 }

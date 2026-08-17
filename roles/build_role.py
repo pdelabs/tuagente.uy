@@ -9,8 +9,8 @@ Produces a directory `hermes profile install` accepts:
       distribution.yaml    manifest the engine reads (version, env, ownership)
       SOUL.md              kit:base block + the role's identity.md
       skills/              only the skills this role owns
-      cron/                nothing yet; flows land in flujos/
-      flujos/              the curated flows shipped with the role
+      cron/                nothing yet; flows land in flows/
+      flows/               the curated flows shipped with the role
       role.json            identity (name + face) for the portal
 
 WHY A BUILDER AND NOT A COMMITTED DIRECTORY. Two things must exist exactly once
@@ -44,15 +44,9 @@ from pathlib import Path
 KIT = Path(__file__).resolve().parent.parent
 ROLES = KIT / "roles"
 
-# Phrases that mean the identity block is legislating something the base block
-# already owns. Deliberately narrow: these are the rules whose divergence is
-# dangerous, not every word the base happens to use.
-BASE_TERRITORY = (
-    "aprobaci",   # aprobación / aprobaciones: whose sole home is 01-aprobaciones.md
-    "kit:base",
-)
-# ...except when the role is merely APPLYING the rule to its own craft, which is
-# the whole point of an identity block. Only a heading-level restatement counts.
+# A role's identity block says how it APPLIES the shared rules to its craft --
+# that is the whole point of it. What it must never do is restate the rules
+# themselves, so only a heading-level redefinition counts as drift.
 BASE_TERRITORY_HEADINGS = re.compile(
     r"^#{1,3}\s+.*(regla de aprobaci|antes de actuar|precedencia)", re.I | re.M
 )
@@ -118,7 +112,7 @@ distribution_owned:
   - SOUL.md
   - skills/
   - cron/
-  - flujos/
+  - flows/
   - role.json
 """,
         encoding="utf-8",
@@ -145,8 +139,8 @@ def build(role: str, out_root: Path) -> Path:
     flows_src = role_dir / "flows"
     flows = 0
     if flows_src.is_dir():
-        shutil.copytree(flows_src, dest / "flujos")
-        flows = len(list((dest / "flujos").iterdir()))
+        shutil.copytree(flows_src, dest / "flows")
+        flows = len(list((dest / "flows").iterdir()))
 
     (dest / "cron").mkdir(exist_ok=True)
     shutil.copy2(role_dir / "role.json", dest / "role.json")
@@ -156,7 +150,7 @@ def build(role: str, out_root: Path) -> Path:
     print(f"{role} v{cfg['version']}  ->  {dest}")
     print(f"  SOUL.md  {soul_bytes} bytes (base {read_version()} + identity)")
     print(f"  skills   {count}")
-    print(f"  flujos   {flows}")
+    print(f"  flows    {flows}")
     print(f"\n  hermes profile install {dest}")
     return dest
 
