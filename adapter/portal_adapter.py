@@ -357,6 +357,10 @@ def manifest():
             # dejo su catalogo. Sin esto el portal no puede condicionar nada y
             # tiene que adivinar si el mecanismo existe en este agente.
             "capacidades": CAPACIDADES_CATALOG.is_file(),
+            # The team. Only when the kit left a roster: a single-role agent --
+            # every one we run today -- looks exactly as it did, with no tab
+            # telling the client about people they never hired.
+            "roles": ROLES_CATALOG.is_file(),
             # SIEMPRE encendida, aunque no haya ninguno todavía. Los flujos son
             # el producto: si para charlar el cliente tiene ChatGPT, lo que
             # justifica esto es que el agente HAGA cosas solo. La pestaña estaba
@@ -647,6 +651,22 @@ POLITICA = POLITICA_DIR / "politica.json"
 CAPACIDADES_DIR = POLITICA_DIR / "capacidades"
 CAPACIDADES_CATALOG = CAPACIDADES_DIR / "catalogo.json"
 CAPACIDADES_PEDIDOS = CAPACIDADES_DIR / "pedidos.jsonl"
+
+# THE ROSTER: which roles exist, which ones the client hired, and what each is
+# called. It lives in politica/ for the same reason as the capability catalog
+# and with more force -- money is involved. In data/ the agent could rewrite the
+# list of what its own client pays for, or hire itself a role.
+#
+# An INSTALLED role is a Hermes profile: a directory under data/profiles/. Like
+# capabilities it is detected by PRESENCE, never by a value someone wrote: the
+# directory is either there or it is not.
+ROLES_DIR = POLITICA_DIR / "roles"
+ROLES_CATALOG = ROLES_DIR / "catalogo.json"
+PROFILES_DIR = DATA / "profiles"
+# The role id gets joined onto a path, so it is validated BEFORE touching disk.
+# Same alphabet `hermes profile create` accepts (lowercase and digits), which
+# also rules out `..` and slashes without having to reason about them.
+_PROFILE_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 # La mencion tal cual la pide el contrato: SOLA EN UNA LINEA. Anclada asi a
 # proposito — el `capacidad:imagenes` que aparece como ejemplo adentro de la
 # skill, o citado en medio de una frase, no es un pedido.
@@ -961,6 +981,71 @@ def guardar_politica(conexion_id, cambios):
     tmp.write_text(json.dumps(actual, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(POLITICA)   # atomico: nunca un archivo a medio escribir
     return politica_de(conexion_id)
+
+
+def _rol_instalado(rol_id):
+    """A role is hired when its profile exists on disk. Nothing else.
+
+    By presence and not by a flag: a flag has to be kept current and drifts
+    exactly when it matters -- the client drops a role, someone forgets to lower
+    the flag, and the portal keeps showing a team they no longer pay for. The
+    directory does not lie.
+    """
+    if not _PROFILE_ID_RE.match(rol_id or ""):
+        return False
+    return (PROFILES_DIR / rol_id).is_dir()
+
+
+def _identidad_del_rol(rol_id):
+    """The role's name and face, from the role.json its distribution shipped.
+
+    The client may rename it, which is why this reads the installed profile and
+    not the catalog -- the catalog only holds the default it arrived with.
+    """
+    try:
+        datos = json.loads((PROFILES_DIR / rol_id / "role.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    identidad = datos.get("identidad") or {}
+    return {k: identidad[k] for k in ("nombre", "look") if k in identidad}
+
+
+def roles():
+    """The team: who is hired, who is on offer, and what each one is called.
+
+    PORTAL CONTRACT:
+      GET /portal/roles -> {disponible, roles:[{id, label, hace, jamas,
+                            contratado, nombre, look, necesita, flujos}]}
+
+    What does NOT come out of here: `ruteo` and `nota_interna`. `ruteo` is the
+    description the decomposer reads to route tasks -- our machinery, and
+    putting it on a commercial screen is showing the client a prompt.
+    """
+    try:
+        catalogo = json.loads(ROLES_CATALOG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        # No catalog means no team: the portal keeps working as the single-role
+        # agent it has been until today. Same degradation as capabilities, and
+        # deliberate -- an older agent does not break.
+        return {"disponible": False, "roles": []}
+
+    salida = []
+    for rol in catalogo.get("roles", []):
+        rol_id = rol.get("id") or ""
+        contratado = _rol_instalado(rol_id)
+        fila = {
+            "id": rol_id,
+            "label": rol.get("label"),
+            "hace": rol.get("hace"),
+            "jamas": rol.get("jamas"),
+            "contratado": contratado,
+            "necesita": rol.get("necesita") or [],
+            "flujos": rol.get("flujos") or [],
+            "estado": rol.get("estado"),
+        }
+        fila.update(_identidad_del_rol(rol_id) if contratado else {})
+        salida.append(fila)
+    return {"disponible": True, "roles": salida}
 
 
 def capacidades():
@@ -2138,6 +2223,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, connections())
             if path == "/portal/capacidades":
                 return self._send(200, capacidades())
+            if path == "/portal/roles":
+                return self._send(200, roles())
             if path == "/portal/flujos":
                 return self._send(200, flujos())
             m = re.match(r"^/portal/flujos/([^/]+)$", path)

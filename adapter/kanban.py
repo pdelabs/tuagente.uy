@@ -56,10 +56,17 @@ class KanbanStore:
         return boards
 
     def tickets(self, database=None):
+        # `assignee` IS THE ROLE DOING THE WORK. The board is shared across
+        # Hermes profiles and this column records which one holds the task;
+        # without exposing it the portal draws a team's board that never says
+        # who does what. Measured in the 16/8 spike: the decomposer split one
+        # request in two and routed both correctly, and the portal still
+        # returned them with a null assignee.
         connection = self.connect(database or self.default_database)
         try:
+            owner = "assignee" if self._has_column(connection, "assignee") else "NULL AS assignee"
             rows = connection.execute(
-                "SELECT id, title, body, status, tenant, created_at FROM tasks "
+                f"SELECT id, title, body, status, tenant, {owner}, created_at FROM tasks "
                 "WHERE status != 'archived' ORDER BY created_at DESC LIMIT 100"
             ).fetchall()
             return [dict(row) for row in rows]
@@ -72,6 +79,23 @@ class KanbanStore:
             if line.strip():
                 return line.strip()
         return title
+
+    @staticmethod
+    def _has_column(connection, name):
+        """Whether the column exists in `tasks`, in this database, right now.
+
+        SAME REASON AS `_pending_where`: the engine owns the kanban schema and
+        it changes between versions, while this adapter runs on agents that do
+        not all update together. Asking for a missing column yields
+        OperationalError, not an empty field, and that takes the whole response
+        down. `assignee` is one of the new ones -- the board shared across
+        roles -- so on an older agent the portal shows an unowned ticket rather
+        than nothing at all.
+        """
+        try:
+            return name in {row[1] for row in connection.execute("PRAGMA table_info(tasks)")}
+        except sqlite3.Error:
+            return False
 
     @staticmethod
     def _pending_where(connection):
@@ -171,8 +195,10 @@ class KanbanStore:
     def ticket_detail(self, task_id: str, database=None):
         connection = self.connect(database or self.default_database)
         try:
+            owner = "assignee" if self._has_column(connection, "assignee") else "NULL AS assignee"
             ticket = connection.execute(
-                "SELECT id, title, body, status, tenant, created_at FROM tasks WHERE id = ?", (task_id,)
+                f"SELECT id, title, body, status, tenant, {owner}, created_at "
+                "FROM tasks WHERE id = ?", (task_id,)
             ).fetchone()
             if ticket is None:
                 return None
