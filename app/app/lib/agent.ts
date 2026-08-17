@@ -63,6 +63,10 @@ export type Ticket = {
   body: string | null;
   status: string;
   tenant: string | null;
+  /** Which role holds this task. The kanban is one board shared across every
+   *  Hermes profile, and this is where it records the owner. `null` on an agent
+   *  that never had a team: the ticket is simply drawn without a chip. */
+  assignee: string | null;
   created_at: string | number; // Hermes lo emite como epoch en segundos
 };
 
@@ -845,6 +849,29 @@ export type Capacidad = {
 };
 export const getCapacidades = (c: PortalConfig) =>
   get<{ disponible: boolean; capacidades: Capacidad[] }>(c.adapter, "/portal/capacidades", c);
+
+/** One member of the team -- hired or on offer.
+ *
+ *  A role is a Hermes profile with its own SOUL, skills and memory. `name` and
+ *  `look` only come back for hired ones: they are read from the profile the
+ *  client owns, so a rename survives. */
+export type Role = {
+  id: string;
+  label: string;
+  /** What it does, in the client's words. */
+  does: string;
+  /** Its hard limit, also in their words. The same sentence lives in its SOUL. */
+  never?: string;
+  hired: boolean;
+  name?: string;
+  look?: Record<string, number>;
+  /** Connections it cannot start without. */
+  needs?: string[];
+  flows?: string[];
+  state?: string;
+};
+export const getRoles = (c: PortalConfig) =>
+  get<{ available: boolean; roles: Role[] }>(c.adapter, "/portal/roles", c);
 
 /** El cliente pide una capacidad. Queda anotado del lado del agente (una línea
  *  por pedido) y lo miramos nosotros: no prende nada solo. */

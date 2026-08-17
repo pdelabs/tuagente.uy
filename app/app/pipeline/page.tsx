@@ -67,6 +67,7 @@ import {
 import Markdown from "../lib/Markdown";
 import { EntityProvider } from "../lib/EntityViewer";
 import { EntityChip } from "../lib/entities";
+import { RoleChip, useRoles } from "../lib/roles";
 
 const REFRESH_MS = 30_000;
 const SIN_TENANT = "__sin_tenant__"; // sentinel para tickets con tenant null
@@ -312,6 +313,8 @@ function Etiqueta({ children, opcional }: { children: string; opcional?: boolean
 type ComentarioLocal = TicketComment & { local: number };
 
 export default function PipelinePage() {
+  // The team, if this agent has one. Empty map on every agent running today.
+  const roles = useRoles();
   // La pinta del agente para el sello de sus comentarios (lazy: sin flash).
   const [lookAgente] = useState(loadAgentLook);
   const [cfg] = useState<PortalConfig | null>(() => loadConfig());
@@ -729,6 +732,10 @@ export default function PipelinePage() {
                               {t.title}
                             </p>
                             <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              {/* Who holds this task. Draws nothing on an agent
+                                  with no team, so a single-role board is
+                                  unchanged. */}
+                              <RoleChip id={t.assignee} roles={roles} />
                               {t.tenant && <Chip tone="neutral">{t.tenant}</Chip>}
                               <span className="ml-auto text-[11px] text-ink-soft">
                                 {fmtRelativa(t.created_at)}
