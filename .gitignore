@@ -9,3 +9,4 @@ respaldos-soul/
 # Copias del config.yaml previo que deja perilla-skills.py --aplicar: son de
 # un agente concreto, no del kit.
 respaldos-config/
+dist/

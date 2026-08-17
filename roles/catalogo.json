@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "_comentario": [
+    "El ROSTER: que roles existen, que hace cada uno y que necesita para",
+    "trabajar. Hermano de capacidades/catalogo.json y cerrado por la misma",
+    "razon: el cliente elige de una lista y el agente jamas redacta un rol",
+    "nuevo.",
+    "",
+    "UNA ENTRADA = ALGUIEN QUE SE CONTRATA. Por dentro es un profile de Hermes",
+    "con su SOUL, sus skills y sus flujos; el cliente ve una persona con nombre",
+    "y cara.",
+    "",
+    "  hace          -> el trabajo, en palabras del cliente",
+    "  jamas         -> el limite duro, tambien en sus palabras. Va en el SOUL.",
+    "  ruteo         -> la descripcion que lee el decomposer para asignarle",
+    "                   tareas. ES UN ARTEFACTO COMERCIAL: si esta floja, el",
+    "                   cliente paga un rol que no recibe trabajo.",
+    "  necesita      -> conexiones sin las cuales no puede empezar",
+    "  flujos        -> los curados que llegan con el rol, listos para un click",
+    "",
+    "PRECIOS: a definir. El numero de referencia que manejamos es ~1000 pesos",
+    "uruguayos por rol, pero marketing genera imagenes y eso se mide aparte:",
+    "medido el 16/8/2026 sobre Mr.Wobble, un dia de generacion costo US$1,51,",
+    "que a ese ritmo se come el precio del rol. No publicar precio sin el costo",
+    "real por rol medido (ver docs/PENDIENTES.md en tuagente.uy)."
+  ],
+  "roles": [
+    {
+      "id": "marketing",
+      "label": "Marketing",
+      "hace": "Escribe y planifica lo que publicás: posteos de Instagram, historias, textos y el kit de marca.",
+      "jamas": "Publica nada sin tu aprobación.",
+      "ruteo": "Writes and plans social media content: Instagram posts, stories, carousels, captions and the brand kit. Owns everything the company publishes to an audience. Route here anything about posting, publishing, campaigns, brand identity, visual pieces or editorial calendar.",
+      "necesita": [],
+      "skills": ["brand-kit", "social-content", "post-image", "entregable", "artifact", "aprobacion", "flujo", "capacidad"],
+      "flujos": ["contenido-instagram-diario"],
+      "estado": "listo"
+    },
+    {
+      "id": "soporte",
+      "label": "Soporte",
+      "hace": "Contesta los mensajes de tus clientes: horarios, precios y estado de pedidos.",
+      "jamas": "Manda un mensaje a un cliente tuyo sin tu aprobación.",
+      "ruteo": "Answers inbound customer messages on WhatsApp and email: questions about hours, prices, availability and order status. Owns the inbox and every reply sent to a customer. Route here anything about answering, replying, customer questions or pending conversations.",
+      "necesita": ["whatsapp"],
+      "skills": ["aprobacion", "entregable", "flujo", "capacidad"],
+      "flujos": [],
+      "estado": "por escribir"
+    },
+    {
+      "id": "ventas",
+      "label": "Ventas",
+      "hace": "Arma presupuestos y hace el seguimiento de los que no te contestaron.",
+      "jamas": "Cierra un precio ni promete una entrega sin tu aprobación.",
+      "ruteo": "Prepares quotes and follows up on them: turns an inbound request into a priced proposal, chases the ones with no answer, and keeps the customer list up to date. Route here anything about quoting, pricing a job, proposals or follow-up.",
+      "necesita": [],
+      "skills": ["aprobacion", "entregable", "flujo", "capacidad"],
+      "flujos": [],
+      "estado": "por escribir"
+    },
+    {
+      "id": "contabilidad",
+      "label": "Contabilidad",
+      "hace": "Te arma las planillas de lo que entra y lo que sale, y te avisa lo que vence.",
+      "jamas": "Factura, paga ni presenta nada. Solo mira, ordena y avisa.",
+      "ruteo": "Builds spreadsheets from financial records and flags what needs attention: income and expense sheets, reconciling what was charged against what was invoiced, and overdue invoice alerts. READ-ONLY: never files, pays or issues anything. Route here anything about numbers, invoices, spreadsheets or what is owed.",
+      "necesita": [],
+      "skills": ["aprobacion", "entregable", "flujo", "capacidad"],
+      "flujos": [],
+      "estado": "por escribir",
+      "nota_interna": "SOLO LECTURA Y NO SE NEGOCIA. En Uruguay facturar toca DGI y factura electronica: superficie regulada, con un agente que EJECUTA CODIGO y un contenedor que administramos nosotros. Este rol lee, ordena en una planilla y avisa. El dia que alguien pida que facture, es otro producto con otro seguro."
+    }
+  ]
+}
