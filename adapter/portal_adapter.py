@@ -1009,6 +1009,34 @@ def _role_identity(role_id, catalog_identity):
     return {k: identity[k] for k in ("name", "look") if k in (identity or {})}
 
 
+def _role_key(role_id):
+    """The API key that addresses one role, read from its own profile.
+
+    THIS IS WHY THE PORTAL CANNOT TALK TO A ROLE DIRECTLY. The engine serves
+    every profile off one port through a `/p/<role>/` prefix, but it resolves
+    `API_SERVER_KEY` inside that profile's scope and FAILS CLOSED rather than
+    letting a named profile inherit the listener's key. Measured 2026-08-17 on
+    the lab: `/p/marketing/v1/chat/completions` answers 200 with marketing's own
+    key and 401 with the portal's.
+
+    That is the right call upstream and it leaves the portal with a problem: the
+    magic link carries ONE credential, and it is the credential -- handing the
+    browser one key per role would multiply what leaks if a link leaks.
+
+    So the adapter holds the mapping. It already lives in the container with the
+    profiles mounted, it is already the thing that exists for what the native
+    API does not expose, and the client keeps a single key.
+    """
+    env_file = PROFILES_DIR / role_id / ".env"
+    if not env_file.is_file():
+        return ""
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        name, _, value = line.partition("=")
+        if name.strip() == "API_SERVER_KEY":
+            return value.strip().strip("\"'")
+    return ""
+
+
 def roles():
     """The team: who is hired, who is on offer, and what each one is called.
 
@@ -2302,13 +2330,37 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError):
             return None
 
-    def _proxy_chat_stream(self, session_id, body):
+    def _proxy_chat_stream(self, session_id, body, role=None):
+        """Continue an existing conversation, optionally as a member of the team."""
+        prefix, token = "", TOKEN
+        if role:
+            token = _role_key(role)
+            if not token:
+                return self._send(409, {
+                    "error": f"el rol '{role}' no tiene su propia clave configurada",
+                })
+            prefix = f"/p/{role}"
+        return self._proxy_sse(
+            f"{AGENT_BASE}{prefix}/api/sessions/{session_id}/chat/stream", body, token)
+
+    def _proxy_sse(self, url, body, token):
+        """Relay one upstream SSE chat stream to the browser, line by line.
+
+        TWO CALLERS, ONE RELAY: the session path continues a conversation, the
+        OpenAI-compatible path opens one with a role. Both need the same
+        line-buffered forwarding, the same CORS, and the same capability-mention
+        sweep -- and a copy of this would mean a fix landing in one of them.
+
+        `role` swaps BOTH the path prefix and the credential upstream: the engine
+        resolves API_SERVER_KEY inside the profile's scope, so the portal's key
+        gets a 401 on `/p/<role>/`. See `_role_key`.
+        """
         # SSE linea a linea: readline() devuelve apenas llega cada evento
         # (read(n) bufferearia hasta completar n bytes y mataria el streaming).
         req = urllib.request.Request(
-            f"{AGENT_BASE}/api/sessions/{session_id}/chat/stream",
+            url,
             data=json.dumps(body).encode(),
-            headers={"Authorization": f"Bearer {TOKEN}",
+            headers={"Authorization": f"Bearer {token}",
                      "Content-Type": "application/json"},
             method="POST",
         )
@@ -2580,12 +2632,44 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "code is required"})
             res = google_auth_code(str(body["code"]))
             return self._send(200 if res.get("ok") else 400, res)
+        if path == "/portal/chat/stream":
+            # A NEW conversation with a member of the team.
+            #
+            # It proxies `/v1/chat/completions` -- the same path the portal
+            # already uses to open a conversation -- only prefixed with the role
+            # and carrying the role's key.
+            #
+            # THE OBVIOUS-LOOKING ALTERNATIVE DOES NOT WORK: creating the
+            # session with `POST /api/sessions` and streaming into it stores the
+            # ADVERTISED model name (`hermes-agent`, the virtual name the
+            # api_server publishes for OpenAI-compatible clients) on the
+            # session, and the provider then rejects it with "hermes-agent is
+            # not a valid model ID". Measured 2026-08-17 on the lab. This path
+            # resolves the configured model on its own.
+            body = self._read_json_body()
+            if body is None or not isinstance(body.get("messages"), list):
+                return self._send(400, {"error": "messages is required"})
+            role = str(body.pop("role", "") or "").strip() or None
+            token, prefix = TOKEN, ""
+            if role:
+                token = _role_key(role)
+                if not token:
+                    return self._send(409, {
+                        "error": f"el rol '{role}' no tiene su propia clave configurada",
+                    })
+                prefix = f"/p/{role}"
+            return self._proxy_sse(f"{AGENT_BASE}{prefix}/v1/chat/completions", body, token)
+
         m = re.match(r"^/portal/sessions/([^/]+)/chat/stream$", path)
         if m:
             body = self._read_json_body()
             if body is None or not str(body.get("message") or "").strip():
                 return self._send(400, {"error": "message is required"})
-            return self._proxy_chat_stream(m.group(1), body)
+            # `role` is optional and travels in the body, not the path: the
+            # client's key stays the same either way, only the member answering
+            # changes. Absent means the agent they named, exactly as before.
+            role = str(body.pop("role", "") or "").strip() or None
+            return self._proxy_chat_stream(m.group(1), body, role)
 
         # --- escrituras del kanban (todo por CLI, jamas SQL) ---
         if path == "/portal/tickets":
