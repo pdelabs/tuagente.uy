@@ -23,7 +23,8 @@ import Markdown from "../lib/Markdown";
 import ArtifactPreview, { artifactIdsIn } from "../lib/ArtifactPreview";
 import dynamic from "next/dynamic";
 import { loadAgentName } from "../lib/onboarding";
-import { AgentitoAvatar, AgentitoCargando, loadAgentLook } from "../lib/agentito";
+import { AgentitoAvatar, AgentitoCargando, LOOK_DEFAULT, loadAgentLook, type AgentitoLook } from "../lib/agentito";
+import { roleName, useRoles } from "../lib/roles";
 import type { EstadoAgentito } from "../lib/AgentitoRive";
 
 // El personaje animado se trae solo cuando el chat se muestra; mientras, la
@@ -50,6 +51,11 @@ type Msg = {
   role: "user" | "assistant";
   content: string;
   tools?: string[]; // herramientas usadas en el run (solo en vivo)
+  /** Which member of the team answered. `assistant` messages only, and only
+   *  when the client addressed someone: absent means the agent they named, and
+   *  that one is never signed -- badging it would turn their agent into an
+   *  employee of a team they never hired. */
+  by?: string;
 };
 
 const THINKING = "_thinking";
@@ -142,6 +148,16 @@ export default function ChatPage() {
   // El agente tiene nombre y cara: el chat los usa en vez de "tu agente".
   // El look va lazy (sin efecto) para no pintar el violeta default un frame.
   const [lookAgente] = useState(loadAgentLook);
+  // The team, if this agent has one. Empty on every agent running today, so the
+  // chat keeps drawing exactly one face: the one the client named.
+  const roles = useRoles();
+  /** The face for a message: the role that answered, or the client's own agent. */
+  const lookDe = (by?: string): AgentitoLook =>
+    by && roles[by]?.look
+      ? ({ ...LOOK_DEFAULT, ...roles[by].look } as AgentitoLook)
+      : lookAgente;
+  /** Who the next message goes to. null = the agent the client named. */
+  const [hablarCon, setHablarCon] = useState<string | null>(null);
   const [nombreAgente, setNombreAgente] = useState<string | null>(null);
   useEffect(() => { setNombreAgente(loadAgentName()); }, []);
 
@@ -391,7 +407,8 @@ export default function ChatPage() {
     // "Pensó un momento" aunque no haya usado nada.
     setLiveTools([THINKING]);
     setEditingIdx(null);
-    setMsgs([...base, { role: "user", content: text }, { role: "assistant", content: "" }]);
+    setMsgs([...base, { role: "user", content: text },
+             { role: "assistant", content: "", by: hablarCon ?? undefined }]);
     setSending(true);
     setAtBottom(true);
 
@@ -402,7 +419,15 @@ export default function ChatPage() {
       if (!vigente()) return;
       setMsgs((ms) => [
         ...ms.slice(0, -1),
-        { role: "assistant", content, tools: tools.length ? [...tools] : undefined },
+        {
+          role: "assistant",
+          content,
+          tools: tools.length ? [...tools] : undefined,
+          // Stamped on the message, not read from a live selector: the client
+          // can address someone else on the next turn and this reply has to
+          // keep saying who actually wrote it.
+          by: hablarCon ?? undefined,
+        },
       ]);
     };
 
@@ -448,7 +473,7 @@ export default function ChatPage() {
               .find((m) => m.role === "assistant" && m.content?.trim());
             if (last?.content) paint(last.content);
           },
-        }, ac.signal);
+        }, ac.signal, hablarCon);
       } else {
         // Conversación nueva: el gateway también reporta herramientas, pero
         // por otro evento. Sin esto el rastro y el gesto se quedan en
@@ -456,7 +481,7 @@ export default function ChatPage() {
         await chatStream(cfg, history, paint, (tool) => {
           if (tools[tools.length - 1] !== tool) tools.push(tool);
           setLiveTools([...tools]);
-        }, ac.signal);
+        }, ac.signal, hablarCon);
       }
       flush();
       if (vigente()) {
@@ -692,20 +717,28 @@ export default function ChatPage() {
                   ) : (
                     <div key={i} className="group flex gap-2.5">
                       {/* Un solo agentito por mensaje: el animado mientras
-                          está trabajando, el quieto cuando terminó. */}
+                          está trabajando, el quieto cuando terminó.
+                          When a member of the team answered, it is THEIR face:
+                          the same identity the board and the roster draw, so
+                          "who did this" reads the same everywhere. */}
                       <div className="mt-0.5 h-7 w-7 shrink-0">
                         {sending && i === lastIdx ? (
                           <AgentitoRive
                             festejos={0}
-                            look={lookAgente}
+                            look={lookDe(m.by)}
                             estado={gestoDe(liveTools[liveTools.length - 1])}
                             className="h-full w-full"
                           />
                         ) : (
-                          <AgentitoAvatar look={lookAgente} className="h-full w-full" />
+                          <AgentitoAvatar look={lookDe(m.by)} className="h-full w-full" />
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
+                      {m.by && (
+                        <p className="mb-0.5 text-[12px] font-semibold text-ink">
+                          {roleName(m.by, roles)}
+                        </p>
+                      )}
                       {(m.tools?.length || (sending && i === lastIdx && liveTools.length > 0)) && (
                         <ToolTrace
                           tools={sending && i === lastIdx ? liveTools : m.tools ?? []}
@@ -797,6 +830,39 @@ export default function ChatPage() {
                 ))}
               </div>
             )}
+            {/* WHO ANSWERS. Above the composer, never in front of it: the
+                default is the agent the client named, and having to pick a
+                recipient before typing is a tax on every message. Nothing
+                renders when the agent has no team. */}
+            {Object.keys(roles).length > 0 && (
+              <div className="mb-2 flex w-full flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-ink-soft">Le escribís a</span>
+                <button
+                  onClick={() => setHablarCon(null)}
+                  className={`rounded-lg border px-2 py-0.5 text-[11px] font-medium transition ${
+                    hablarCon === null
+                      ? "border-primary bg-primary text-white"
+                      : "border-black/[0.07] bg-white text-ink-soft hover:border-primary/40"
+                  }`}
+                >
+                  {nombreAgente || "tu agente"}
+                </button>
+                {Object.values(roles).map((role) => (
+                  <button
+                    key={role.id}
+                    onClick={() => setHablarCon(role.id)}
+                    title={role.does}
+                    className={`rounded-lg border px-2 py-0.5 text-[11px] font-medium transition ${
+                      hablarCon === role.id
+                        ? "border-primary bg-primary text-white"
+                        : "border-black/[0.07] bg-white text-ink-soft hover:border-primary/40"
+                    }`}
+                  >
+                    {roleName(role.id, roles)}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-2 rounded-2xl border border-black/10 bg-white p-2 pl-2 transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
               <input
                 ref={fileRef}
@@ -850,7 +916,14 @@ export default function ChatPage() {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
                 }}
                 rows={1}
-                placeholder={nombreAgente ? `Escribile a ${nombreAgente}…` : "Escribile a tu agente…"}
+                placeholder={
+                  // The field says who is actually going to read it. With a
+                  // member selected it said the agent's name anyway, which
+                  // quietly contradicted the row right above.
+                  hablarCon
+                    ? `Escribile a ${roleName(hablarCon, roles)}…`
+                    : nombreAgente ? `Escribile a ${nombreAgente}…` : "Escribile a tu agente…"
+                }
                 disabled={sending}
                 className="max-h-52 flex-1 resize-none bg-transparent py-1.5 text-[15px] text-ink outline-none placeholder:text-ink-soft/60 disabled:opacity-60"
               />

@@ -1037,13 +1037,18 @@ export async function sessionChatStream(
   message: string,
   h: SessionStreamHandlers,
   signal?: AbortSignal,
+  /** Which member of the team answers. Absent = the agent the client named.
+   *  It travels in the body and the client's key never changes: the adapter
+   *  holds the per-role credential, because the engine fails a named profile
+   *  closed rather than let it inherit the listener's key. */
+  role?: string | null,
 ): Promise<void> {
   const res = await fetch(
     `${cfg.adapter}/portal/sessions/${encodeURIComponent(sessionId)}/chat/stream`,
     {
       method: "POST",
       headers: { ...headers(cfg), "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify(role ? { message, role } : { message }),
       signal,
     },
   );
@@ -1127,11 +1132,19 @@ export async function chatStream(
    *  Los `_internos` (como `_thinking`) el gateway ni los manda por acá. */
   onTool?: (tool: string) => void,
   signal?: AbortSignal,
+  /** Which member of the team answers. With a role this goes through the
+   *  ADAPTER instead of the gateway: addressing a role needs that profile's own
+   *  key and the browser only ever holds one. Without a role it is the gateway
+   *  directly, exactly as before -- nothing to scope, no extra hop. */
+  role?: string | null,
 ): Promise<string> {
-  const res = await fetch(cfg.endpoint + "/v1/chat/completions", {
+  const url = role
+    ? cfg.adapter + "/portal/chat/stream"
+    : cfg.endpoint + "/v1/chat/completions";
+  const res = await fetch(url, {
     method: "POST",
     headers: { ...headers(cfg), "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, stream: true }),
+    body: JSON.stringify(role ? { messages, stream: true, role } : { messages, stream: true }),
     signal,
   });
   if (!res.ok || !res.body) throw new Error(`${res.status} en chat`);
