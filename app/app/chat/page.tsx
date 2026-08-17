@@ -255,13 +255,27 @@ export default function ChatPage() {
     [activeId, sessions],
   );
 
-  const mentionItems = useMentionItems(cfg, mention?.kind ?? null, mention?.term ?? "");
+  const mentionItems = useMentionItems(cfg, mention?.kind ?? null, mention?.term ?? "", roles);
 
-  // Reemplaza el token `#…`/`@…` por la referencia elegida.
+  // `/…` and `#…` insert a reference into the message. `@…` does NOT: it hands
+  // the turn to someone on the team, which is what an @ means in a room.
+  // Leaving the id in the text would send the client's own words plus a token
+  // they never wrote.
   const pickMention = (item: MentionItem) => {
     if (!mention) return;
     const el = taRef.current;
     const caret = el?.selectionStart ?? input.length;
+    if (mention.kind === "role") {
+      setHablarCon(item.insert);
+      setInput(`${input.slice(0, mention.start)}${input.slice(caret)}`);
+      setMention(null);
+      setMentionIdx(0);
+      requestAnimationFrame(() => {
+        el?.focus();
+        el?.setSelectionRange(mention.start, mention.start);
+      });
+      return;
+    }
     const next = `${input.slice(0, mention.start)}${item.insert} ${input.slice(caret)}`;
     setInput(next);
     setMention(null);
@@ -393,8 +407,26 @@ export default function ChatPage() {
     const seqEnvio = openSeq.current;
     const vigente = () => openSeq.current === seqEnvio;
 
+    // THE ROOM, SEEN FROM WHOEVER IS ANSWERING.
+    //
+    // In the OpenAI format `assistant` means "you said this", so handing a
+    // teammate's reply through untouched makes the next one read it as its own
+    // words. Measured on the lab: Vera got Beto's line as `assistant`, quoted
+    // it back as hers -- "Te dije: 'Soy Beto…'" -- and then apologised for
+    // having said something she never said.
+    //
+    // So a teammate's turn arrives as what it is: something SOMEONE ELSE said
+    // in the room, attributed by name. Only the answerer's own turns stay
+    // `assistant`. That is what makes the transcript a room instead of one
+    // confused monologue.
+    const speaker = (by?: string) => (by ? roleName(by, roles) : nombreAgente || "Tu agente");
     const history: ChatMessage[] = [
-      ...base.map((m): ChatMessage => ({ role: m.role, content: m.content })),
+      ...base.map((m): ChatMessage => {
+        if (m.role !== "assistant" || (m.by ?? null) === hablarCon) {
+          return { role: m.role, content: m.content };
+        }
+        return { role: "user", content: `[${speaker(m.by)} dijo] ${m.content}` };
+      }),
       { role: "user", content: text },
     ];
 
@@ -449,7 +481,16 @@ export default function ChatPage() {
     };
 
     try {
-      if (activeId) {
+      // THE ROOM IS THE MESSAGE LIST, and that is the whole trick: `chatStream`
+      // already sends the full history, so whoever takes this turn reads
+      // everything said before it -- including what a teammate answered three
+      // messages ago -- without needing a memory of its own.
+      //
+      // A turn aimed at someone always goes this way, even inside an open
+      // conversation. `sessionChatStream` sends only the new message and leans
+      // on a session stored INSIDE one profile: down that path a teammate would
+      // answer having read nothing, which is exactly the bubble we are leaving.
+      if (activeId && !hablarCon) {
         // Un run puede traer varios mensajes del asistente (rondas de tools).
         const segments: string[] = [""];
         const render = () => paint(segments.filter((s) => s.trim()).join("\n\n"));
@@ -830,37 +871,23 @@ export default function ChatPage() {
                 ))}
               </div>
             )}
-            {/* WHO ANSWERS. Above the composer, never in front of it: the
-                default is the agent the client named, and having to pick a
-                recipient before typing is a tax on every message. Nothing
-                renders when the agent has no team. */}
-            {Object.keys(roles).length > 0 && (
-              <div className="mb-2 flex w-full flex-wrap items-center gap-1.5">
-                <span className="text-[11px] text-ink-soft">Le escribís a</span>
-                <button
-                  onClick={() => setHablarCon(null)}
-                  className={`rounded-lg border px-2 py-0.5 text-[11px] font-medium transition ${
-                    hablarCon === null
-                      ? "border-primary bg-primary text-white"
-                      : "border-black/[0.07] bg-white text-ink-soft hover:border-primary/40"
-                  }`}
-                >
-                  {nombreAgente || "tu agente"}
-                </button>
-                {Object.values(roles).map((role) => (
+            {/* WHO THIS TURN GOES TO. Only when it is aimed at someone: the
+                room's default is the agent the client named, and a standing row
+                of every teammate would say that picking is a step before every
+                message. `@` aims it; this shows it, and takes it back. */}
+            {hablarCon && (
+              <div className="mb-2 flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-c-violet/40 px-2 py-1 text-[12px] font-medium text-ink">
+                  <AgentitoAvatar look={lookDe(hablarCon)} className="h-4 w-4 shrink-0" />
+                  Para {roleName(hablarCon, roles)}
                   <button
-                    key={role.id}
-                    onClick={() => setHablarCon(role.id)}
-                    title={role.does}
-                    className={`rounded-lg border px-2 py-0.5 text-[11px] font-medium transition ${
-                      hablarCon === role.id
-                        ? "border-primary bg-primary text-white"
-                        : "border-black/[0.07] bg-white text-ink-soft hover:border-primary/40"
-                    }`}
+                    aria-label="Escribirle a todo el equipo"
+                    onClick={() => setHablarCon(null)}
+                    className="ml-0.5 text-ink-soft transition hover:text-ink"
                   >
-                    {roleName(role.id, roles)}
+                    <X className="h-3 w-3" />
                   </button>
-                ))}
+                </span>
               </div>
             )}
             <div className="flex items-end gap-2 rounded-2xl border border-black/10 bg-white p-2 pl-2 transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
