@@ -21,17 +21,18 @@ class KanbanStoreTests(unittest.TestCase):
         connection.executescript("""
             CREATE TABLE tasks (
               id TEXT PRIMARY KEY, title TEXT, body TEXT, status TEXT,
-              tenant TEXT, created_at INTEGER, block_kind TEXT, block_recurrences INTEGER
+              tenant TEXT, assignee TEXT, created_at INTEGER,
+              block_kind TEXT, block_recurrences INTEGER
             );
             CREATE TABLE task_comments (id INTEGER PRIMARY KEY, task_id TEXT, author TEXT, body TEXT, created_at INTEGER);
             CREATE TABLE task_events (id INTEGER PRIMARY KEY, task_id TEXT, kind TEXT, payload TEXT, created_at INTEGER);
         """)
         connection.executemany(
-            "INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                ("t_blocked", "Blocked", "First line", "blocked", None, 20, "needs_input", 1),
-                ("t_triage", "Escalated", "Needs a decision", "triage", None, 10, "needs_input", 2),
-                ("t_other", "Other", "Not an approval", "triage", None, 30, "dependency", 0),
+                ("t_blocked", "Blocked", "First line", "blocked", None, "marketing", 20, "needs_input", 1),
+                ("t_triage", "Escalated", "Needs a decision", "triage", None, "soporte", 10, "needs_input", 2),
+                ("t_other", "Other", "Not an approval", "triage", None, None, 30, "dependency", 0),
             ],
         )
         connection.execute(
@@ -47,11 +48,7 @@ class KanbanStoreTests(unittest.TestCase):
             connection.execute("PRAGMA query_only = ON")
             return connection
 
-        # Kept on the instance so a test can build a second store over a
-        # different schema without re-deriving the fixture's plumbing.
-        self.connect = connect
-        self.boards = root / "boards"
-        self.store = KanbanStore(connect, self.database, self.boards, self.workspace)
+        self.store = KanbanStore(connect, self.database, root / "boards", self.workspace)
 
     def tearDown(self):
         self.temporary_directory.cleanup()
@@ -77,40 +74,19 @@ class KanbanStoreTests(unittest.TestCase):
         unreadable = Path(self.temporary_directory.name) / "no-existe" / "kanban.db"
         self.assertEqual(self.store.pending_count(unreadable), 0)
 
-    def test_assignee_is_null_when_the_schema_predates_it(self):
-        """An older agent shows an unowned ticket, never an error.
+    def test_assignee_travels_to_the_portal(self):
+        """The role doing the work reaches the portal: it draws the role chip.
 
-        The engine owns the kanban schema and our agents do not all update on
-        the same day. `assignee` -- the role doing the work -- is one of the new
-        columns: asking for it where it does not exist yields OperationalError,
-        not an empty field, and that takes the whole response down. This class's
-        fixture deliberately lacks the column, so this covers the old shape.
+        The board is one database shared across every Hermes profile, and this
+        column is where it records which profile holds the task.
         """
-        self.assertIsNone(self.store.tickets()[0]["assignee"])
-        self.assertIsNone(self.store.ticket_detail("t_blocked")["ticket"]["assignee"])
-
-    def test_assignee_travels_when_the_schema_has_it(self):
-        """And when it is there it reaches the portal: it draws the role chip."""
-        database = Path(self.temporary_directory.name) / "with-roles.db"
-        connection = sqlite3.connect(database)
-        connection.executescript("""
-            CREATE TABLE tasks (
-              id TEXT PRIMARY KEY, title TEXT, body TEXT, status TEXT,
-              tenant TEXT, assignee TEXT, created_at INTEGER,
-              block_kind TEXT, block_recurrences INTEGER
-            );
-            CREATE TABLE task_comments (id INTEGER PRIMARY KEY, task_id TEXT, author TEXT, body TEXT, created_at INTEGER);
-            CREATE TABLE task_events (id INTEGER PRIMARY KEY, task_id TEXT, kind TEXT, payload TEXT, created_at INTEGER);
-        """)
-        connection.execute(
-            "INSERT INTO tasks VALUES ('t_post', 'Publicar', '', 'ready', NULL, 'marketing', 1, NULL, NULL)"
+        by_id = {ticket["id"]: ticket for ticket in self.store.tickets()}
+        self.assertEqual(by_id["t_blocked"]["assignee"], "marketing")
+        self.assertEqual(by_id["t_triage"]["assignee"], "soporte")
+        self.assertIsNone(by_id["t_other"]["assignee"])
+        self.assertEqual(
+            self.store.ticket_detail("t_blocked")["ticket"]["assignee"], "marketing"
         )
-        connection.commit()
-        connection.close()
-
-        store = KanbanStore(self.connect, database, self.boards, self.workspace)
-        self.assertEqual(store.tickets()[0]["assignee"], "marketing")
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -663,10 +663,6 @@ CAPACIDADES_PEDIDOS = CAPACIDADES_DIR / "pedidos.jsonl"
 ROLES_DIR = POLITICA_DIR / "roles"
 ROLES_CATALOG = ROLES_DIR / "catalogo.json"
 PROFILES_DIR = DATA / "profiles"
-# The role id gets joined onto a path, so it is validated BEFORE touching disk.
-# Same alphabet `hermes profile create` accepts (lowercase and digits), which
-# also rules out `..` and slashes without having to reason about them.
-_PROFILE_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 # La mencion tal cual la pide el contrato: SOLA EN UNA LINEA. Anclada asi a
 # proposito — el `capacidad:imagenes` que aparece como ejemplo adentro de la
 # skill, o citado en medio de una frase, no es un pedido.
@@ -991,8 +987,6 @@ def _rol_instalado(rol_id):
     the flag, and the portal keeps showing a team they no longer pay for. The
     directory does not lie.
     """
-    if not _PROFILE_ID_RE.match(rol_id or ""):
-        return False
     return (PROFILES_DIR / rol_id).is_dir()
 
 
@@ -1001,12 +995,14 @@ def _identidad_del_rol(rol_id):
 
     The client may rename it, which is why this reads the installed profile and
     not the catalog -- the catalog only holds the default it arrived with.
+
+    A hired role without a role.json is a broken install, and it should read as
+    one: no name, no face, loudly missing on screen.
     """
-    try:
-        datos = json.loads((PROFILES_DIR / rol_id / "role.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    manifest_file = PROFILES_DIR / rol_id / "role.json"
+    if not manifest_file.is_file():
         return {}
-    identidad = datos.get("identidad") or {}
+    identidad = json.loads(manifest_file.read_text(encoding="utf-8")).get("identidad") or {}
     return {k: identidad[k] for k in ("nombre", "look") if k in identidad}
 
 
@@ -1021,13 +1017,12 @@ def roles():
     description the decomposer reads to route tasks -- our machinery, and
     putting it on a commercial screen is showing the client a prompt.
     """
-    try:
-        catalogo = json.loads(ROLES_CATALOG.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        # No catalog means no team: the portal keeps working as the single-role
-        # agent it has been until today. Same degradation as capabilities, and
-        # deliberate -- an older agent does not break.
+    # No catalog means no team: the portal keeps working as the single-role
+    # agent it has been until today. `manifest()` gates the tab on the same
+    # file, so this only answers a client that asked anyway.
+    if not ROLES_CATALOG.is_file():
         return {"disponible": False, "roles": []}
+    catalogo = json.loads(ROLES_CATALOG.read_text(encoding="utf-8"))
 
     salida = []
     for rol in catalogo.get("roles", []):
