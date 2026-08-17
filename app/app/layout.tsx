@@ -410,7 +410,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const enabled = MODULES.filter(
     (m) => !MODULOS_OCULTOS.has(m.key)
-      && (m.key === "home" || m.key === "capabilities" || manifest.modules[m.key]));
+      && (m.key === "home" || m.key === "capabilities" || manifest.modules[m.key]))
+    // Habilidades pasa a la nav principal el dia que el agente tiene equipo:
+    // el roster vive arriba de esa misma pagina, y dejarlo bajo "Más" lo
+    // esconde justo cuando mas importa -- la clienta acaba de contratar gente
+    // y "Más" no es donde uno busca a su equipo.
+    .map((m) => (m.key === "capabilities" && manifest.modules.roles ? { ...m, sec: false } : m));
   // Bienvenida por módulo: se ve una sola vez, hasta que el cliente da "Ok".
   const current = moduloActual;
   const Intro = current ? INTROS[current.key] : undefined;
