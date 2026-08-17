@@ -28,6 +28,7 @@ lo dejamos ahí).
 |---|---|
 | Inicio | `/app/inicio` |
 | Chat | `/app/chat` |
+| Equipo | `/app/equipo` |
 | Flujos | `/app/flujos` |
 | Tablero | `/app/pipeline` |
 | Aprobaciones | `/app/aprobaciones` |

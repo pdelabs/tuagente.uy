@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home,
-  LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Plug, Puzzle, Workflow,
+  LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Plug, Puzzle, Users, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -52,6 +52,10 @@ export const MODULOS_OCULTOS = new Set<string>(["usage"]);
 export const MODULES: { key: string; path: string; label: string; icon: LucideIcon; sec?: boolean }[] = [
   { key: "home", path: "/app/inicio", label: "Inicio", icon: Home },
   { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
+  // WHO works for you comes before WHAT they are doing, so this sits high and
+  // never under "Más". It only appears on an agent that has a team: the module
+  // is false on every single-role agent, which is all of them today.
+  { key: "roles", path: "/app/equipo", label: "Equipo", icon: Users },
   { key: "flujos", path: "/app/flujos", label: "Flujos", icon: Workflow },
   // Actividad sale de "Más" (13/8) y queda pegada a Flujos. Las dos clientas
   // del QA a ciegas la fueron a buscar y las dos dijeron lo mismo: "es donde
@@ -410,12 +414,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const enabled = MODULES.filter(
     (m) => !MODULOS_OCULTOS.has(m.key)
-      && (m.key === "home" || m.key === "capabilities" || manifest.modules[m.key]))
-    // Habilidades pasa a la nav principal el dia que el agente tiene equipo:
-    // el roster vive arriba de esa misma pagina, y dejarlo bajo "Más" lo
-    // esconde justo cuando mas importa -- la clienta acaba de contratar gente
-    // y "Más" no es donde uno busca a su equipo.
-    .map((m) => (m.key === "capabilities" && manifest.modules.roles ? { ...m, sec: false } : m));
+      && (m.key === "home" || m.key === "capabilities" || manifest.modules[m.key]));
   // Bienvenida por módulo: se ve una sola vez, hasta que el cliente da "Ok".
   const current = moduloActual;
   const Intro = current ? INTROS[current.key] : undefined;

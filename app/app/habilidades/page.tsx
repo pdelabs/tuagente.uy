@@ -22,7 +22,6 @@ import {
   getCapabilities, getSkillContent, loadConfig, saveSkill,
   type Capabilities, type Capability, type HttpError, type PortalConfig,
 } from "../lib/agent";
-import Equipo from "./equipo";
 import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner,
 } from "../lib/ui";
@@ -604,10 +603,6 @@ export default function CapacidadesPage() {
           No pude actualizar recién ({err.message}). Te muestro lo último que tengo.
         </p>
       )}
-
-      {/* WHO does the work comes before WHAT it can do. Renders nothing on an
-          agent with no roster, which is every one running today. */}
-      <Equipo />
 
       {cuerpo()}
     </div>

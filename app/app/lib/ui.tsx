@@ -18,8 +18,13 @@ export const SOPORTE = {
 };
 
 /** Link de auxilio. Va en las pantallas donde el cliente se puede quedar
- *  trabado (login, sin conexión, error) y al pie del menú. */
-export function Soporte({ className = "" }: { className?: string }) {
+ *  trabado (login, sin conexión, error) y al pie del menú.
+ *
+ *  `label` lo reusa donde escribirnos no es un pedido de auxilio -- sumar a
+ *  alguien al equipo, por ejemplo. La URL sigue viviendo en UN solo lugar, que
+ *  es el punto: un mailto escrito a mano en cada pantalla es otro dato que se
+ *  desincroniza el día que cambiamos de número. */
+export function Soporte({ className = "", label }: { className?: string; label?: string }) {
   return (
     <a
       href={SOPORTE.whatsapp}
@@ -28,7 +33,7 @@ export function Soporte({ className = "" }: { className?: string }) {
       className={`inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-soft transition hover:text-primary ${className}`}
     >
       <LifeBuoy className="h-3.5 w-3.5 shrink-0" />
-      ¿Algo no anda? Escribinos
+      {label ?? "¿Algo no anda? Escribinos"}
     </a>
   );
 }
