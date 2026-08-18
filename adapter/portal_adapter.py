@@ -19,6 +19,7 @@ from urllib.parse import unquote, urlparse
 
 from flows import FlowStore
 from kanban import KanbanStore
+from rooms import RoomStore
 from workspace import MAX_FILE_BYTES, WorkspaceStore
 
 VERSION = "0.37.0"
@@ -660,6 +661,11 @@ CAPACIDADES_PEDIDOS = CAPACIDADES_DIR / "pedidos.jsonl"
 # An INSTALLED role is a Hermes profile: a directory under data/profiles/. Like
 # capabilities it is detected by PRESENCE, never by a value someone wrote: the
 # directory is either there or it is not.
+# The client's conversations. In politica/ for the same reason as
+# `capacidades/pedidos.jsonl`: the agent's container mounts it :ro, so an agent
+# cannot rewrite the record of what its client asked it to do.
+ROOMS = RoomStore(POLITICA_DIR / "salas")
+
 ROLES_DIR = POLITICA_DIR / "roles"
 ROLES_CATALOG = ROLES_DIR / "catalogo.json"
 PROFILES_DIR = DATA / "profiles"
@@ -2346,6 +2352,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, capacidades())
             if path == "/portal/roles":
                 return self._send(200, roles())
+            if path == "/portal/salas":
+                return self._send(200, {"salas": ROOMS.rooms()})
+            m = re.match(r"^/portal/salas/([^/]+)$", path)
+            if m:
+                return self._send(200, {"turnos": ROOMS.read(m.group(1))})
             if path == "/portal/flujos":
                 return self._send(200, flujos())
             m = re.match(r"^/portal/flujos/([^/]+)$", path)
@@ -2438,7 +2449,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._proxy_sse(
             f"{AGENT_BASE}{prefix}/api/sessions/{session_id}/chat/stream", body, token, role)
 
-    def _proxy_sse(self, url, body, token, answered_by=None):
+    def _proxy_sse(self, url, body, token, answered_by=None, room=None):
         """Relay one upstream SSE chat stream to the browser, line by line.
 
         TWO CALLERS, ONE RELAY: the session path continues a conversation, the
@@ -2494,7 +2505,7 @@ class Handler(BaseHTTPRequestHandler):
         # el catálogo con `capacidad:imagenes` de ejemplo, y contarlo habría
         # inventado demanda en cada lectura — justo la medición que queremos
         # limpia.
-        menciones, evento = [], ""
+        menciones, evento, respuesta = [], "", ""
         try:
             for line in upstream:
                 self.wfile.write(line)
@@ -2502,16 +2513,39 @@ class Handler(BaseHTTPRequestHandler):
                 texto = line.decode("utf-8", "replace")
                 if texto.startswith("event:"):
                     evento = texto[6:].strip()
-                elif texto.startswith("data:") and evento == "assistant.completed":
-                    try:
-                        menciones += MENCION_CAPACIDAD.findall(
-                            json.loads(texto[5:]).get("content") or "")
-                    except (ValueError, AttributeError):
-                        pass
+                elif texto.startswith("data:"):
+                    if evento == "assistant.completed":
+                        try:
+                            contenido = json.loads(texto[5:]).get("content") or ""
+                        except (ValueError, AttributeError):
+                            contenido = ""
+                        menciones += MENCION_CAPACIDAD.findall(contenido)
+                        # The session path hands over the whole answer at once.
+                        respuesta = contenido or respuesta
+                    elif room and not evento and "[DONE]" not in texto:
+                        # The OpenAI-compatible path -- the one a room turn takes
+                        # -- has no `completed` event: the text arrives in
+                        # unnamed deltas and has to be accumulated.
+                        try:
+                            trozo = (json.loads(texto[5:]).get("choices") or [{}])[0]
+                            respuesta += (trozo.get("delta") or {}).get("content") or ""
+                        except (ValueError, AttributeError, IndexError):
+                            pass
         except (BrokenPipeError, ConnectionResetError):
             pass  # el cliente corto el stream (boton detener): normal
         finally:
             upstream.close()
+        # AFTER closing, never inside the loop: the client is reading the answer
+        # as it lands and a disk write in there buys nothing.
+        #
+        # A stopped stream still persists what arrived. The client saw those
+        # words; a transcript that drops them is a transcript that disagrees
+        # with the screen they were just looking at.
+        if room and respuesta.strip():
+            try:
+                ROOMS.append(room, "assistant", respuesta, answered_by)
+            except OSError:
+                pass  # el chat ya llego: no se pierde por no poder anotarlo
         for ident in dict.fromkeys(menciones):  # después de cerrar: no le roba tiempo al chat
             try:
                 pedido_de_capacidad("mención del agente en el chat", ident,
@@ -2755,6 +2789,19 @@ class Handler(BaseHTTPRequestHandler):
             if body is None or not isinstance(body.get("messages"), list):
                 return self._send(400, {"error": "messages is required"})
             role = str(body.pop("role", "") or "").strip() or None
+            # The room this belongs to. The portal makes the id; without one
+            # the turn is not recorded, which is what the chat did until today.
+            room = str(body.pop("sala", "") or "").strip() or None
+            if room:
+                # The client's own turn goes in BEFORE the answer streams. If it
+                # went in after, a stream that dies mid-flight would leave a
+                # transcript where the client never said anything.
+                last = [m for m in body["messages"] if m.get("role") == "user"]
+                if last:
+                    try:
+                        ROOMS.append(room, "user", str(last[-1].get("content") or ""))
+                    except OSError:
+                        pass
             if role is None:
                 # Nobody was named, so the room decides. The client's own turn
                 # is the last message; earlier ones are context, including what
@@ -2777,7 +2824,8 @@ class Handler(BaseHTTPRequestHandler):
                         "error": f"el rol '{role}' no tiene su propia clave configurada",
                     })
                 prefix = f"/p/{role}"
-            return self._proxy_sse(f"{AGENT_BASE}{prefix}/v1/chat/completions", body, token, role)
+            return self._proxy_sse(
+                f"{AGENT_BASE}{prefix}/v1/chat/completions", body, token, role, room)
 
         m = re.match(r"^/portal/sessions/([^/]+)/chat/stream$", path)
         if m:
