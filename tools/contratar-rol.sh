@@ -65,6 +65,14 @@ corre "hermes profile install /tmp/dist-$ROL -y" | tail -3
 echo "→ dándole su propia clave"
 corre "echo 'API_SERVER_KEY=$CLAVE' > /opt/data/profiles/$ROL/.env && chown 10000:10000 /opt/data/profiles/$ROL/.env"
 
+echo "→ apuntando su workspace al compartido"
+# ONE workspace, the client's. Every profile gets its own workspace dir and the
+# portal's Archivos tab reads only the default's -- so a role that "delivered"
+# into its private dir delivered into a place no screen shows. A symlink makes
+# this a filesystem fact instead of a SOUL instruction someone can forget.
+# cp -rn first: never clobber anything the role already wrote.
+corre "w=/opt/data/profiles/$ROL/workspace; if [ -d \"\$w\" ] && [ ! -L \"\$w\" ]; then cp -rn \"\$w\"/. /opt/data/workspace/ 2>/dev/null || true; rm -rf \"\$w\"; ln -s /opt/data/workspace \"\$w\"; chown -h 10000:10000 \"\$w\"; fi"
+
 echo "→ reiniciando el gateway para que lo sirva"
 if [[ "$MODO" == local ]]; then docker restart "$CONT" >/dev/null; else ssh "$HOST" "docker restart $CONT" >/dev/null; fi
 
