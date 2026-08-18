@@ -1,6 +1,6 @@
 {
   "id": "marketing",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "_comentario": [
     "Identidad y empaque de UN rol. Lo que el cliente ve (nombre y cara) y lo",
     "que el rol necesita para trabajar (skills, conexiones, claves).",
@@ -67,6 +67,8 @@
   ],
   "connections": [],
   "flows": [
-    "contenido-instagram-diario"
+    "contenido-instagram-diario",
+    "reporte-de-lo-publicado",
+    "calendario-del-mes"
   ]
 }

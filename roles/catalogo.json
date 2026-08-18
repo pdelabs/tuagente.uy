@@ -49,7 +49,9 @@
         "capacidad"
       ],
       "flows": [
-        "contenido-instagram-diario"
+        "contenido-instagram-diario",
+        "reporte-de-lo-publicado",
+        "calendario-del-mes"
       ],
       "state": "ready",
       "identity": {
@@ -81,8 +83,12 @@
         "flujo",
         "capacidad"
       ],
-      "flows": [],
-      "state": "unwritten",
+      "flows": [
+        "fuera-de-hora",
+        "resumen-de-la-bandeja",
+        "casos-sin-cerrar"
+      ],
+      "state": "ready",
       "identity": {
         "name": "Beto",
         "look": {
@@ -110,8 +116,12 @@
         "flujo",
         "capacidad"
       ],
-      "flows": [],
-      "state": "unwritten",
+      "flows": [
+        "presupuesto-nuevo",
+        "seguimiento-de-presupuestos",
+        "alta-de-cliente"
+      ],
+      "state": "ready",
       "identity": {
         "name": "Nina",
         "look": {
@@ -139,8 +149,12 @@
         "flujo",
         "capacidad"
       ],
-      "flows": [],
-      "state": "unwritten",
+      "flows": [
+        "planilla-del-mes",
+        "conciliar-cobros",
+        "facturas-vencidas"
+      ],
+      "state": "ready",
       "internal_note": "READ-ONLY AND NOT NEGOTIABLE. Invoicing in Uruguay touches DGI and electronic invoicing: a regulated surface, with an agent that EXECUTES CODE in a container we administer. This role reads, arranges a spreadsheet and warns. The day someone asks it to invoice, that is a different product with different insurance.",
       "identity": {
         "name": "Tino",
