@@ -1074,6 +1074,101 @@ def roles():
     return {"available": True, "roles": out}
 
 
+# The router's whole prompt. Short on purpose: this is a dispatch decision, not
+# a conversation, and it runs on every message that does not name someone.
+_ROUTE_PROMPT = """Sos el ruteo de un equipo de trabajo.
+
+QUIEN ESCRIBE ES LA DUEÑA DEL NEGOCIO, la jefa de este equipo. No es una
+clienta de ella escribiendo: es ella hablándole a su gente.
+
+Equipo:
+{team}
+
+Lo que escribió:
+{message}
+
+Respondé UNICAMENTE con el id de quien corresponde, o con `-`.
+
+Un PEDIDO DE TRABAJO va siempre a quien lo hace, aunque falte algún dato para
+hacerlo. "Contestá los mensajes que quedaron" es trabajo de quien atiende la
+bandeja, esté conectada o no.
+
+`-` es sólo para lo que no es un pedido de trabajo: un saludo, una pregunta
+sobre cómo viene todo, charla.
+
+Sin explicar, sin puntuación, sin comillas."""
+
+
+def _model_for_routing():
+    """The provider endpoint and model the agent itself is configured with.
+
+    IT DOES NOT GO THROUGH THE GATEWAY, and that is the point. `/v1/chat/completions`
+    runs the whole agent -- SOUL, skills, tools -- and we measured it at ~10s a
+    turn. Paying that to answer "who should take this" would make every message
+    twice as slow and twice as expensive to decide something a one-word answer
+    settles.
+
+    So this reads the same config the agent uses and calls the provider
+    directly. With observability on, `base_url` already points at litellm and
+    the routing call gets logged and costed like everything else.
+    """
+    import yaml
+
+    config = yaml.safe_load((DATA / "config.yaml").read_text(encoding="utf-8")) or {}
+    model = config.get("model") or {}
+    base_url = str(model.get("base_url") or "").strip().rstrip("/")
+    return {
+        "base_url": base_url or "https://openrouter.ai/api/v1",
+        "model": str(model.get("default") or "").strip(),
+        "api_key": os.environ.get("OPENROUTER_API_KEY", ""),
+    }
+
+
+def route_message(message):
+    """Which hired role should answer, or None for the agent the client named.
+
+    None is a real answer, not a failure: most of what a client writes is for
+    their agent, and forcing a specialist onto every "hola" is worse than not
+    routing at all.
+
+    IT ROUTES ON `routing`, WHICH MAKES THAT FIELD A COMMERCIAL ARTIFACT. A role
+    with a weak description is a role the client pays for that never receives
+    work -- and they find out at renewal, not before.
+    """
+    if not ROLES_CATALOG.is_file():
+        return None
+    catalog = json.loads(ROLES_CATALOG.read_text(encoding="utf-8"))
+    hired = [r for r in catalog.get("roles", []) if _role_installed(r["id"])]
+    if len(hired) < 2:
+        # One role (or none) is not a routing decision. Do not spend a call.
+        return None
+
+    team = "\n".join(f"- {r['id']}: {r.get('routing') or r.get('does') or ''}" for r in hired)
+    runtime = _model_for_routing()
+    body = {
+        "model": runtime["model"],
+        "messages": [{
+            "role": "user",
+            "content": _ROUTE_PROMPT.format(team=team, message=message[:2000]),
+        }],
+        "max_tokens": 12,
+        "temperature": 0,
+    }
+    request = urllib.request.Request(
+        f"{runtime['base_url']}/chat/completions",
+        data=json.dumps(body).encode(),
+        headers={"Authorization": f"Bearer {runtime['api_key']}",
+                 "Content-Type": "application/json"},
+        method="POST",
+    )
+    payload = json.loads(urllib.request.urlopen(request, timeout=30).read())
+    choice = (payload.get("choices") or [{}])[0]
+    answer = ((choice.get("message") or {}).get("content") or "").strip().strip("`\"' .")
+    # Only an id that is actually on the team counts. Anything else -- "-", a
+    # sentence, a role they never hired -- means the agent they named answers.
+    return answer if any(r["id"] == answer for r in hired) else None
+
+
 def capacidades():
     """Lo que el portal necesita para dibujar la tarjeta `capacidad:<id>`.
 
@@ -2341,9 +2436,9 @@ class Handler(BaseHTTPRequestHandler):
                 })
             prefix = f"/p/{role}"
         return self._proxy_sse(
-            f"{AGENT_BASE}{prefix}/api/sessions/{session_id}/chat/stream", body, token)
+            f"{AGENT_BASE}{prefix}/api/sessions/{session_id}/chat/stream", body, token, role)
 
-    def _proxy_sse(self, url, body, token):
+    def _proxy_sse(self, url, body, token, answered_by=None):
         """Relay one upstream SSE chat stream to the browser, line by line.
 
         TWO CALLERS, ONE RELAY: the session path continues a conversation, the
@@ -2376,6 +2471,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
+        # WHO IS ABOUT TO ANSWER, before a single token of the answer.
+        #
+        # When the client names someone the portal already knows. When the room
+        # routed it, only this side knows -- and without it the reply would be
+        # drawn with the wrong face and the wrong name, which is worse than no
+        # attribution at all.
+        if answered_by:
+            self.wfile.write(
+                f"event: portal.role\ndata: {json.dumps({'role': answered_by})}\n\n".encode())
+            self.wfile.flush()
         # De paso, sin frenar el stream: si el agente escribio `capacidad:<id>`,
         # queda anotado como pedido de origen "mencion". Es lo que hace REAL la
         # medicion de demanda: el agente no corre ningun comando para dejar el
@@ -2650,6 +2755,20 @@ class Handler(BaseHTTPRequestHandler):
             if body is None or not isinstance(body.get("messages"), list):
                 return self._send(400, {"error": "messages is required"})
             role = str(body.pop("role", "") or "").strip() or None
+            if role is None:
+                # Nobody was named, so the room decides. The client's own turn
+                # is the last message; earlier ones are context, including what
+                # a teammate already answered.
+                #
+                # A failure here costs the routing, never the answer: the agent
+                # they named takes the turn, which is what used to happen for
+                # every message anyway.
+                last = [m for m in body["messages"] if m.get("role") == "user"]
+                if last:
+                    try:
+                        role = route_message(str(last[-1].get("content") or ""))
+                    except Exception:
+                        role = None
             token, prefix = TOKEN, ""
             if role:
                 token = _role_key(role)
@@ -2658,7 +2777,7 @@ class Handler(BaseHTTPRequestHandler):
                         "error": f"el rol '{role}' no tiene su propia clave configurada",
                     })
                 prefix = f"/p/{role}"
-            return self._proxy_sse(f"{AGENT_BASE}{prefix}/v1/chat/completions", body, token)
+            return self._proxy_sse(f"{AGENT_BASE}{prefix}/v1/chat/completions", body, token, role)
 
         m = re.match(r"^/portal/sessions/([^/]+)/chat/stream$", path)
         if m:
