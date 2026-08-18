@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import {
   loadConfig, chatStream, sessionChatStream, getSessions, getSessionMessages,
-  uploadFile, type PortalConfig, type ChatMessage,
+  getRooms, getRoom, uploadFile,
+  type PortalConfig, type ChatMessage, type RoomTurn,
 } from "../lib/agent";
 import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
 import {
@@ -158,6 +159,11 @@ export default function ChatPage() {
       : lookAgente;
   /** Who the next message goes to. null = the agent the client named. */
   const [hablarCon, setHablarCon] = useState<string | null>(null);
+  // WITH A TEAM THE CHAT IS A ROOM, stored by the adapter. Without one it is an
+  // engine session, exactly as it has always been -- so no agent running today
+  // changes. Both live under the same `?conversacion=` param and are told apart
+  // by the prefix the portal itself mints.
+  const roomMode = Object.keys(roles).length > 0;
   const [nombreAgente, setNombreAgente] = useState<string | null>(null);
   useEffect(() => { setNombreAgente(loadAgentName()); }, []);
 
@@ -218,7 +224,22 @@ export default function ChatPage() {
     run(pedido.trim(), []);
   }, [cfg]);
 
-  const refreshSessions = useCallback((c: PortalConfig) => {
+  const refreshSessions = useCallback((c: PortalConfig, rooms: boolean) => {
+    if (rooms) {
+      // The adapter already returns them newest first.
+      getRooms(c)
+        .then((r) => {
+          setSessionsErr(null);
+          setSessions((r.salas ?? []).map((s) => ({
+            id: s.id,
+            title: s.title,
+            last_active: s.updated_at,
+            message_count: s.turns,
+          }) as SessionSummary));
+        })
+        .catch((e) => setSessionsErr(e instanceof Error ? e.message : "error de red"));
+      return;
+    }
     getSessions(c)
       .then((r: { data?: SessionSummary[] }) => {
         setSessionsErr(null);
@@ -226,7 +247,7 @@ export default function ChatPage() {
       })
       .catch((e) => setSessionsErr(e instanceof Error ? e.message : "error de red"));
   }, []);
-  useEffect(() => { if (cfg) refreshSessions(cfg); }, [cfg, refreshSessions]);
+  useEffect(() => { if (cfg) refreshSessions(cfg, roomMode); }, [cfg, roomMode, refreshSessions]);
 
   // Scroll: seguimos el stream solo si el usuario está mirando el final.
   const onScroll = () => {
@@ -335,14 +356,19 @@ export default function ChatPage() {
     setEditingIdx(null);
     setLoadingThread(true);
     setAtBottom(true);
-    getSessionMessages(c, id)
-      .then((r: { data?: StoredMessage[] }) => {
+    const cargar = id.startsWith("sala_")
+      // A room keeps who answered each turn, which is what lets the thread be
+      // redrawn with the right faces after a reload instead of one voice.
+      ? getRoom(c, id).then((r) => (r.turnos ?? []).map((t: RoomTurn) => ({
+          role: t.role, content: t.content, by: t.by,
+        })))
+      : getSessionMessages(c, id).then((r: { data?: StoredMessage[] }) => (r.data ?? [])
+          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
+          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content as string })));
+    cargar
+      .then((turnos: Msg[]) => {
         if (openSeq.current !== seq) return;
-        setMsgs(
-          (r.data ?? [])
-            .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
-            .map((m) => ({ role: m.role as "user" | "assistant", content: m.content as string })),
-        );
+        setMsgs(turnos);
       })
       .catch((e) => {
         if (openSeq.current !== seq) return;
@@ -446,6 +472,15 @@ export default function ChatPage() {
 
     const ac = new AbortController();
     abortRef.current = ac;
+    // THE ROOM THIS TURN BELONGS TO. An open conversation keeps its id; a new
+    // one gets minted here and goes into the URL, so a reload -- or the link --
+    // comes back to the same room.
+    const sala = roomMode
+      ? (activeId?.startsWith("sala_") ? activeId
+        : `sala_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`)
+      : null;
+    if (sala && sala !== activeId) reemplazarEnRuta({ [PARAM.conversacion]: sala });
+
     const tools: string[] = [];
     // Who takes this turn. Starts as whoever the client named -- null when
     // nobody was -- and the room may fill it in before the first token.
@@ -493,7 +528,7 @@ export default function ChatPage() {
       // conversation. `sessionChatStream` sends only the new message and leans
       // on a session stored INSIDE one profile: down that path a teammate would
       // answer having read nothing, which is exactly the bubble we are leaving.
-      if (activeId && !hablarCon) {
+      if (activeId && !hablarCon && !roomMode) {
         // Un run puede traer varios mensajes del asistente (rondas de tools).
         const segments: string[] = [""];
         const render = () => paint(segments.filter((s) => s.trim()).join("\n\n"));
@@ -525,25 +560,25 @@ export default function ChatPage() {
         await chatStream(cfg, history, paint, (tool) => {
           if (tools[tools.length - 1] !== tool) tools.push(tool);
           setLiveTools([...tools]);
-        }, ac.signal, hablarCon, Object.keys(roles).length > 0, (who) => {
+        }, ac.signal, hablarCon, roomMode, (who) => {
           answeredBy = who;
           // Repaint the placeholder message so the face and the name are right
           // from the first token, not after the answer lands.
           setMsgs((ms) => [...ms.slice(0, -1), { ...ms[ms.length - 1], by: who }]);
-        });
+        }, sala);
       }
       flush();
       if (vigente()) {
         setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
       }
-      refreshSessions(cfg);
+      refreshSessions(cfg, roomMode);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         flush();
         if (vigente()) {
           setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
         }
-        refreshSessions(cfg);
+        refreshSessions(cfg, roomMode);
       } else if (vigente()) {
         setMsgs(base);
         setInput(text);
@@ -643,7 +678,7 @@ export default function ChatPage() {
       sending={sending}
       onOpen={irASesion}
       onNew={newConversation}
-      onRefresh={() => refreshSessions(cfg)}
+      onRefresh={() => refreshSessions(cfg, roomMode)}
       onDeletedActive={newConversation}
       searchRef={searchRef}
       onNavigate={() => setDrawer(false)}

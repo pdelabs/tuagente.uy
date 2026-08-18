@@ -873,6 +873,29 @@ export type Role = {
 export const getRoles = (c: PortalConfig) =>
   get<{ available: boolean; roles: Role[] }>(c.adapter, "/portal/roles", c);
 
+/** One turn of a room, as the adapter stored it. */
+export type RoomTurn = {
+  ts: number;
+  role: "user" | "assistant";
+  content: string;
+  /** Which teammate answered. Absent = the agent the client named. */
+  by?: string;
+};
+export type RoomSummary = { id: string; title: string; updated_at: number; turns: number };
+
+/** The rooms this client has.
+ *
+ *  A room is ONE conversation the whole team shares, and it is stored by the
+ *  adapter rather than the engine: its turns are answered by different profiles,
+ *  each of which persists into its own store, so an engine-side conversation
+ *  would end up scattered with no way to reassemble it. Measured 2026-08-17 --
+ *  pinning every turn to one `session_id` does not work either, the engine mints
+ *  its own per turn. */
+export const getRooms = (c: PortalConfig) =>
+  get<{ salas: RoomSummary[] }>(c.adapter, "/portal/salas", c);
+export const getRoom = (c: PortalConfig, id: string) =>
+  get<{ turnos: RoomTurn[] }>(c.adapter, `/portal/salas/${encodeURIComponent(id)}`, c);
+
 /** El cliente pide una capacidad. Queda anotado del lado del agente (una línea
  *  por pedido) y lo miramos nosotros: no prende nada solo. */
 export const pedirCapacidad = async (c: PortalConfig, id: string | null, texto: string) => {
@@ -1142,6 +1165,9 @@ export async function chatStream(
    *  it, and it arrives before the first token so the reply is drawn with the
    *  right face from the start. */
   onRole?: (role: string) => void,
+  /** Which room to record this turn in. Without it nothing is stored, which is
+   *  what the chat did until rooms existed. */
+  sala?: string | null,
 ): Promise<string> {
   // The ADAPTER, not the gateway, whenever a role could be involved: addressing
   // one needs that profile's own key and the browser only ever holds one.
@@ -1151,7 +1177,12 @@ export async function chatStream(
   const res = await fetch(url, {
     method: "POST",
     headers: { ...headers(cfg), "Content-Type": "application/json" },
-    body: JSON.stringify(role ? { messages, stream: true, role } : { messages, stream: true }),
+    body: JSON.stringify({
+      messages,
+      stream: true,
+      ...(role ? { role } : {}),
+      ...(sala ? { sala } : {}),
+    }),
     signal,
   });
   if (!res.ok || !res.body) throw new Error(`${res.status} en chat`);
