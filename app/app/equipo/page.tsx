@@ -17,12 +17,14 @@
 // reached.
 
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw, Users } from "lucide-react";
+import { ChevronLeft, RefreshCw, Users } from "lucide-react";
 import { AgentitoAvatar, LOOK_DEFAULT, type AgentitoLook } from "../lib/agentito";
 import { getRoles, loadConfig, type HttpError, type PortalConfig, type Role } from "../lib/agent";
 import { loadAgentName } from "../lib/onboarding";
 import { horaDe, rotuloCanal } from "../lib/palabras";
 import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Soporte, Spinner } from "../lib/ui";
+import { PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
+import FichaDelRol from "./ficha";
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
@@ -31,9 +33,13 @@ function faceOf(role: Role): AgentitoLook {
   return { ...LOOK_DEFAULT, ...(role.look ?? {}) } as AgentitoLook;
 }
 
-function RoleCard({ role }: { role: Role }) {
+function RoleCard({ role, onOpen }: { role: Role; onOpen: () => void }) {
   return (
-    <Card className={`flex gap-4 p-4 ${role.hired ? "" : "opacity-70"}`}>
+    // The button is OUTSIDE the Card on purpose: `Card` is presentational and
+    // shared by half the portal. Teaching it to be clickable for one caller is
+    // how a UI kit turns into a pile of props.
+    <button onClick={onOpen} className="block w-full text-left">
+    <Card className={`flex gap-4 p-4 transition hover:border-primary/40 ${role.hired ? "" : "opacity-70"}`}>
       <AgentitoAvatar
         look={faceOf(role)}
         className="h-14 w-14 shrink-0"
@@ -70,10 +76,15 @@ function RoleCard({ role }: { role: Role }) {
         )}
       </div>
     </Card>
+    </button>
   );
 }
 
 export default function EquipoPage() {
+  // Which teammate is open is READ FROM THE URL, never from a useState in
+  // parallel: that is what makes a reload land on the same one and the link
+  // shareable.
+  const abierto = useParamRuta(PARAM.rol);
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [err, setErr] = useState<{ status?: number; message: string } | null>(null);
@@ -110,6 +121,12 @@ export default function EquipoPage() {
   }, [cfg, load]);
 
   const cuerpo = () => {
+    if (abierto && roles) {
+      const role = roles.find((r) => r.id === abierto);
+      // A link to a teammate this agent does not have is a stale link, not a
+      // crash: the roster is shown instead of an error about an id.
+      if (role) return <FichaDelRol role={role} />;
+    }
     if (err && roles === null) {
       return <ErrorState message={err.message} onRetry={() => load()} />;
     }
@@ -130,14 +147,20 @@ export default function EquipoPage() {
     return (
       <>
         <div className="flex flex-col gap-2">
-          {hired.map((role) => <RoleCard key={role.id} role={role} />)}
+          {hired.map((role) => (
+            <RoleCard key={role.id} role={role}
+              onOpen={() => abrirEnRuta({ [PARAM.rol]: role.id })} />
+          ))}
         </div>
 
         {offered.length > 0 && (
           <>
             <h2 className="mb-2 mt-7 text-[15px] font-semibold text-ink">Podés sumar</h2>
             <div className="flex flex-col gap-2">
-              {offered.map((role) => <RoleCard key={role.id} role={role} />)}
+              {offered.map((role) => (
+                <RoleCard key={role.id} role={role}
+                  onOpen={() => abrirEnRuta({ [PARAM.rol]: role.id })} />
+              ))}
             </div>
             {/* No hire button. Hiring installs a profile and restarts the
                 gateway, and neither belongs behind a click before we have
@@ -153,14 +176,25 @@ export default function EquipoPage() {
     );
   };
 
+  const abiertoRole = abierto ? (roles ?? []).find((r) => r.id === abierto) : undefined;
+
   return (
     <div className={WRAP}>
+      {abierto && (
+        <button
+          onClick={() => cerrarEnRuta(PARAM.rol)}
+          className="mb-2 inline-flex items-center gap-1 text-[13px] text-ink-soft transition hover:text-ink"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" /> Tu equipo
+        </button>
+      )}
       <PageHeader
-        title="Tu equipo"
+        title={abiertoRole ? (abiertoRole.name || abiertoRole.label) : "Tu equipo"}
         subtitle={
-          nombreAgente
-            ? `${nombreAgente} no trabaja solo: cada uno se ocupa de lo suyo y comparten lo que saben de tu empresa.`
-            : "Cada uno se ocupa de lo suyo y comparten lo que saben de tu empresa."
+          abiertoRole ? undefined
+            : nombreAgente
+              ? `${nombreAgente} no trabaja solo: cada uno se ocupa de lo suyo y comparten lo que saben de tu empresa.`
+              : "Cada uno se ocupa de lo suyo y comparten lo que saben de tu empresa."
         }
         actions={
           <>

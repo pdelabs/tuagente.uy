@@ -28,7 +28,7 @@ lo dejamos ahí).
 |---|---|
 | Inicio | `/app/inicio` |
 | Chat | `/app/chat` |
-| Equipo | `/app/equipo` |
+| Equipo | `/app/equipo` | `?rol=<id>` abre su ficha |
 | Flujos | `/app/flujos` |
 | Tablero | `/app/pipeline` |
 | Aprobaciones | `/app/aprobaciones` |

@@ -46,6 +46,8 @@ export const PARAM = {
   conexion: "conexion",
   /** /app/tareas?programada=<id de cron> */
   programada: "programada",
+  /** /app/equipo?rol=<id del rol> */
+  rol: "rol",
 } as const;
 
 /** `?p=` (el pedido con el que el chat arranca) también cuenta como llegar con
