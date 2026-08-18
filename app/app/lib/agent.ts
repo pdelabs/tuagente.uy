@@ -1132,13 +1132,20 @@ export async function chatStream(
    *  Los `_internos` (como `_thinking`) el gateway ni los manda por acá. */
   onTool?: (tool: string) => void,
   signal?: AbortSignal,
-  /** Which member of the team answers. With a role this goes through the
-   *  ADAPTER instead of the gateway: addressing a role needs that profile's own
-   *  key and the browser only ever holds one. Without a role it is the gateway
-   *  directly, exactly as before -- nothing to scope, no extra hop. */
+  /** Which member of the team answers, when the client named someone. */
   role?: string | null,
+  /** True when this agent has a team, so the room can route a message nobody
+   *  addressed. Without it we would pay the adapter hop on every single-role
+   *  agent for a routing decision that has nothing to decide. */
+  hasTeam?: boolean,
+  /** Who ended up taking the turn. Only the adapter knows when the room routed
+   *  it, and it arrives before the first token so the reply is drawn with the
+   *  right face from the start. */
+  onRole?: (role: string) => void,
 ): Promise<string> {
-  const url = role
+  // The ADAPTER, not the gateway, whenever a role could be involved: addressing
+  // one needs that profile's own key and the browser only ever holds one.
+  const url = role || hasTeam
     ? cfg.adapter + "/portal/chat/stream"
     : cfg.endpoint + "/v1/chat/completions";
   const res = await fetch(url, {
@@ -1172,6 +1179,10 @@ export async function chatStream(
       try {
         payload = JSON.parse(line.slice(6));
       } catch { continue; /* chunk parcial */ }
+      if (evento === "portal.role") {
+        if (typeof payload?.role === "string") onRole?.(payload.role);
+        continue;
+      }
       if (evento === "hermes.tool.progress") {
         // Solo el arranque: el `completed` que viene después duplicaría.
         if (payload?.status !== "completed" && typeof payload?.tool === "string") {

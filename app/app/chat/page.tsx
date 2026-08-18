@@ -447,6 +447,9 @@ export default function ChatPage() {
     const ac = new AbortController();
     abortRef.current = ac;
     const tools: string[] = [];
+    // Who takes this turn. Starts as whoever the client named -- null when
+    // nobody was -- and the room may fill it in before the first token.
+    let answeredBy: string | null = hablarCon;
     const apply = (content: string) => {
       if (!vigente()) return;
       setMsgs((ms) => [
@@ -458,7 +461,7 @@ export default function ChatPage() {
           // Stamped on the message, not read from a live selector: the client
           // can address someone else on the next turn and this reply has to
           // keep saying who actually wrote it.
-          by: hablarCon ?? undefined,
+          by: answeredBy ?? undefined,
         },
       ]);
     };
@@ -522,7 +525,12 @@ export default function ChatPage() {
         await chatStream(cfg, history, paint, (tool) => {
           if (tools[tools.length - 1] !== tool) tools.push(tool);
           setLiveTools([...tools]);
-        }, ac.signal, hablarCon);
+        }, ac.signal, hablarCon, Object.keys(roles).length > 0, (who) => {
+          answeredBy = who;
+          // Repaint the placeholder message so the face and the name are right
+          // from the first token, not after the answer lands.
+          setMsgs((ms) => [...ms.slice(0, -1), { ...ms[ms.length - 1], by: who }]);
+        });
       }
       flush();
       if (vigente()) {
