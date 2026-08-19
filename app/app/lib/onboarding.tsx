@@ -89,8 +89,9 @@ function capturaDelAgentito(): { avatar_png?: string } {
   return {};
 }
 
-/** Un look al azar, garantizado distinto del actual. */
-function sortearLook(actual: AgentitoLook): AgentitoLook {
+/** Un look al azar, garantizado distinto del actual. El bautizo del agente y el
+ *  del primer rol del equipo tiran el mismo dado. */
+export function sortearLook(actual: AgentitoLook): AgentitoLook {
   for (;;) {
     const look = { ...actual };
     for (const eje of Object.keys(LOOK_EJES) as (keyof AgentitoLook)[]) {
@@ -151,6 +152,16 @@ export function altaYaContestada(manifest: Manifest | null | undefined): boolean
   return Boolean(manifest?.bautizado) && (manifest?.aviso ?? "").trim() !== "";
 }
 
+/** LA MISMA PREGUNTA, PARA UN AGENTE CON EQUIPO. En un equipo no hay bautizo
+ *  del agente —el cliente bautiza a quien contrata, no al agente— así que
+ *  `bautizado` no llega nunca y `altaYaContestada` sería siempre false. Lo que
+ *  queda es el canal de aviso, y vale la misma lección: contestarlo ESCRIBE en
+ *  el agente, así que a un cliente que ya lo contestó no se le vuelve a
+ *  preguntar cuando entra desde otra máquina. */
+export function avisoYaContestado(manifest: Manifest | null | undefined): boolean {
+  return (manifest?.aviso ?? "").trim() !== "";
+}
+
 // Qué contamos en el paso 2: solo lo que el manifest habilita.
 //
 // SE MUESTRAN SIN TARJETA, y eso no es estética. Eran tres cajas blancas con
@@ -184,21 +195,34 @@ const PUNTOS = [
   },
 ];
 
-export default function Onboarding({ manifest, cfg, onDone }: {
+export default function Onboarding({ manifest, cfg, onDone, equipo }: {
   manifest: Manifest;
   cfg: PortalConfig;
   onDone: (name: string) => void;
+  /** ALTA DE EQUIPO: quién acaba de entrar al equipo del cliente.
+   *
+   *  Cuando viene, este onboarding entra RECORTADO — el negocio y el canal de
+   *  aviso, nada más — y lo hace en la voz del compañero que el cliente acaba
+   *  de contratar. El bautizo no va: ya lo bautizó cuando lo eligió
+   *  (`lib/altaEquipo.tsx`), y volver a pedirle un nombre es pedirle que
+   *  bautice a alguien dos veces. La presentación tampoco: las tres tarjetas
+   *  cuentan lo que hace UN agente, y este cliente tiene un equipo.
+   *
+   *  Lo que sí queda es lo que el alta de equipo no pregunta y el portal
+   *  necesita igual: de qué es el negocio (es lo que dispara el brief) y por
+   *  dónde avisarle (sin eso el agente trabaja y nadie se entera). */
+  equipo?: { nombre: string; look: AgentitoLook } | null;
 }) {
   // Si el agente YA fue bautizado (otra máquina, otra persona de la empresa),
   // no se le vuelve a pedir el nombre: se salta directo a la presentación.
   const yaBautizado = Boolean(manifest.bautizado);
   const [nombre, setNombre] = useState(
-    () => loadAgentName() ?? (yaBautizado ? manifest.agent : ""));
+    () => equipo?.nombre ?? loadAgentName() ?? (yaBautizado ? manifest.agent : ""));
   // El canal de aviso es un paso PROPIO y no el pie de la presentación. Es la
   // decisión que decide si el portal sirve —"la hoja espera que yo venga y yo
   // no voy a venir"— y apretada abajo de tres tarjetas competía con ellas.
   const [paso, setPaso] = useState<"bautismo" | "negocio" | "presentacion" | "aviso" | "automatizaciones" | "charla">(
-    yaBautizado ? "presentacion" : "bautismo");
+    equipo ? "negocio" : yaBautizado ? "presentacion" : "bautismo");
   // Quien es EL CLIENTE. El onboarding le preguntaba el nombre al agente y
   // nunca por el negocio: el portal terminaba hablandole de "nosotros" y el
   // agente firmando con el nombre del dueño anterior.
@@ -357,9 +381,10 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   // Contador de festejos: cada bautismo dispara el trigger del personaje.
   const [festejos, setFestejos] = useState(0);
   const [look, setLook] = useState<AgentitoLook>(
-    () => (hayLookGuardado()
-      ? loadAgentLook()
-      : lookDesdeAgente(manifest.look) ?? LOOK_DEFAULT));
+    () => (equipo?.look
+      ?? (hayLookGuardado()
+        ? loadAgentLook()
+        : lookDesdeAgente(manifest.look) ?? LOOK_DEFAULT)));
   const listo = nombre.trim().length > 0;
 
   const otroLook = () => {
@@ -391,7 +416,10 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   };
 
   /** Paso 2 → presentación. La web se manda ACÁ y no al final: mientras el
-   *  cliente lee la presentación, el agente ya está leyendo su sitio. */
+   *  cliente lee la presentación, el agente ya está leyendo su sitio.
+   *
+   *  En el alta de equipo la presentación no existe, así que el brief se manda
+   *  igual y se pasa derecho a la pregunta del canal. */
   const contarme = () => {
     const e = empresa.trim();
     if (!e) return;
@@ -399,7 +427,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
       empresa: e,
       ...(url.trim() ? { url: url.trim() } : {}),
     }).catch(() => { /* adapter viejo o caído: el portal sigue */ });
-    setPaso("presentacion");
+    setPaso(equipo ? "aviso" : "presentacion");
   };
 
   /** El mismo pedido que deja la pestaña Conexiones —mismo helper, mismo
@@ -470,6 +498,11 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     // decide el manifiesto, que es de donde sale la verdad.
     recordarTramite(pedidoDeConexion);
     if (pedidoDeConexion) pedirConexion(pedidoDeConexion);
+    // En el alta de equipo esta era la última pregunta: el cliente ya eligió a
+    // alguien y ya esperó a que llegara, y el carrusel de automatizaciones le
+    // ofrecería armar un flujo con un agente que todavía no conoce. Entra al
+    // portal, que es donde está su equipo.
+    if (equipo) { terminar(); return; }
     setPaso("automatizaciones");
   };
 

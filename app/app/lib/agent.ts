@@ -850,6 +850,19 @@ export type Capacidad = {
 export const getCapacidades = (c: PortalConfig) =>
   get<{ disponible: boolean; capacidades: Capacidad[] }>(c.adapter, "/portal/capacidades", c);
 
+/** Lo que el cliente pidió de un rol que todavía no está andando: con qué
+ *  nombre y con qué cara lo bautizó cuando lo eligió. Un rol PEDIDO sigue
+ *  sirviendo el nombre y el look DEL CATÁLOGO (recién al instalarlo el perfil
+ *  pasa a ser suyo), así que lo que el cliente eligió viaja acá adentro y es lo
+ *  único con lo que el portal puede mostrárselo mientras espera. */
+export type PedidoDeRol = {
+  nombre: string;
+  /** El look del agentito, tal cual lo guarda el bautizo. */
+  pinta?: Record<string, number> | null;
+  /** Cuándo lo pidió, como lo anotó el agente (ISO). */
+  pedido_en: string;
+};
+
 /** One member of the team -- hired or on offer.
  *
  *  A role is a Hermes profile with its own SOUL, skills and memory. `name` and
@@ -869,9 +882,30 @@ export type Role = {
   needs?: string[];
   flows?: string[];
   state?: string;
+  /** Ya trabaja para el cliente. Es el mismo hecho que `hired`: el roster lo
+   *  publica con los dos nombres mientras el alta usa el nuevo. */
+  contratado?: boolean;
+  /** Pedido y todavía no instalado. Es lo que separa "podés sumarlo" de "ya lo
+   *  pediste y está en camino" — sin esto, un cliente que espera ve el rol
+   *  ofrecido de nuevo y lo vuelve a pedir. */
+  pedido?: PedidoDeRol | null;
 };
 export const getRoles = (c: PortalConfig) =>
   get<{ available: boolean; roles: Role[] }>(c.adapter, "/portal/roles", c);
+
+/** El cliente elige un rol del catálogo, lo bautiza y lo deja pedido.
+ *
+ *  NO PRENDE NADA SOLO: instalar un perfil es trabajo nuestro (SOUL, skills,
+ *  permisos, reinicio del gateway). Esto lo anota del lado del agente y el
+ *  portal se queda esperando a que el rol aparezca contratado en el roster.
+ *
+ *  El adapter contesta 409 con dos motivos distintos —ya lo pediste, o ya lo
+ *  tenés— y 400 si el nombre viene vacío. El texto viaja en `{error}`, que es
+ *  lo que `failure` deja en el mensaje del error. */
+export const crearPedidoDeRol = (
+  c: PortalConfig, rol: string, nombre: string, pinta: Record<string, number> | null,
+) => post<{ pedido: PedidoDeRol & { rol: string } }>(
+  c.adapter, "/portal/roles/pedido", c, { rol, nombre, pinta });
 
 /** One turn of a room, as the adapter stored it. */
 export type RoomTurn = {

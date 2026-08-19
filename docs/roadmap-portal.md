@@ -126,6 +126,20 @@ Marcas de viabilidad:
   cliente con scripts de debug. Ver el toolkit común.
 - [?] Borrar/renombrar (read-only es más seguro).
 
+## Equipo
+
+- **Alta de equipo: hecho.** Un agente con roster (`politica/roles/catalogo.json`)
+  ya no muestra el bautizo de un agente solo: el cliente elige su primer rol, lo
+  bautiza, el pedido queda anotado y la pantalla espera hasta que aparece
+  contratado en el roster. Después van el negocio y el canal de aviso, sin
+  bautizo. Ver `docs/alta-cliente.md`, Fase 3b.
+- [adapter] Sumar el **segundo** rol desde adentro del portal (hoy el alta es
+  solo del primero; el resto se pide por Soporte desde la pestaña Equipo).
+- [ui] Que la espera diga **desde cuándo** está pedido (el `pedido_en` ya viaja).
+- [?] **Precio por rol** — sin definir, y hasta que no esté medido el costo real
+  (marketing genera imágenes) no se publica ningún número.
+- [adapter] Dar de baja un rol contratado.
+
 ## Uso
 
 - [adapter] **Costo en USD** — `state.db` ya guarda `estimated_cost_usd`, no lo

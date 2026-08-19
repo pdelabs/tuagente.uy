@@ -145,6 +145,46 @@ diagnosticar nada.
 
 ---
 
+## Fase 3b — Equipos: el cliente que contrata gente
+
+Un cliente de equipo no se levanta distinto. Lo único que cambia es **un archivo,
+y va antes de entregarle el link** (Fase 7):
+
+```bash
+cp hermes-kit/roles/catalogo.json <ruta-del-agente>/politica/roles/catalogo.json
+```
+
+Ese archivo es **la oferta**: qué roles puede sumar este cliente. Y es también el
+interruptor — que este agente tenga equipo lo decide la **presencia** del
+archivo, nunca un valor escrito: de ahí salen `modules.roles` en el manifiesto y
+`GET /portal/roles`. Sin él, el agente es el de siempre y el portal se comporta
+como hasta hoy. `install.sh` lo actualiza en cada corrida **si ya está**, pero la
+primera copia es a mano: poner la oferta es la decisión de venderle equipo, no un
+default.
+
+Con la oferta puesta, el alta la corre el portal solo, la primera vez que el
+cliente entra con su link:
+
+1. Elige **un** rol de la oferta (solo los `state: "ready"`: un borrador no se
+   ofrece porque el pedido le contestaría 404).
+2. Lo bautiza —nombre y cara—, igual que se bautizaba al agente.
+3. El pedido queda anotado en `politica/roles/pedidos.jsonl`. **El portal no
+   instala nada**, y el cliente se queda en una pantalla de espera.
+4. Lo contratamos nosotros, con el nombre que puso él:
+
+```bash
+# en la VPS                     / en un agente local
+tools/contratar-rol.sh <rol> <host-ssh> [slug] --del-pedido
+tools/contratar-rol.sh <rol> --local <ruta-del-agente> --del-pedido
+```
+
+Cuando el rol aparece contratado en el roster, la espera se cierra sola y el
+portal sigue con lo que falta: de qué es el negocio y por dónde avisarle. **A un
+cliente de equipo no se le pide que bautice "su agente"** — bautiza a cada
+compañero cuando lo contrata, y ese es todo el bautizo que hay.
+
+---
+
 ## Fase 4 — Escribir el SOUL
 
 Lo único verdaderamente artesanal, y donde está el valor. Mínimo:

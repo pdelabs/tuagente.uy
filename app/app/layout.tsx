@@ -24,8 +24,9 @@ import {
 } from "./lib/rutas";
 import { INTROS, useIntroGate } from "./lib/intros";
 import Onboarding, {
-  AvisoSinCanal, altaYaContestada, loadAgentName, saveAgentName,
+  AvisoSinCanal, altaYaContestada, avisoYaContestado, loadAgentName, saveAgentName,
 } from "./lib/onboarding";
+import AltaDeEquipo, { useAltaDeEquipo } from "./lib/altaEquipo";
 import {
   AgentitoAvatar, hayLookGuardado, loadAgentLook, lookDesdeAgente, saveAgentLook,
 } from "./lib/agentito";
@@ -152,6 +153,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [verMas, setVerMas] = useState(false);
   useEffect(() => { setNombre(loadAgentName()); }, []);
   const { seen, dismiss } = useIntroGate();
+  // ¿Este cliente todavía no contrató a nadie? Solo pregunta de verdad si el
+  // agente declara equipo; en un agente de uno se aparta sin pedir nada.
+  const alta = useAltaDeEquipo(manifest, cfg);
 
   // LOS HOOKS VAN TODOS ACÁ ARRIBA, antes de cualquier `return` condicional.
   // Puestos más abajo —después de los returns de loading/login/error— la
@@ -382,6 +386,52 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // ALTA DE EQUIPO, ANTES QUE EL ONBOARDING DE UN AGENTE SOLO. En un agente con
+  // equipo, el cliente no tiene todavía a quién bautizar: lo primero que hace
+  // es contratar su primer rol. Bautizar "tu agente" ahí sería ponerle nombre a
+  // alguien que no eligió, y el portal quedaría lleno de pestañas de un equipo
+  // vacío.
+  //
+  // La precedencia entera vive en `useAltaDeEquipo` y la decide EL ROSTER, no
+  // el browser: si el agente no declara equipo, o si el roster no contesta,
+  // esto se aparta y sigue todo como antes.
+  if (alta.estado === "cargando") {
+    return <main className="app-shell min-h-screen bg-surface"><Spinner /></main>;
+  }
+  if (alta.estado === "alta" || alta.estado === "en-camino") {
+    return (
+      <AltaDeEquipo cfg={cfg} roles={alta.roles} onContratado={alta.marcarContratado} />
+    );
+  }
+
+  // Y APENAS LLEGÓ EL PRIMERO, LO QUE EL ALTA DE EQUIPO NO PREGUNTA. Elegir y
+  // bautizar no dice de qué es el negocio —que es lo que dispara el brief— ni
+  // por dónde avisarle. Son las dos preguntas que el alta de un agente solo
+  // hace igual, y acá las hace el compañero que el cliente acaba de contratar,
+  // sin bautizo: a ese ya lo bautizó cuando lo eligió.
+  //
+  // Se recuerda IGUAL QUE EL ONBOARDING (la misma llave del browser): si el
+  // cliente lo abandona a la mitad, la próxima vez que entre el roster ya dice
+  // "contratado" y no hay nada pendiente, así que cae de nuevo acá y no en el
+  // alta. Lo que no se le vuelve a preguntar es a quien ya contestó el canal en
+  // otra máquina: eso lo dice el agente (`avisoYaContestado`), y volver a
+  // preguntarlo le pisaría el canal que ya tiene.
+  if (alta.estado === "contratado" && seen && !seen.onboarding && !avisoYaContestado(manifest)) {
+    return (
+      <Onboarding
+        manifest={manifest}
+        cfg={cfg}
+        equipo={alta.equipo ?? { nombre: manifest.agent, look: lookAgente }}
+        onDone={() => {
+          // El nombre y el look son del compañero, no del agente: no se copian
+          // al browser. Lo único que queda marcado es que la bienvenida ya pasó.
+          dismiss("onboarding");
+          dismiss("home");
+        }}
+      />
+    );
+  }
+
   // Onboarding: antes que cualquier módulo, el cliente bautiza a su agente y
   // el agente se presenta. Completa la bienvenida general, así que también
   // marca la intro de "home" (si no, hay dos pantallas de bienvenida seguidas).
@@ -397,7 +447,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Un agente nuevo (sin bautizar) sigue viendo el alta completa, y uno
   // bautizado al que le falta el canal la ve desde la presentación —que es
   // donde `Onboarding` arranca cuando `bautizado` es true—.
-  if (seen && !seen.onboarding && !altaYaContestada(manifest)) {
+  //
+  // Y NUNCA EN UN AGENTE CON EQUIPO (`modules.roles`). Ahí no hay "tu agente"
+  // que bautizar: el cliente contrata gente, y el bautizo es de cada uno cuando
+  // lo elige. Sin esta condición, un cliente de equipo en un browser virgen
+  // —salió, entró en incógnito, cambió de máquina— caía en el bautizo de un
+  // agente solo apenas el roster no llegaba a tiempo o quedaba fuera de juego,
+  // y contestarlo ESCRIBE en el agente (`POST /portal/identity`): le ponía
+  // nombre y cara a un agente que ninguno de sus compañeros es. Lo que le toca
+  // a un cliente de equipo lo deciden los dos gates de arriba.
+  if (seen && !seen.onboarding && !altaYaContestada(manifest) && !manifest.modules.roles) {
     return (
       <Onboarding
         manifest={manifest}
