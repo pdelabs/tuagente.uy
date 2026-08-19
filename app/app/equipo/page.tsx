@@ -15,76 +15,116 @@
 // It only exists on an agent that has a team: the `roles` module is false on
 // every single-role agent, so the tab is not in the nav and this page is never
 // reached.
+//
+// ACÁ TAMBIÉN SE SUMA GENTE, y no es un botón de más: es la misma acción del
+// alta (`lib/altaEquipo.tsx`) para el segundo compañero en adelante. El portal
+// no INSTALA nada —eso lo hacemos nosotros a mano: el perfil, los permisos, el
+// reinicio del gateway— pero sí puede dejar el pedido anotado con el nombre y
+// la cara que el cliente eligió. Acá decía "escribinos y lo sumamos a tu
+// equipo", que desde que el pedido existe es mandarlo a escribir un mail por
+// algo que la pantalla hace sola.
 
-import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, RefreshCw, Users } from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { ChevronLeft, RefreshCw, UserPlus, Users } from "lucide-react";
 import { AgentitoAvatar, LOOK_DEFAULT, type AgentitoLook } from "../lib/agentito";
 import { getRoles, loadConfig, type HttpError, type PortalConfig, type Role } from "../lib/agent";
+import { BautizoDeRol, yaEsta, type AltaDelRol } from "../lib/altaEquipo";
 import { loadAgentName } from "../lib/onboarding";
 import { horaDe, rotuloCanal } from "../lib/palabras";
-import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Soporte, Spinner } from "../lib/ui";
+import { Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Soporte, Spinner } from "../lib/ui";
 import { PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
 import FichaDelRol from "./ficha";
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
 
-function faceOf(role: Role): AgentitoLook {
-  return { ...LOOK_DEFAULT, ...(role.look ?? {}) } as AgentitoLook;
+/** Pedido y todavía no instalado: ni está en el equipo ni se puede volver a
+ *  pedir. Sin esta distinción, el cliente que ya esperó ve el rol ofrecido de
+ *  nuevo y lo pide dos veces. */
+const enCamino = (role: Role) => Boolean(role.pedido) && !yaEsta(role);
+
+/** El nombre con el que el cliente lo ve. Si lo bautizó al pedirlo, ESE gana
+ *  aunque el roster siga sirviendo el del catálogo: el perfil recién pasa a ser
+ *  suyo cuando se lo instalamos, así que hasta entonces lo que eligió viaja
+ *  adentro del pedido. */
+function nombreDeRol(role: Role): string {
+  return (enCamino(role) ? role.pedido?.nombre : "") || role.name || role.label;
 }
 
-function RoleCard({ role, onOpen }: { role: Role; onOpen: () => void }) {
+function faceOf(role: Role): AgentitoLook {
+  return { ...LOOK_DEFAULT, ...((enCamino(role) ? role.pedido?.pinta : null) ?? role.look ?? {}) } as AgentitoLook;
+}
+
+function RoleCard({ role, onOpen, accion }: {
+  role: Role;
+  onOpen: () => void;
+  /** Lo único que se toca en la tarjeta además de la tarjeta misma: hoy,
+   *  "Sumarlo". */
+  accion?: ReactNode;
+}) {
+  const nombre = nombreDeRol(role);
   return (
-    // The button is OUTSIDE the Card on purpose: `Card` is presentational and
-    // shared by half the portal. Teaching it to be clickable for one caller is
-    // how a UI kit turns into a pile of props.
-    <button onClick={onOpen} className="block w-full text-left">
-    <Card className={`flex gap-4 p-4 transition hover:border-primary/40 ${role.hired ? "" : "opacity-70"}`}>
-      <AgentitoAvatar
-        look={faceOf(role)}
-        className="h-14 w-14 shrink-0"
-        apagado={!role.hired}
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-[15px] font-semibold text-ink">{role.name || role.label}</p>
-          {/* The job title stays visible even after a rename: "Vera" on its own
-              does not say what Vera does. */}
-          {role.name && role.name !== role.label && (
-            <span className="text-[13px] text-ink-soft">{role.label}</span>
+    // The button is INSIDE the Card and does not wrap it: `Card` is
+    // presentational and shared by half the portal -- teaching it to be
+    // clickable for one caller is how a UI kit turns into a pile of props --
+    // and a button inside a button (the "Sumarlo" one) is not valid HTML.
+    <Card className={`flex items-start gap-3 p-4 transition hover:border-primary/40 ${yaEsta(role) ? "" : "opacity-70"}`}>
+      <button onClick={onOpen} className="flex min-w-0 flex-1 gap-4 text-left">
+        <AgentitoAvatar
+          look={faceOf(role)}
+          className="h-14 w-14 shrink-0"
+          apagado={!yaEsta(role)}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[15px] font-semibold text-ink">{nombre}</p>
+            {/* The job title stays visible even after a rename: "Vera" on its own
+                does not say what Vera does. */}
+            {nombre !== role.label && (
+              <span className="text-[13px] text-ink-soft">{role.label}</span>
+            )}
+            {yaEsta(role)
+              ? <Chip tone="green">En tu equipo</Chip>
+              : enCamino(role)
+                ? <Chip tone="amber">En camino</Chip>
+                : <Chip tone="neutral">Podés sumarlo</Chip>}
+          </div>
+          {enCamino(role) && (
+            <p className="mt-1.5 text-[14px] leading-snug text-ink">
+              «{nombre}» está en camino: lo estamos preparando.
+            </p>
           )}
-          {role.hired
-            ? <Chip tone="green">En tu equipo</Chip>
-            : <Chip tone="neutral">Podés sumarlo</Chip>}
+          <p className="mt-1.5 text-[14px] leading-snug text-ink-soft">{role.does}</p>
+          {role.never && (
+            // The hard limit is a selling point, not fine print: it is the same
+            // sentence that lives in this role's SOUL, so what the screen promises
+            // and what the agent obeys cannot drift apart.
+            <p className="mt-1.5 text-[13px] text-ink-soft">
+              <span className="font-medium text-ink">Nunca:</span> {role.never}
+            </p>
+          )}
+          {!!role.needs?.length && (
+            // Connection ids travel raw (`whatsapp`); the portal has one
+            // dictionary that turns them into names the client recognises, and it
+            // is the same one Actividad and Conexiones use.
+            <p className="mt-1.5 text-[13px] text-ink-soft">
+              Necesita {role.needs.map(rotuloCanal).join(", ")} para empezar.
+            </p>
+          )}
         </div>
-        <p className="mt-1.5 text-[14px] leading-snug text-ink-soft">{role.does}</p>
-        {role.never && (
-          // The hard limit is a selling point, not fine print: it is the same
-          // sentence that lives in this role's SOUL, so what the screen promises
-          // and what the agent obeys cannot drift apart.
-          <p className="mt-1.5 text-[13px] text-ink-soft">
-            <span className="font-medium text-ink">Nunca:</span> {role.never}
-          </p>
-        )}
-        {!!role.needs?.length && (
-          // Connection ids travel raw (`whatsapp`); the portal has one
-          // dictionary that turns them into names the client recognises, and it
-          // is the same one Actividad and Conexiones use.
-          <p className="mt-1.5 text-[13px] text-ink-soft">
-            Necesita {role.needs.map(rotuloCanal).join(", ")} para empezar.
-          </p>
-        )}
-      </div>
+      </button>
+      {accion && <div className="shrink-0">{accion}</div>}
     </Card>
-    </button>
   );
 }
 
 export default function EquipoPage() {
   // Which teammate is open is READ FROM THE URL, never from a useState in
   // parallel: that is what makes a reload land on the same one and the link
-  // shareable.
+  // shareable. Lo mismo con el bautizo del que se está sumando (`?sumar=`):
+  // refrescar en el medio vuelve al mismo lugar, y "atrás" lo cierra.
   const abierto = useParamRuta(PARAM.rol);
+  const bautizando = useParamRuta(PARAM.sumar);
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [roles, setRoles] = useState<Role[] | null>(null);
   const [err, setErr] = useState<{ status?: number; message: string } | null>(null);
@@ -120,6 +160,24 @@ export default function EquipoPage() {
     return () => clearInterval(t);
   }, [cfg, load]);
 
+  // El bautizo se hace cargo del pedido y del 409; lo que queda acá es dejar el
+  // roster al día. Si el 409 contestó que el rol YA está instalado, viene el
+  // roster fresco y ese manda. Si no, se anota el pedido tal como lo devolvió
+  // el agente —para que la tarjeta diga "en camino" en el mismo tick— y se
+  // vuelve a preguntar, que es lo que lo confirma.
+  const alQuedarPedido = (r: AltaDelRol) => {
+    // Only close what is still open: if the client already navigated away, a
+    // late resolve must not pop an unrelated history entry.
+    if (bautizando) cerrarEnRuta(PARAM.sumar);
+    if (r.tipo === "contratado") { setRoles(r.roles); return; }
+    setRoles((prev) => (prev ?? []).map((x) => (
+      x.id === r.role.id
+        ? { ...x, pedido: r.pedido ?? { nombre: r.nombre, pinta: r.look, pedido_en: "" } }
+        : x
+    )));
+    load(true);
+  };
+
   const cuerpo = () => {
     if (abierto && roles) {
       const role = roles.find((r) => r.id === abierto);
@@ -141,34 +199,80 @@ export default function EquipoPage() {
       );
     }
 
-    const hired = roles.filter((r) => r.hired);
-    const offered = roles.filter((r) => !r.hired);
+    const hired = roles.filter(yaEsta);
+    const pedidos = roles.filter(enCamino);
+    // SOLO LOS QUE SE PUEDEN PEDIR llevan botón. `state` viene tal cual del
+    // catálogo y el adapter no lo completa: un rol sin `state`, o en borrador,
+    // contesta 404 al pedido. Ofrecer "Sumarlo" ahí es ofrecerle al cliente un
+    // error después de que ya eligió y bautizó. Es el mismo filtro del alta.
+    const offered = roles.filter((r) => !yaEsta(r) && !r.pedido && r.state === "ready");
+    const enPreparacion = roles.filter((r) => !yaEsta(r) && !r.pedido && r.state !== "ready");
+
+    const abrirFicha = (role: Role) => () => abrirEnRuta({ [PARAM.rol]: role.id });
 
     return (
       <>
         <div className="flex flex-col gap-2">
           {hired.map((role) => (
-            <RoleCard key={role.id} role={role}
-              onOpen={() => abrirEnRuta({ [PARAM.rol]: role.id })} />
+            <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)} />
           ))}
         </div>
+
+        {pedidos.length > 0 && (
+          <>
+            <h2 className="mb-2 mt-7 text-[15px] font-semibold text-ink">En camino</h2>
+            <div className="flex flex-col gap-2">
+              {pedidos.map((role) => (
+                <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)} />
+              ))}
+            </div>
+            {/* La misma verdad que la pantalla de espera del alta, y por el
+                mismo motivo: del otro lado hay una persona preparándolo. Sin
+                esto, un rol pedido hace tres días parece una pantalla colgada. */}
+            <p className="mt-2 text-[13px] leading-relaxed text-ink-soft">
+              Lo prepara alguien de tuagente: hay que darle su lugar en tu
+              agente, sus permisos y lo que necesita para arrancar. No es
+              automático y no lo podés apurar desde acá. Cuando esté, aparece
+              acá arriba trabajando.
+            </p>
+          </>
+        )}
 
         {offered.length > 0 && (
           <>
             <h2 className="mb-2 mt-7 text-[15px] font-semibold text-ink">Podés sumar</h2>
             <div className="flex flex-col gap-2">
               {offered.map((role) => (
-                <RoleCard key={role.id} role={role}
-                  onOpen={() => abrirEnRuta({ [PARAM.rol]: role.id })} />
+                <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)}
+                  accion={
+                    <Btn size="sm" kind="secondary"
+                      onClick={() => abrirEnRuta({ [PARAM.sumar]: role.id })}>
+                      <UserPlus className="h-4 w-4" /> Sumarlo
+                    </Btn>
+                  } />
               ))}
             </div>
-            {/* No hire button. Hiring installs a profile and restarts the
-                gateway, and neither belongs behind a click before we have
-                decided what a role costs. The roster informs; we do the hiring.
-                The link is the shared one so the contact URL keeps living in a
-                single place -- only the words change. */}
             <div className="mt-3">
-              <Soporte label="Escribinos y lo sumamos a tu equipo" />
+              <Soporte label="¿No sabés cuál te sirve? Escribinos" />
+            </div>
+          </>
+        )}
+
+        {enPreparacion.length > 0 && (
+          <>
+            {/* Los que el catálogo todavía no da por listos. Se muestran igual
+                —lo que viene también es parte de la oferta— pero sin botón,
+                porque el pedido de uno de estos contesta 404. */}
+            <h2 className="mb-2 mt-7 text-[15px] font-semibold text-ink">
+              Todavía los estamos armando
+            </h2>
+            <div className="flex flex-col gap-2">
+              {enPreparacion.map((role) => (
+                <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)} />
+              ))}
+            </div>
+            <div className="mt-3">
+              <Soporte label="¿Te sirve alguno de estos? Escribinos" />
             </div>
           </>
         )}
@@ -177,6 +281,31 @@ export default function EquipoPage() {
   };
 
   const abiertoRole = abierto ? (roles ?? []).find((r) => r.id === abierto) : undefined;
+  // A quién se está bautizando sale del ROSTER y no de la URL a secas: un
+  // `?sumar=` con un id que no existe, con alguien que ya está en el equipo o
+  // con uno que ya se pidió es un link viejo, y un link viejo muestra la lista
+  // —nunca un formulario para pedir dos veces lo mismo—.
+  const sumando = cfg && bautizando
+    ? (roles ?? []).find((r) => r.id === bautizando && !yaEsta(r) && !r.pedido && r.state === "ready")
+    : undefined;
+
+  // El bautizo se lleva la pestaña entera: es una decisión —cómo se va a llamar
+  // y qué cara tiene— y no un detalle al costado de la lista.
+  if (sumando && cfg) {
+    return (
+      <div className={WRAP}>
+        <button
+          onClick={() => cerrarEnRuta(PARAM.sumar)}
+          className="mb-2 inline-flex items-center gap-1 text-[13px] text-ink-soft transition hover:text-ink"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" /> Tu equipo
+        </button>
+        <div className="flex justify-center py-6">
+          <BautizoDeRol key={sumando.id} cfg={cfg} role={sumando} onListo={alQuedarPedido} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={WRAP}>
@@ -189,7 +318,7 @@ export default function EquipoPage() {
         </button>
       )}
       <PageHeader
-        title={abiertoRole ? (abiertoRole.name || abiertoRole.label) : "Tu equipo"}
+        title={abiertoRole ? nombreDeRol(abiertoRole) : "Tu equipo"}
         subtitle={
           abiertoRole ? undefined
             : nombreAgente

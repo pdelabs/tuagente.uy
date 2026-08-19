@@ -48,6 +48,12 @@ export const PARAM = {
   programada: "programada",
   /** /app/equipo?rol=<id del rol> */
   rol: "rol",
+  /** /app/equipo?sumar=<id del rol> — el bautizo del que se está sumando.
+   *  Es OTRO parámetro y no un modo de `?rol=`: son dos cosas distintas sobre
+   *  el mismo id —mirar la ficha de alguien y ponerle nombre a alguien que
+   *  todavía no está—, y meterlas en un solo parámetro obliga a un segundo
+   *  valor al lado para saber cuál de las dos. */
+  sumar: "sumar",
 } as const;
 
 /** `?p=` (el pedido con el que el chat arranca) también cuenta como llegar con

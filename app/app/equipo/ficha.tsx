@@ -10,6 +10,7 @@
 // earning its place.
 
 import { useEffect, useState } from "react";
+import { yaEsta } from "../lib/altaEquipo";
 import Link from "next/link";
 import { Workflow } from "lucide-react";
 import { AgentitoAvatar, LOOK_DEFAULT, type AgentitoLook } from "../lib/agentito";
@@ -22,7 +23,9 @@ import { Card, Chip, Spinner } from "../lib/ui";
 import { PARAM } from "../lib/rutas";
 
 function faceOf(role: Role): AgentitoLook {
-  return { ...LOOK_DEFAULT, ...(role.look ?? {}) } as AgentitoLook;
+  // La pinta del pedido gana por lo mismo que el nombre: mientras el rol está
+  // en camino, la cara que el cliente eligió sólo vive ahí.
+  return { ...LOOK_DEFAULT, ...((role.pedido && !yaEsta(role) ? role.pedido.pinta : null) ?? role.look ?? {}) } as AgentitoLook;
 }
 
 export default function FichaDelRol({ role }: { role: Role }) {
@@ -48,17 +51,30 @@ export default function FichaDelRol({ role }: { role: Role }) {
   const suyos = (flujos ?? []).filter((f) => (role.flows ?? []).includes(f.slug));
   const prometidos = (role.flows ?? []).filter((slug) => !suyos.some((f) => f.slug === slug));
 
+  const enCamino = Boolean(role.pedido) && !yaEsta(role);
+
   return (
     <div className="flex flex-col gap-5">
       <Card className="flex gap-4 p-5">
         <AgentitoAvatar look={faceOf(role)} className="h-16 w-16 shrink-0" apagado={!role.hired} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[18px] font-semibold text-ink">{role.name || role.label}</p>
-            <span className="text-[14px] text-ink-soft">{role.label}</span>
-            {role.hired
+            {/* Un rol PEDIDO sigue sirviendo el nombre del catálogo: el perfil
+                recién pasa a ser suyo cuando se lo instalamos, así que hasta
+                entonces el nombre que el cliente eligió viaja en el pedido. */}
+            <p className="text-[18px] font-semibold text-ink">
+              {(enCamino ? role.pedido?.nombre : "") || role.name || role.label}
+            </p>
+            {(((enCamino ? role.pedido?.nombre : "") || role.name || role.label) !== role.label) && (
+              <span className="text-[14px] text-ink-soft">{role.label}</span>
+            )}
+            {yaEsta(role)
               ? <Chip tone="green">En tu equipo</Chip>
-              : <Chip tone="neutral">Podés sumarlo</Chip>}
+              : enCamino
+                // Ya lo pidió: decirle "podés sumarlo" es invitarlo a pedir de
+                // nuevo lo que ya está esperando.
+                ? <Chip tone="amber">En camino</Chip>
+                : <Chip tone="neutral">Podés sumarlo</Chip>}
           </div>
           <p className="mt-2 text-[14px] leading-snug text-ink-soft">{role.does}</p>
           {role.never && (

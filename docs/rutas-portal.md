@@ -28,7 +28,7 @@ lo dejamos ahí).
 |---|---|
 | Inicio | `/app/inicio` |
 | Chat | `/app/chat` |
-| Equipo | `/app/equipo` | `?rol=<id>` abre su ficha |
+| Equipo | `/app/equipo` |
 | Flujos | `/app/flujos` |
 | Tablero | `/app/pipeline` |
 | Aprobaciones | `/app/aprobaciones` |
@@ -36,7 +36,7 @@ lo dejamos ahí).
 | Conexiones | `/app/conexiones` |
 | Actividad | `/app/actividad` |
 | Archivos | `/app/archivos` |
-| Uso | `/app/uso` | **oculta** — redirige a `/app/inicio` |
+| Uso | `/app/uso` (**oculta** — redirige a `/app/inicio`) |
 | Habilidades | `/app/habilidades` |
 | Tareas programadas | `/app/tareas` |
 
@@ -83,6 +83,24 @@ vista. Están implementadas (`rutas.tsx`) y no verificadas una por una.
 | Una conexión | `/app/conexiones?conexion=<id del catálogo>` | `/app/conexiones?conexion=telegram` | abre · id viejo |
 | Una habilidad del sistema | `/app/habilidades?habilidad=<nombre>` | `/app/habilidades?habilidad=aprobacion` | abre · id viejo |
 | Una tarea programada | `/app/tareas?programada=<id de cron>` | `/app/tareas?programada=bb8485784d90` | abre |
+| Un compañero del equipo | `/app/equipo?rol=<id del rol>` | `/app/equipo?rol=asistente` | SIN VERIFICAR |
+| Sumar un rol (su bautizo) | `/app/equipo?sumar=<id del rol>` | `/app/equipo?sumar=asistente` | SIN VERIFICAR |
+
+Las dos de Equipo **sólo existen en un agente con equipo** (`modules.roles`): en
+un agente de uno la pestaña no está en el nav y la página no se alcanza.
+
+`?sumar=` es **otro parámetro y no un modo de `?rol=`**: son dos cosas distintas
+sobre el mismo id —mirar la ficha de alguien, o ponerle nombre y cara a alguien
+que todavía no está—, y meterlas en un solo parámetro obliga a un segundo valor
+al lado para saber cuál de las dos. Abre el bautizo (el mismo del alta) y deja
+el pedido anotado; **no instala nada**: eso lo hacemos nosotros a mano y la
+tarjeta queda en "en camino" hasta entonces.
+
+**Un `?sumar=` que no se puede pedir muestra la lista, no un formulario**: si el
+id no existe, si ese rol ya está en el equipo, si ya se pidió, o si el catálogo
+todavía no lo da por `ready` (pedirlo contesta 404), la pestaña se comporta como
+con cualquier link viejo. Por eso no es un link para citarle al cliente: el que
+sirve para "sumá a alguien" es la pestaña, `/app/equipo`.
 
 Lo que quedó **SIN VERIFICAR** dentro de filas que sí se probaron:
 

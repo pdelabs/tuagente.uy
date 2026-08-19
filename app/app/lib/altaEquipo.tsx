@@ -62,7 +62,7 @@ function pintaDe(look: Record<string, number> | null | undefined): AgentitoLook 
 
 /** ¿Este rol ya trabaja para el cliente? `contratado` es el campo del alta;
  *  `hired` es el mismo hecho con el nombre viejo del roster. */
-const yaEsta = (r: Role) => Boolean(r.contratado ?? r.hired);
+export const yaEsta = (r: Role) => Boolean(r.contratado ?? r.hired);
 
 /** EL PEDIDO QUE EL AGENTE TIENE ANOTADO, que es el único que se muestra: lo
  *  que la pantalla de espera dice —el nombre, la cara— sale de acá y no de lo
@@ -217,6 +217,167 @@ function TarjetaDeRol({ role, onElegir }: { role: Role; onElegir: () => void }) 
   );
 }
 
+/* ── El bautizo de un rol ────────────────────────────────────────────────── */
+
+/** En qué terminó el bautizo. Son los dos finales posibles y ninguno es un
+ *  error del cliente: o el agente tiene el pedido anotado —el que se acaba de
+ *  crear, o el que ya tenía—, o el rol ya está trabajando y no hay nada que
+ *  esperar. */
+export type AltaDelRol =
+  | {
+      tipo: "pedido";
+      /** El rol del pedido que quedó, que NO siempre es el que se bautizó: en
+       *  un 409 puede ganar otro que el cliente había pedido antes. */
+      role: Role;
+      pedido: PedidoDeRol | null;
+      /** Nombre y pinta ya reconciliados con lo que contestó el agente. */
+      nombre: string;
+      look: AgentitoLook;
+    }
+  | { tipo: "contratado"; roles: Role[] };
+
+/** Lo que se muestra sale de la respuesta, no de lo tipeado: el adapter le pasa
+ *  el nombre por el mismo saneado que el bautizo del agente (va a parar a un
+ *  bloque del SOUL), así que puede volver recortado. Si el pedido no trae
+ *  nombre o pinta, queda lo que el cliente eligió. */
+function loQueAnotoElAgente(
+  role: Role, pedido: PedidoDeRol | null | undefined, nombre: string, look: AgentitoLook,
+): AltaDelRol {
+  return {
+    tipo: "pedido",
+    role,
+    pedido: pedido ?? null,
+    nombre: pedido?.nombre || nombre,
+    look: pedido?.pinta ? pintaDe(pedido.pinta) : look,
+  };
+}
+
+/** EL BAUTIZO DE UN ROL, UNA SOLA VEZ EN EL PORTAL. Lo usan los dos momentos en
+ *  que un cliente suma a alguien: el alta (su primer compañero, a pantalla
+ *  completa) y la pestaña Equipo (todos los que sume después). Es la misma
+ *  pantalla porque es el mismo momento —elegís cómo se va a llamar y qué cara
+ *  tiene lo que estás sumando—, y tenerla dos veces era garantizar que un día
+ *  digan cosas distintas.
+ *
+ *  Se hace cargo del pedido entero, incluido el 409: quien la usa sólo recibe
+ *  en qué terminó (`AltaDelRol`) y decide qué hacer con eso. El dado cambia SU
+ *  pinta, no la página, y el nombre es lo único que hay que decidir. */
+export function BautizoDeRol({ cfg, role, onListo, onVolver, volverLabel }: {
+  cfg: PortalConfig;
+  role: Role;
+  onListo: (r: AltaDelRol) => void;
+  /** Sin esto no se dibuja la salida de abajo: en Equipo el volver ya está
+   *  arriba, y dos "atrás" en la misma pantalla es uno de más. */
+  onVolver?: () => void;
+  volverLabel?: string;
+}) {
+  // El catálogo ya trae un nombre y una cara: el bautizo empieza con los suyos
+  // puestos, y cambiarlos es opcional. Una pantalla en blanco convierte "elegí
+  // un rol" en "inventá un personaje".
+  const [nombre, setNombre] = useState(role.name || role.label);
+  const [look, setLook] = useState<AgentitoLook>(() => pintaDe(role.look));
+  const [pidiendo, setPidiendo] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const pedir = async () => {
+    const limpio = nombre.trim();
+    if (!limpio || pidiendo) return;
+    setPidiendo(true);
+    setErr(null);
+    try {
+      const d = await crearPedidoDeRol(cfg, role.id, limpio, look);
+      onListo(loQueAnotoElAgente(role, d?.pedido, limpio, look));
+    } catch (e) {
+      const h = e as HttpError;
+      // 409 son dos cosas y ninguna es un error del cliente: o ya lo había
+      // pedido (dos pestañas, o volvió a entrar), o se lo instalamos mientras
+      // lo bautizaba. La diferencia la contesta el roster, no el texto.
+      if (h?.status === 409) {
+        const r = await getRoles(cfg).catch(() => null);
+        const frescos = r?.roles ?? [];
+        if (frescos.some(yaEsta)) { onListo({ tipo: "contratado", roles: frescos }); return; }
+        // El pedido que ya existía manda: puede ser este rol pedido en otra
+        // pestaña, o directamente otro rol. Se devuelve el que el agente tiene
+        // anotado, no el que este browser acaba de intentar.
+        const p = pedidoPendiente(frescos);
+        onListo(p
+          ? loQueAnotoElAgente(p, p.pedido, limpio, look)
+          : loQueAnotoElAgente(role, null, limpio, look));
+        return;
+      }
+      setErr(describirError(e));
+    } finally {
+      setPidiendo(false);
+    }
+  };
+
+  return (
+    <div className="flex w-full max-w-2xl flex-col items-center text-center">
+      <div className="mb-8 animate-fadeup">
+        <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
+          Ponele nombre
+        </h1>
+        <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-soft">
+          Así lo vas a ver acá adentro: al lado de cada cosa que haga, y
+          cuando te conteste en el chat.
+        </p>
+      </div>
+
+      <div className="relative h-40 w-40">
+        {/* Sin festejo: el bautizo del agente lo dispara y se queda a verlo,
+            pero acá la pantalla siguiente es la espera y el personaje se
+            desmonta en el mismo tick. Un contador que nadie mira es una
+            promesa de animación que no pasa. */}
+        <AgentitoRive festejos={0} look={look} estado="normal" className="h-full w-full" />
+        <button
+          onClick={() => setLook(sortearLook(look))}
+          title="Otro look"
+          aria-label="Otro look"
+          className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white transition hover:scale-105 hover:bg-black/[0.03] active:scale-95"
+        >
+          <Dices className="h-[18px] w-[18px] text-ink" />
+        </button>
+      </div>
+
+      <input
+        autoFocus
+        value={nombre}
+        maxLength={24}
+        onChange={(e) => { setNombre(e.target.value); setErr(null); }}
+        onKeyDown={(e) => { if (e.key === "Enter") pedir(); }}
+        placeholder={role.label}
+        aria-label={`Nombre para tu ${role.label}`}
+        className="mt-7 w-[8em] max-w-[80vw] border-b-[3px] border-black/15 bg-transparent text-center text-[32px] font-extrabold tracking-tight text-primary outline-none transition placeholder:font-extrabold placeholder:text-ink-soft/35 focus:border-primary sm:text-[38px]"
+      />
+      {/* El puesto queda a la vista aunque le cambie el nombre: "Vera" sola no
+          dice qué hace Vera. */}
+      <p className="mt-3 text-[14px] font-medium text-ink-soft">{role.label}</p>
+      <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-ink-soft">
+        {role.does}
+      </p>
+
+      {err && <p className="mt-4 text-[13px] text-c-coral-ink">{err}</p>}
+
+      <div className="mt-8 flex flex-col items-center gap-3">
+        <Btn disabled={!nombre.trim() || pidiendo} onClick={pedir}>
+          {pidiendo ? "Pidiéndolo…" : "Sumarlo a mi equipo"}
+          {!pidiendo && <ArrowRight className="h-4 w-4" />}
+        </Btn>
+        {onVolver && (
+          <button
+            onClick={() => { setErr(null); onVolver(); }}
+            className="inline-flex items-center gap-1 text-[13px] font-semibold text-ink-soft underline-offset-4 transition hover:text-ink hover:underline"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> {volverLabel ?? "Volver"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Las tres pantallas del alta ─────────────────────────────────────────── */
+
 export default function AltaDeEquipo({ cfg, roles, onContratado }: {
   cfg: PortalConfig;
   roles: Role[];
@@ -233,8 +394,6 @@ export default function AltaDeEquipo({ cfg, roles, onContratado }: {
   const [nombre, setNombre] = useState(pendiente?.pedido?.nombre ?? "");
   const [look, setLook] = useState<AgentitoLook>(
     () => pintaDe(pendiente?.pedido?.pinta ?? pendiente?.look));
-  const [pidiendo, setPidiendo] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
 
   /** Mostrar lo que el AGENTE tiene anotado. Se llama con el pedido que
    *  contestó el adapter —al crearlo, al reencontrarlo en un 409, o en cada
@@ -280,48 +439,7 @@ export default function AltaDeEquipo({ cfg, roles, onContratado }: {
 
   const elegir = (role: Role) => {
     setElegido(role);
-    // El catálogo ya trae un nombre y una cara: el bautizo empieza con los
-    // suyos puestos, y cambiarlos es opcional. Una pantalla en blanco convierte
-    // "elegí un rol" en "inventá un personaje".
-    setNombre(role.name || role.label);
-    setLook(pintaDe(role.look));
-    setErr(null);
     setPaso("bautizo");
-  };
-
-  const pedir = async () => {
-    if (!elegido || !nombre.trim() || pidiendo) return;
-    setPidiendo(true);
-    setErr(null);
-    try {
-      // Lo que se muestra en la espera sale de la respuesta, no de lo tipeado:
-      // el adapter le pasa el nombre por el mismo saneado que el bautizo del
-      // agente (va a parar a un bloque del SOUL), así que puede volver
-      // recortado.
-      const d = await crearPedidoDeRol(cfg, elegido.id, nombre.trim(), look);
-      mostrar(elegido, d?.pedido);
-      setPaso("en-camino");
-    } catch (e) {
-      const h = e as HttpError;
-      // 409 son dos cosas y ninguna es un error del cliente: o ya lo había
-      // pedido (dos pestañas, o volvió a entrar), o se lo instalamos mientras
-      // lo bautizaba. La diferencia la contesta el roster, no el texto.
-      if (h?.status === 409) {
-        const r = await getRoles(cfg).catch(() => null);
-        const frescos = r?.roles ?? [];
-        if (frescos.some(yaEsta)) { onContratado(frescos); return; }
-        // El pedido que ya existía manda: puede ser este rol pedido en otra
-        // pestaña, o directamente otro rol. Se muestra el que el agente tiene
-        // anotado, no el que este browser acaba de intentar.
-        const p = pedidoPendiente(frescos);
-        if (p) mostrar(p, p.pedido);
-        setPaso("en-camino");
-        return;
-      }
-      setErr(describirError(e));
-    } finally {
-      setPidiendo(false);
-    }
   };
 
   // SOLO LOS QUE SE PUEDEN PEDIR. `state` viene tal cual del catálogo y el
@@ -329,7 +447,6 @@ export default function AltaDeEquipo({ cfg, roles, onContratado }: {
   // pedido. Ofrecer algo que no se puede pedir es ofrecerle al cliente un error
   // después de que ya eligió y bautizó.
   const ofrecidos = roles.filter((r) => r.state === "ready" && !yaEsta(r));
-  const listoParaPedir = Boolean(elegido) && nombre.trim().length > 0;
 
   /* Paso 1 — elegir. */
   if (paso === "eligiendo") {
@@ -371,70 +488,29 @@ export default function AltaDeEquipo({ cfg, roles, onContratado }: {
     );
   }
 
-  /* Paso 2 — bautizarlo. Mismo bautizo que el del agente: el dado cambia SU
-     pinta, no la página, y el nombre es lo único que hay que decidir. */
+  /* Paso 2 — bautizarlo. La pantalla es la misma que la pestaña Equipo le
+     pone a cada rol que se suma después: vive en `BautizoDeRol`, acá arriba. */
   if (paso === "bautizo" && elegido) {
     return (
       <main className="app-shell flex min-h-screen items-center justify-center bg-surface px-6 py-12">
-        <div className="flex w-full max-w-2xl flex-col items-center text-center">
-          <div className="mb-8 animate-fadeup">
-            <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
-              Ponele nombre
-            </h1>
-            <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-soft">
-              Así lo vas a ver acá adentro: al lado de cada cosa que haga, y
-              cuando te conteste en el chat.
-            </p>
-          </div>
-
-          <div className="relative h-40 w-40">
-            {/* Sin festejo: el bautizo del agente lo dispara y se queda a
-                verlo, pero acá la pantalla siguiente es la espera y el
-                personaje se desmonta en el mismo tick. Un contador que nadie
-                mira es una promesa de animación que no pasa. */}
-            <AgentitoRive festejos={0} look={look} estado="normal" className="h-full w-full" />
-            <button
-              onClick={() => setLook(sortearLook(look))}
-              title="Otro look"
-              aria-label="Otro look"
-              className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white transition hover:scale-105 hover:bg-black/[0.03] active:scale-95"
-            >
-              <Dices className="h-[18px] w-[18px] text-ink" />
-            </button>
-          </div>
-
-          <input
-            autoFocus
-            value={nombre}
-            maxLength={24}
-            onChange={(e) => { setNombre(e.target.value); setErr(null); }}
-            onKeyDown={(e) => { if (e.key === "Enter") pedir(); }}
-            placeholder={elegido.label}
-            aria-label={`Nombre para tu ${elegido.label}`}
-            className="mt-7 w-[8em] max-w-[80vw] border-b-[3px] border-black/15 bg-transparent text-center text-[32px] font-extrabold tracking-tight text-primary outline-none transition placeholder:font-extrabold placeholder:text-ink-soft/35 focus:border-primary sm:text-[38px]"
-          />
-          {/* El puesto queda a la vista aunque le cambie el nombre: "Vera" sola
-              no dice qué hace Vera. */}
-          <p className="mt-3 text-[14px] font-medium text-ink-soft">{elegido.label}</p>
-          <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-ink-soft">
-            {elegido.does}
-          </p>
-
-          {err && <p className="mt-4 text-[13px] text-c-coral-ink">{err}</p>}
-
-          <div className="mt-8 flex flex-col items-center gap-3">
-            <Btn disabled={!listoParaPedir || pidiendo} onClick={pedir}>
-              {pidiendo ? "Pidiéndolo…" : "Sumarlo a mi equipo"}
-              {!pidiendo && <ArrowRight className="h-4 w-4" />}
-            </Btn>
-            <button
-              onClick={() => { setPaso("eligiendo"); setErr(null); }}
-              className="inline-flex items-center gap-1 text-[13px] font-semibold text-ink-soft underline-offset-4 transition hover:text-ink hover:underline"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" /> Ver los otros roles
-            </button>
-          </div>
-        </div>
+        <BautizoDeRol
+          key={elegido.id}
+          cfg={cfg}
+          role={elegido}
+          volverLabel="Ver los otros roles"
+          onVolver={() => setPaso("eligiendo")}
+          onListo={(r) => {
+            // El rol ya estaba instalado (el 409 de "ya lo tenés"): no hay nada
+            // que esperar.
+            if (r.tipo === "contratado") { onContratado(r.roles); return; }
+            // Lo que muestra la espera es lo que el AGENTE anotó —el pedido que
+            // acaba de quedar, o el que ya tenía—, nunca lo tipeado acá.
+            setElegido(r.role);
+            setNombre(r.nombre);
+            setLook(r.look);
+            setPaso("en-camino");
+          }}
+        />
       </main>
     );
   }

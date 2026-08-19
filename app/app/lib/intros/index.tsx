@@ -17,12 +17,16 @@ import FilesIntro from "./files";
 import UsageIntro from "./usage";
 import ConnectionsIntro from "./connections";
 import FlujosIntro from "./flujos";
+import EquipoIntro from "./equipo";
 
 const KEY = "tuagente_intro_v2";
 
 export const INTROS: Record<string, ComponentType<IntroProps>> = {
   home: HomeIntro,
   chat: ChatIntro,
+  // La clave es la del MÓDULO, no la de la pestaña: el manifiesto declara
+  // `roles` y el nav lo rotula "Equipo".
+  roles: EquipoIntro,
   kanban: PipelineIntro,
   approvals: ApprovalsIntro,
   artifacts: ArtifactsIntro,
