@@ -1,5 +1,9 @@
 # Capacidades v2 — draft para podar
 
+> SUPERSEDIDO el 19/8: la lista final con evidencia y devil's advocate está en
+> `capacidades-50-veredicto.md` (research en `research-capacidades/`). Este
+> draft queda como historia de la ronda 1-2.
+
 18/8/2026, ronda 2 el 19/8. Propuesta de catálogo ampliado (hoy 6 entradas,
 todas de contenido). Esto es el **qué**: labels, para_qué y respaldo técnico.
 El **cómo** de cada entrada (`detecta`/`verifica`/`instala`, que es lo caro) se
