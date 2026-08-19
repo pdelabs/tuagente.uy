@@ -1,4 +1,4 @@
-# Pivot a equipo — estado al 18/8/2026
+# Pivot a equipo — estado al 19/8/2026
 
 Para retomar en una sesión nueva. Todo vive en la rama `pivot-equipo` de los DOS
 repos (worktrees en `.claude/worktrees/pivot-equipo`); `main` no sabe nada del
@@ -72,11 +72,30 @@ viejo (JSONDecodeError en `line <última>`). `docker restart lab-portal-adapter`
 lo limpia. En un remoto Linux no pasa. Por esto mismo `deja()` en
 `contratar-rol.sh` escribe con tmp+mv (afde4bf).
 
+## Hecho el 19/8 (olas 1-4, orquestadas con subagentes + validador cada una)
+
+- **Catálogo de capacidades v2** (b659ad2): 25 filas, niveles base/menú,
+  `paquete-social` como UNA oferta. Salió de 3 investigaciones + devil's
+  advocate: `notas/capacidades-50-veredicto.md` y `notas/research-capacidades/`.
+- **install.sh por rol** (81ad2d6): split mecánico en `roles/skills_split.py`
+  (intersección de roles ready + fallbacks + skills de capacidades base);
+  retrocompat sin roster probada con diff byte a byte; curator apagado.
+- **Pipeline de contratación** (181df5b + afde4bf): `POST /portal/roles/pedido`
+  (ledger append-only), `GET /portal/roles` con contratado/pedido/bautizo,
+  `contratar-rol.sh --del-pedido|--nombre|--pinta-file` con nombre al SOUL en
+  build temporal. E2E verde contra el lab vivo.
+- **Portal** (84b6c77 + 853e643): alta de equipo (elegir rol → bautizar →
+  pedido → espera → onboarding recortado con negocio+canal), intro de Equipo,
+  y "sumar otro rol" desde la pestaña (`?sumar=<rol>`). Un agente con equipo
+  nunca ve el bautizo de agente único.
+
 ## Pendiente (en orden)
 
-1. `install.sh` sigue mandando las 12 skills a todos los agentes.
-2. Alta del portal para equipos (elegir rol → bautizar) + intro de Equipo en
-   `lib/intros/`.
+1. **Menú de capacidades en la ficha del rol** (portal): el adapter ya sirve
+   `nivel` y la ficha debe dibujar base como "incluido" sin botón — deuda
+   anotada en el docstring de `capacidades()`.
+2. **Rol "Asistente"**: identity + flujos + el paso "¿qué vas a hacer?" del
+   alta (matching de capacidades vía adapter, patrón router ~300 tokens).
 3. **Medir costo por rol** (bloquea publicar precio).
 4. Mr.Wobble sigue pre-pivot; migrarlo cuando Luis quiera. Merge a main es
    decisión de Luis.
