@@ -147,11 +147,54 @@ while IFS= read -r f; do
   conexion="${rel%%/*}"
   ARCHIVOS+=("connections/$rel:$POLITICA/mcp/$conexion/${rel#"$conexion"/mcp/}")
 done < <(find "$KIT"/connections/*/mcp -type f ! -path "*/__pycache__/*" 2>/dev/null | sort)
-while IFS= read -r f; do
-  rel="${f#"$KIT"/}"                       # skills/entregable/SKILL.md
-  ARCHIVOS+=("$rel:$KIT_SKILLS/${rel#skills/}")
-done < <(find "$KIT/skills" -type f \( -name "*.md" -o -name "*.py" \) \
-  ! -path "*/evals/*" | sort)
+# WHICH SKILLS THIS AGENT GETS, AND IT IS NO LONGER "ALL OF THEM". The kit used
+# to copy every skill into kit-skills/, which the compose mounts for the WHOLE
+# installation -- so on a client with a team the accounting role was indexing
+# the brand kit and the Instagram writer, and a skill's description is loaded on
+# EVERY request. A role carrying the whole kit is the single fat agent this
+# pivot exists to replace.
+#
+# THE MARKER IS THE ROSTER, the same file the adapter reads to decide whether
+# this client has a team (`ROLES_CATALOG.is_file()` in portal_adapter.py).
+# Presence, never a value someone wrote. Without it nothing changes: a pre-pivot
+# client gets the whole kit exactly like yesterday.
+#
+# With a roster only the shared skills travel here; the craft ones arrive with
+# the role that claims them (`tools/contratar-rol.sh` installs the profile with
+# its skills inside). Who is shared and who is not is COMPUTED from the roles by
+# roles/skills_split.py, not written down here: a list by hand is how two skills
+# once made it into the kit and never into a new agent.
+ROSTER="$POLITICA/roles/catalogo.json"
+SKILLS_A_INSTALAR=()
+if [[ -f "$ROSTER" ]]; then
+  while IFS= read -r s; do
+    SKILLS_A_INSTALAR+=("$s")
+  done < <(python3 "$KIT/roles/skills_split.py" --shared)
+  # If the split cannot be computed there is no safe fallback: installing
+  # everything would put the craft skills back on every role, and installing
+  # nothing would take the portal's screens down. Stop before writing anything.
+  [[ ${#SKILLS_A_INSTALAR[@]} -gt 0 ]] || {
+    echo "roles/skills_split.py no dijo qué skills son compartidas. No instalé nada." >&2
+    exit 1
+  }
+  # The roster is OURS and closed -- the client never writes it (a renamed role
+  # lives in the profile's role.json). Keeping it in the install is what makes a
+  # new role show up as available to a client that already has a team, instead
+  # of waiting for someone to copy a file by hand.
+  ARCHIVOS+=("roles/catalogo.json:$ROSTER")
+else
+  while IFS= read -r d; do
+    SKILLS_A_INSTALAR+=("$(basename "$d")")
+  done < <(find "$KIT/skills" -mindepth 1 -maxdepth 1 -type d | sort)
+fi
+
+for s in "${SKILLS_A_INSTALAR[@]}"; do
+  while IFS= read -r f; do
+    rel="${f#"$KIT"/}"                     # skills/entregable/SKILL.md
+    ARCHIVOS+=("$rel:$KIT_SKILLS/${rel#skills/}")
+  done < <(find "$KIT/skills/$s" -type f \( -name "*.md" -o -name "*.py" \) \
+    ! -path "*/evals/*" | sort)
+done
 # Los evals/ NO viajan a proposito: son nuestros, para probar la skill antes de
 # soltarla. Adentro del agente no los corre nadie y solo ocupan prompt y disco.
 
@@ -191,9 +234,13 @@ if [[ "$MODO" == "--diff" ]]; then
       distintos=$((distintos+1))
     fi
   done
-  for s in "$KIT"/skills/*/; do
-    vieja="$DATA/skills/$(basename "$s")"
-    [[ -d "$vieja" ]] && { echo "SOBRA    data/skills/$(basename "$s") — copia vieja, tapa a la del kit"; distintos=$((distintos+1)); }
+  # WHAT THIS AGENT GETS, not the kit's whole catalog -- same list the copy uses
+  # below. On a team agent `brand-kit` is not shipped here, so a directory by
+  # that name under data/skills/ is the CLIENT's, and calling it "una copia
+  # vieja que tapa a la del kit" is a lie that ends with us moving it away.
+  for s in "${SKILLS_A_INSTALAR[@]}"; do
+    vieja="$DATA/skills/$s"
+    [[ -d "$vieja" ]] && { echo "SOBRA    data/skills/$s — copia vieja, tapa a la del kit"; distintos=$((distintos+1)); }
   done
   # Lo que el kit instaló alguna vez y ya no trae: la instalación lo va a
   # quitar (si sigue igual a como lo dejamos) o a avisar (si alguien lo editó).
@@ -278,10 +325,17 @@ done
 # categoria (data/skills/productivity/flujo/) tapa exactamente igual, y es lo
 # que reporta agente-check. Se saltean los directorios que el motor tampoco
 # indexa (EXCLUDED_SKILL_DIRS): lo que esta en .archive/ ya esta fuera de juego.
+#
+# IT WALKS THIS AGENT'S SELECTION AND NOT THE KIT'S CATALOG, and the difference
+# is whose file it is. Setting a directory aside is justified by one sentence:
+# there are two copies of THE SAME skill and the one in data/ shadows ours. On a
+# team agent the kit does not ship `brand-kit` here -- it travels inside
+# marketing's profile -- so a `data/skills/brand-kit` shadows nothing: it is the
+# client's. Walking the whole catalog confiscated a client's own skill and told
+# them it was shadowing a kit skill this agent is never going to receive.
 APARTADAS_DIR="$AGENTE/skills-reemplazadas"
 apartadas=0
-for s in "$KIT"/skills/*/; do
-  nombre="$(basename "$s")"
+for nombre in "${SKILLS_A_INSTALAR[@]}"; do
   while IFS= read -r vieja; do
     [[ -f "$vieja/SKILL.md" ]] || continue
     rel="${vieja#"$DATA"/skills/}"
@@ -347,9 +401,32 @@ fi
 # se editan desde ahí) de las hechas para ESTE cliente (editables). Sin esto,
 # todas parecen del cliente y el portal ofrece editar la que sostiene la
 # pestaña de entregas.
+#
+# IT IS WHAT THIS AGENT GOT, not the kit's whole catalog: on a team agent
+# `brand-kit` lives inside marketing's profile and not here. The adapter adds
+# the hired roles' skills when it builds the list (`_kit_names`), so a craft
+# skill still counts as ours -- and a capability detected by `kit_skill` does
+# not tell the client "you already have this" about something that is nowhere.
 mkdir -p "$DATA/skills"
-ls -1 "$KIT/skills" > "$DATA/skills/.kit_manifest"
+printf '%s\n' "${SKILLS_A_INSTALAR[@]}" > "$DATA/skills/.kit_manifest"
 echo "instalado data/skills/.kit_manifest"
+
+if [[ -f "$ROSTER" ]]; then
+  echo "equipo: kit-skills/ quedó con las compartidas (${SKILLS_A_INSTALAR[*]})"
+  echo "        las de oficio viajan con cada rol: tools/contratar-rol.sh <rol> <agente>"
+  # OUT LOUD, because the alternative is a skill that reaches nobody: a skill in
+  # the kit that no role claims and that is not a fallback note has no way into
+  # a team agent. Either a role declares it or it does not exist for this client.
+  #
+  # A BANNER IS NOT WORTH ABORTING FOR, and under `set -euo pipefail` this
+  # assignment was: the install had already copied every file, and a failure
+  # here died before writing the manifest -- leaving the agent installed and the
+  # cleanup never run. The install was already gated on `--shared` succeeding,
+  # up where it still could stop without writing anything; this second call only
+  # decorates the output. If it fails, no banner.
+  huerfanas="$(python3 "$KIT/roles/skills_split.py" --orphan | tr '\n' ' ')" || huerfanas=""
+  [[ -z "${huerfanas// }" ]] || echo "        sin dueño (no las trae ningún rol): ${huerfanas% }"
+fi
 
 
 # El manifiesto de lo que instalamos, y la limpieza de lo que el kit dejó de

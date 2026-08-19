@@ -78,6 +78,41 @@ del lab). Clave OpenRouter `lab-equipo-spike`, tope US$5 — **revocar al cerrar
 6. Agentes viejos (east, etc.): confirmar que no son de clientes y borrar.
 7. Rol "Asistente" + ampliar catálogo de capacidades (6 hoy, ~30 posibles;
    sumar `vision` y `code_execution` primero).
+8. **Medir el curator en el lab, en vez de deducirlo.** `config.base.yaml` ya
+   apaga `curator.enabled`, porque en un agente con equipo la ÚNICA copia de
+   una skill de oficio vive en `data/profiles/<rol>/skills/` — que es del
+   agente, escribible, y que al motor le parece "agent-created", o sea
+   archivable a los 90 días sin uso (`perillas-motor.md:370-388`). La perilla
+   es cinturón y tiradores; falta la medición, que son dos preguntas: (a)
+   ¿`is_curation_eligible` da True para una skill que puso `hermes profile
+   install`?, y (b) ¿`skill_manage` puede reescribir la skill de un profile, o
+   se topa con algo? Las dos se contestan en el lab, con los cuatro roles ya
+   contratados.
+9. **Los cuatro roles del lab arrastran un `transcribir` viejo adentro de
+   soporte.** Se contrataron con el `role.json` v0.1.0, que lo declaraba; la
+   distribución de hoy es v0.1.1 con cuatro skills. `hermes profile install` no
+   saca lo que ya está: hay que pasarles `hermes profile update` (o reinstalar)
+   y verificar que soporte quede con aprobacion/entregable/flujo/capacidad y
+   nada más.
+10. **`entrada-drive` no llega a ningún agente con equipo.** Es la única que
+    lista `skills_split.py --orphan`: ningún rol la declara y no es nota de
+    fallback. Y el ejemplo canónico de `skills/flujo/crear_flujo.py:21-24` —que
+    sí viaja a todos, porque `flujo` es compartida— arma su flujo de muestra con
+    `--gatillo drive` y `--skills entrada-drive,…`. O le damos dueño (¿soporte?
+    ¿el "Asistente"?) o sacamos el ejemplo: hoy le estamos enseñando a cada rol
+    a armar un flujo con una skill que no tiene.
+11. **Un cliente que contrata SOLO soporte se queda sin `artifact`.** Es el
+    único de los cuatro que no la declara, y `artifact` es lo que hay atrás de
+    la pantalla de visualizaciones del portal (`entregable`→Archivos,
+    `aprobacion`→Aprobaciones, `artifact`→artefactos): contrata su rol y una
+    pestaña queda sin nada que la sostenga. Decidir si soporte la declara
+    (y entonces v0.1.1 → v0.1.2) o si la pantalla se apaga cuando no está.
+12. **`pedidos.jsonl` no cruza el rename de las capacidades.** `imagenes` y
+    otras cuatro se juntaron en `paquete-social`, así que los pedidos ya
+    anotados quedan con ids que el catálogo nuevo no tiene. No rompe nada —el
+    archivo es append-only y el portal lee el catálogo—, pero cualquier
+    análisis histórico de qué pidieron los clientes no junta el antes con el
+    después. Nota de análisis, no tarea.
 
 ## Reglas de trabajo de Luis
 

@@ -12,6 +12,7 @@
 #   2. install it                    hermes profile install
 #   3. GIVE IT ITS OWN API KEY       <- without this you cannot talk to it
 #   4. restart the gateway           <- profiles_to_serve runs only at boot
+#   5. leave the roster              <- last on purpose: see it, further down
 #
 # Step 3 is not optional and it is not obvious. The engine resolves
 # API_SERVER_KEY inside the profile's own scope and FAILS CLOSED rather than let
@@ -83,9 +84,44 @@ until corre "hermes profile list" >/dev/null 2>&1; do sleep 5; done
 # parecia que el rol no habia entrado.
 until corre "grep -q \"multiplex:.*'"'"'$ROL'"'"'\" /opt/data/logs/gateway.log" 2>/dev/null; do sleep 3; done
 
+echo "→ dejando el roster en politica/"
+# THE ROSTER IS WHAT TURNS THIS AGENT INTO A TEAM, for the portal and for the
+# installer. The adapter draws the Equipo tab only when `politica/roles/
+# catalogo.json` exists, and `install.sh` reads the same file to decide that
+# kit-skills/ gets the shared skills and nothing else. Hiring is the moment it
+# becomes true, so hiring is what writes it -- until today it was a file
+# somebody had to copy by hand, and an agent could have four roles installed
+# while the portal still showed the single-agent product.
+#
+# AND IT IS THE LAST STEP, not the first, because the order IS the safety here.
+# Written up front, a hire that failed at `hermes profile install` left behind a
+# roster with zero profiles installed: a working single-agent client whose next
+# `install.sh` reads that file, believes there is a team, and strips the five
+# craft skills out of kit-skills/ -- with nowhere for them to have gone. No
+# rollback undoes that (the next installer run is what does the damage, hours
+# later); the fix is that the dangerous state never exists. Down here the roster
+# is only written once the profile is installed AND the gateway is serving it,
+# so "there is a team" and "a teammate answers" become true together.
+#
+# It goes on the HOST and not through `docker exec`: politica/ is mounted read
+# only in the engine's container, on purpose (a guardrail the guarded can
+# rewrite is not a guardrail).
+if [[ "$MODO" == local ]]; then
+  mkdir -p "$DIR/politica/roles"
+  cp "$KIT/roles/catalogo.json" "$DIR/politica/roles/catalogo.json"
+else
+  ssh "$HOST" "mkdir -p /opt/agentes/$SLUG/politica/roles"
+  scp -q "$KIT/roles/catalogo.json" "$HOST:/opt/agentes/$SLUG/politica/roles/catalogo.json"
+fi
+
 echo
 corre "grep -o \"multiplex: .*\" /opt/data/logs/gateway.log | tail -1" || true
 echo
 echo "Listo. $ROL contratado en $SLUG."
 echo "El portal lo va a mostrar en Equipo — no hace falta pasarle ninguna clave:"
 echo "el adapter tiene la del rol y el cliente sigue con la suya."
+echo
+echo "Si es el primer rol de este agente, corré el instalador una vez más:"
+echo "  ./install.sh <agente>/data      (o ./desplegar-remoto.sh, si es remoto)"
+echo "Ahora que hay roster, kit-skills/ se queda con las skills compartidas y las"
+echo "de oficio dejan de cobrárselas todos los roles en cada pedido."

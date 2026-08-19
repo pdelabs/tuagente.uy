@@ -425,6 +425,57 @@ def skills_del_kit():
         return set()
 
 
+def tiene_equipo(data):
+    """Does this client have a team? The roster, same marker the adapter uses."""
+    return os.path.isfile(os.path.join(
+        os.path.dirname(data), "politica", "roles", "catalogo.json"))
+
+
+_COMPARTIDAS = None  # (names|None, reason|None) -- computed once, asked twice
+
+
+def split_compartidas():
+    """What roles/skills_split.py calls shared, or why it cannot say.
+
+    Returns `(set, None)` or `(None, reason)`, and the reason is always the
+    same one: the roster and some role.json declare different skills, so
+    skills_split.py stops with `SystemExit` -- right there, where it is a
+    program. Here it is not: `SystemExit` is not an `Exception`, so it flew past
+    `check()`'s handler and took the whole run with it. One role with one skill
+    too many and this tool stopped looking at the SOUL, the door, the compose
+    and the forty-odd checks after it, printing not a single result. Caught once
+    here, the drift is ONE red check and the rest still run.
+    """
+    global _COMPARTIDAS
+    if _COMPARTIDAS is None:
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "roles"))
+        from skills_split import shared_skills
+        try:
+            _COMPARTIDAS = (set(shared_skills()), None)
+        except SystemExit as exc:
+            _COMPARTIDAS = (None, str(exc))
+    return _COMPARTIDAS
+
+
+def skills_esperadas(data):
+    """The ones install.sh leaves in kit-skills/ for THIS agent, or None.
+
+    An agent with a team gets the shared ones only: the craft skills live inside
+    each hired role's profile, installed by tools/contratar-rol.sh. Asking for
+    all of them here would fail every team agent and send whoever reads it to
+    re-run install.sh, which would not change a thing.
+
+    None means the split could not be computed (the roster and a role.json
+    contradict each other, which is its own check): nobody can say which skills
+    this agent should have, so whoever asks skips the comparison instead of
+    guessing a set and reporting the guess as a fact.
+    """
+    if not tiene_equipo(data):
+        return skills_del_kit()
+    return split_compartidas()[0]
+
+
 def soul(data):
     """SOUL.md como texto. Lo miran cuatro chequeos distintos."""
     ruta = os.path.join(data, "SOUL.md")
@@ -538,25 +589,47 @@ def main():
 
     print(f"Chequeando {data}\n")
 
+    # --- las dos declaraciones de cada rol dicen lo mismo ---
+    # Only on a team agent: it is the only one that reads the roster, and it is
+    # the reading that breaks. It goes FIRST so the red line explaining why the
+    # skill checks stopped comparing is above them and not buried at the end.
+    def _roles():
+        _, motivo = split_compartidas()
+        if motivo:
+            raise AssertionError(motivo)
+        return "el roster y los role.json declaran lo mismo"
+
+    if tiene_equipo(data):
+        check("roles: el roster y los profiles", _roles)
+
     # --- el kit está instalado ---
     def _kit():
         # Las skills del kit pueden estar en los dos lados: adentro de data/
         # (agentes de antes) o en kit-skills/ montado :ro (los migrados). Para
         # este chequeo alcanza con que estén; que estén en el lugar bueno —y en
         # uno solo— lo mira "skills del kit: montaje externo".
-        faltan = []
+        faltan, mirados = [], 0
+        esperadas = skills_esperadas(data)
         for r in DEL_KIT:
             candidatas = [os.path.join(data, r)]
             if r.startswith("skills/"):
+                # On a team agent `artifact` travels inside the roles that claim
+                # it, not in kit-skills/: demanding it here would be a failure
+                # that installing anything cannot fix. And with the split
+                # unknown, no skill name can be judged at all -- "roles: el
+                # roster y los profiles" is the check that says why.
+                if esperadas is None or r.split("/")[1] not in esperadas:
+                    continue
                 candidatas.append(os.path.join(kit_skills_dir(data), r[len("skills/"):]))
             if r == "scripts/portal_adapter.py":
                 candidatas.append(os.path.join(
                     os.path.dirname(os.path.abspath(data)), "kit-adapter", "portal_adapter.py"))
+            mirados += 1
             if not any(os.path.isfile(c) for c in candidatas):
                 faltan.append(r)
         if faltan:
             raise AssertionError("faltan: " + ", ".join(faltan) + " — corré install.sh")
-        return f"{len(DEL_KIT)} archivos del kit"
+        return f"{mirados} archivos del kit"
 
     check("kit instalado", _kit)
 
@@ -1068,7 +1141,15 @@ def main():
         """
         externas_dir = kit_skills_dir(data)
         declarados = lista_yaml(conf(data), "skills", "external_dirs")
-        del_kit = skills_del_kit()
+        # WHAT THIS AGENT GETS, not the kit's whole catalog -- the same list
+        # install.sh walks. On a team agent `brand-kit` travels inside
+        # marketing's profile and never comes through here, so a
+        # `data/skills/brand-kit` shadows nothing: it is the client's own. Asked
+        # against the catalog it was denounced anyway, with a "corré install.sh"
+        # that the installer -- rightly -- no longer obeys: an eternal red line
+        # over somebody else's file. None = the split could not be computed, and
+        # its own check says so.
+        esperadas = skills_esperadas(data)
         presentes = set()
         if os.path.isdir(externas_dir):
             presentes = {d for d in os.listdir(externas_dir)
@@ -1079,7 +1160,7 @@ def main():
         tapando = sorted({
             f"{nombre} ({os.path.relpath(os.path.dirname(ruta), data)})"
             for nombre, ruta in skills_indexadas(os.path.join(data, "skills"))
-            if nombre in del_kit
+            if esperadas is not None and nombre in esperadas
         })
         if tapando:
             raise AssertionError(
@@ -1099,9 +1180,35 @@ def main():
                 "kit-skills/ existe pero config.yaml no declara skills.external_dirs: "
                 "el motor no las indexa y el agente no las ve"
             )
-        faltan = sorted(del_kit - presentes)
+        if esperadas is None:
+            # Which ones belong here cannot be computed: the roles contradict
+            # each other and their own check is already red. Comparing against
+            # a guess would put a second, wrong red line under it.
+            return (f"{len(presentes)} skills del kit, montadas afuera de data/ "
+                    "(sin comparar: mirá «roles: el roster y los profiles»)")
+        faltan = sorted(esperadas - presentes)
         if faltan:
             raise AssertionError("faltan en kit-skills/: " + ", ".join(faltan) + " — corré install.sh")
+        # And the ones left over, which is where any agent that hired a team
+        # with the old installer ended up: kit-skills/ is mounted for the WHOLE
+        # installation, so a craft skill sitting there is eaten by every role on
+        # every request -- the accounting one indexing the brand kit.
+        #
+        # And "corré install.sh" is not always enough, which is what this used
+        # to advise forever: the cleaner only deletes what is still byte for
+        # byte what it wrote ("ya no viene en el kit PERO esta editado — lo
+        # dejo"). An edited craft skill therefore stays there for good, charged
+        # to every role on every request, while the check kept sending whoever
+        # read it back to the installer. So the message says both.
+        sobran = sorted(presentes - esperadas)
+        if tiene_equipo(data) and sobran:
+            raise AssertionError(
+                "este agente tiene equipo y kit-skills/ todavía trae skills de oficio: "
+                + ", ".join(sobran)
+                + " — las paga cada rol en cada pedido; corré install.sh, que las saca. "
+                "Si ya lo corriste y siguen, están EDITADAS y por eso no se borran: "
+                "movelas a mano a skills-reemplazadas/"
+            )
         return f"{len(presentes)} skills del kit, montadas afuera de data/"
 
     def _hint_del_portal():

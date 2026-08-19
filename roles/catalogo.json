@@ -15,6 +15,12 @@
     "              role that never receives work.",
     "  needs    -> connections it cannot start without",
     "  flows    -> the curated ones shipped with the role, one click away",
+    "  state    -> `ready` = on offer, hireable. `unwritten` = the id, the",
+    "              label and the face exist and the SOUL does not. It is not",
+    "              decoration: roles/skills_split.py intersects only the",
+    "              `ready` ones, so a draft entry with a skeleton skill list",
+    "              cannot pull a shared skill out of kit-skills/ on agents",
+    "              whose clients never saw that role.",
     "",
     "PRICING: undecided. The number on the table is ~1000 Uruguayan pesos per",
     "role, but marketing generates images and that is measured separately: on",
@@ -113,6 +119,7 @@
       "skills": [
         "aprobacion",
         "entregable",
+        "artifact",
         "flujo",
         "capacidad"
       ],
@@ -146,6 +153,7 @@
       "skills": [
         "aprobacion",
         "entregable",
+        "artifact",
         "flujo",
         "capacidad"
       ],

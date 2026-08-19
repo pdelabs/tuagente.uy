@@ -68,6 +68,12 @@ PUEDE_SER_NUESTRO=(
   "politica/parche-pairing.py"        # el parche del mensaje de pairing
   "politica/cont-init-parches.sh"     # el cont-init que lo dispara
   "politica/capacidades/catalogo.json"  # OJO: pedidos.jsonl, al lado, es del cliente
+  # The roster: which roles exist and what each one does. Ours and closed --
+  # the client never writes it (a renamed role lives in the profile's role.json)
+  # -- and it is only installed on an agent that ALREADY has a team. The exact
+  # file and not `politica/roles/`: whatever the client decides will live next
+  # to it.
+  "politica/roles/catalogo.json"
   "politica/hooks/"                   # la puerta en codigo
   "politica/plugins/"                 # los plugins del motor (la guardia de las promesas)
   "politica/tools/"                   # el permiso de cada conexion, para la guardia

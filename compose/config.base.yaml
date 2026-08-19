@@ -267,6 +267,29 @@ platforms:
       name: COMPLETAR_NOMBRE
       user_id: 'COMPLETAR_CHAT_ID'
 
+# THE CURATOR IS OFF, and on a team agent that is not tidiness. It runs by
+# itself every 7 days, marks a skill stale at 30 days without use and ARCHIVES
+# it at 90 -- it moves the directory into skills/.archive/ (notas/
+# perillas-motor.md:370-388, VERIFIED against the engine's own defaults).
+#
+# The kit's own skills are already out of reach: they are mounted read only
+# through `skills.external_dirs`, and an external path is never curation
+# eligible. The craft skills of a hired role are NOT: `hermes profile install`
+# leaves them in data/profiles/<rol>/skills/, which is the agent's, writable,
+# and looks agent-created to the engine -- and on a team agent that is the ONLY
+# copy of `brand-kit` or `post-image` anywhere. A client who hires marketing and
+# then has a quiet quarter would find the craft gone from the index, archived,
+# with no error anywhere: exactly what the client is paying for.
+#
+# The same notas lists `hermes curator pin <skill>` as the other way to close
+# it; a pin is per skill and per agent, so it has to be repeated on every hire
+# and nothing checks it was. The switch is one line and holds for every role
+# hired from here on. What we lose is the stale/archive housekeeping of the
+# skills the AGENT writes for itself, which is worth strictly less than the
+# skills the client is paying for.
+curator:
+  enabled: false
+
 # <<< generado por tools/perilla-skills.py — no editar a mano
 #   fuente: las skills que el motor trae instaladas
 #   apagadas: 66 · prendidas: docx, ocr-and-documents, pdf, xlsx

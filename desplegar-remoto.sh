@@ -120,6 +120,20 @@ echo "→ armando el kit con install.sh (staging)"
 STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"' EXIT
 mkdir -p "$STAGING/data"
+# THE ROSTER FROM OVER THERE TRAVELS INTO THE STAGING BEFORE THE INSTALL.
+# `install.sh` decides which skills it ships by looking at
+# `politica/roles/catalogo.json` -- the same file the adapter reads to know
+# whether this client has a team -- and the staging is a newborn agent: without
+# this, a client with a team would get the whole kit in kit-skills/ again, which
+# is mounted for the WHOLE installation, so every role would go back to paying
+# prompt for the other roles' skills. Same shape as the adapter's old entrypoint
+# a few lines below: what decides the install is the state OVER THERE, not the
+# state of the fake directory.
+if alla "[ -f $REMOTO/politica/roles/catalogo.json ]" 2>/dev/null; then
+  mkdir -p "$STAGING/politica/roles"
+  alla "cat $REMOTO/politica/roles/catalogo.json" > "$STAGING/politica/roles/catalogo.json"
+  echo "   este agente tiene equipo: van solo las skills compartidas"
+fi
 if ! "$KIT/install.sh" "$STAGING/data" > "$STAGING/salida-install.txt" 2>&1; then
   echo "install.sh falló armando el staging; no subo nada:" >&2
   sed 's/^/   /' "$STAGING/salida-install.txt" >&2
