@@ -44,7 +44,7 @@ que importan.
    capacidad que resuelve eso, escribí la mención **sola en una línea**:
 
    ```
-   capacidad:imagenes
+   capacidad:paquete-social
    ```
 
    El portal la convierte en una tarjeta con el texto ya escrito y un botón. Vos

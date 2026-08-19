@@ -25,7 +25,7 @@ DESTINO = os.path.join(KIT, "skills", "capacidad", "references", "catalogo.md")
 CABECERA = """# Catálogo de capacidades
 
 Lo que se puede pedir hoy. **Elegí un `id` de esta lista**: la mención va sola
-en una línea, así — `capacidad:imagenes` — y el portal la convierte en una
+en una línea, así — `capacidad:paquete-social` — y el portal la convierte en una
 tarjeta con el texto ya escrito.
 
 Si lo que necesitás no está acá, **no inventes un id**: decilo en una frase y
@@ -35,23 +35,41 @@ GENERADO desde `capacidades/catalogo.json` con `tools/capacidad-catalogo.py`.
 """
 
 
+def _ficha(c, partes):
+    partes.append(f"### `{c['id']}` — {c['label']}\n")
+    partes.append(f"{c['para_que']}\n")
+    detalle = []
+    if c.get("como"):
+        detalle.append(f"- Cómo se consigue: {c['como']}")
+    if c.get("costo"):
+        detalle.append(f"- Costo: {c['costo']}")
+    if detalle:
+        partes.append("\n".join(detalle) + "\n")
+
+
 def render(datos):
+    """El markdown que lee el agente: primero lo que ya tiene, después el menú.
+
+    `nivel: base` va en su propia sección arriba de todo. No es cosmética: el
+    agente elige de esta lista, y ofrecer una capacidad que YA está puesta es la
+    forma más rápida de que su cliente aprenda a ignorar las tarjetas.
+    """
     partes = [CABECERA]
+    base = [c for c in datos["capacidades"] if c.get("nivel") == "base"]
+    menu = [c for c in datos["capacidades"] if c.get("nivel") != "base"]
+    if base:
+        partes.append("\n## Ya incluidas en todos los agentes\n")
+        partes.append("Estas ya las tenés puestas: **no se piden ni se ofrecen.** "
+                      "Están acá para que sepas con qué contás.\n")
+        for c in base:
+            _ficha(c, partes)
     por_grupo = {}
-    for c in datos["capacidades"]:
+    for c in menu:
         por_grupo.setdefault(c.get("grupo") or "otras", []).append(c)
     for grupo in sorted(por_grupo):
         partes.append(f"\n## {grupo}\n")
         for c in por_grupo[grupo]:
-            partes.append(f"### `{c['id']}` — {c['label']}\n")
-            partes.append(f"{c['para_que']}\n")
-            detalle = []
-            if c.get("como"):
-                detalle.append(f"- Cómo se consigue: {c['como']}")
-            if c.get("costo"):
-                detalle.append(f"- Costo: {c['costo']}")
-            if detalle:
-                partes.append("\n".join(detalle) + "\n")
+            _ficha(c, partes)
     return "\n".join(partes)
 
 

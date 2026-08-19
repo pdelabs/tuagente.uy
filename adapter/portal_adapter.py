@@ -447,11 +447,23 @@ def _kit_names():
     Son comunes a todos los clientes y sostienen pantallas del portal
     (entregable→Archivos, aprobacion→Aprobaciones, artifact→visualizaciones):
     no se presentan como "hechas para vos" ni se editan desde el portal.
+
+    THE ROLES' SKILLS COUNT TOO, and they are not in kit-skills/. Since the team
+    pivot `install.sh` leaves only the shared ones there: `brand-kit` travels
+    inside marketing's profile. Without looking at the profiles, a capability
+    detected by `kit_skill` -- the brand kit, the posts, the pieces -- would
+    tell the client they do not have it while the role they hired is using it.
     """
     nombres = set()
     if KIT_SKILLS_DIR.is_dir():
         nombres = {d.name for d in KIT_SKILLS_DIR.iterdir()
                    if d.is_dir() and (d / "SKILL.md").is_file()}
+    if PROFILES_DIR.is_dir():
+        for perfil in PROFILES_DIR.iterdir():
+            if not (perfil / "skills").is_dir():
+                continue
+            nombres |= {d.name for d in (perfil / "skills").iterdir()
+                        if d.is_dir() and (d / "SKILL.md").is_file()}
     try:
         # El manifiesto sigue valiendo para un agente todavia no migrado, donde
         # las del kit estan adentro de data/skills/.
@@ -670,7 +682,7 @@ ROLES_DIR = POLITICA_DIR / "roles"
 ROLES_CATALOG = ROLES_DIR / "catalogo.json"
 PROFILES_DIR = DATA / "profiles"
 # La mencion tal cual la pide el contrato: SOLA EN UNA LINEA. Anclada asi a
-# proposito — el `capacidad:imagenes` que aparece como ejemplo adentro de la
+# proposito — el `capacidad:paquete-social` que aparece como ejemplo adentro de la
 # skill, o citado en medio de una frase, no es un pedido.
 MENCION_CAPACIDAD = re.compile(r"^\s*capacidad:([a-z0-9][a-z0-9-]{1,40})\s*$", re.M)
 
@@ -1184,11 +1196,25 @@ def capacidades():
 
     Cada capacidad trae `activa`, que se calcula igual que las conexiones: por
     PRESENCIA, nunca por valores. `activa` sale de `detecta`:
-      {"tool": "image_generate"}  -> la tool esta en el indice vivo del agente
+      {"tool": "image_generate"}     -> la tool esta en el indice vivo del agente
+      {"toolset": "vision"}          -> el toolset esta prendido en el gateway
       {"kit_skill": "formato-redes"} -> la skill esta montada en kit-skills/
 
-    Lo que NO sale de aca: `instala`, `verifica` y `nota_interna`. Son nuestras
-    y hablan de maquina; el cliente ve `para_que`, `como` y `costo`.
+    Lo que NO sale de aca: `instala`, `verifica`, `estado` y `nota_interna`.
+    Son nuestras y hablan de maquina (o de lo que falta construir); el cliente
+    ve `para_que`, `como` y `costo`.
+
+    `nivel` SI sale, y es una DEUDA CON EL PORTAL, no algo que ya funcione:
+    `nivel: base` es una capacidad que viene en todos los agentes, y el portal
+    TIENE QUE dibujarla como incluida y sin boton de pedido. HOY NO LO HACE:
+    mientras no lo implemente, el cliente ve un boton para pedir algo que ya
+    tiene. El campo se sirve para que ese arreglo sea del lado del portal y no
+    un endpoint mas.
+
+    `paquete` YA NO SALE porque ya no existe: las cinco filas de redes se
+    colapsaron en `paquete-social`, una sola fila vendible. Un campo que el
+    portal podia ignorar no alcanzaba — mientras la fila `imagenes` existiera,
+    se podia pedir suelta.
     """
     try:
         catalogo = json.loads(CAPACIDADES_CATALOG.read_text(encoding="utf-8"))
@@ -1209,6 +1235,13 @@ def capacidades():
                 # Sin el motor a mano solo se puede afirmar la AUSENCIA.
                 ts = (c.get("verifica") or {}).get("toolset")
                 activa = False if (toolsets is not None and ts and ts not in toolsets) else None
+        elif detecta.get("toolset"):
+            # The gateway answers `enabled` per TOOLSET, not per tool: `image_gen`
+            # shows up enabled while `image_generate` is missing because its
+            # check_fn has no provider. So a capability only detects this way when
+            # it has no external provider to fail — `vision` is the case: the
+            # toolset ships in platform_toolsets and there is no key behind it.
+            activa = detecta["toolset"] in toolsets if toolsets is not None else None
         elif detecta.get("kit_skill"):
             activa = detecta["kit_skill"] in del_kit
         else:
@@ -1217,6 +1250,7 @@ def capacidades():
             "id": c.get("id"),
             "label": c.get("label"),
             "grupo": c.get("grupo", "otras"),
+            "nivel": c.get("nivel", "menu"),
             "para_que": c.get("para_que", ""),
             "como": c.get("como", ""),
             "costo": c.get("costo", ""),
@@ -2502,7 +2536,7 @@ class Handler(BaseHTTPRequestHandler):
         # Solo se mira `assistant.completed`, que trae la respuesta ENTERA y ya
         # terminada. Ni los deltas (parten la mención por la mitad), ni los
         # resultados de tools: un `skill_view` de la skill `capacidad` devuelve
-        # el catálogo con `capacidad:imagenes` de ejemplo, y contarlo habría
+        # el catálogo con `capacidad:paquete-social` de ejemplo, y contarlo habría
         # inventado demanda en cada lectura — justo la medición que queremos
         # limpia.
         menciones, evento, respuesta = [], "", ""

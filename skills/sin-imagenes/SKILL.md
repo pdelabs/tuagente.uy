@@ -39,8 +39,12 @@ día que compara con lo que esperaba.
 3. **Ofrecé la capacidad**, con la mención sola en una línea:
 
    ```
-   capacidad:imagenes
+   capacidad:paquete-social
    ```
+
+   Es la que trae la generación de imágenes, y viene con el kit de marca
+   adelante: las placas salen con los colores y la tipografía de tu
+   cliente, no con las de nadie. No hay forma de pedir sólo el generador.
 
 4. Seguí con el resto del pedido.
 
