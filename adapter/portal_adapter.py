@@ -22,7 +22,7 @@ from kanban import KanbanStore
 from rooms import RoomStore
 from workspace import MAX_FILE_BYTES, WorkspaceStore
 
-VERSION = "0.37.0"
+VERSION = "0.38.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -680,6 +680,27 @@ ROOMS = RoomStore(POLITICA_DIR / "salas")
 
 ROLES_DIR = POLITICA_DIR / "roles"
 ROLES_CATALOG = ROLES_DIR / "catalogo.json"
+# WHAT THE CLIENT ASKED FOR, AND WHAT THEY CALLED IT. Append-only, sibling of
+# `capacidades/pedidos.jsonl` and there for the same reasons -- with more force,
+# because hiring is money: the record of what a client asked for cannot live
+# where the agent can rewrite it, and a log that is only appended to cannot lose
+# the ask when the hire that follows it fails.
+#
+#   {"evento": "pedido",   "rol":…, "nombre":…, "pinta":…, "pedido_en":…}
+#   {"evento": "atendido", "rol":…, "nombre":…, "atendido_en":…}   <- closes it
+#
+# PENDING IS DERIVED FROM THE LOG, never stored. A state file next to an
+# append-only log is a second truth, and it drifts the first time a hire dies
+# halfway: the ask is written by the adapter and closed by tools/contratar-rol.sh
+# hours later, from another machine.
+ROLES_PEDIDOS = ROLES_DIR / "pedidos.jsonl"
+# The name and face the CLIENT chose, per role, written by contratar-rol.sh when
+# the hire succeeds. It is NOT in the profile: the profile's role.json is
+# `distribution_owned`, so the next `hermes profile install` replaces it and a
+# baptism stored there dies with the first update the client never asked for.
+ROLES_IDENTIDADES = ROLES_DIR / "identidades.json"
+# Serialises check-then-append on pedidos.jsonl (the server is threaded).
+_PEDIDOS_LOCK = threading.Lock()
 PROFILES_DIR = DATA / "profiles"
 # La mencion tal cual la pide el contrato: SOLA EN UNA LINEA. Anclada asi a
 # proposito — el `capacidad:paquete-social` que aparece como ejemplo adentro de la
@@ -1008,23 +1029,153 @@ def _role_installed(role_id):
     return (PROFILES_DIR / role_id).is_dir()
 
 
-def _role_identity(role_id, catalog_identity):
-    """The role's name and face.
+def _role_identity(role_id, catalog_identity, bautizo=None):
+    """The role's name and face, most personal first.
 
-    An installed profile wins over the catalog, because the client may rename
-    theirs and that has to survive. A role on offer has no profile to read, so
-    it falls back to the default identity it ships with -- otherwise the four
-    roles on the roster would be four identical grey shapes, which defeats the
-    entire point of giving them faces.
+      1. what the CLIENT called it when they hired it (identidades.json),
+      2. the identity the installed profile shipped with (its role.json),
+      3. the default in the catalog -- what a role ON OFFER is drawn with.
 
-    A hired role without a role.json is a broken install and reads as one: it
-    falls through to the catalog default, and the name the client set is gone.
+    THE BAPTISM GOES FIRST AND LIVES OUTSIDE THE PROFILE. role.json is
+    `distribution_owned`: the next `hermes profile install` replaces it, so a
+    name written there survives exactly until the first update. The catalog
+    default stays underneath because a role nobody hired still has to have a
+    face -- otherwise the roster is four identical grey shapes, which defeats
+    the entire point of giving them faces.
     """
     manifest_file = PROFILES_DIR / role_id / "role.json"
     identity = catalog_identity
     if manifest_file.is_file():
         identity = json.loads(manifest_file.read_text(encoding="utf-8")).get("identity") or identity
-    return {k: identity[k] for k in ("name", "look") if k in (identity or {})}
+    out = {k: identity[k] for k in ("name", "look") if k in (identity or {})}
+    nombre = str((bautizo or {}).get("nombre") or "").strip()
+    if nombre:
+        out["name"] = nombre[:MAX_NOMBRE_LEN]
+    pinta = _look_limpio((bautizo or {}).get("pinta"))
+    if pinta:
+        out["look"] = pinta
+    return out
+
+
+def _catalogo_de_roles():
+    """The offer. Its absence is the answer to "is this agent a team?"."""
+    if not ROLES_CATALOG.is_file():
+        return {}
+    return json.loads(ROLES_CATALOG.read_text(encoding="utf-8"))
+
+
+def _identidades_de_roles():
+    """{rol: {nombre, pinta}} — how the client baptised each role they hired."""
+    try:
+        data = json.loads(ROLES_IDENTIDADES.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    # One hand-mangled entry must cost that entry, not the whole roster: an
+    # unparseable FILE already degrades to defaults, so a non-dict VALUE
+    # degrades the same way instead of AttributeError-ing the Equipo tab away.
+    return {rol: v for rol, v in data.items() if isinstance(v, dict)}
+
+
+def _pedidos_pendientes():
+    """{rol: {nombre, pinta, pedido_en}} — asks that no hire has closed yet.
+
+    Read forward over the log: a `pedido` opens one, an `atendido` (the hire
+    went through) or a `cancelado` closes it. The OLDEST open ask for a role
+    wins, because it is the one the client is waiting on -- and it is the same
+    one `contratar-rol.sh --del-pedido` reads, so the portal and the hire never
+    disagree about which name is being installed.
+    """
+    pendientes = {}
+    if not ROLES_PEDIDOS.is_file():
+        return pendientes
+    try:
+        fh = ROLES_PEDIDOS.open(encoding="utf-8")
+    except OSError:
+        # Same condition _identidades_de_roles already absorbs: a fleet file
+        # left root-owned by the ssh hire path. The ledger being unreadable
+        # must not take GET /portal/roles down with it.
+        return pendientes
+    with fh:
+        for linea in fh:
+            try:
+                fila = json.loads(linea)
+            except ValueError:
+                continue          # a half-written line costs that line, not the log
+            rol = fila.get("rol")
+            if not rol:
+                continue
+            if fila.get("evento") == "pedido":
+                pendientes.setdefault(rol, {
+                    "nombre": fila.get("nombre"),
+                    "pinta": fila.get("pinta"),
+                    "pedido_en": fila.get("pedido_en"),
+                })
+            elif fila.get("evento") in ("atendido", "cancelado"):
+                pendientes.pop(rol, None)
+    return pendientes
+
+
+def pedido_de_rol(rol, nombre, pinta):
+    """El cliente pide un rol y lo bautiza. Devuelve (status, cuerpo).
+
+    HIRING IS NOT A BUTTON, and this endpoint does not pretend it is: it writes
+    down the ask -- which role, what they called it, what face they gave it --
+    and someone runs tools/contratar-rol.sh. Installing a profile builds a
+    distribution, mints a key and restarts the gateway; none of that belongs
+    behind a click, and it is also the moment the client starts paying.
+
+    THE NAME IS THE POINT OF ASKING FROM THE PORTAL. The catalog ships Vera,
+    Beto, Nina and Tino so the roles are told apart before anyone reads a label,
+    but the one the client types is the one that ends up in the role's SOUL and
+    on every chip in the product. It is captured here, at the ask, because after
+    the hire nobody goes back to fill it in.
+
+    Two asks for the same role are a 409 and not a second line: the double click
+    of a portal button used to count twice in `capacidades/pedidos.jsonl`, and
+    here it would show the client two people arriving.
+    """
+    ident = str(rol or "").strip()
+    fila_catalogo = next(
+        (r for r in _catalogo_de_roles().get("roles", []) if r.get("id") == ident), None)
+    # `ready` and not merely present: a draft entry has an id, a label and a
+    # face, and no SOUL to install behind them.
+    if fila_catalogo is None or fila_catalogo.get("state") != "ready":
+        return 404, {"error": "ese rol no está en el catálogo"}
+    # Saneado como el bautizo del agente, y por el mismo motivo: este nombre
+    # viaja a un bloque delimitado con comentarios HTML adentro del SOUL del rol.
+    limpio = _limpio_para_soul(nombre)[:MAX_NOMBRE_LEN]
+    if not limpio:
+        return 400, {"error": "hace falta un nombre"}
+
+    # Check-then-append under one lock: the server is threaded, and without it
+    # a double click reliably lands two 201s -- the exact "two people arriving"
+    # the docstring above promises not to show.
+    with _PEDIDOS_LOCK:
+        if _role_installed(ident):
+            return 409, {"error": "ese rol ya está contratado"}
+        if ident in _pedidos_pendientes():
+            return 409, {"error": "ya pediste ese rol"}
+
+        fila = {
+            "evento": "pedido",
+            "rol": ident,
+            "nombre": limpio,
+            "pinta": _look_limpio(pinta),
+            "pedido_en": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "agente": agent_name(),   # la flota escribe archivos separados; el
+        }                             # analisis de que se pide los junta
+        try:
+            ROLES_PEDIDOS.parent.mkdir(parents=True, exist_ok=True)
+            with ROLES_PEDIDOS.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(fila, ensure_ascii=False) + "\n")
+        except OSError as e:
+            # Same guard as pedido_de_capacidad, and it matters more here
+            # because hiring is money: the client already pressed the button,
+            # so say what happened instead of resetting the socket.
+            return 400, {"error": f"no pude anotar el pedido: {e}"}
+    return 201, {"pedido": {k: fila[k] for k in ("rol", "nombre", "pinta", "pedido_en")}}
 
 
 def _role_key(role_id):
@@ -1060,7 +1211,14 @@ def roles():
 
     PORTAL CONTRACT:
       GET /portal/roles -> {available, roles:[{id, label, does, never, hired,
-                            name, look, needs, flows, state}]}
+                            contratado, pedido, name, look, needs, flows, state}]}
+
+    `pedido` is null or {nombre, pinta, pedido_en}: the client asked for this
+    role and nobody has hired it yet. It is what lets the portal show "lo
+    pediste, está en camino" instead of the button they already pressed.
+
+    `contratado` is `hired` said in the language the rest of the roster speaks;
+    both go out until the portal stops reading the English one.
 
     What does NOT come out of here: `routing` and `internal_note`. `routing` is
     the description the decomposer reads to route tasks -- our machinery, and
@@ -1069,9 +1227,11 @@ def roles():
     # No catalog means no team: the portal keeps working as the single-role
     # agent it has been until today. `manifest()` gates the tab on the same
     # file, so this only answers a client that asked anyway.
-    if not ROLES_CATALOG.is_file():
+    catalog = _catalogo_de_roles()
+    if not catalog:
         return {"available": False, "roles": []}
-    catalog = json.loads(ROLES_CATALOG.read_text(encoding="utf-8"))
+    bautizos = _identidades_de_roles()
+    pendientes = _pedidos_pendientes()
 
     out = []
     for role in catalog.get("roles", []):
@@ -1083,11 +1243,13 @@ def roles():
             "does": role.get("does"),
             "never": role.get("never"),
             "hired": hired,
+            "contratado": hired,
+            "pedido": pendientes.get(role_id),
             "needs": role.get("needs") or [],
             "flows": role.get("flows") or [],
             "state": role.get("state"),
         }
-        row.update(_role_identity(role_id, role.get("identity") or {}))
+        row.update(_role_identity(role_id, role.get("identity") or {}, bautizos.get(role_id)))
         out.append(row)
     return {"available": True, "roles": out}
 
@@ -1153,9 +1315,9 @@ def route_message(message):
     with a weak description is a role the client pays for that never receives
     work -- and they find out at renewal, not before.
     """
-    if not ROLES_CATALOG.is_file():
+    catalog = _catalogo_de_roles()
+    if not catalog:
         return None
-    catalog = json.loads(ROLES_CATALOG.read_text(encoding="utf-8"))
     hired = [r for r in catalog.get("roles", []) if _role_installed(r["id"])]
     if len(hired) < 2:
         # One role (or none) is not a routing decision. Do not spend a call.
@@ -2466,9 +2628,13 @@ class Handler(BaseHTTPRequestHandler):
         if length <= 0:
             return {}
         try:
-            return json.loads(self.rfile.read(length).decode("utf-8"))
+            cuerpo = json.loads(self.rfile.read(length).decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
             return None
+        # Every caller does `cuerpo.get(...)`: a JSON array or scalar is as
+        # malformed as broken JSON, and deserves the same 400 -- not a reset
+        # socket from an AttributeError.
+        return cuerpo if isinstance(cuerpo, dict) else None
 
     def _proxy_chat_stream(self, session_id, body, role=None):
         """Continue an existing conversation, optionally as a member of the team."""
@@ -2757,6 +2923,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "invalid JSON body"})
             r = pedido_de_capacidad(cuerpo.get("texto"), cuerpo.get("id"))
             return self._send(200 if r.get("ok") else 400, r)
+        if path == "/portal/roles/pedido":
+            # El cliente eligio un rol del catalogo y lo bautizo. Esto NO
+            # contrata: anota el pedido, y contratar-rol.sh lo cierra.
+            cuerpo = self._read_json_body()
+            if cuerpo is None:
+                return self._send(400, {"error": "invalid JSON body"})
+            estado, respuesta = pedido_de_rol(
+                cuerpo.get("rol"), cuerpo.get("nombre"), cuerpo.get("pinta"))
+            return self._send(estado, respuesta)
         if path == "/portal/identity":
             body = self._read_json_body()
             if body is None:

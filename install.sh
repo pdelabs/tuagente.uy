@@ -177,8 +177,10 @@ if [[ -f "$ROSTER" ]]; then
     echo "roles/skills_split.py no dijo qué skills son compartidas. No instalé nada." >&2
     exit 1
   }
-  # The roster is OURS and closed -- the client never writes it (a renamed role
-  # lives in the profile's role.json). Keeping it in the install is what makes a
+  # The roster is OURS and closed -- the client never writes it (the name they
+  # gave a role lives beside it, in politica/roles/identidades.json, and their
+  # pending asks in pedidos.jsonl; neither is touched here, and this copies the
+  # one file and not the directory). Keeping it in the install is what makes a
   # new role show up as available to a client that already has a team, instead
   # of waiting for someone to copy a file by hand.
   ARCHIVOS+=("roles/catalogo.json:$ROSTER")

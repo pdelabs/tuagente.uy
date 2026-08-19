@@ -69,7 +69,7 @@ PUEDE_SER_NUESTRO=(
   "politica/cont-init-parches.sh"     # el cont-init que lo dispara
   "politica/capacidades/catalogo.json"  # OJO: pedidos.jsonl, al lado, es del cliente
   # The roster: which roles exist and what each one does. Ours and closed --
-  # the client never writes it (a renamed role lives in the profile's role.json)
+  # the client never writes it (the name they chose lives in identidades.json)
   # -- and it is only installed on an agent that ALREADY has a team. The exact
   # file and not `politica/roles/`: whatever the client decides will live next
   # to it.
