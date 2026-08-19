@@ -844,6 +844,11 @@ export type Capacidad = {
   costo?: string;
   esfuerzo?: string;
   quien?: string;
+  /** `base` viene en TODOS los agentes: se dibuja como incluida y NUNCA con
+   *  botón de pedido (pedir algo que ya se tiene es la peor pantalla posible).
+   *  `menu` es lo que se puede sumar. Un adapter viejo no lo manda: sin el
+   *  campo se asume `menu`, que es como se comportaba el portal hasta ahora. */
+  nivel?: "base" | "menu" | string;
   /** null = no se puede afirmar (el motor no expone el índice de tools). */
   activa: boolean | null;
 };

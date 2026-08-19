@@ -21,6 +21,7 @@ import {
 import { rotuloCanal } from "../lib/palabras";
 import { Card, Chip, Spinner } from "../lib/ui";
 import { PARAM } from "../lib/rutas";
+import QueSabeHacer from "./saberHacer";
 
 function faceOf(role: Role): AgentitoLook {
   // La pinta del pedido gana por lo mismo que el nombre: mientras el rol está
@@ -124,6 +125,11 @@ export default function FichaDelRol({ role }: { role: Role }) {
           </div>
         )}
       </section>
+
+      {/* Qué herramientas tiene a mano. Solo para el que YA está en el equipo:
+          a uno que todavía no llegó, esto le contaría del agente —el catálogo es
+          uno solo para todos— en la ficha de alguien que no trabaja acá. */}
+      {yaEsta(role) && <QueSabeHacer role={role} />}
 
       <section>
         <h2 className="mb-2 text-[15px] font-semibold text-ink">En qué anduvo</h2>

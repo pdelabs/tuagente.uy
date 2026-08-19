@@ -27,39 +27,11 @@
 
 import { useEffect, useState } from "react";
 import { Check, Sparkles } from "lucide-react";
-import { getCapacidades, loadConfig, pedirCapacidad, type Capacidad } from "./agent";
-
-let cache: Promise<Capacidad[]> | null = null;
-// De QUÉ agente es lo cacheado: el cache es de la página, y la credencial puede
-// cambiar mientras la pestaña sigue viva.
-let cacheDe: string | null = null;
-function capacidades(): Promise<Capacidad[]> {
-  const cfg = loadConfig();
-  const de = cfg ? `${cfg.endpoint}|${cfg.key}` : "";
-  if (!cache || cacheDe !== de) {
-    cacheDe = de;
-    cache = cfg
-      ? getCapacidades(cfg)
-          .then((r) => r?.capacidades ?? [])
-          .catch(() => { cache = null; return []; })
-      : Promise.resolve([]);
-  }
-  return cache;
-}
-
-// Lo que este browser ya pidió. El adapter anota los pedidos en un archivo pero
-// no los devuelve, así que no hay forma de preguntárselo: se recuerda acá para
-// no invitar al doble clic ni al "¿lo habré pedido?".
-const PEDIDAS_KEY = "tuagente_capacidades_pedidas";
-function leerPedidas(): string[] {
-  try { return JSON.parse(localStorage.getItem(PEDIDAS_KEY) || "[]"); } catch { return []; }
-}
-function marcarPedida(id: string) {
-  try {
-    const todas = Array.from(new Set([...leerPedidas(), id]));
-    localStorage.setItem(PEDIDAS_KEY, JSON.stringify(todas));
-  } catch { /* modo privado: al menos vale para esta pantalla */ }
-}
+import { loadConfig, pedirCapacidad, type Capacidad } from "./agent";
+// El catálogo y la memoria de lo pedido viven en `lib/capacidades.ts` desde que
+// la ficha de cada compañero también los lee: son los mismos dos estados, y dos
+// copias contestarían distinto a "¿esto ya lo tiene?" y a "¿ya lo pedí?".
+import { catalogoDeCapacidades, leerPedidas, marcarPedida } from "./capacidades";
 
 function Dato({ rotulo, children }: { rotulo: string; children: string }) {
   return (
@@ -79,7 +51,7 @@ export function CapacidadInline({ id }: { id: string }) {
   useEffect(() => {
     let vivo = true;
     setPedida(leerPedidas().includes(id));
-    capacidades().then((cs) => { if (vivo) setC(cs.find((x) => x.id === id) ?? null); });
+    catalogoDeCapacidades().then((cs) => { if (vivo) setC(cs.find((x) => x.id === id) ?? null); });
     return () => { vivo = false; };
   }, [id]);
 
@@ -117,6 +89,11 @@ export function CapacidadInline({ id }: { id: string }) {
   // sería ruido. `false` y `null` (no se sabe) se ofrecen igual, sin diagnóstico.
   if (c.activa === true) return null;
 
+  // Una capacidad base viene incluida en todos los agentes: acá no se VENDE
+  // nada, se avisa que algo que ya es suyo quedó a medias. Mismo POST, otra
+  // conversación.
+  const esBase = c.nivel === "base";
+
   if (pospuesta) {
     return (
       <span className="not-prose my-1.5 flex items-center gap-2 text-[12.5px] text-ink-soft">
@@ -138,7 +115,7 @@ export function CapacidadInline({ id }: { id: string }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-          Tu agente pide esto para hacerlo bien
+          {esBase ? "Esto viene con tu agente" : "Tu agente pide esto para hacerlo bien"}
         </span>
         <span className="mt-0.5 block text-sm font-semibold text-ink">{c.label}</span>
         {c.para_que && <Dato rotulo="Para qué sirve:">{c.para_que}</Dato>}
@@ -158,19 +135,22 @@ export function CapacidadInline({ id }: { id: string }) {
                 disabled={pidiendo}
                 className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-[13px] font-semibold text-white transition hover:bg-primary-dark disabled:opacity-50"
               >
-                {pidiendo ? "Pidiendo…" : "Pedirla"}
+                {pidiendo ? "Pidiendo…" : esBase ? "Avisanos" : "Pedirla"}
               </button>
-              <button
-                onClick={() => setPospuesta(true)}
-                className="inline-flex h-8 items-center rounded-lg px-2.5 text-[13px] font-semibold text-ink-soft transition hover:bg-black/[0.05] hover:text-ink"
-              >
-                Ahora no
-              </button>
+              {!esBase && (
+                <button
+                  onClick={() => setPospuesta(true)}
+                  className="inline-flex h-8 items-center rounded-lg px-2.5 text-[13px] font-semibold text-ink-soft transition hover:bg-black/[0.05] hover:text-ink"
+                >
+                  Ahora no
+                </button>
+              )}
             </span>
             {/* Honestidad: pedirla no la prende. La prendemos nosotros. */}
             <span className="mt-1.5 block text-[12px] leading-snug text-ink-soft/85">
-              Pedirla no cambia nada todavía: nos avisa a nosotros, lo miramos y te
-              escribimos. Podés seguir con lo tuyo mientras tanto.
+              {esBase
+                ? "Ya está incluida en lo tuyo: avisarnos no cuesta nada, lo revisamos y te escribimos."
+                : "Pedirla no cambia nada todavía: nos avisa a nosotros, lo miramos y te escribimos. Podés seguir con lo tuyo mientras tanto."}
             </span>
           </>
         )}
