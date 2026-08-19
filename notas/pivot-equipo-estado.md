@@ -65,6 +65,13 @@ de Luis — la de orbit NO):
 portal local `nohup npx next start -p 8090` (8090 es el único puerto en el CORS
 del lab). Clave OpenRouter `lab-equipo-spike`, tope US$5 — **revocar al cerrar**.
 
+**Quirk del lab (solo Mac):** el file-sharing de Docker Desktop cachea el
+tamaño de los archivos bind-mounteados; tras reescribir `politica/roles/
+catalogo.json` desde el host, el adapter puede leerlo TRUNCADO al tamaño
+viejo (JSONDecodeError en `line <última>`). `docker restart lab-portal-adapter`
+lo limpia. En un remoto Linux no pasa. Por esto mismo `deja()` en
+`contratar-rol.sh` escribe con tmp+mv (afde4bf).
+
 ## Pendiente (en orden)
 
 1. `install.sh` sigue mandando las 12 skills a todos los agentes.
