@@ -90,8 +90,13 @@ trae() { if [[ "$MODO" == local ]]; then cat "$POLITICA/$1" 2>/dev/null || true
 # next pedido from the portal dies on Errno 13. The chown keeps what the hire
 # drops writable for the adapter. Locally Docker Desktop virtualises bind-mount
 # ownership, so there is nothing to fix on the Mac.
-deja() { if [[ "$MODO" == local ]]; then mkdir -p "$POLITICA"; cat > "$POLITICA/$1"
-         else ssh "$HOST" "mkdir -p '$POLITICA' && cat > '$POLITICA/$1' && chown -R 10000:10000 '$POLITICA'"; fi; }
+# deja() replaces via tmp+mv: the adapter parses these files on every request,
+# and a plain `cat >` truncates first -- a request landing mid-write reads half
+# a JSON document. Measured on the lab (2026-08-19): a pedido POST during an
+# in-place catalog rewrite died on JSONDecodeError. rename(2) is atomic on the
+# same filesystem, bind mounts included.
+deja() { if [[ "$MODO" == local ]]; then mkdir -p "$POLITICA"; cat > "$POLITICA/$1.tmp" && mv "$POLITICA/$1.tmp" "$POLITICA/$1"
+         else ssh "$HOST" "mkdir -p '$POLITICA' && cat > '$POLITICA/$1.tmp' && mv '$POLITICA/$1.tmp' '$POLITICA/$1' && chown -R 10000:10000 '$POLITICA'"; fi; }
 suma() { if [[ "$MODO" == local ]]; then mkdir -p "$POLITICA"; cat >> "$POLITICA/$1"
          else ssh "$HOST" "mkdir -p '$POLITICA' && cat >> '$POLITICA/$1' && chown -R 10000:10000 '$POLITICA'"; fi; }
 
