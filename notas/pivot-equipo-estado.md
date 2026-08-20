@@ -126,6 +126,21 @@ lo limpia. En un remoto Linux no pasa. Por esto mismo `deja()` en
   ≈ US$7,7/mes (31%). SIN imágenes todavía: eso era el 9x del gap. El mix
   manda, no la cantidad de turnos.
 
+## Hecho el 19/8, cuarta tanda (ola 9)
+
+- **Las dos skills del cluster que paga** (eaaf0bb): `presupuestos` (formato y
+  lista del cliente, bootstrap que pregunta, descuento autorizado como línea
+  visible con motivo, nunca un precio inventado) y `facturas-a-datos`
+  (extracción CFE con lo ilegible vacío-y-marcado, dígito verificador de RUT
+  mod-11, la tanda nunca entra sin que el cliente la vea). Ya vivas en el lab.
+- **build_role.py reescribe paths** (misma tanda): las skills de oficio viajan
+  en el profile y sus textos citaban `/opt/kit/skills/` podado — brand-kit del
+  lab tenía TODOS los scripts muertos y nadie lo sabía.
+- **`contratar-rol.sh --actualizar`** (07434b7): una actualización del kit
+  llega a un rol vivo sin renombrarlo ni rotarle la clave. Cerró de paso los
+  pendientes 8/9 viejos: los 4 del lab + Rita corren el dist de hoy, y el
+  soporte pre-dist del spike se rehizo limpio.
+
 ## Pendiente (en orden)
 
 1. **Costo con imágenes** — la medición de arriba no ejercitó image_gen, que
