@@ -11,7 +11,9 @@
 //   - lo pedido, porque un pedido hecho desde el chat no se puede volver a
 //     ofrecer en la ficha como si no hubiera pasado nada.
 //
-// Acá no hay UI: son los dos estados y nada más.
+// Acá no hay UI: son los dos estados, y cómo se agrupa el catálogo para
+// mostrarlo — que también lo miran dos pantallas (la ficha de un compañero y el
+// alta del rol que se arma con capacidades) y también tienen que coincidir.
 
 import { getCapacidades, loadConfig, type Capacidad } from "./agent";
 
@@ -49,4 +51,41 @@ export function marcarPedida(id: string) {
     const todas = Array.from(new Set([...leerPedidas(), id]));
     localStorage.setItem(PEDIDAS_KEY, JSON.stringify(todas));
   } catch { /* modo privado: al menos vale para esta pantalla */ }
+}
+
+/** Los grupos del catálogo, en palabras. El catálogo es cerrado pero puede
+ *  crecer: un grupo que no esté acá se humaniza (guiones a espacios) en vez de
+ *  romper la pantalla o mostrarse crudo. */
+const GRUPO: Record<string, string> = {
+  administracion: "Administración",
+  "documentos-y-datos": "Documentos y datos",
+  informacion: "Información",
+  contenido: "Contenido",
+  atencion: "Atención a clientes",
+  audio: "Audio",
+};
+
+export function rotuloGrupo(g: string): string {
+  const conocido = GRUPO[g];
+  if (conocido) return conocido;
+  const libre = g.replace(/-/g, " ");
+  return libre.charAt(0).toUpperCase() + libre.slice(1);
+}
+
+/** El catálogo partido en grupos, EN EL ORDEN EN QUE VIENE. El orden es una
+ *  decisión del catálogo y reordenarlo acá sería una segunda opinión sobre lo
+ *  mismo. Es una función y no una copia por pantalla porque las dos listas de
+ *  capacidades del portal —la ficha del compañero y el alta— se tienen que leer
+ *  igual: son el mismo catálogo. */
+export function porGrupo(caps: Capacidad[]): {
+  grupo: string; rotulo: string; capacidades: Capacidad[];
+}[] {
+  const orden: string[] = [];
+  const por: Record<string, Capacidad[]> = {};
+  for (const c of caps) {
+    const g = c.grupo || "otras";
+    if (!por[g]) { orden.push(g); por[g] = []; }
+    por[g].push(c);
+  }
+  return orden.map((grupo) => ({ grupo, rotulo: rotuloGrupo(grupo), capacidades: por[grupo] }));
 }

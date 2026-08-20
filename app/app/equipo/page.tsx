@@ -28,7 +28,10 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ChevronLeft, RefreshCw, UserPlus, Users } from "lucide-react";
 import { AgentitoAvatar, LOOK_DEFAULT, type AgentitoLook } from "../lib/agentito";
 import { getRoles, loadConfig, type HttpError, type PortalConfig, type Role } from "../lib/agent";
-import { BautizoDeRol, yaEsta, type AltaDelRol } from "../lib/altaEquipo";
+import {
+  BautizoDeRol, QueNecesita, SIN_CONTAR, seArmaAMedida, yaEsta,
+  type AltaDelRol, type LoQueNecesita,
+} from "../lib/altaEquipo";
 import { loadAgentName } from "../lib/onboarding";
 import { horaDe, rotuloCanal } from "../lib/palabras";
 import { Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Soporte, Spinner } from "../lib/ui";
@@ -131,6 +134,11 @@ export default function EquipoPage() {
   const [cargando, setCargando] = useState(false);
   const [ultima, setUltima] = useState<Date | null>(null);
   const [nombreAgente, setNombreAgente] = useState("");
+  // The made-to-measure role (asistente) asks what the client needs BEFORE the
+  // baptism, exactly like the first-run alta does. The answer lives here so
+  // going back from the baptism keeps the text and the checks.
+  const [necesita, setNecesita] = useState<LoQueNecesita>(SIN_CONTAR);
+  const [contado, setContado] = useState(false);
 
   useEffect(() => {
     setCfg(loadConfig());
@@ -285,6 +293,8 @@ export default function EquipoPage() {
   // `?sumar=` con un id que no existe, con alguien que ya está en el equipo o
   // con uno que ya se pidió es un link viejo, y un link viejo muestra la lista
   // —nunca un formulario para pedir dos veces lo mismo—.
+  useEffect(() => { setNecesita(SIN_CONTAR); setContado(false); }, [bautizando]);
+
   const sumando = cfg && bautizando
     ? (roles ?? []).find((r) => r.id === bautizando && !yaEsta(r) && !r.pedido && r.state === "ready")
     : undefined;
@@ -301,7 +311,25 @@ export default function EquipoPage() {
           <ChevronLeft className="h-3.5 w-3.5" /> Tu equipo
         </button>
         <div className="flex justify-center py-6">
-          <BautizoDeRol key={sumando.id} cfg={cfg} role={sumando} onListo={alQuedarPedido} />
+          {seArmaAMedida(sumando) && !contado ? (
+            <QueNecesita
+              key={sumando.id}
+              cfg={cfg}
+              valor={necesita}
+              onCambio={setNecesita}
+              onListo={() => setContado(true)}
+            />
+          ) : (
+            <BautizoDeRol
+              key={sumando.id}
+              cfg={cfg}
+              role={sumando}
+              capacidades={seArmaAMedida(sumando) ? necesita.marcadas ?? [] : undefined}
+              volverLabel={seArmaAMedida(sumando) ? "Cambiar lo que va a hacer" : undefined}
+              onVolver={seArmaAMedida(sumando) ? () => setContado(false) : undefined}
+              onListo={alQuedarPedido}
+            />
+          )}
         </div>
       </div>
     );

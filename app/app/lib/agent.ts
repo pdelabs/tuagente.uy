@@ -855,6 +855,20 @@ export type Capacidad = {
 export const getCapacidades = (c: PortalConfig) =>
   get<{ disponible: boolean; capacidades: Capacidad[] }>(c.adapter, "/portal/capacidades", c);
 
+/** Lo que el cliente escribió que necesita, traducido a ids del catálogo.
+ *
+ *  Lo resuelve el agente con UNA llamada corta al modelo —no una corrida
+ *  entera— y contesta ids validados contra el catálogo: lo que el modelo se
+ *  invente no llega hasta acá.
+ *
+ *  `sin_matching` es la respuesta honesta a "no se pudo preguntar" (el agente
+ *  no tiene con qué llamar al modelo): la pantalla muestra el menú entero sin
+ *  marcar en vez de cortar el alta. Una lista vacía SIN ese campo dice otra
+ *  cosa: se preguntó, y nada del menú era lo que el cliente pidió. */
+export const crearSugerenciaDeCapacidades = (c: PortalConfig, texto: string) =>
+  post<{ sugeridas: string[]; sin_matching?: boolean }>(
+    c.adapter, "/portal/capacidades/sugerir", c, { texto });
+
 /** Lo que el cliente pidió de un rol que todavía no está andando: con qué
  *  nombre y con qué cara lo bautizó cuando lo eligió. Un rol PEDIDO sigue
  *  sirviendo el nombre y el look DEL CATÁLOGO (recién al instalarlo el perfil
@@ -866,6 +880,11 @@ export type PedidoDeRol = {
   pinta?: Record<string, number> | null;
   /** Cuándo lo pidió, como lo anotó el agente (ISO). */
   pedido_en: string;
+  /** Las capacidades que el cliente eligió al pedirlo, si el rol se las
+   *  preguntó (hoy sólo el asistente, que no viene armado de fábrica). No
+   *  prenden nada solas: son lo que el cliente espera, y quien lo contrata las
+   *  lee para saber qué ponerle. */
+  capacidades?: string[];
 };
 
 /** One member of the team -- hired or on offer.
@@ -909,8 +928,13 @@ export const getRoles = (c: PortalConfig) =>
  *  lo que `failure` deja en el mensaje del error. */
 export const crearPedidoDeRol = (
   c: PortalConfig, rol: string, nombre: string, pinta: Record<string, number> | null,
+  /** Sólo para el rol que se compone de capacidades: los ids que el cliente
+   *  dejó marcados. El adapter los valida contra el catálogo y contesta 400 si
+   *  hay alguno que no se pueda pedir. */
+  capacidades?: string[],
 ) => post<{ pedido: PedidoDeRol & { rol: string } }>(
-  c.adapter, "/portal/roles/pedido", c, { rol, nombre, pinta });
+  c.adapter, "/portal/roles/pedido", c,
+  capacidades?.length ? { rol, nombre, pinta, capacidades } : { rol, nombre, pinta });
 
 /** One turn of a room, as the adapter stored it. */
 export type RoomTurn = {

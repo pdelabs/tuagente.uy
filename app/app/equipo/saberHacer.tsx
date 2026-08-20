@@ -23,7 +23,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { loadConfig, pedirCapacidad, type Capacidad, type Role } from "../lib/agent";
-import { catalogoDeCapacidades, leerPedidas, marcarPedida } from "../lib/capacidades";
+import { catalogoDeCapacidades, leerPedidas, marcarPedida, porGrupo } from "../lib/capacidades";
 import { Btn, Card, Chip } from "../lib/ui";
 
 /** Cuánto tarda en estar puesta. Es trabajo NUESTRO —el catálogo entero viene
@@ -32,24 +32,6 @@ const ESFUERZO: Record<string, string> = {
   minutos: "La ponemos en minutos",
   horas: "Lleva unas horas",
   dias: "Lleva unos días",
-};
-
-/** Los grupos del catálogo, en palabras. El catálogo es cerrado pero puede
- *  crecer: un grupo que no esté acá se humaniza (guiones a espacios) en vez de
- *  romper la pantalla o mostrarse crudo. */
-const GRUPO: Record<string, string> = {
-  administracion: "Administración",
-  "documentos-y-datos": "Documentos y datos",
-  informacion: "Información",
-  contenido: "Contenido",
-  atencion: "Atención a clientes",
-  audio: "Audio",
-};
-const rotuloGrupo = (g: string) => {
-  const conocido = GRUPO[g];
-  if (conocido) return conocido;
-  const libre = g.replace(/-/g, " ");
-  return libre.charAt(0).toUpperCase() + libre.slice(1);
 };
 
 /** Una capacidad que ya está: incluida o activa. Sin botón y sin ceremonia. */
@@ -135,13 +117,9 @@ export default function QueSabeHacer({ role }: { role: Role }) {
   // que hace la tarjeta del chat: no se promete ni que la tiene ni que no.
   const sumables = delMenu.filter((c) => c.activa !== true);
 
-  // Los grupos en el orden en que vienen del catálogo: el orden es una decisión
-  // del catálogo y reordenarlo acá sería una segunda opinión sobre lo mismo.
-  const grupos: string[] = [];
-  for (const c of sumables) {
-    const g = c.grupo || "otras";
-    if (!grupos.includes(g)) grupos.push(g);
-  }
+  // Agrupadas como las agrupa el alta, y por la misma función: es el mismo
+  // catálogo, y dos maneras de partirlo serían dos pantallas distintas.
+  const grupos = porGrupo(sumables);
 
   return (
     <section>
@@ -185,13 +163,13 @@ export default function QueSabeHacer({ role }: { role: Role }) {
                 Pedir una no la prende: nos avisa a nosotros, lo miramos y te escribimos.
               </p>
               <div className="flex flex-col gap-4">
-                {grupos.map((g) => (
-                  <div key={g}>
+                {grupos.map(({ grupo, rotulo, capacidades }) => (
+                  <div key={grupo}>
                     <h3 className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-                      {rotuloGrupo(g)}
+                      {rotulo}
                     </h3>
                     <div className="flex flex-col gap-2">
-                      {sumables.filter((c) => (c.grupo || "otras") === g).map((c) => (
+                      {capacidades.map((c) => (
                         <Card key={c.id} className="p-3.5">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-[14px] font-medium text-ink">{c.label}</p>
