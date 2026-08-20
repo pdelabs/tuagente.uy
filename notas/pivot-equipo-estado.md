@@ -141,6 +141,27 @@ lo limpia. En un remoto Linux no pasa. Por esto mismo `deja()` en
   pendientes 8/9 viejos: los 4 del lab + Rita corren el dist de hoy, y el
   soporte pre-dist del spike se rehizo limpio.
 
+## Hecho el 19/8 (noche): conexiones
+
+- **Puente de WhatsApp VIVO en el lab** (0e542ea): imagen auditada local,
+  template del kit corregido (decía servicio/puerto/imagen inexistentes; la
+  verdad es `whatsapp-bridge:8080`, el default del adapter). El QR de pairing
+  se sirve en la pestaña Conexiones — falta que Luis lo escanee con un número
+  DESCARTABLE. Nota: `pair/status` devuelve `{"error":"not found"}` raro,
+  mirar. Para remotos: subir la imagen a un registry nuestro antes.
+- **Google consent-ready**: el `setup.py` del motor tiene los scopes
+  hardcodeados (los 8, Gmail incluido — el `--services` del runbook NO existe;
+  anotado en connections/google-workspace.md). El flujo corre afuera con
+  scopes acotados (sheets/drive/calendar/docs): URL acuñada con PKCE, falta el
+  click de consentimiento de Luis y `google_exchange.py` instala el token en
+  el lab y corre --check-live solo. Si se repite 3 veces → tools/conectar-google.py.
+  El token de prueba viejo (drive.readonly) REFRESCA: la app OAuth está sana.
+- **Rol ↔ conexión en el portal** (1bb09aa): "Necesita WhatsApp para empezar"
+  ahora pide la conexión ahí mismo, con el MISMO contrato de ticket que lee
+  Conexiones (probado en vivo: la card de Beto creó el ticket y pasó a
+  "Pedida" en el mismo tick). Self-service solo cuando la puerta de Conexiones
+  lo permite — `flujo` solo mentía (WhatsApp tiene QR y advertencia).
+
 ## Pendiente (en orden)
 
 1. **Costo con imágenes: MEDIDO (19/8, lab real)** — US$0,10 por turno con
