@@ -599,8 +599,24 @@ def main():
             raise AssertionError(motivo)
         return "el roster y los role.json declaran lo mismo"
 
+    def _multiplex():
+        # The fourth classic install-forgets, found on the first from-scratch
+        # team agent (19/8): without gateway.multiplex_profiles the roles
+        # install fine, `hermes profile list` shows them, and /p/<rol>/ never
+        # answers. contratar-rol.sh guards the hire; this catches the agent
+        # BEFORE anyone tries to hire into it.
+        cfg = os.path.join(data, "config.yaml")
+        with open(cfg, encoding="utf-8") as fh:
+            for linea in fh:
+                if re.match(r"^\s*multiplex_profiles:\s*true\b", linea):
+                    return "gateway.multiplex_profiles: true"
+        raise AssertionError(
+            "data/config.yaml no tiene multiplex_profiles: true — el gateway "
+            "va a instalar roles que nunca sirve (viene en compose/config.base.yaml)")
+
     if tiene_equipo(data):
         check("roles: el roster y los profiles", _roles)
+        check("roles: el gateway multiplexa", _multiplex)
 
     # --- el kit está instalado ---
     def _kit():

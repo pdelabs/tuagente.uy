@@ -162,6 +162,16 @@ if [[ -n "$NOMBRE" ]]; then
   [[ -n "$NOMBRE" ]] || { echo "ese nombre no deja nada utilizable" >&2; exit 1; }
 fi
 
+# Without gateway.multiplex_profiles the install "succeeds" and the role is
+# never served: /p/<rol>/ stays dead and the waiting loop below never ends.
+# Cheaper to refuse here, with the fix in hand, than to hang there.
+if ! corre "grep -qE '^[[:space:]]*multiplex_profiles:[[:space:]]*true' /opt/data/config.yaml"; then
+  echo "este agente no tiene gateway.multiplex_profiles: true en data/config.yaml:" >&2
+  echo "el gateway solo serviría el profile activo y el rol quedaría instalado pero" >&2
+  echo "inalcanzable. Agregalo (viene en compose/config.base.yaml) y reintentá." >&2
+  exit 1
+fi
+
 echo "→ armando la distribución"
 # Into the temp dir, NOT the repo's dist/: the client's name gets injected into
 # this build, and a named build sitting in the working tree is one copy-paste

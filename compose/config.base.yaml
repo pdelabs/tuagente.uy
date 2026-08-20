@@ -23,6 +23,14 @@ toolsets:
 #   tts        1,8 KB  hablar en voz alta
 #   delegation 5,8 KB  crear sub-agentes
 # Si un cliente llega a necesitarlas, se sacan de esta lista y se reinicia.
+# One gateway serving EVERY profile. Without this the inbound gateway handles
+# only the active profile: a hired role installs fine, `hermes profile list`
+# shows it, and /p/<rol>/ never answers -- contratar-rol.sh hangs forever on
+# its "esperando" loop. Found the hard way on the first from-scratch team
+# agent (2026-08-19); the lab only worked because the spike set it by hand.
+gateway:
+  multiplex_profiles: true
+
 agent:
   # Effort al maximo. Probado el 5/8 sobre el mismo agente, mismos datos y
   # mismas consignas: con el default del proveedor dejaba 3 de 18 clientes
