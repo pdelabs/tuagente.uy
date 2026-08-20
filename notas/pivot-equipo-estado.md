@@ -143,9 +143,13 @@ lo limpia. En un remoto Linux no pasa. Por esto mismo `deja()` en
 
 ## Pendiente (en orden)
 
-1. **Costo con imágenes** — la medición de arriba no ejercitó image_gen, que
-   es justo lo que rompía la estimación vieja. Falta la pasada con el paquete
-   social prendido, y de ahí el precio.
+1. **Costo con imágenes: MEDIDO (19/8, lab real)** — US$0,10 por turno con
+   imagen (Vera generó una placa real de 1080x1080); 10 placas/mes ≈ US$1.
+   El cuadro completo del mix: conversacional US$0,006 · herramientas US$0,062
+   · imagen US$0,10. Un mix pyme realista (10 turnos/día + 10 placas/mes) da
+   ~US$8-10/mes por rol contra ~US$25 de precio; el que rompe es el uso
+   intensivo (30 turnos/día pesados ≈ US$23). El 9x del gap viejo era la
+   MEDICIÓN, no la economía. Falta solo la decisión de precio (Luis).
 1b. El warning "Skipping secondary profile ... port-binding api_server" en cada
    boot con multiplex es benigno (medido: /p/<rol>/ contesta igual) pero ruidoso;
    ver si el dist puede no declarar api_server en el profile.
