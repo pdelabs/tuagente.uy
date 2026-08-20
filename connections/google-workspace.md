@@ -36,6 +36,18 @@ aceptar y devolvernos un código. Dos minutos, por teléfono si hace falta.
    que agregues a mano y **los permisos se vencen a los 7 días** — un agente que
    deja de leer las planillas cada semana no es un producto.
 
+## OJO: el `--services` de abajo no existe (medido 19/8/2026)
+
+El `setup.py` del motor (v2026.7.30) tiene los scopes HARDCODEADOS — los ocho,
+Gmail y Drive completos incluidos — y no acepta acotarlos. Pero el chequeo sí
+tolera un token con menos scopes ("Don't pass scopes — user may have authorized
+only a subset"), así que la salida es hacer el flujo OAuth AFUERA con solo los
+scopes que el cliente necesita y escribir el token directo en
+`data/google_token.json` (formato authorized_user: client_id, client_secret,
+refresh_token, scopes). El helper vive en el scratchpad de la sesión del 19/8
+(`google_auth_url.py` + `google_exchange.py`); si se repite tres veces, entra
+al kit como `tools/conectar-google.py` de verdad.
+
 ## Runbook — por cada cliente
 
 1. Copiar el JSON del paso 4 al agente como `data/google_client_secret.json`.

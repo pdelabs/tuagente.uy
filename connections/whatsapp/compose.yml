@@ -5,9 +5,16 @@
 #
 # El agente NO habla con este servicio: habla con el decorator, y el decorator
 # es el unico que llega hasta aca. Por eso el puerto no se publica al host.
-  whatsapp-mcp:
-    image: ghcr.io/tuagente/whatsapp-mcp:auditado    # nuestra copia auditada, tag fijo
-    container_name: ${CLIENTE}-whatsapp-mcp
+  # El nombre del servicio y el puerto NO son decorativos: el adapter llega por
+  # http://whatsapp-bridge:8080 (su default, portal_adapter.py WHATSAPP_BRIDGE).
+  # Antes este template decia whatsapp-mcp:8590 y una imagen de ghcr que no
+  # existe: tres nombres distintos para la misma cosa, ninguno el real.
+  whatsapp-bridge:
+    # Imagen construida por nosotros con bridge/Dockerfile.bridge (whatsmeow
+    # parcheado y auditado). Para un agente REMOTO hay que subirla antes a un
+    # registry nuestro; hoy vive local en la Mac del lab.
+    image: tuagente/whatsapp-bridge:auditado
+    container_name: ${CLIENTE}-whatsapp-bridge
     restart: unless-stopped
     volumes:
       # El historial de mensajes del cliente. Dentro de SU volumen, siempre.
@@ -16,4 +23,4 @@
       - TZ=America/Montevideo
     # Sin `ports`: solo alcanzable desde la red interna del compose.
     expose:
-      - "8590"
+      - "8080"
