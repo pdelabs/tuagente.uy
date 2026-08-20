@@ -1,6 +1,6 @@
 {
   "id": "ventas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "_comment": [
     "Identity and packaging for ONE role: what the client sees (name and face)",
     "and what the role needs to work (skills, connections, keys).",
@@ -27,6 +27,7 @@
     }
   },
   "skills": [
+    "presupuestos",
     "aprobacion",
     "entregable",
     "artifact",

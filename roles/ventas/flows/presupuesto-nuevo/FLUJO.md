@@ -3,7 +3,7 @@ nombre: Presupuesto desde un pedido
 para_cliente: "Cuando alguien pide un presupuesto, te lo dejo armado con tus precios para que solo lo apruebes."
 gatillo_tipo: pedido
 gatillo_detalle: Cada vez que llega un pedido de presupuesto
-skills: aprobacion,entregable
+skills: presupuestos,aprobacion,entregable
 resultados: entregables/presupuestos
 estado: activo
 ---
@@ -19,7 +19,8 @@ estado: activo
 ## Notas técnicas
 
 - **Los números salen de la lista, nunca de mi memoria.** Un precio inventado no
-  se demora: se cobra.
+  se demora: se cobra. El cruce contra la lista, las cuentas y el número
+  consecutivo los hace la skill `presupuestos`; yo pongo las palabras.
 - **No descuento por mi cuenta.** Un descuento es plata del bolsillo del cliente
   y esa decisión es suya, aunque el que pregunta parezca que se va.
 - Si falta el precio de algo, va aparte y se dice: "me falta el precio del flete,

@@ -153,25 +153,25 @@
       "label": "Presupuestos y cotizaciones al toque",
       "grupo": "administracion",
       "nivel": "menu",
-      "estado": "nueva-kit",
+      "estado": "existente",
       "para_que": "Que armes el presupuesto en minutos y con tu formato: le decís qué te pidieron y te lo deja listo para mandar, con tus precios y tus condiciones.",
-      "como": "La escribimos nosotros y llega con la próxima actualización de tu agente. Antes te pedimos un presupuesto tuyo, para que los que arme salgan iguales a los que ya mandás.",
+      "como": "Viene con el rol de ventas; si ya lo tenés contratado, te la prendemos nosotros con una actualización. Antes te pedimos un presupuesto tuyo, para que los que arme salgan iguales a los que ya mandás.",
       "costo": "Sin costo.",
       "esfuerzo": "dias",
       "quien": "nosotros",
       "detecta": { "kit_skill": "presupuestos" },
       "verifica": { "kit_skill": "presupuestos" },
       "instala": { "kit_skills": ["presupuestos"] },
-      "nota_interna": "Todavia no escrita. Es la evidencia mas fuerte del research: cotizar a mano lleva 2-4 horas, el cliente espera respuesta en menos de 24 y la velocidad es lo que cierra la venta; hay productos standalone a US$30-40/mes y ROMA AI (UY) ya lo automatiza para 24 pymes. GUARDA: plantilla del cliente primero y numeros del cliente SIEMPRE — un presupuesto con un precio inventado es peor que no tener la capacidad. Combina con `vision`: presupuesto desde la foto de lo que hay que cotizar. Cuando exista, va al kit y llega a todos con install.sh."
+      "nota_interna": "ESCRITA el 19/8/2026: skills/presupuestos/ (SKILL.md, references/ejemplo.md y dos scripts), declarada por el rol ventas (role.json 0.2.0), asi que viaja dentro del perfil del rol y no en kit-skills/. Es la evidencia mas fuerte del research: cotizar a mano lleva 2-4 horas, el cliente espera respuesta en menos de 24 y la velocidad es lo que cierra la venta; hay productos standalone a US$30-40/mes y ROMA AI (UY) ya lo automatiza para 24 pymes. GUARDA QUE NO SE NEGOCIA: plantilla del cliente primero y numeros del cliente SIEMPRE — un presupuesto con un precio inventado es peor que no tener la capacidad, porque no se demora: se cobra. Por eso el reparto es el de siempre, y aca es plata: el modelo escribe las palabras y `new_quote.py` resuelve cada renglon contra `lista-precios.csv`; lo que no encuentra vuelve en `faltantes` y no tiene precio. Tres cosas mas que el script se niega a inventar: el tipo de cambio (dos monedas = dos totales, UYU y USD conviven en UY), la regla de IVA (`mas_iva` vs `incluido` se pregunta UNA vez y queda en formato.json) y el numero consecutivo, que solo se gasta con --numerar y solo si no falta nada. El arranque es el de brand-kit: sin formato ni lista no se cotiza, se piden los dos juntos —un presupuesto viejo del cliente y su lista como la tenga— y se guardan en workspace/presupuestos/ con save_setup.py, que ademas normaliza las dos trampas de transcribir precios uruguayos ($ vs U$S, y 1.250,50). Combina con `vision`: presupuesto desde la foto de lo que hay que cotizar. PENDIENTE, igual que en facturas-a-datos: el `como` todavia dice 'llega con la proxima actualizacion de tu agente', cierto para un agente ya instalado; el dia que la flota se actualice pasa a 'La prendemos nosotros' y hay que regenerar el markdown con tools/capacidad-catalogo.py --aplicar, porque `como` SI se renderiza (`estado` no)."
     },
     {
       "id": "facturas-a-datos",
       "label": "Cargar facturas",
       "grupo": "administracion",
       "nivel": "menu",
-      "estado": "nueva-kit",
+      "estado": "existente",
       "para_que": "Que la foto o el PDF de la factura entre solo a tu planilla —fecha, proveedor, número y monto— sin que tengas que tipear nada.",
-      "como": "La escribimos nosotros y llega con la próxima actualización de tu agente. Cada carga te la muestra para que la confirmes antes de que quede escrita.",
+      "como": "Viene con el rol de contabilidad; si ya lo tenés contratado, te la prendemos nosotros con una actualización. Cada carga te la muestra para que la confirmes antes de que quede escrita.",
       "costo": "Sin costo.",
       "esfuerzo": "dias",
       "quien": "nosotros",
@@ -179,7 +179,7 @@
       "detecta": { "kit_skill": "facturas-a-datos" },
       "verifica": { "kit_skill": "facturas-a-datos" },
       "instala": { "kit_skills": ["facturas-a-datos"] },
-      "nota_interna": "Todavia no escrita. La carga de datos es el 43% de lo que se automatiza en contabilidad (Intuit) y la e-factura obligatoria en UY desde el 1/1/2026 empuja a las chicas a digitalizar. GUARDA QUE NO SE NEGOCIA: humano en el loop SIEMPRE — el OCR alucina montos plausibles en 1-3% de los casos y un monto mal cargado no se nota hasta el cierre; la confirmacion es parte del flujo, no una opcion. Y DGI/factura electronica es SOLO LECTURA, decidido y no se reabre. Cuando exista, va al kit y llega a todos con install.sh."
+      "nota_interna": "ESCRITA el 19/8/2026: skills/facturas-a-datos/ (SKILL.md, references/cfe.md y scripts/verificar_filas.py), declarada por el rol contabilidad (role.json 0.2.0), asi que viaja dentro del perfil del rol y no en kit-skills/. La carga de datos es el 43% de lo que se automatiza en contabilidad (Intuit) y la e-factura obligatoria en UY desde el 1/1/2026 empuja a las chicas a digitalizar. GUARDA QUE NO SE NEGOCIA: humano en el loop SIEMPRE — el OCR alucina montos plausibles en 1-3% de los casos y un monto mal cargado no se nota hasta el cierre; la confirmacion es parte del flujo, no una opcion. Eso quedo escrito para el modelo como el contrato de honestidad de la SKILL.md: lo que no se pudo leer va VACIO y marcado, hablar de confianza esta prohibido, y no se completa por contexto ni se cuadra con la resta. El script chequea lo unico que la aritmetica puede verificar —digito verificador del RUT, subtotal + IVA contra el total, la tasa contra 22% y 10%— y NO propone valores corregidos, a proposito. Y DGI/factura electronica es SOLO LECTURA, decidido y no se reabre. PENDIENTE: el `como` todavia dice 'llega con la proxima actualizacion de tu agente', que es cierto para un agente ya instalado; el dia que la flota se actualice pasa a 'La prendemos nosotros' y hay que regenerar el markdown con tools/capacidad-catalogo.py --aplicar, porque `como` SI se renderiza (`estado` no)."
     },
     {
       "id": "seguimiento-de-cobranzas",

@@ -76,6 +76,46 @@ def check_identity(identity: str, role: str) -> None:
         )
 
 
+# Where a skill's files live INSIDE THE CONTAINER depends on who ships it.
+# Shared skills stay in kit-skills/ (/opt/kit/skills); a role's craft skills
+# travel inside its profile (/opt/data/profiles/<rol>/skills). The kit sources
+# are all written against /opt/kit/skills -- true before the team split, and
+# still true for a no-roster agent -- so packing a craft skill means rewriting
+# those references, or the SKILL.md tells the agent to run scripts from a path
+# that no longer exists (found on the lab, 19/8: brand-kit pointing at a
+# trimmed kit-skills/). A reference to a skill that ships NEITHER with this
+# role NOR shared is a build error, not a silent broken path.
+KIT_SKILLS_RE = re.compile(r"/opt/kit/skills/([a-z0-9-]+)/")
+
+
+def rewrite_kit_paths(dest: Path, role: str, packed: set[str]) -> None:
+    import skills_split
+    shared = set(skills_split.shared_skills())
+    for path in dest.rglob("*"):
+        if not path.is_file() or path.suffix not in (".md", ".py", ".txt"):
+            continue
+        text = path.read_text(encoding="utf-8")
+
+        def cambio(m: "re.Match[str]") -> str:
+            name = m.group(1)
+            # Shared wins over packed: the plumbing skills ship BOTH shared and
+            # inside every profile, and their canonical copy is the kit's --
+            # rewriting them per-profile indexes the same skill twice with
+            # diverging texts.
+            if name in shared:
+                return m.group(0)
+            if name in packed:
+                return f"/opt/data/profiles/{role}/skills/{name}/"
+            raise SystemExit(
+                f"{role}: {path.relative_to(dest)} references /opt/kit/skills/{name}/ "
+                f"but '{name}' ships neither with this role nor shared -- the path "
+                f"would be dead on a team agent")
+
+        nuevo = KIT_SKILLS_RE.sub(cambio, text)
+        if nuevo != text:
+            path.write_text(nuevo, encoding="utf-8")
+
+
 def collect_skills(names: list[str], dest: Path, role: str) -> int:
     dest.mkdir(parents=True, exist_ok=True)
     for name in names:
@@ -85,6 +125,7 @@ def collect_skills(names: list[str], dest: Path, role: str) -> int:
         # evals/ stay out of the distribution for the same reason install.sh
         # excludes them: they are our test material, not the client's agent.
         shutil.copytree(source, dest / name, ignore=shutil.ignore_patterns("evals", "__pycache__"))
+    rewrite_kit_paths(dest, role, set(names))
     return len(names)
 
 

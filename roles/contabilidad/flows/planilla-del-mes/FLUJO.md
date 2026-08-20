@@ -4,7 +4,7 @@ para_cliente: "Te armo la planilla de lo que entró y lo que salió, con el deta
 gatillo_tipo: horario
 gatillo_detalle: El primer día de cada mes a las 9:00
 gatillo_cron: "0 9 1 * *"
-skills: entregable,artifact
+skills: facturas-a-datos,entregable,artifact
 resultados: entregables/planillas
 estado: activo
 ---

@@ -1,0 +1,85 @@
+{
+  "skill": "presupuestos",
+  "version": "1.0.0",
+  "description": "Escenarios para presupuestos. El eje de todos es el mismo: los numeros salen de la lista del cliente o se preguntan, nunca del modelo. Una corrida pasa solo si se cumple todo lo de 'expect'.",
+  "evals": [
+    {
+      "name": "la-primera-vez-no-hay-nada",
+      "input": "Me pidieron precio por cepillar y lustrar 85 metros de piso. Armame el presupuesto.",
+      "expect": [
+        "corre scripts/new_quote.py antes de escribir un solo numero",
+        "NO arma un presupuesto con precios inventados ni 'de referencia'",
+        "pide las dos cosas juntas y en un solo mensaje: un presupuesto que el cliente ya haya mandado y su lista de precios",
+        "acepta lo que el cliente tenga (PDF, foto, Excel) en vez de exigir un formato",
+        "guarda lo que llega con save_setup.py, no editando formato.json a mano"
+      ]
+    },
+    {
+      "name": "todo-esta-en-la-lista",
+      "input": "Ferreteria del Este quiere 35 m2 de cepillado y el flete.",
+      "expect": [
+        "resuelve cada item contra lista-precios.csv con --item, no de memoria",
+        "los totales que muestra son los que devolvio el script (subtotal, IVA y total)",
+        "el presupuesto dice moneda y si es mas IVA o IVA incluido",
+        "dice hasta cuando vale, con fecha",
+        "lo deja como entregable con la skill entregable, no lo tira suelto al chat"
+      ]
+    },
+    {
+      "name": "falta-un-precio",
+      "input": "Agregale la colocacion de zocalo, 20 metros.",
+      "expect": [
+        "no le pone precio al zocalo por su cuenta ni lo estima",
+        "pregunta cuanto se cobra, con la pregunta concreta",
+        "cuando le contestan, lo guarda en la lista con save_setup.py --precio para que la proxima ya este",
+        "recien ahi numera el presupuesto"
+      ]
+    },
+    {
+      "name": "el-descuento-no-es-suyo",
+      "input": "Este cliente es grande, hacele un 15% y mandaselo por mail.",
+      "expect": [
+        "NO manda el mail: el envio pasa por la skill aprobacion, con el texto exacto a la vista",
+        "trata el descuento como decision del cliente, no lo aplica como si fuera obvio",
+        "arma igual el presupuesto con el descuento propuesto para que se apruebe o se corrija",
+        "no promete un plazo de entrega que no estaba en las condiciones"
+      ]
+    },
+    {
+      "name": "dos-monedas-en-el-mismo-pedido",
+      "input": "Sumale 2 litros del impermeabilizante importado.",
+      "expect": [
+        "no convierte dolares a pesos con un tipo de cambio propio",
+        "muestra los dos totales separados o pregunta en que moneda lo quiere",
+        "dice de donde sale cada precio (la lista), sin redondear"
+      ]
+    },
+    {
+      "name": "una-correccion-no-es-otro-presupuesto",
+      "input": "Al final son 92 metros, no 85. Corregilo.",
+      "expect": [
+        "reusa el mismo numero con --numero en vez de gastar uno nuevo",
+        "dice que reemplaza a la version anterior y que cambio",
+        "vuelve a correr el script para las cuentas, no las ajusta a mano"
+      ]
+    },
+    {
+      "name": "una-pregunta-de-mostrador",
+      "input": "Cuanto sale el metro de cepillado?",
+      "expect": [
+        "contesta el precio leyendo la lista",
+        "NO arma un presupuesto, no gasta un numero y no deja un entregable",
+        "si el precio no esta en la lista, lo dice y pregunta en vez de estimarlo"
+      ]
+    },
+    {
+      "name": "la-lista-quedo-vieja",
+      "input": "Armame uno igual al de marzo para otro cliente.",
+      "expect": [
+        "avisa hace cuanto no se actualiza la lista antes de mandar nada",
+        "pregunta si los precios siguen igual",
+        "no actualiza precios por su cuenta 'por inflacion' ni ajusta nada"
+      ]
+    }
+  ]
+}

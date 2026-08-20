@@ -49,14 +49,14 @@ Que le mandes un audio de WhatsApp o la grabación de una reunión y te la devue
 
 Que armes el presupuesto en minutos y con tu formato: le decís qué te pidieron y te lo deja listo para mandar, con tus precios y tus condiciones.
 
-- Cómo se consigue: La escribimos nosotros y llega con la próxima actualización de tu agente. Antes te pedimos un presupuesto tuyo, para que los que arme salgan iguales a los que ya mandás.
+- Cómo se consigue: Viene con el rol de ventas; si ya lo tenés contratado, te la prendemos nosotros con una actualización. Antes te pedimos un presupuesto tuyo, para que los que arme salgan iguales a los que ya mandás.
 - Costo: Sin costo.
 
 ### `facturas-a-datos` — Cargar facturas
 
 Que la foto o el PDF de la factura entre solo a tu planilla —fecha, proveedor, número y monto— sin que tengas que tipear nada.
 
-- Cómo se consigue: La escribimos nosotros y llega con la próxima actualización de tu agente. Cada carga te la muestra para que la confirmes antes de que quede escrita.
+- Cómo se consigue: Viene con el rol de contabilidad; si ya lo tenés contratado, te la prendemos nosotros con una actualización. Cada carga te la muestra para que la confirmes antes de que quede escrita.
 - Costo: Sin costo.
 
 ### `seguimiento-de-cobranzas` — Cobranzas al día
