@@ -1107,18 +1107,30 @@ def _pedidos_pendientes():
             if not rol:
                 continue
             if fila.get("evento") == "pedido":
-                pendientes.setdefault(rol, {
+                pendiente = {
                     "nombre": fila.get("nombre"),
                     "pinta": fila.get("pinta"),
                     "pedido_en": fila.get("pedido_en"),
-                })
+                }
+                # La clave sale sólo si el pedido la trae, igual que al crearlo:
+                # un pedido sin capacidades y uno con la lista vacía son lo
+                # mismo, y el portal ya lee `capacidades` como opcional.
+                if fila.get("capacidades"):
+                    pendiente["capacidades"] = fila["capacidades"]
+                pendientes.setdefault(rol, pendiente)
             elif fila.get("evento") in ("atendido", "cancelado"):
                 pendientes.pop(rol, None)
     return pendientes
 
 
-def pedido_de_rol(rol, nombre, pinta):
+def pedido_de_rol(rol, nombre, pinta, capacidades=None):
     """El cliente pide un rol y lo bautiza. Devuelve (status, cuerpo).
+
+    `capacidades` es opcional y hoy sólo la manda el asistente, que es el único
+    rol que no viene armado de fábrica: son los ids del menú que el cliente
+    marcó cuando contó qué necesitaba. NO INSTALAN NADA -- viajan con el pedido
+    porque es el único momento en que el cliente dice qué espera, y quien
+    contrata las lee para saber qué ponerle (`contratar-rol.sh` las imprime).
 
     HIRING IS NOT A BUTTON, and this endpoint does not pretend it is: it writes
     down the ask -- which role, what they called it, what face they gave it --
@@ -1148,6 +1160,9 @@ def pedido_de_rol(rol, nombre, pinta):
     limpio = _limpio_para_soul(nombre)[:MAX_NOMBRE_LEN]
     if not limpio:
         return 400, {"error": "hace falta un nombre"}
+    elegidas, problema = _capacidades_pedidas(capacidades)
+    if problema:
+        return 400, {"error": problema}
 
     # Check-then-append under one lock: the server is threaded, and without it
     # a double click reliably lands two 201s -- the exact "two people arriving"
@@ -1166,6 +1181,10 @@ def pedido_de_rol(rol, nombre, pinta):
             "pedido_en": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "agente": agent_name(),   # la flota escribe archivos separados; el
         }                             # analisis de que se pide los junta
+        if elegidas:
+            # Sólo cuando hay algo marcado: una lista vacía no es señal de nada
+            # y la clave ausente es lo que ya leen todas las líneas viejas.
+            fila["capacidades"] = elegidas
         try:
             ROLES_PEDIDOS.parent.mkdir(parents=True, exist_ok=True)
             with ROLES_PEDIDOS.open("a", encoding="utf-8") as fh:
@@ -1175,7 +1194,10 @@ def pedido_de_rol(rol, nombre, pinta):
             # because hiring is money: the client already pressed the button,
             # so say what happened instead of resetting the socket.
             return 400, {"error": f"no pude anotar el pedido: {e}"}
-    return 201, {"pedido": {k: fila[k] for k in ("rol", "nombre", "pinta", "pedido_en")}}
+    campos = ("rol", "nombre", "pinta", "pedido_en")
+    if elegidas:
+        campos += ("capacidades",)
+    return 201, {"pedido": {k: fila[k] for k in campos}}
 
 
 def _role_key(role_id):
@@ -1304,6 +1326,38 @@ def _model_for_routing():
     }
 
 
+def _preguntar_al_modelo(prompt, max_tokens):
+    """One short question to the provider, and its answer as text.
+
+    THE TWO DECISIONS THE ADAPTER TAKES ON ITS OWN GO THROUGH HERE: who answers
+    a room turn, and which capacities the sentence a client typed points at.
+    Neither is a conversation -- one prompt, a handful of tokens, no history --
+    and neither can afford the ~10s a full agent turn costs (see
+    `_model_for_routing` for why the gateway is the wrong door for this).
+
+    It raises like any other request, and each caller decides what a provider
+    that is down means for IT: the router falls back to the agent the client
+    named, the capacity matcher falls back to showing the whole menu.
+    """
+    runtime = _model_for_routing()
+    body = {
+        "model": runtime["model"],
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": 0,
+    }
+    request = urllib.request.Request(
+        f"{runtime['base_url']}/chat/completions",
+        data=json.dumps(body).encode(),
+        headers={"Authorization": f"Bearer {runtime['api_key']}",
+                 "Content-Type": "application/json"},
+        method="POST",
+    )
+    payload = json.loads(urllib.request.urlopen(request, timeout=30).read())
+    choice = (payload.get("choices") or [{}])[0]
+    return ((choice.get("message") or {}).get("content") or "").strip()
+
+
 def route_message(message):
     """Which hired role should answer, or None for the agent the client named.
 
@@ -1324,26 +1378,8 @@ def route_message(message):
         return None
 
     team = "\n".join(f"- {r['id']}: {r.get('routing') or r.get('does') or ''}" for r in hired)
-    runtime = _model_for_routing()
-    body = {
-        "model": runtime["model"],
-        "messages": [{
-            "role": "user",
-            "content": _ROUTE_PROMPT.format(team=team, message=message[:2000]),
-        }],
-        "max_tokens": 12,
-        "temperature": 0,
-    }
-    request = urllib.request.Request(
-        f"{runtime['base_url']}/chat/completions",
-        data=json.dumps(body).encode(),
-        headers={"Authorization": f"Bearer {runtime['api_key']}",
-                 "Content-Type": "application/json"},
-        method="POST",
-    )
-    payload = json.loads(urllib.request.urlopen(request, timeout=30).read())
-    choice = (payload.get("choices") or [{}])[0]
-    answer = ((choice.get("message") or {}).get("content") or "").strip().strip("`\"' .")
+    answer = _preguntar_al_modelo(
+        _ROUTE_PROMPT.format(team=team, message=message[:2000]), 12).strip("`\"' .")
     # Only an id that is actually on the team counts. Anything else -- "-", a
     # sentence, a role they never hired -- means the agent they named answers.
     return answer if any(r["id"] == answer for r in hired) else None
@@ -1355,6 +1391,7 @@ def capacidades():
     CONTRATO CON EL PORTAL (lo implementa la pestaña, no el agente):
       GET  /portal/capacidades          -> {disponible, capacidades:[...]}
       POST /portal/capacidades/pedido   -> {"texto": "...", "id": "<id>|null"}
+      POST /portal/capacidades/sugerir  -> {"texto": "..."} -> {sugeridas:[ids]}
 
     Cada capacidad trae `activa`, que se calcula igual que las conexiones: por
     PRESENCIA, nunca por valores. `activa` sale de `detecta`:
@@ -1515,6 +1552,131 @@ def _ids_del_catalogo():
     except (OSError, ValueError):
         return set()
     return {c.get("id") for c in catalogo.get("capacidades", []) if c.get("id")}
+
+
+def _capacidades_del_menu():
+    """Las filas del catálogo QUE SE PUEDEN ELEGIR, con su texto comercial.
+
+    `nivel: base` queda afuera y no es un detalle: viene puesta en todos los
+    agentes, así que ofrecerla es ofrecer algo que el cliente ya tiene. Un
+    catálogo sin `nivel` cuenta como `menu`, que es como se comportaba todo
+    antes de que el campo existiera.
+    """
+    try:
+        catalogo = json.loads(CAPACIDADES_CATALOG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [c for c in catalogo.get("capacidades", [])
+            if c.get("id") and c.get("nivel", "menu") != "base"]
+
+
+# Lo que se le pregunta al modelo para pasar de "necesito que me ordene los
+# presupuestos" a ids del catálogo. Corto a propósito: es una traducción, no una
+# conversación, y el menú entero ya ocupa la mayor parte del prompt.
+_SUGERIR_PROMPT = """Un cliente contó qué necesita que haga su asistente. Elegí
+del menú de abajo lo que le sirve.
+
+Lo que escribió:
+{texto}
+
+El menú (id: qué es):
+{menu}
+
+Respondé UNICAMENTE con una lista JSON de ids del menú, del que más le sirve al
+que menos: ["id", "id"]. Cinco como máximo.
+
+Sólo lo que pidió. No completes la lista con lo que podría llegar a servirle: si
+pidió una sola cosa, va una sola. Si nada del menú se parece a lo que pidió,
+respondé [].
+
+Sin explicar, sin markdown, sin nada antes ni después."""
+
+
+def _ids_de_la_respuesta(respuesta):
+    """La lista JSON que contestó el modelo, sea lo que sea que la rodee.
+
+    Se busca entre corchetes en vez de parsear el texto entero porque un modelo
+    que igual contesta bien suele envolverlo: un ```json, un "Claro:" adelante.
+    Lo que no tenga forma de lista no sugiere nada, que es distinto de fallar.
+    """
+    inicio, fin = respuesta.find("["), respuesta.rfind("]")
+    if inicio == -1 or fin < inicio:
+        return []
+    try:
+        datos = json.loads(respuesta[inicio:fin + 1])
+    except ValueError:
+        return []
+    return [d for d in datos if isinstance(d, str)] if isinstance(datos, list) else []
+
+
+def sugerir_capacidades(texto):
+    """De lo que el cliente escribió a ids del catálogo. Devuelve (status, cuerpo).
+
+    ES EL PASO QUE HACE VENDIBLE AL ASISTENTE. Los otros roles ya vienen
+    armados; el asistente se compone de capacidades, y pedirle a un cliente que
+    elija de una lista de veinte antes de saber qué son es pedirle que haga
+    nuestro trabajo. Así que escribe qué necesita y el portal le vuelve con lo
+    que le corresponde marcado — editable, porque esto sugiere y no decide.
+
+    UNA LLAMADA CORTA AL PROVEEDOR, no una corrida del agente: el mismo camino
+    que usa el ruteo de la sala (`_preguntar_al_modelo`), por las mismas razones.
+
+    SIN PROVEEDOR NO HAY ERROR, HAY MENÚ. `sin_matching` le dice al portal que
+    la sugerencia no se pudo hacer para que muestre la lista entera sin marcar:
+    un alta que se cae porque no había clave es peor negocio que un cliente
+    eligiendo a mano. Es lo único que devuelve ese campo — una respuesta vacía
+    del modelo es una sugerencia legítima ("nada del menú es esto") y viaja como
+    `sugeridas: []`.
+    """
+    limpio = re.sub(r"\s+", " ", str(texto or "")).strip()
+    if len(limpio) < 10:
+        # Con tres palabras no hay nada que matchear y el modelo contesta
+        # cualquier cosa: se para acá y el portal vuelve a preguntar.
+        return 400, {"error": "contame un poco más de lo que necesitás que haga"}
+
+    menu = _capacidades_del_menu()
+    if not menu:
+        return 200, {"sugeridas": [], "sin_matching": True}
+    filas = "\n".join(
+        f"- {c['id']}: {c.get('label', '')} — {c.get('para_que', '')}" for c in menu)
+    try:
+        respuesta = _preguntar_al_modelo(
+            _SUGERIR_PROMPT.format(texto=limpio[:1000], menu=filas), 200)
+    except Exception:
+        return 200, {"sugeridas": [], "sin_matching": True}
+
+    # Sólo ids que existen y una sola vez cada uno: un modelo que inventa una
+    # fila («agenda-google») dejaría al portal dibujando una tarjeta vacía.
+    del_menu = {c["id"] for c in menu}
+    sugeridas = []
+    for ident in _ids_de_la_respuesta(respuesta):
+        if ident in del_menu and ident not in sugeridas:
+            sugeridas.append(ident)
+    return 200, {"sugeridas": sugeridas[:5]}
+
+
+def _capacidades_pedidas(capacidades):
+    """Lo que el cliente marcó, validado contra el menú. Devuelve (lista, error).
+
+    SE VALIDA POR LA MISMA RAZÓN QUE `pedido_de_capacidad` VALIDA SU `id`: esta
+    lista se lee para decidir qué construimos y qué le instalamos a este
+    cliente. Un id inventado ahí adentro no es un dato menos preciso, es un
+    pedido que nadie va a poder cumplir — y `nivel: base` es peor todavía: sería
+    anotar como pedido algo que ya viene puesto.
+    """
+    if capacidades is None:
+        return [], None
+    if not isinstance(capacidades, list):
+        return None, "capacidades tiene que ser una lista de ids"
+    del_menu = {c["id"] for c in _capacidades_del_menu()}
+    limpias = []
+    for cruda in capacidades:
+        ident = cruda.strip() if isinstance(cruda, str) else ""
+        if ident not in del_menu:
+            return None, f"«{str(cruda)[:40]}» no es una capacidad que se pueda pedir"
+        if ident not in limpias:
+            limpias.append(ident)
+    return limpias, None
 
 
 def pedido_de_capacidad(texto, cap_id=None, origen="cliente"):
@@ -2914,6 +3076,15 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return self._send(400, {"error": "invalid JSON body"})
             return self._upload(body)
+        if path == "/portal/capacidades/sugerir":
+            # El alta del asistente: el cliente escribió qué necesita y esto le
+            # contesta qué del catálogo se le parece. No anota nada -- el pedido
+            # se hace después, con lo que el cliente deje marcado.
+            cuerpo = self._read_json_body()
+            if cuerpo is None:
+                return self._send(400, {"error": "invalid JSON body"})
+            estado, respuesta = sugerir_capacidades(cuerpo.get("texto"))
+            return self._send(estado, respuesta)
         if path == "/portal/capacidades/pedido":
             # Lo pide el PORTAL cuando el cliente toca "Pedirla", o cuando lo que
             # hace falta no esta en el catalogo. El agente nunca llama a esto:
@@ -2930,7 +3101,8 @@ class Handler(BaseHTTPRequestHandler):
             if cuerpo is None:
                 return self._send(400, {"error": "invalid JSON body"})
             estado, respuesta = pedido_de_rol(
-                cuerpo.get("rol"), cuerpo.get("nombre"), cuerpo.get("pinta"))
+                cuerpo.get("rol"), cuerpo.get("nombre"), cuerpo.get("pinta"),
+                cuerpo.get("capacidades"))
             return self._send(estado, respuesta)
         if path == "/portal/identity":
             body = self._read_json_body()

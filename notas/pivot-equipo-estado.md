@@ -7,7 +7,7 @@ pivot y el rollback es borrar las ramas.
 ## Qué es el pivot
 
 De "un asistente" a **un equipo**: el cliente contrata roles por separado
-(marketing, soporte, ventas, contabilidad). Cada rol es un **profile de Hermes**
+(marketing, soporte, ventas, contabilidad, y el asistente a medida). Cada rol es un **profile de Hermes**
 en el mismo contenedor — su SOUL, sus skills, su memoria, su nombre y su cara.
 Precio de referencia ~1000 UYU/rol, **sin publicar hasta medir el costo real**
 (un día de imágenes en Mr.Wobble costó US$1,51: se come el precio).
@@ -89,14 +89,25 @@ lo limpia. En un remoto Linux no pasa. Por esto mismo `deja()` en
   y "sumar otro rol" desde la pestaña (`?sumar=<rol>`). Un agente con equipo
   nunca ve el bautizo de agente único.
 
+## Hecho el 19/8, segunda tanda (olas 5-6)
+
+- **"Qué sabe hacer" en la ficha del rol**: base como incluido (sin botón),
+  activas, y el menú agrupado y colapsado. La tarjeta del chat aprendió lo
+  mismo: una base apagada pide "avisanos", no "pedila". QA visual contra el
+  lab migrado (que ya corre install nuevo + catálogo v2: agente-check 0
+  fallas, portal-check cumple).
+- **Rol Asistente ("Lola")**: identity con anti-patear y el flujo de la skill
+  capacidad, routing = fallback del roster que no le roba a los de oficio,
+  3 flujos sobre capacidades base. El split no se movió.
+- **"¿Qué necesitás que haga?"**: POST /portal/capacidades/sugerir (una
+  llamada al proveedor, patrón router, ids validados contra el menú,
+  sin_matching degrada al menú entero sin marcar); el pedido viaja con
+  `capacidades` y contratar-rol.sh las imprime al contratar (no auto-instala).
+  La pregunta aparece en el alta Y al sumarlo desde Equipo. 47 tests.
+
 ## Pendiente (en orden)
 
-1. **Menú de capacidades en la ficha del rol** (portal): el adapter ya sirve
-   `nivel` y la ficha debe dibujar base como "incluido" sin botón — deuda
-   anotada en el docstring de `capacidades()`.
-2. **Rol "Asistente"**: identity + flujos + el paso "¿qué vas a hacer?" del
-   alta (matching de capacidades vía adapter, patrón router ~300 tokens).
-3. **Medir costo por rol** (bloquea publicar precio).
+1. **Medir costo por rol** (bloquea publicar precio).
 4. Mr.Wobble sigue pre-pivot; migrarlo cuando Luis quiera. Merge a main es
    decisión de Luis.
 5. Sesiones huérfanas del motor (una por turno de sala) se acumulan en cada

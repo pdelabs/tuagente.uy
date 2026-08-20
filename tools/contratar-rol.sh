@@ -109,10 +109,10 @@ trap 'rm -rf "$TMP"' EXIT
 # que lo hace el adapter, para que los dos no puedan discrepar sobre qué nombre
 # se está instalando.
 trae pedidos.jsonl > "$TMP/pedidos.jsonl"
-PEDIDO_NOMBRE="$(python3 - "$ROL" "$TMP/pedidos.jsonl" "$TMP/pinta-pedido.json" <<'PY'
+PEDIDO_NOMBRE="$(python3 - "$ROL" "$TMP/pedidos.jsonl" "$TMP/pinta-pedido.json" "$TMP/capacidades-pedido.json" <<'PY'
 import json, sys
 
-rol, log, pinta_out = sys.argv[1], sys.argv[2], sys.argv[3]
+rol, log, pinta_out, caps_out = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 pendiente = None
 for linea in open(log, encoding="utf-8"):
     try:
@@ -130,6 +130,11 @@ if pendiente is None:
 if pendiente.get("pinta"):
     with open(pinta_out, "w", encoding="utf-8") as fh:
         json.dump(pendiente["pinta"], fh, ensure_ascii=False)
+if pendiente.get("capacidades"):
+    # Lo que el cliente marcó cuando contó qué necesitaba (hoy sólo el
+    # asistente). Se saca acá y se imprime al final: no se instala solo.
+    with open(caps_out, "w", encoding="utf-8") as fh:
+        json.dump(pendiente["capacidades"], fh, ensure_ascii=False)
 print(pendiente.get("nombre") or "")
 PY
 )"
@@ -317,3 +322,32 @@ echo "Si es el primer rol de este agente, corré el instalador una vez más:"
 echo "  ./install.sh <agente>/data      (o ./desplegar-remoto.sh, si es remoto)"
 echo "Ahora que hay roster, kit-skills/ se queda con las skills compartidas y las"
 echo "de oficio dejan de cobrárselas todos los roles en cada pedido."
+
+# LO QUE EL CLIENTE PIDIÓ Y ESTE SCRIPT NO PUSO. Un rol que se compone de
+# capacidades (hoy el asistente) llega con la lista que el cliente marcó en el
+# alta, y contratarlo NO instala ninguna: cada una es trabajo nuestro con el
+# catálogo delante. Va último y a los gritos porque es la única parte del alta
+# que queda pendiente cuando el script termina bien — y un pendiente que se
+# imprime en el medio del log es un pendiente que nadie ve.
+if [[ -s "$TMP/capacidades-pedido.json" ]]; then
+  echo
+  echo "=============================================================="
+  echo "EL CLIENTE PIDIÓ ESTAS CAPACIDADES — todavía no están puestas:"
+  python3 - "$TMP/capacidades-pedido.json" "$KIT/capacidades/catalogo.json" <<'PY'
+import json, sys
+
+pedidas = json.load(open(sys.argv[1], encoding="utf-8"))
+try:
+    catalogo = json.load(open(sys.argv[2], encoding="utf-8"))["capacidades"]
+except (OSError, ValueError, KeyError):
+    catalogo = []
+etiquetas = {c.get("id"): c.get("label") or "" for c in catalogo}
+for ident in pedidas:
+    # El id manda: es lo que hay que buscar en el catálogo. La etiqueta es para
+    # reconocerla de un vistazo, y si el catálogo cambió, falta y no miente.
+    print(f"  - {ident}" + (f"   ({etiquetas[ident]})" if etiquetas.get(ident) else ""))
+PY
+  echo
+  echo "Instalalas con el catálogo en la mano (capacidades/catalogo.json)."
+  echo "=============================================================="
+fi

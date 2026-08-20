@@ -177,6 +177,40 @@
           "cejas": 1
         }
       }
+    },
+    {
+      "id": "asistente",
+      "label": "Asistente",
+      "does": "Hace los mandados del negocio: averigua lo que le pedís, lee lo que le mandás, escucha los audios y te deja la planilla o el documento armado.",
+      "never": "Promete lo que no puede hacer. Si le falta una herramienta te lo dice y te ofrece la que lo resuelve.",
+      "routing": "THE FALLBACK OF THE ROSTER, and it is meant to be reached often. The generalist: looks things up on the internet and writes a report with its sources, reads photos, screenshots and scanned PDFs, transcribes audio, does the calculations and turns any pile of material into a spreadsheet or a document. Route here EVERY work request that is not clearly publishing, answering a customer, quoting a price or arranging the numbers: research, errands, paperwork, file work, and anything the client asks for that has no craft name. It never takes work off a hired specialist: when a request belongs to one of the other roles it goes there even though this one could do it. When in doubt between this role and a craft role, the craft role wins; when in doubt between this role and nobody, and it is a work request, this role wins.",
+      "needs": [],
+      "skills": [
+        "aprobacion",
+        "entregable",
+        "flujo",
+        "capacidad"
+      ],
+      "flows": [
+        "informe-con-fuentes",
+        "de-fotos-y-audios-a-documento",
+        "repaso-de-internet"
+      ],
+      "state": "ready",
+      "internal_note": "THE ONE FOR THE CLIENT WHOSE NEED FITS NO CRAFT (the East case). It ships NO craft skill: its hands are the four `nivel: base` capacities every agent already has (calculo-y-planillas, vision, busqueda-web, transcripcion), and it grows only with what the client picks from the capacity menu -- the portal asks what they are going to do at hire time and suggests. The agent never installs anything: the `capacidad` card is the only path in. Its skill list is exactly the intersection every role declares, on purpose: roles/skills_split.py stays byte for byte the same when this role goes on sale.",
+      "identity": {
+        "name": "Lola",
+        "look": {
+          "tono": 3,
+          "antena": 0,
+          "accesorio": 3,
+          "pupila": 0,
+          "boca": 3,
+          "piel": 0,
+          "traje": 2,
+          "cejas": 1
+        }
+      }
     }
   ]
 }
