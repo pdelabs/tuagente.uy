@@ -324,6 +324,22 @@ export function esPedidoDelCliente(body: string | null | undefined): boolean {
   return b.includes(MARCA_PEDIDO) || b.trimStart().startsWith(PREFIJO_PEDIDO);
 }
 
+/** Qué conexiones ya pidió el cliente y siguen en trámite, por el label del
+ *  catálogo con el que se armó el título (`Conectar {label}`).
+ *
+ *  EL TÍTULO ES EL ÚNICO VÍNCULO: el ticket no guarda el id de la conexión, así
+ *  que quien quiera contestar "¿esto ya lo pedí?" tiene que leerlo de ahí. Vive
+ *  acá —y no en Conexiones— porque desde que Equipo también deja el pedido son
+ *  dos pantallas leyendo la misma convención, y si se desincronizan una de las
+ *  dos le ofrece al cliente pedir de nuevo lo que ya está esperando. */
+export function conexionesPedidas(tickets: Ticket[] | null | undefined): Set<string> {
+  return new Set(
+    (tickets ?? [])
+      .filter((t) => esPedidoDelCliente(t.body) && t.status !== "done" && t.status !== "archived")
+      .map((t) => (t.title ?? "").replace(/^Conectar\s+/i, "").trim().toLowerCase()),
+  );
+}
+
 /* ── Un freno NO es una aprobación ────────────────────────────────────────────
    TERCERA COSA EN LA MISMA COLA, Y ES LA CONTRARIA DE UNA APROBACIÓN. En
    `blocked` no hay dos clases sino tres. Las dos conocidas: el agente pide

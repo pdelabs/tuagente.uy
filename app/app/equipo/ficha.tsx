@@ -10,7 +10,7 @@
 // earning its place.
 
 import { useEffect, useState } from "react";
-import { yaEsta } from "../lib/altaEquipo";
+import { listo, yaEsta } from "../lib/altaEquipo";
 import Link from "next/link";
 import { Workflow } from "lucide-react";
 import { AgentitoAvatar, LOOK_DEFAULT, type AgentitoLook } from "../lib/agentito";
@@ -21,6 +21,7 @@ import {
 import { rotuloCanal } from "../lib/palabras";
 import { Card, Chip, Spinner } from "../lib/ui";
 import { PARAM } from "../lib/rutas";
+import { LoQueLeFalta, type ConexionesDelEquipo } from "./necesita";
 import QueSabeHacer from "./saberHacer";
 
 function faceOf(role: Role): AgentitoLook {
@@ -29,7 +30,13 @@ function faceOf(role: Role): AgentitoLook {
   return { ...LOOK_DEFAULT, ...((role.pedido && !yaEsta(role) ? role.pedido.pinta : null) ?? role.look ?? {}) } as AgentitoLook;
 }
 
-export default function FichaDelRol({ role }: { role: Role }) {
+export default function FichaDelRol({ role, conexiones }: {
+  role: Role;
+  /** El catálogo de conexiones de la pestaña: lo trae Equipo una sola vez y lo
+   *  comparte con las tarjetas. Acá se usa para que «Necesita WhatsApp» deje de
+   *  ser un dato y sea el pedido. */
+  conexiones: ConexionesDelEquipo;
+}) {
   const [flujos, setFlujos] = useState<Flujo[] | null>(null);
   const [tareas, setTareas] = useState<Ticket[] | null>(null);
 
@@ -83,11 +90,17 @@ export default function FichaDelRol({ role }: { role: Role }) {
               <span className="font-medium text-ink">Nunca:</span> {role.never}
             </p>
           )}
-          {!!role.needs?.length && (
+          {/* Al que todavía no está en el equipo se le cuenta qué va a
+              necesitar, y nada más: pedir una conexión para alguien que no
+              trabaja acá no destraba nada. */}
+          {!!role.needs?.length && !listo(role) && (
             <p className="mt-1.5 text-[13px] text-ink-soft">
               Necesita {role.needs.map(rotuloCanal).join(", ")} para empezar.
             </p>
           )}
+          {/* Al que YA está, lo mismo pero con el botón: es la única pantalla
+              donde el cliente ve que su compañero no puede arrancar. */}
+          <LoQueLeFalta role={role} conexiones={conexiones} />
         </div>
       </Card>
 

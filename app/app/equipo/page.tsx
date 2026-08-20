@@ -37,6 +37,7 @@ import { horaDe, rotuloCanal } from "../lib/palabras";
 import { Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Soporte, Spinner } from "../lib/ui";
 import { PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
 import FichaDelRol from "./ficha";
+import { LoQueLeFalta, useConexionesDelEquipo, type ConexionesDelEquipo } from "./necesita";
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
@@ -61,9 +62,12 @@ function faceOf(role: Role): AgentitoLook {
   return { ...LOOK_DEFAULT, ...((enCamino(role) ? role.pedido?.pinta : null) ?? role.look ?? {}) } as AgentitoLook;
 }
 
-function RoleCard({ role, onOpen, accion }: {
+function RoleCard({ role, onOpen, conexiones, accion }: {
   role: Role;
   onOpen: () => void;
+  /** El catálogo de conexiones de la pantalla: lo que le falta al que YA está
+   *  en el equipo se dice con el botón para destrabarlo. */
+  conexiones: ConexionesDelEquipo;
   /** Lo único que se toca en la tarjeta además de la tarjeta misma: hoy,
    *  "Sumarlo". */
   accion?: ReactNode;
@@ -74,52 +78,63 @@ function RoleCard({ role, onOpen, accion }: {
     // presentational and shared by half the portal -- teaching it to be
     // clickable for one caller is how a UI kit turns into a pile of props --
     // and a button inside a button (the "Sumarlo" one) is not valid HTML.
-    <Card className={`flex items-start gap-3 p-4 transition hover:border-primary/40 ${yaEsta(role) ? "" : "opacity-70"}`}>
-      <button onClick={onOpen} className="flex min-w-0 flex-1 gap-4 text-left">
-        <AgentitoAvatar
-          look={faceOf(role)}
-          className="h-14 w-14 shrink-0"
-          apagado={!yaEsta(role)}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[15px] font-semibold text-ink">{nombre}</p>
-            {/* The job title stays visible even after a rename: "Vera" on its own
-                does not say what Vera does. */}
-            {nombre !== role.label && (
-              <span className="text-[13px] text-ink-soft">{role.label}</span>
+    <Card className={`p-4 transition hover:border-primary/40 ${yaEsta(role) ? "" : "opacity-70"}`}>
+      <div className="flex items-start gap-3">
+        <button onClick={onOpen} className="flex min-w-0 flex-1 gap-4 text-left">
+          <AgentitoAvatar
+            look={faceOf(role)}
+            className="h-14 w-14 shrink-0"
+            apagado={!yaEsta(role)}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[15px] font-semibold text-ink">{nombre}</p>
+              {/* The job title stays visible even after a rename: "Vera" on its own
+                  does not say what Vera does. */}
+              {nombre !== role.label && (
+                <span className="text-[13px] text-ink-soft">{role.label}</span>
+              )}
+              {yaEsta(role)
+                ? <Chip tone="green">En tu equipo</Chip>
+                : enCamino(role)
+                  ? <Chip tone="amber">En camino</Chip>
+                  : <Chip tone="neutral">Podés sumarlo</Chip>}
+            </div>
+            {enCamino(role) && (
+              <p className="mt-1.5 text-[14px] leading-snug text-ink">
+                «{nombre}» está en camino: lo estamos preparando.
+              </p>
             )}
-            {yaEsta(role)
-              ? <Chip tone="green">En tu equipo</Chip>
-              : enCamino(role)
-                ? <Chip tone="amber">En camino</Chip>
-                : <Chip tone="neutral">Podés sumarlo</Chip>}
+            <p className="mt-1.5 text-[14px] leading-snug text-ink-soft">{role.does}</p>
+            {role.never && (
+              // The hard limit is a selling point, not fine print: it is the same
+              // sentence that lives in this role's SOUL, so what the screen promises
+              // and what the agent obeys cannot drift apart.
+              <p className="mt-1.5 text-[13px] text-ink-soft">
+                <span className="font-medium text-ink">Nunca:</span> {role.never}
+              </p>
+            )}
+            {!!role.needs?.length && !listo(role) && (
+              // Connection ids travel raw (`whatsapp`); the portal has one
+              // dictionary that turns them into names the client recognises, and it
+              // is the same one Actividad and Conexiones use.
+              //
+              // Al que TODAVÍA NO ESTÁ en el equipo esto le queda como dato: una
+              // conexión que le falta a alguien que no trabaja acá no es un
+              // problema que el cliente tenga que resolver hoy. Al que ya está lo
+              // atiende `LoQueLeFalta`, abajo y con el botón.
+              <p className="mt-1.5 text-[13px] text-ink-soft">
+                Necesita {role.needs.map(rotuloCanal).join(", ")} para empezar.
+              </p>
+            )}
           </div>
-          {enCamino(role) && (
-            <p className="mt-1.5 text-[14px] leading-snug text-ink">
-              «{nombre}» está en camino: lo estamos preparando.
-            </p>
-          )}
-          <p className="mt-1.5 text-[14px] leading-snug text-ink-soft">{role.does}</p>
-          {role.never && (
-            // The hard limit is a selling point, not fine print: it is the same
-            // sentence that lives in this role's SOUL, so what the screen promises
-            // and what the agent obeys cannot drift apart.
-            <p className="mt-1.5 text-[13px] text-ink-soft">
-              <span className="font-medium text-ink">Nunca:</span> {role.never}
-            </p>
-          )}
-          {!!role.needs?.length && (
-            // Connection ids travel raw (`whatsapp`); the portal has one
-            // dictionary that turns them into names the client recognises, and it
-            // is the same one Actividad and Conexiones use.
-            <p className="mt-1.5 text-[13px] text-ink-soft">
-              Necesita {role.needs.map(rotuloCanal).join(", ")} para empezar.
-            </p>
-          )}
-        </div>
-      </button>
-      {accion && <div className="shrink-0">{accion}</div>}
+        </button>
+        {accion && <div className="shrink-0">{accion}</div>}
+      </div>
+      {/* AFUERA del botón que abre la ficha: adentro sería un botón dentro de
+          otro —HTML inválido— y apretar "Pedirla" abriría la ficha en vez de
+          dejar el pedido. Alineado con el texto, no con el avatar. */}
+      <LoQueLeFalta role={role} conexiones={conexiones} className="sm:pl-[72px]" />
     </Card>
   );
 }
@@ -142,6 +157,10 @@ export default function EquipoPage() {
   // going back from the baptism keeps the text and the checks.
   const [necesita, setNecesita] = useState<LoQueNecesita>(SIN_CONTAR);
   const [contado, setContado] = useState(false);
+  // Las conexiones se traen UNA VEZ POR PANTALLA, al lado del roster: son las
+  // mismas para todos los compañeros, y una llamada por tarjeta sería la misma
+  // lista pedida seis veces.
+  const conexiones = useConexionesDelEquipo(cfg);
 
   useEffect(() => {
     setCfg(loadConfig());
@@ -165,11 +184,14 @@ export default function EquipoPage() {
   }, [cfg]);
 
   useEffect(() => { load(); }, [load]);
+  const refrescarConexiones = conexiones.refrescar;
   useEffect(() => {
     if (!cfg) return;
-    const t = setInterval(() => load(true), REFRESH_MS);
+    // El mismo tick refresca las dos cosas: una conexión que alguien conectó
+    // mientras el cliente mira la pantalla tiene que sacar el renglón sola.
+    const t = setInterval(() => { load(true); refrescarConexiones(); }, REFRESH_MS);
     return () => clearInterval(t);
-  }, [cfg, load]);
+  }, [cfg, load, refrescarConexiones]);
 
   // El bautizo se hace cargo del pedido y del 409; lo que queda acá es dejar el
   // roster al día. Si el 409 contestó que el rol YA está instalado, viene el
@@ -194,7 +216,7 @@ export default function EquipoPage() {
       const role = roles.find((r) => r.id === abierto);
       // A link to a teammate this agent does not have is a stale link, not a
       // crash: the roster is shown instead of an error about an id.
-      if (role) return <FichaDelRol role={role} />;
+      if (role) return <FichaDelRol role={role} conexiones={conexiones} />;
     }
     if (err && roles === null) {
       return <ErrorState message={err.message} onRetry={() => load()} />;
@@ -225,7 +247,7 @@ export default function EquipoPage() {
       <>
         <div className="flex flex-col gap-2">
           {hired.map((role) => (
-            <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)} />
+            <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)} conexiones={conexiones} />
           ))}
         </div>
 
@@ -234,7 +256,7 @@ export default function EquipoPage() {
             <h2 className="mb-2 mt-7 text-[15px] font-semibold text-ink">En camino</h2>
             <div className="flex flex-col gap-2">
               {pedidos.map((role) => (
-                <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)} />
+                <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)} conexiones={conexiones} />
               ))}
             </div>
             {/* La misma verdad que la pantalla de espera del alta, y por el
@@ -254,7 +276,7 @@ export default function EquipoPage() {
             <h2 className="mb-2 mt-7 text-[15px] font-semibold text-ink">Podés sumar</h2>
             <div className="flex flex-col gap-2">
               {offered.map((role) => (
-                <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)}
+                <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)} conexiones={conexiones}
                   accion={
                     <Btn size="sm" kind="secondary"
                       onClick={() => abrirEnRuta({ [PARAM.sumar]: role.id })}>
@@ -279,7 +301,7 @@ export default function EquipoPage() {
             </h2>
             <div className="flex flex-col gap-2">
               {enPreparacion.map((role) => (
-                <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)} />
+                <RoleCard key={role.id} role={role} onOpen={abrirFicha(role)} conexiones={conexiones} />
               ))}
             </div>
             <div className="mt-3">
@@ -365,7 +387,7 @@ export default function EquipoPage() {
                 Actualizado {horaDe(ultima.getTime())}
               </span>
             )}
-            <IconBtn label="Actualizar" disabled={cargando} onClick={() => load(true)}>
+            <IconBtn label="Actualizar" disabled={cargando} onClick={() => { load(true); refrescarConexiones(); }}>
               <RefreshCw className={`h-4 w-4 ${cargando ? "animate-spin" : ""}`} />
             </IconBtn>
           </>

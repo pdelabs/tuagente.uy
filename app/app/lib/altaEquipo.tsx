@@ -103,7 +103,7 @@ function pedidoPendiente(roles: Role[]): Role | null {
 /** El error, en el idioma del cliente. Mismo criterio que en las otras
  *  pestañas: "Failed to fetch" es lo que el browser dice cuando el agente no
  *  contesta, y mostrárselo tal cual es mostrarle nuestra consola. */
-function describirError(e: unknown): string {
+export function describirError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   if (msg.includes("Failed to fetch") || msg.includes("NetworkError"))
     return "No hay conexión con tu agente. Probá de nuevo en un rato.";

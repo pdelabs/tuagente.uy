@@ -27,10 +27,10 @@ import {
   ArrowRight, Check, Clock, ExternalLink, Link2, Plug, RefreshCw, TriangleAlert,
 } from "lucide-react";
 import {
-  activateTelegramPairing, crearPedidoDeConexion, esPedidoDelCliente,
+  activateTelegramPairing, conexionesPedidas, crearPedidoDeConexion,
   exchangeGoogleAuthCode, getConnections, getGoogleAuthUrl, getTickets,
   guardarIdentidad, loadConfig,
-  type Connection, type PortalConfig, type Ticket,
+  type Connection, type PortalConfig,
 } from "../lib/agent";
 import { ConexionLogo } from "../lib/ConexionLogo";
 import Permisos from "../lib/Permisos";
@@ -346,13 +346,10 @@ export default function ConexionesPage() {
     // pantalla de conexiones tiene que seguir funcionando igual.
     try {
       const t = await getTickets(cfg);
-      const abiertos = new Set(
-        (t.tickets ?? [])
-          .filter((x: Ticket) =>
-            esPedidoDelCliente(x.body) && x.status !== "done" && x.status !== "archived")
-          .map((x: Ticket) => (x.title ?? "").replace(/^Conectar\s+/i, "").trim().toLowerCase()),
-      );
-      setPedidosAbiertos(abiertos);
+      // Cómo se reconoce un pedido abierto vive en `agent.ts`: Equipo lee lo
+      // mismo, y dos copias de esta regla es una de las dos ofreciendo pedir
+      // otra vez lo que ya está en camino.
+      setPedidosAbiertos(conexionesPedidas(t.tickets));
     } catch { /* sin tablero seguimos con lo que haya en memoria */ }
   }, [cfg]);
 
