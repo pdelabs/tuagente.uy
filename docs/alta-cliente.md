@@ -185,6 +185,19 @@ compañero cuando lo contrata, y ese es todo el bautizo que hay.
 
 ---
 
+**Si una contratación muere a mitad de camino** (entre `hermes profile install`
+y el `atendido` del libro): el rol queda instalado con el pedido abierto y el
+portal lo sigue mostrando "en camino" — honesto y recuperable. Se cierra a mano
+agregando la línea al libro:
+
+```bash
+echo '{"evento":"atendido","rol":"<rol>","atendido_en":"'$(date +%Y-%m-%dT%H:%M:%S)'"}' >> <agente>/politica/roles/pedidos.jsonl
+```
+
+(y si el bautizo no llegó a persistirse, primero `identidades.json` — o
+directamente reintentar `contratar-rol.sh --del-pedido`, que es idempotente
+sobre un profile ya instalado).
+
 ## Fase 4 — Escribir el SOUL
 
 Lo único verdaderamente artesanal, y donde está el valor. Mínimo:

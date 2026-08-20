@@ -52,7 +52,7 @@ export default function FichaDelRol({ role }: { role: Role }) {
   const suyos = (flujos ?? []).filter((f) => (role.flows ?? []).includes(f.slug));
   const prometidos = (role.flows ?? []).filter((slug) => !suyos.some((f) => f.slug === slug));
 
-  const enCamino = Boolean(role.pedido) && !yaEsta(role);
+  const enCamino = Boolean(role.pedido);
 
   return (
     <div className="flex flex-col gap-5">

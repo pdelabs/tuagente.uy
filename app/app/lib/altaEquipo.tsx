@@ -73,6 +73,14 @@ function pintaDe(look: Record<string, number> | null | undefined): AgentitoLook 
  *  `hired` es el mismo hecho con el nombre viejo del roster. */
 export const yaEsta = (r: Role) => Boolean(r.contratado ?? r.hired);
 
+/** Contratado DEL TODO: el profile instalado Y su pedido cerrado en el libro.
+ *  Entre una cosa y la otra pasan minutos (contratar-rol.sh instala, reinicia
+ *  el gateway y recién al final persiste el bautizo), y en esa ventana el
+ *  roster dice contratado con el nombre DEL CATÁLOGO: el flip temprano le
+ *  presentaba "Lola" a un cliente que la bautizó Rita (medido en el E2E del
+ *  19/8). Mientras el pedido siga abierto, para el portal sigue en camino. */
+export const listo = (r: Role) => yaEsta(r) && !r.pedido;
+
 /** EL PEDIDO QUE EL AGENTE TIENE ANOTADO, que es el único que se muestra: lo
  *  que la pantalla de espera dice —el nombre, la cara— sale de acá y no de lo
  *  que este browser recuerda haber tipeado.
@@ -83,7 +91,11 @@ export const yaEsta = (r: Role) => Boolean(r.contratado ?? r.hired);
  *  sí sabe cuándo se hizo. */
 function pedidoPendiente(roles: Role[]): Role | null {
   const cuando = (r: Role) => r.pedido?.pedido_en || "9999";
-  const pendientes = roles.filter((r) => r.pedido && !yaEsta(r));
+  // An open pedido is pending even if the profile is already installed: the
+  // baptism persists last, and until it does the hire is not finished. With
+  // the old !yaEsta term, a reload mid-hire fell through to the PICKER and
+  // offered a second role to a client who already chose one.
+  const pendientes = roles.filter((r) => r.pedido);
   if (pendientes.length === 0) return null;
   return pendientes.slice().sort((a, b) => cuando(a).localeCompare(cuando(b)))[0];
 }
@@ -155,7 +167,7 @@ export function useAltaDeEquipo(manifest: Manifest | null, cfg: PortalConfig | n
       ? "contratado"
       : roles === null
         ? "cargando"
-        : lista.some(yaEsta)
+        : lista.some(listo)
           ? "contratado"
           : pedidoPendiente(lista)
             ? "en-camino"
@@ -164,7 +176,7 @@ export function useAltaDeEquipo(manifest: Manifest | null, cfg: PortalConfig | n
   // Con quién le habla el portal apenas contrató: el compañero que acaba de
   // entrar, con el nombre y la cara que el cliente le puso. Es quien hace las
   // preguntas que faltan.
-  const primero = lista.find(yaEsta) ?? null;
+  const primero = lista.find(listo) ?? null;
   const equipo = primero
     ? { nombre: primero.name || primero.label, look: pintaDe(primero.look) }
     : null;
@@ -540,7 +552,7 @@ export function BautizoDeRol({ cfg, role, capacidades, onListo, onVolver, volver
       if (h?.status === 409) {
         const r = await getRoles(cfg).catch(() => null);
         const frescos = r?.roles ?? [];
-        if (frescos.some(yaEsta)) { onListo({ tipo: "contratado", roles: frescos }); return; }
+        if (frescos.some(listo)) { onListo({ tipo: "contratado", roles: frescos }); return; }
         // El pedido que ya existía manda: puede ser este rol pedido en otra
         // pestaña, o directamente otro rol. Se devuelve el que el agente tiene
         // anotado, no el que este browser acaba de intentar.
@@ -667,7 +679,7 @@ export default function AltaDeEquipo({ cfg, roles, onContratado }: {
         .then((r) => {
           if (!vivo) return;
           const frescos = r?.roles ?? [];
-          if (frescos.some(yaEsta)) { alContratado.current(frescos); return; }
+          if (frescos.some(listo)) { alContratado.current(frescos); return; }
           // Todavía no está: se sigue mostrando el pedido tal como lo tiene el
           // agente. Si alguien lo canceló o quedó otro más viejo primero, la
           // pantalla se corrige sola.

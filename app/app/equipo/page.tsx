@@ -29,7 +29,7 @@ import { ChevronLeft, RefreshCw, UserPlus, Users } from "lucide-react";
 import { AgentitoAvatar, LOOK_DEFAULT, type AgentitoLook } from "../lib/agentito";
 import { getRoles, loadConfig, type HttpError, type PortalConfig, type Role } from "../lib/agent";
 import {
-  BautizoDeRol, QueNecesita, SIN_CONTAR, seArmaAMedida, yaEsta,
+  BautizoDeRol, QueNecesita, SIN_CONTAR, listo, seArmaAMedida, yaEsta,
   type AltaDelRol, type LoQueNecesita,
 } from "../lib/altaEquipo";
 import { loadAgentName } from "../lib/onboarding";
@@ -44,7 +44,10 @@ const REFRESH_MS = 60_000;
 /** Pedido y todavía no instalado: ni está en el equipo ni se puede volver a
  *  pedir. Sin esta distinción, el cliente que ya esperó ve el rol ofrecido de
  *  nuevo y lo pide dos veces. */
-const enCamino = (role: Role) => Boolean(role.pedido) && !yaEsta(role);
+// An open pedido means "on its way" even mid-install: until the baptism
+// persists, the roster carries the CATALOG name and face, and this tab is
+// exactly where the client checks that their hire arrived.
+const enCamino = (role: Role) => Boolean(role.pedido);
 
 /** El nombre con el que el cliente lo ve. Si lo bautizó al pedirlo, ESE gana
  *  aunque el roster siga sirviendo el del catálogo: el perfil recién pasa a ser
@@ -207,7 +210,7 @@ export default function EquipoPage() {
       );
     }
 
-    const hired = roles.filter(yaEsta);
+    const hired = roles.filter(listo);
     const pedidos = roles.filter(enCamino);
     // SOLO LOS QUE SE PUEDEN PEDIR llevan botón. `state` viene tal cual del
     // catálogo y el adapter no lo completa: un rol sin `state`, o en borrador,
