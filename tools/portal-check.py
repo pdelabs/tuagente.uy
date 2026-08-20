@@ -189,9 +189,15 @@ def main():
              lambda d, h: f"{len(d['artifacts'])} artefactos")
     modcheck("activity", f"{A}/portal/activity",
              lambda d, h: f"{len(d['events'])} eventos")
-    modcheck("usage", f"{A}/portal/usage",
-             lambda d, h: ("sin datos aún" if not d.get("available")
-                           else f"USD {d.get('cost_usd', 0):.2f} en {d.get('period')}"))
+    def _uso_ok(d, h):
+        # Declarado y roto NO es "anda": si el manifiesto promete el modulo, el
+        # numero tiene que venir. Y un total ausente se dice, no se inventa un 0.
+        if not d.get("disponible"):
+            raise AssertionError("declarado pero el proveedor no contesta: " + str(d.get("motivo")))
+        total = d.get("total_usd")
+        return ("USD — (el proveedor no informo el total)" if total is None
+                else f"USD {total:.4f} cobrados a esta clave")
+    modcheck("usage", f"{A}/portal/uso", _uso_ok)
     modcheck("crons", f"{E}/api/jobs?include_disabled=true",
              lambda d, h: f"{len(d['jobs'])} tareas (incluye pausadas)")
 
@@ -242,8 +248,7 @@ def main():
     #
     # No es cosmético: el primer día es cuando el cliente decide qué es esto.
     # Si abre su portal y encuentra una conversación nuestra —la de la
-    # verificación— y gasto en la pestaña de Uso, lo primero que aprende es que
-    # su agente ya venía usado. Verificar ensucia por definición (el circuito
+    # verificación—, lo primero que aprende es que su agente ya venía usado. Verificar ensucia por definición (el circuito
     # que vende el producto es hablarle, pedirle un artefacto y aprobarle algo),
     # así que lo que no puede depender de la memoria de nadie es LIMPIARLO
     # después: esto es lo que se planta si no se hizo, con el comando al lado.
@@ -268,13 +273,14 @@ def main():
                 n = len(jget(f"{A}/portal/files", K)[0]["files"])
                 if n:
                     rastro.append(f"{n} archivo(s) en el workspace")
-            if mods.get("usage"):
-                uso = jget(f"{A}/portal/usage", K)[0]
-                if uso.get("available") and (uso.get("cost_usd") or 0) > 0:
-                    # Cuatro decimales: una verificación cuesta centésimas y con
-                    # dos decimales el rastro se lee "USD 0.00", que es lo mismo
-                    # que decir que no hay gasto.
-                    rastro.append(f"USD {uso['cost_usd']:.4f} de gasto en Uso")
+            # El gasto SALIO de este chequeo, y no por descuido: desde que el
+            # número lo da OpenRouter (`/portal/uso`), es lo que lleva cobrado
+            # LA CLAVE desde que existe, y eso no se puede volver a cero. Un
+            # agente recién verificado quedaría marcado como "usado" para
+            # siempre y el chequeo sería imposible de pasar. Lo que sí queda en
+            # cero —conversaciones, tablero, artefactos, archivos— alcanza para
+            # lo que esto cuida: que el cliente no encuentre trabajo ajeno
+            # adentro de su portal el primer día.
             if manifest.get("bautizado"):
                 rastro.append("ya está bautizado (el cliente no vería el onboarding)")
             if rastro:
@@ -282,7 +288,7 @@ def main():
                     "el agente llega con huella nuestra: " + " · ".join(rastro)
                     + " — dejalo en cero con  tools/resetear-agente.sh --local "
                       "<ruta> --entrega  (o --entrega por ssh) y volvé a correr esto")
-            return "sin conversaciones, sin tablero, sin archivos, sin gasto y sin bautizar"
+            return "sin conversaciones, sin tablero, sin archivos y sin bautizar"
 
         check("Entrega: el agente está en cero", _en_cero)
 

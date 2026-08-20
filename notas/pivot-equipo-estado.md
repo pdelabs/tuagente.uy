@@ -56,9 +56,12 @@ de Luis — la de orbit NO):
 **Portal** (tuagente.uy, rama `worktree-pivot-equipo`):
 - `lib/roles.tsx` (useRoles/RoleChip/RoleSignature), pestaña Equipo + ficha,
   chip en Tablero, chat-sala completo con salas persistentes.
-- Uso está oculto (`MODULOS_OCULTOS`) y "Consumo" borrado de Inicio: el número
-  mentía 9x para abajo (litellm no ve image_gen). El camino bueno ya probado:
-  `GET https://openrouter.ai/api/v1/key` → usage_daily real por cliente.
+- Uso VOLVIÓ (19/8): el número lo da el proveedor. `GET /portal/uso` en el
+  adapter le pregunta a `https://openrouter.ai/api/v1/key` con la clave del
+  agente (server-side, la clave nunca llega al browser), cachea 5 minutos y
+  sirve hoy/mes/total/tope. El manifiesto enciende `usage` sólo si hay
+  `OPENROUTER_API_KEY`. `/portal/usage` y `costos.jsonl` murieron con el número
+  viejo. "Consumo" sigue borrado de Inicio.
 - Agente sin roster ⇒ portal idéntico al de hoy (módulo `roles` en false).
 
 **Lab**: `scratchpad/agente-lab`, 4 roles contratados (Vera/Beto/Nina/Tino),

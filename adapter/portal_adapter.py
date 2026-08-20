@@ -4,6 +4,7 @@
 # subprocess del CLI `hermes kanban ...` (jamas SQL de escritura).
 # Artefactos: solo filesystem (workspace/artifacts), el HTML viaja en el JSON.
 # Bearer auth con API_SERVER_KEY + CORS por PORTAL_CORS_ORIGINS.
+import http.client
 import json
 import os
 import re
@@ -22,7 +23,7 @@ from kanban import KanbanStore
 from rooms import RoomStore
 from workspace import MAX_FILE_BYTES, WorkspaceStore
 
-VERSION = "0.38.0"
+VERSION = "0.39.0"
 # El gateway responde el stream de sesiones SIN cabeceras CORS (solo las manda
 # en el preflight), asi que el browser descarta la respuesta. Lo proxeamos.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -349,7 +350,12 @@ def manifest():
             # true con que exista la carpeta (aunque este vacia): asi el cliente
             # ve la pestaña y su explicacion antes del primer artefacto.
             "artifacts": WORKSPACE_STORE.artifacts.is_dir(),
-            "usage": STATE_DB.exists(),
+            # Uso: SOLO si el agente tiene con que preguntarle al proveedor
+            # cuanto le cobro. Antes esto miraba state.db —o sea, se encendia
+            # siempre— y la pestaña mostraba lo que habiamos visto pasar
+            # nosotros, que le erraba 9x para abajo (ver `uso()`). Sin clave no
+            # hay numero honesto, y sin numero honesto no hay pestaña.
+            "usage": bool(os.environ.get("OPENROUTER_API_KEY", "").strip()),
             "activity": CRON_EXEC_DB.exists() or CRON_JOBS.exists(),
             "crons": CRON_JOBS.exists(),
             # La pestaña de conexiones solo si el kit dejo su catalogo.
@@ -2463,153 +2469,102 @@ def activity():
     return events[:80]
 
 
-# ---------- costo real, el que anota litellm ----------
+# ---------- uso (lo que el proveedor cobro, no lo que nosotros vimos pasar) ----------
+#
+# ESTA PANTALLA ESTUVO APAGADA POR MENTIROSA. Hasta el 16/8/2026 el numero salia
+# de sumar lo que registraba litellm (`costos.jsonl`) mas lo que estimaba Hermes,
+# y le erraba 9x PARA ABAJO: `image_generate` es un plugin del motor que le pega
+# DIRECTO al proveedor —no pasa por el proxy— y ademas descarta el `usage` que
+# le devuelven. Medido contra un agente real: la pestaña decia US$ 0,17 y
+# OpenRouter habia cobrado US$ 1,52 ese mismo dia. Un cliente que planifica con
+# eso se entera del gasto real cuando le llega la factura.
+#
+# Ahora el numero lo da el que cobra. Cada agente tiene SU clave de OpenRouter,
+# asi que `GET /api/v1/key` ya viene aislado por cliente sin que nadie tenga que
+# filtrar nada, e incluye TODO lo que se paga con esa clave: el agente, las
+# imagenes, el ruteo de la sala, lo que venga despues.
+#
+# Y LA CLAVE NO SALE DE ACA. La llamada la hace el adapter, server-side; al
+# browser le llega un resumen en dolares y nada mas.
 
-COSTOS_JSONL = DATA / "costos.jsonl"
+OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key"
+# El portal pollea y este numero se mueve por turno, no por segundo: cinco
+# minutos de cache le sacan a OpenRouter una pregunta que no necesita sin
+# cambiarle la respuesta al cliente.
+USO_CACHE_SEGUNDOS = 300
+_uso_cache = {"en": 0.0, "valor": None}
+_uso_lock = threading.Lock()
 
 
-def costo_registrado(days=30):
-    """Lo que el proveedor COBRO de verdad, por dia y en total.
+def openrouter_key_info(key):
+    """Lo que OpenRouter dice de ESTA clave: su objeto `data`, crudo.
 
-    Hermes no puede precificar cuando `model.provider` es `custom`, y con el
-    proxy de observabilidad en el medio esa es la unica configuracion posible:
-    la ruta de facturacion queda cableada en "no se el precio" y la pestania de
-    Uso muestra $0. Medido: el agente anterior, sin proxy, registraba costo por
-    sesion; desde que se agrego, ninguno.
+    ES LA UNICA COSTURA DE RED de `uso()`, y por eso vive aparte: los tests la
+    reemplazan y todo lo que hay arriba queda probado sin salir a internet.
 
-    litellm si tiene el numero —OpenRouter lo devuelve en usage.cost— y lo anota
-    en costos.jsonl. Esto lo lee. Es el cobro real, no una estimacion contra una
-    tabla de precios que habria que mantener al dia.
+    Forma de la respuesta VERIFICADA contra la API real (19/8/2026, clave del
+    lab). Vinieron los seis campos que servimos:
+        usage, usage_daily, usage_weekly, usage_monthly   (USD, floats)
+        limit, limit_remaining                            (limit null = sin tope)
+    y ademas label, limit_reset, byok_usage*, is_free_tier, expires_at,
+    is_management_key, is_provisioning_key, creator_user_id y un `rate_limit`
+    que la propia respuesta marca como deprecado.
 
-    Si el archivo no esta, devuelve None y el portal muestra lo de Hermes: no se
-    inventa un cero, que es justamente el error que estamos arreglando.
+    Lo que NO esta verificado es que vengan SIEMPRE: una clave de otro plan
+    podria no traer alguno. Por eso cada campo que falte se sirve null y no
+    cero — cero es una mentira distinta de "no se".
     """
-    if not COSTOS_JSONL.exists():
-        return None
-    desde = time.time() - days * 86400
-    total, por_dia, por_modelo, lineas = 0.0, {}, {}, 0
-    primero = None
-    try:
-        with open(COSTOS_JSONL, "r", encoding="utf-8", errors="replace") as f:
-            for linea in f:
-                try:
-                    fila = json.loads(linea)
-                    ts = float(fila["ts"])
-                    costo = float(fila["costo_usd"])
-                except (ValueError, KeyError, TypeError):
-                    continue          # una linea rota no puede tapar el total
-                if ts < desde:
-                    continue
-                total += costo
-                dia = time.strftime("%Y-%m-%d", time.localtime(ts))
-                por_dia[dia] = por_dia.get(dia, 0.0) + costo
-                modelo = fila.get("modelo") or ""
-                if modelo:
-                    por_modelo[modelo] = por_modelo.get(modelo, 0.0) + costo
-                primero = ts if primero is None else min(primero, ts)
-                lineas += 1
-    except OSError:
-        return None
-    if not lineas:
-        return None
-    return {"total": round(total, 6), "por_dia": por_dia, "por_modelo": por_modelo,
-            "llamadas": lineas, "desde": primero}
+    request = urllib.request.Request(
+        OPENROUTER_KEY_URL, headers={"Authorization": f"Bearer {key}"})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        payload = json.loads(response.read().decode("utf-8", "replace"))
+    return payload.get("data") or {}
 
 
-# ---------- usage ----------
+def _usd(valor):
+    """El campo como float, o None si el proveedor no lo mando."""
+    return float(valor) if isinstance(valor, (int, float)) else None
 
-def usage(days=30):
-    if not STATE_DB.exists():
-        return {"available": False}
+
+def uso():
+    """Cuanto gasto este agente, segun quien le cobra.
+
+    `disponible: False` cuando no hay clave o el proveedor no contesta, y con
+    200: el portal esconde la pestaña entera. Que no sea un error es a
+    proposito — "hoy no lo se" no es una falla del agente, y una pantalla de
+    plata rota se lee mucho peor que una pantalla que no esta.
+    """
+    from datetime import datetime
+
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not key:
+        return {"disponible": False, "motivo": "este agente no tiene clave del proveedor"}
+    ahora = time.time()
+    with _uso_lock:
+        if _uso_cache["valor"] and ahora - _uso_cache["en"] < USO_CACHE_SEGUNDOS:
+            return _uso_cache["valor"]
     try:
-        since = time.time() - days * 86400
-        conn = ro(STATE_DB)
-        row = conn.execute(
-            "SELECT COUNT(*) AS sessions, "
-            "COALESCE(SUM(input_tokens), 0) AS input_tokens, "
-            "COALESCE(SUM(output_tokens), 0) AS output_tokens, "
-            "COALESCE(SUM(estimated_cost_usd), 0) AS cost_usd "
-            "FROM sessions WHERE started_at >= ?",
-            (since,),
-        ).fetchone()
-        conn.close()
-    except sqlite3.Error:
-        return {"available": False}
-    if not row or row["sessions"] == 0:
-        return {"available": False}
-    daily, by_channel, by_model = [], [], []
-    try:
-        conn = ro(STATE_DB)
-        daily = [
-            dict(r) for r in conn.execute(
-                "SELECT date(started_at, 'unixepoch', 'localtime') AS date, "
-                "COALESCE(SUM(input_tokens), 0) AS input_tokens, "
-                "COALESCE(SUM(output_tokens), 0) AS output_tokens, "
-                "COALESCE(SUM(estimated_cost_usd), 0) AS cost_usd "
-                "FROM sessions WHERE started_at >= ? GROUP BY date ORDER BY date",
-                (time.time() - 14 * 86400,),
-            ).fetchall()
-        ]
-        # De donde vino el trabajo y con que modelo se pago: las dos preguntas
-        # que se hace cualquiera que mira una factura.
-        by_channel = [
-            dict(r) for r in conn.execute(
-                "SELECT source AS name, COUNT(*) AS sessions, "
-                "COALESCE(SUM(estimated_cost_usd), 0) AS cost_usd "
-                "FROM sessions WHERE started_at >= ? "
-                "GROUP BY source ORDER BY cost_usd DESC",
-                (since,),
-            ).fetchall()
-        ]
-        by_model = [
-            dict(r) for r in conn.execute(
-                "SELECT COALESCE(model, 'sin dato') AS name, COUNT(*) AS sessions, "
-                "COALESCE(SUM(estimated_cost_usd), 0) AS cost_usd "
-                "FROM sessions WHERE started_at >= ? "
-                "GROUP BY model ORDER BY cost_usd DESC LIMIT 8",
-                (since,),
-            ).fetchall()
-        ]
-        conn.close()
-    except sqlite3.Error:
-        pass
-    real = costo_registrado(days)
-    if real:
-        # Antes del primer registro no sabemos cuanto se gasto, y CERO ES UNA
-        # MENTIRA DISTINTA de "no se". El portal dibuja "—" con null y "US$ 0,00"
-        # con 0; el segundo le diria al cliente que no gasto nada.
-        desde_dia = time.strftime("%Y-%m-%d", time.localtime(real["desde"])) if real.get("desde") else None
-        for d in daily:
-            fecha = d.get("date")
-            if fecha in real["por_dia"]:
-                d["cost_usd"] = round(real["por_dia"][fecha], 6)
-            elif desde_dia and fecha < desde_dia:
-                d["cost_usd"] = None
-        for m in by_model:
-            nombre = m.get("name") or ""
-            m["cost_usd"] = (round(real["por_modelo"][nombre], 6)
-                             if nombre in real["por_modelo"] else None)
-        # El canal (chat, cron, terminal) no viaja hasta litellm: solo lo sabe
-        # Hermes, y Hermes no sabe el costo. Nadie tiene las dos mitades, asi
-        # que se muestra el uso por canal sin precio en vez de un cero falso.
-        for c in by_channel:
-            c["cost_usd"] = None
-    return {
-        "available": True,
-        "sessions": row["sessions"],
-        "input_tokens": row["input_tokens"],
-        "output_tokens": row["output_tokens"],
-        "total_tokens": row["input_tokens"] + row["output_tokens"],
-        # El cobro REAL que anoto litellm cuando lo hay; si no, el estimado de
-        # Hermes. `cost_source` dice cual de los dos esta mirando el cliente.
-        "cost_usd": (real["total"] if real else row["cost_usd"]),
-        "cost_source": ("proveedor" if real else "estimado"),
-        "cost_calls": (real["llamadas"] if real else None),
-        "period": f"{days}d",
-        "daily": daily,
-        "by_channel": by_channel,
-        "by_model": by_model,
+        data = openrouter_key_info(key)
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as exc:
+        # HTTPException covers a TRUNCATED provider response (IncompleteRead,
+        # BadStatusLine): neither OSError nor ValueError, and without it the
+        # one failure mode this endpoint promises to absorb killed the request.
+        # El fallo NO se cachea: un pico del proveedor no puede apagarle la
+        # pantalla al cliente por los proximos cinco minutos.
+        return {"disponible": False, "motivo": f"no pude preguntarle al proveedor: {exc}"}
+    valor = {
+        "disponible": True,
+        "hoy_usd": _usd(data.get("usage_daily")),
+        "mes_usd": _usd(data.get("usage_monthly")),
+        # Lo que lleva gastado la clave desde que existe.
+        "total_usd": _usd(data.get("usage")),
+        # None es "sin tope", que no es lo mismo que un tope en cero.
+        "limite_usd": _usd(data.get("limit")),
+        "actualizado": datetime.now().astimezone().isoformat(),
     }
+    with _uso_lock:
+        _uso_cache["en"], _uso_cache["valor"] = ahora, valor
+    return valor
 
 
 # ---------- http ----------
@@ -2762,8 +2717,10 @@ class Handler(BaseHTTPRequestHandler):
                 if detail is None:
                     return self._send(404, {"error": "artifact not found"})
                 return self._send(200, detail)
-            if path == "/portal/usage":
-                return self._send(200, usage())
+            # `/portal/usage` MURIO con el numero que servia (ver `uso()`): la
+            # plata la contesta el proveedor y la ruta se llama como la pestaña.
+            if path == "/portal/uso":
+                return self._send(200, uso())
         except (sqlite3.Error, OSError) as exc:
             return self._send(500, {"error": str(exc)})
         return self._send(404, {"error": "not found"})
