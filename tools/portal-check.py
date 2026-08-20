@@ -187,6 +187,24 @@ def main():
              lambda d, h: f"{len(d['approvals'])} pendientes")
     modcheck("artifacts", f"{A}/portal/artifacts",
              lambda d, h: f"{len(d['artifacts'])} artefactos")
+    def _roles_ok(d, h):
+        # The team is the product now: a declared roles module must serve the
+        # offer, and every hired role must be reachable through the multiplex
+        # with its own key -- which only the adapter can verify, so here we at
+        # least assert the roster's shape and that hired roles carry identity.
+        if not d.get("available"):
+            raise AssertionError("declarado pero available=false")
+        roles = d.get("roles") or []
+        if not roles:
+            raise AssertionError("el catálogo de la oferta está vacío")
+        contratados = [r for r in roles if r.get("contratado") or r.get("hired")]
+        sin_cara = [r["id"] for r in roles if not (r.get("name") and r.get("look"))]
+        if sin_cara:
+            raise AssertionError(f"roles sin identidad (name/look): {sin_cara}")
+        pendientes = [r["id"] for r in roles if r.get("pedido") and r not in contratados]
+        extra = f", {len(pendientes)} en camino" if pendientes else ""
+        return f"{len(roles)} en oferta, {len(contratados)} contratados{extra}"
+    modcheck("roles", f"{A}/portal/roles", _roles_ok)
     modcheck("activity", f"{A}/portal/activity",
              lambda d, h: f"{len(d['events'])} eventos")
     def _uso_ok(d, h):
