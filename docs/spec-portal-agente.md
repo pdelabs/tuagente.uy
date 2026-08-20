@@ -63,7 +63,7 @@ sobrevive updates de imagen; versionado en el git del agente).
 | GET | `/portal/tickets?tenant=&q=` | lectura del kanban (filtros = tenant + búsqueda en título, la convención de tags existente) |
 | GET | `/portal/activity` | últimas N: corridas de crons (jobs + last_status + entregas), fuente: API de jobs + log |
 | GET | `/portal/files` / `/portal/files/{path}` | workspace read-only (reportes, dossiers) — solo texto, path-confinado a workspace/ |
-| GET | `/portal/usage` | resumen de insights: sesiones, tokens del período |
+| GET | `/portal/uso` | gasto real del proveedor en USD: hoy, mes y total (OpenRouter, no estimaciones) |
 
 ### Notas de implementación (lecciones aplicadas)
 

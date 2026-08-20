@@ -142,11 +142,12 @@ Marcas de viabilidad:
 
 ## Uso
 
-- [adapter] **Costo en USD** — `state.db` ya guarda `estimated_cost_usd`, no lo
-  estamos mostrando.
-- [adapter] Desglose por canal (Telegram, portal, crons) y por modelo.
-- [ui] Rango configurable (7 / 30 / 90 días) y comparación con el período anterior.
-- [adapter] Presupuesto mensual con alerta.
+- [hecho 19/8] **El número ahora es real**: `GET /portal/uso` le pregunta a
+  OpenRouter lo que de verdad se cobró (hoy / mes / total). El camino viejo
+  (`estimated_cost_usd` de `state.db`, litellm) mentía 9x y se borró entero.
+- [adapter] Desglose por rol: OpenRouter cobra por clave y hoy la clave es una
+  por agente; separar por rol pide una clave por rol o atribución propia.
+- [adapter] Presupuesto mensual con alerta (el `limite_usd` ya viene).
 
 ---
 

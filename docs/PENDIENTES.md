@@ -789,7 +789,14 @@ trabajo del día sobre la puerta.
   hay perilla de extracción automática (`config_defaults.py:1531-1554`). Se
   arregló el lado de la lectura, que era hueco nuestro.
 
-## Uso escondido, y la plata que no vemos (16/8, decidido por Luis)
+## Uso escondido, y la plata que no vemos (16/8) — RESUELTO el 19/8
+
+**Ya está hecho:** el adapter 0.39 expone `GET /portal/uso`, que le pregunta a
+OpenRouter por la clave del agente y sirve hoy / este mes / desde siempre; la
+pestaña volvió (`MODULOS_OCULTOS` quedó vacío) y `/portal/usage` se borró con
+el número que mentía. Queda abierto sólo el punto 1 de abajo: **cómo le
+cobramos al cliente** — la pantalla ahora dice la verdad, pero sigue sin ser
+una factura. Lo de abajo queda como registro de por qué.
 
 **La pestaña Uso y el bloque "Consumo" de Inicio están fuera del portal.** El
 bloque de Inicio se borró; la pestaña está detrás de un interruptor

@@ -735,7 +735,28 @@ export const getFileBytes = async (c: PortalConfig, path: string) => {
   if (!res.ok) throw httpError(res.status, path);
   return res.arrayBuffer();
 };
-export const getUsage = (c: PortalConfig) => get<any>(c.adapter, "/portal/usage", c);
+/** Lo que gastó el agente, según quien le cobra (adapter 0.39+).
+ *
+ *  Reemplaza a `getUsage` (`/portal/usage`), que sumaba lo que nosotros veíamos
+ *  pasar por el proxy y le erraba 9x PARA ABAJO — la generación de imágenes le
+ *  pega directo al proveedor y nunca entraba en la cuenta. Ahora el número lo da
+ *  OpenRouter para la clave de ESTE agente. La clave no llega nunca al browser:
+ *  la llamada la hace el adapter.
+ *
+ *  `disponible: false` (sin clave, o el proveedor no contesta) viene con 200:
+ *  la pantalla lo dice y no se dibuja ningún número. */
+export type Uso = {
+  disponible?: boolean;
+  motivo?: string;
+  /** Todos en USD. `null` es "el proveedor no lo informa", que NO es cero. */
+  hoy_usd?: number | null;
+  mes_usd?: number | null;
+  total_usd?: number | null;
+  /** Tope de la clave; null = sin tope. */
+  limite_usd?: number | null;
+  actualizado?: string;
+};
+export const getUso = (c: PortalConfig) => get<Uso>(c.adapter, "/portal/uso", c);
 
 /** Sube un archivo al buzón del agente (workspace/entrada) y devuelve su ruta. */
 export async function uploadFile(c: PortalConfig, file: File) {

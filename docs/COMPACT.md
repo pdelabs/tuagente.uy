@@ -128,7 +128,8 @@ Los esquemas pesan casi el doble que el system prompt entero: **la palanca es
 **:8643** — `manifest` · `tickets` (+`/{id}`, POST crear, comentar, estado) ·
 `approvals` (+approve con `{correction}` opcional; reject con `{reason}` y
 `{definitivo}` opcional, que además CIERRA el ticket) · `artifacts`
-(+`/{id}`, DELETE) · `activity` · `usage` · `files` (+`/{path}`, siempre
+(+`/{id}`, DELETE) · `activity` · `uso` (lo que OpenRouter le cobró a la
+clave del agente; reemplazó a `usage`, que mentía 9x para abajo) · `files` (+`/{path}`, siempre
 text/plain) · `crons/{id}` · `capabilities` · `boards` · `POST upload` ·
 `POST sessions/{id}/chat/stream` (proxy).
 

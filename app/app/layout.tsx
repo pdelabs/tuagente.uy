@@ -41,14 +41,13 @@ import {
 // interruptor, no un borrado: la pantalla, su ruta y su bienvenida siguen
 // enteras, y sacar la clave de acá las devuelve al nav.
 //
-// `usage` está oculto desde el 16/8/2026 porque el número que muestra es FALSO
-// y falso para abajo, que es la peor dirección: sólo ve lo que pasa por
-// litellm, y la generación de imágenes le pega directo al proveedor. Medido ese
-// día contra la cuenta real de OpenRouter: la pestaña decía US$ 0,17 y el
-// proveedor había cobrado US$ 1,52 — 9x. Un cliente que planifica con eso se
-// entera del gasto real cuando le llega la factura. Vuelve cuando el total
-// salga de lo que el proveedor cobró y no de lo que nosotros vimos pasar.
-export const MODULOS_OCULTOS = new Set<string>(["usage"]);
+// Hoy no hay ninguno. `usage` estuvo acá del 16 al 19/8/2026, porque el número
+// que mostraba era FALSO y falso para abajo, que es la peor dirección: sólo veía
+// lo que pasaba por litellm, y la generación de imágenes le pega directo al
+// proveedor (la pestaña decía US$ 0,17 el día que el proveedor cobró US$ 1,52 —
+// 9x). Volvió cuando el número dejó de ser nuestro: ahora sale de la cuenta de
+// OpenRouter del agente (`/portal/uso`), que es lo que le cobraron.
+export const MODULOS_OCULTOS = new Set<string>([]);
 
 export const MODULES: { key: string; path: string; label: string; icon: LucideIcon; sec?: boolean }[] = [
   { key: "home", path: "/app/inicio", label: "Inicio", icon: Home },
