@@ -169,6 +169,17 @@ def build(role: str, out_root: Path) -> Path:
     identity = (role_dir / "identity.md").read_text(encoding="utf-8")
     check_identity(identity, role)
 
+    # Five roles that read the same are one role sold five times. The clone
+    # check runs at build time for the same reason check_identity does: the
+    # moment a copy-pasted identity would ship is the cheapest moment to stop it.
+    clones = subprocess.run(
+        [sys.executable, str(KIT / "tools" / "chequear-clones.py")],
+        capture_output=True, text=True,
+    )
+    if clones.returncode != 0:
+        raise SystemExit(
+            f"{role}: tools/chequear-clones.py failed:\n{clones.stdout}{clones.stderr}")
+
     dest = out_root / role
     if dest.exists():
         shutil.rmtree(dest)

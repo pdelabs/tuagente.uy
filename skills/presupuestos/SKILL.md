@@ -3,7 +3,7 @@ titulo: Presupuestos
 para_cliente: "Arma el presupuesto con tu formato y tus precios, listo para que lo mandes."
 name: presupuestos
 description: "Arma un presupuesto con el formato y los precios del cliente: cruza lo que le pidieron contra su lista, hace las cuentas con IVA, moneda y validez, y lo deja como entregable listo para mandar. Usala cuando pregunten cuanto sale algo, pidan un precio, una cotizacion o un presupuesto, o cuando haya que actualizar la lista de precios. La primera vez no hay formato ni lista: se los pedis al cliente, no los inventas."
-version: 1.0.0
+version: 1.1.0
 license: MIT
 ---
 
@@ -102,6 +102,30 @@ python3 /opt/kit/skills/presupuestos/scripts/save_setup.py \
 Así el próximo presupuesto ya lo tiene y no hay que volver a preguntar. Es la
 mitad del valor de esto.
 
+## Antes de cotizar, seis cosas que conviene saber
+
+Esto **no frena el presupuesto**. El presupuesto sale igual y sale rápido: el que
+llega primero gana seguido contra uno más barato que llega el martes. Es para
+cuando el pedido viene en tres palabras —"pasame precio de una reforma"— y
+cotizar cualquier cosa es tirar dos horas a la basura.
+
+1. **Qué necesita resuelto**, no qué producto quiere. "Se me llueve el galpón" y
+   "quiero 30 chapas" no se cotizan igual, y el segundo puede estar equivocado.
+2. **Por qué pasa.** Lo que se rompe dos veces por año no se arregla con lo
+   mismo que se rompió una vez.
+3. **Qué le está costando hoy.** Días parado, un cliente que perdió, horas de
+   alguien. Es contra eso que va a comparar el número, no contra cero.
+4. **Quién más decide.** Si el que pregunta no es el que firma, el presupuesto
+   tiene que poder leerlo alguien que nunca habló con vos.
+5. **Por qué ahora.** Una fecha, una inspección, un local que abre. El plazo a
+   veces vale más que el precio, y eso cambia lo que se cotiza.
+6. **Qué pasa si no hace nada.** Si la respuesta es "nada", el presupuesto se va
+   a quedar sin contestar. Mejor saberlo antes.
+
+Preguntá **solo las que falten, todas juntas en un mensaje y una sola vez**. Si
+no te contestan, cotizás con lo que hay y lo decís: *"lo armé para 30 chapas
+como me pediste; si el problema es la filtración avisame y lo rehago"*.
+
 ## Cada presupuesto, el mismo camino
 
 1. **Leé qué pidieron** y anotá lo que falta definir: cantidad, plazo, lugar de
@@ -163,6 +187,20 @@ Tres formas de inventar un precio, y las tres cuestan lo mismo:
 Lo que falta se dice en el presupuesto, no se rellena: *"el flete queda a
 confirmar"* es una línea normal en un presupuesto y no le cuesta la venta a
 nadie. Un número inventado, sí.
+
+## Cuando dicen que está caro
+
+- **"Está caro" es una pregunta, no un precio nuevo.** Antes de tocar nada:
+  ¿está fuera de lo que tenía pensado gastar, o no se ve por qué vale eso? Son
+  dos problemas distintos y solo uno se arregla con plata.
+- **Lo que se puede dar y no es plata**: más plazo para pagar, el flete
+  incluido, entregar en dos veces, un precio mejor si lleva más. Cuando le
+  lleves esto a tu cliente, llevale las dos cosas —el descuento que piden y las
+  alternativas— y no solo "quiere 10% menos". Decide él igual, pero decide entre
+  opciones.
+- **Si te dicen que tienen otro más barato, no lo desarmes**: preguntá qué
+  incluye. La mitad de las veces no incluye lo mismo, y esa cuenta la tiene que
+  hacer el que compara, no escucharla de vos.
 
 ## IVA, moneda y validez
 

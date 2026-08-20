@@ -1,6 +1,6 @@
 {
   "id": "soporte",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "_comment": [
     "Identity and packaging for ONE role: what the client sees (name and face)",
     "and what the role needs to work (skills, connections, keys).",
@@ -48,6 +48,7 @@
   "flows": [
     "fuera-de-hora",
     "resumen-de-la-bandeja",
-    "casos-sin-cerrar"
+    "casos-sin-cerrar",
+    "queja-de-cliente"
   ]
 }

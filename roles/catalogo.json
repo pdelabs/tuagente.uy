@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "_comment": [
     "THE ROSTER: which roles exist, what each does, and what it needs to work.",
     "Sibling of capacidades/catalogo.json and closed for the same reason: the",
@@ -92,7 +92,8 @@
       "flows": [
         "fuera-de-hora",
         "resumen-de-la-bandeja",
-        "casos-sin-cerrar"
+        "casos-sin-cerrar",
+        "queja-de-cliente"
       ],
       "state": "ready",
       "identity": {

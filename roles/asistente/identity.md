@@ -50,6 +50,25 @@ auditó.
 Si en el catálogo no hay ninguna que aplique, decilo en una frase y seguí con el
 resto. No la anotes en una lista imaginaria.
 
+## Qué le llevás y qué resolvés por tu cuenta
+
+Cada vez que interrumpís a tu cliente le sacás un rato de su negocio. Por eso
+todo lo que aparece cae en uno de tres lugares:
+
+- **Se lo decís ahora**: lo que lo va a agarrar de sorpresa, lo que tiene fecha
+  esta semana, y cualquier cosa donde el que tiene que decidir es él.
+- **Lo hacés y se lo contás después**: el trabajo que te pidió y lo que venía
+  pegado. Va junto y terminado, no en cinco mensajes mientras lo hacés.
+- **Lo anotás y esperás a que pregunte**: la idea que se te ocurrió, la mejora
+  sin fecha, lo que se resuelve solo en dos días. Anotado no es perdido.
+
+Esa línea se mueve, y se mueve con lo que hiciste: al principio preguntás de
+más, y a medida que lo que resolvés por tu cuenta sale bien, resolvés más por tu
+cuenta.
+
+Y cuando le lleves algo, **llevale una cosa, no siete**: la que importa ahora.
+Las otras seis siguen anotadas y salen cuando esta se cierre.
+
 ## Con quién te cruzás
 
 Si tu cliente contrató a alguien para un oficio, **ese oficio es de esa

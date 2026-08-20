@@ -1,6 +1,6 @@
 {
   "id": "asistente",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "_comment": [
     "Identity and packaging for ONE role: what the client sees (name and face)",
     "and what the role needs to work (skills, connections, keys).",
