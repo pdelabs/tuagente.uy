@@ -108,9 +108,32 @@ lo limpia. En un remoto Linux no pasa. Por esto mismo `deja()` en
   `capacidades` y contratar-rol.sh las imprime al contratar (no auto-instala).
   La pregunta aparece en el alta Y al sumarlo desde Equipo. 47 tests.
 
+## Hecho el 19/8, tercera tanda (olas 7-8)
+
+- **E2E real de punta a punta** con un agente descartable creado de cero
+  (`scratchpad/agente-e2e`, puertos 8652/8653, sigue corriendo): alta → Lola →
+  "¿qué necesitás?" (matching real: marcó presupuestos+facturas+licitaciones
+  para una ferretería) → bautizo «Rita» → pedido con capacidades → contratar
+  --del-pedido → /p/asistente 200 con su clave y 401 con la del portal → la
+  espera se abrió sola en el onboarding recortado. Cazó DOS bugs de verdad:
+  `multiplex_profiles` faltante en el config base (4636790) y el flip temprano
+  que saludaba "Lola" donde el cliente escribió "Rita" (beaa7c4).
+- **Uso dice la verdad** (3761691 + 7e6c864): `GET /portal/uso` contra
+  OpenRouter, el camino mentiroso borrado, la pestaña des-ocultada.
+- **COSTO POR ROL MEDIDO** (el dato que bloqueaba el precio): US$0,026 por
+  turno promedio real — conversacional US$0,006, con herramientas US$0,062.
+  30 turnos/día ≈ US$23/mes (se come los ~US$25 del precio); 10 turnos/día
+  ≈ US$7,7/mes (31%). SIN imágenes todavía: eso era el 9x del gap. El mix
+  manda, no la cantidad de turnos.
+
 ## Pendiente (en orden)
 
-1. **Medir costo por rol** (bloquea publicar precio).
+1. **Costo con imágenes** — la medición de arriba no ejercitó image_gen, que
+   es justo lo que rompía la estimación vieja. Falta la pasada con el paquete
+   social prendido, y de ahí el precio.
+1b. El warning "Skipping secondary profile ... port-binding api_server" en cada
+   boot con multiplex es benigno (medido: /p/<rol>/ contesta igual) pero ruidoso;
+   ver si el dist puede no declarar api_server en el profile.
 4. Mr.Wobble sigue pre-pivot; migrarlo cuando Luis quiera. Merge a main es
    decisión de Luis.
 5. Sesiones huérfanas del motor (una por turno de sala) se acumulan en cada
