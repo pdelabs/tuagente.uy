@@ -162,6 +162,23 @@ lo limpia. En un remoto Linux no pasa. Por esto mismo `deja()` en
   "Pedida" en el mismo tick). Self-service solo cuando la puerta de Conexiones
   lo permite — `flujo` solo mentía (WhatsApp tiene QR y advertencia).
 
+## Hecho el 20/8: minado de agency-agents (ola 10)
+
+Análisis de github.com/msitarzewski/agency-agents (MIT, 125 agentes-persona):
+NO son competencia de nuestros roles (son personas para prestar contexto, sin
+puerta de aprobación ni entrega ni permisos — su plugin de Hermes es roster
+abierto + delegación, lo contrario de nuestras decisiones). Lo que SÍ había
+era método, y se trasplantó traducido (6cd7a66): condiciones de salida + "¿te
+cierro la carpeta?" + las seis preguntas antes de cotizar + alternativas al
+descuento (ventas/presupuestos), protocolo de quejas como flujo nuevo
+`queja-de-cliente` + los cuatro mensajes que se escalan (soporte), cierre de
+mes en cuatro días con "una diferencia se investiga o se dice" (contabilidad),
+y el triage de tres niveles + "una cosa, no siete" + "la grabación es
+contenido, no jefe" (asistente). Los cinco roles vivos ya lo corren
+(--actualizar, bautizos intactos). Y quedó `tools/chequear-clones.py`
+(99519d5), cableado a build_role: umbrales 15/30 medidos contra el corpus
+(peor par honesto 3,8%, clon real 97%).
+
 ## Pendiente (en orden)
 
 1. **Costo con imágenes: MEDIDO (19/8, lab real)** — US$0,10 por turno con
