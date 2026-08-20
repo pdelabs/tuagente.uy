@@ -8,6 +8,11 @@
 #
 #   --del-pedido            toma el nombre y la pinta del pedido que dejó el
 #                           cliente en el portal (politica/roles/pedidos.jsonl)
+#   --actualizar            re-instala un rol YA contratado con el dist de hoy:
+#                           rebuild + re-inyección del bautizo que ya tiene en
+#                           identidades.json, SIN clave nueva, SIN tocar el
+#                           libro ni el roster. Es como llega una actualización
+#                           del kit a un rol vivo sin pisarle el nombre.
 #   --nombre "Juana"        se lo pone a mano (pisa el pedido, si había)
 #   --pinta-file cara.json  la cara, para un alta a mano; va con --nombre
 #
@@ -39,12 +44,14 @@ KIT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Las banderas salen primero y lo posicional queda igual que siempre: bash 3.2
 # (el /bin/bash de macOS) no tiene getopt largo y no lo vamos a extrañar.
 DEL_PEDIDO=0
+ACTUALIZAR=0
 NOMBRE=""
 PINTA_FILE=""
 ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --del-pedido) DEL_PEDIDO=1; shift ;;
+    --actualizar) ACTUALIZAR=1; shift ;;
     --nombre)     NOMBRE="${2:-}"; shift 2 ;;
     --pinta-file) PINTA_FILE="${2:-}"; shift 2 ;;
     *)            ARGS+=("$1"); shift ;;
@@ -139,7 +146,20 @@ print(pendiente.get("nombre") or "")
 PY
 )"
 
-if [[ "$DEL_PEDIDO" == 1 ]]; then
+if [[ "$ACTUALIZAR" == 1 ]]; then
+  # An update keeps the baptism the role already has: the SOUL is
+  # distribution_owned, so re-installing without re-injecting the name would
+  # silently rename the client's teammate back to the catalog default.
+  trae identidades.json > "$TMP/identidades.actual.json"
+  NOMBRE="$(python3 -c '
+import json, sys
+try:
+    datos = json.load(open(sys.argv[2], encoding="utf-8"))
+except (OSError, ValueError):
+    datos = {}
+print((datos.get(sys.argv[1]) or {}).get("nombre") or "")' "$ROL" "$TMP/identidades.actual.json")"
+  [[ -n "$NOMBRE" ]] && echo "→ actualización: conserva el bautizo $NOMBRE" || echo "→ actualización: el rol no tiene bautizo, va con el nombre del catálogo"
+elif [[ "$DEL_PEDIDO" == 1 ]]; then
   [[ -n "$PEDIDO_NOMBRE" ]] || { echo "no hay ningún pedido pendiente de '$ROL' en $POLITICA/pedidos.jsonl" >&2; exit 1; }
   NOMBRE="$PEDIDO_NOMBRE"
   if [[ -f "$TMP/pinta-pedido.json" ]]; then PINTA_FILE="$TMP/pinta-pedido.json"; fi
@@ -217,10 +237,13 @@ fi
 # La clave del rol se genera ACA y no se reutiliza ninguna: es lo que separa a un
 # rol de otro para el motor, y compartirla seria darle a los cuatro la misma
 # puerta.
-CLAVE="$(openssl rand -hex 32)"
+if [[ "$ACTUALIZAR" == 1 ]]; then CLAVE=""; else CLAVE="$(openssl rand -hex 32)"; fi
 
 echo "→ copiando la distribución"
 if [[ "$MODO" == local ]]; then
+  # rm first: `docker cp dir existing-dir` NESTS instead of replacing, and an
+  # update would silently re-fetch the stale copy from the original hire.
+  corre "rm -rf /tmp/dist-$ROL"
   docker cp "$DIST" "$CONT:/tmp/dist-$ROL" >/dev/null
 else
   ssh "$HOST" "rm -rf /tmp/dist-$ROL"
@@ -228,11 +251,24 @@ else
   ssh "$HOST" "docker cp /tmp/dist-$ROL $CONT:/tmp/dist-$ROL"
 fi
 
-echo "→ instalando el profile"
-corre "hermes profile install /tmp/dist-$ROL -y" | tail -3
+if [[ "$ACTUALIZAR" == 1 ]]; then
+  # The engine refuses `install` over an existing profile and is right to:
+  # update rewrites only distribution_owned files, install would demand --force.
+  echo "→ actualizando el profile"
+  # update takes the NAME and re-fetches from the recorded source -- which is
+  # /tmp/dist-$ROL from the original install, refreshed by the docker cp above.
+  corre "hermes profile update $ROL -y" | tail -3
+else
+  echo "→ instalando el profile"
+  corre "hermes profile install /tmp/dist-$ROL -y" | tail -3
+fi
 
-echo "→ dándole su propia clave"
-corre "echo 'API_SERVER_KEY=$CLAVE' > /opt/data/profiles/$ROL/.env && chown 10000:10000 /opt/data/profiles/$ROL/.env"
+if [[ "$ACTUALIZAR" == 1 ]]; then
+  echo "→ la clave queda la que tiene (.env no es de la distribución)"
+else
+  echo "→ dándole su propia clave"
+  corre "echo 'API_SERVER_KEY=$CLAVE' > /opt/data/profiles/$ROL/.env && chown 10000:10000 /opt/data/profiles/$ROL/.env"
+fi
 
 echo "→ apuntando su workspace al compartido"
 # ONE workspace, the client's. Every profile gets its own workspace dir and the
@@ -255,7 +291,7 @@ until corre "grep -q \"multiplex:.*'"'"'$ROL'"'"'\" /opt/data/logs/gateway.log" 
 # DE ACÁ PARA ABAJO SE PERSISTE, y no antes: el rol ya está instalado y el
 # gateway ya lo sirve. Un alta que se cayó en `hermes profile install` no deja
 # nada escrito (ver el porqué del roster, más abajo).
-if [[ -n "$NOMBRE" ]]; then
+if [[ -n "$NOMBRE" && "$ACTUALIZAR" != 1 ]]; then
   echo "→ anotando el bautizo"
   # EL NOMBRE DEL CLIENTE NO VIVE EN EL PROFILE. role.json es
   # `distribution_owned`: el próximo `hermes profile install` lo reemplaza y el
@@ -295,6 +331,11 @@ PY
   # está en camino" a alguien que ya está trabajando.
   python3 -c 'import json,sys,time; print(json.dumps({"evento":"atendido","rol":sys.argv[1],"nombre":sys.argv[2],"atendido_en":time.strftime("%Y-%m-%dT%H:%M:%S")}, ensure_ascii=False))' \
     "$ROL" "$NOMBRE" | suma pedidos.jsonl
+fi
+
+if [[ "$ACTUALIZAR" == 1 ]]; then
+  echo "Listo: $ROL actualizado con el dist de hoy, mismo bautizo y misma clave."
+  exit 0
 fi
 
 echo "→ dejando el roster en politica/"
