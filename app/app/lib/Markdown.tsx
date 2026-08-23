@@ -1,12 +1,12 @@
 "use client";
 
-// Render markdown de las respuestas del agente — sobrio, tipografía primero.
-// GFM (tablas, tachado, task lists) + matemática (KaTeX) + código con
-// highlighting + diagramas mermaid.
+// Renders markdown from the agent's replies -- sober, typography-first. GFM
+// (tables, strikethrough, task lists) + math (KaTeX) + code with highlighting
+// + mermaid diagrams.
 //
-// Todo esto se dibuja mientras el mensaje streamea, así que el markdown llega
-// roto la mayor parte del tiempo: fences a medio abrir, tablas sin cuerpo,
-// `$$` sin cerrar. La regla es que nada de eso explote ni parpadee feo.
+// All of this gets drawn while the message is streaming, so the markdown
+// arrives broken most of the time: half-open fences, tables with no body,
+// unclosed `$$`. The rule is that none of that can explode or flicker ugly.
 
 import { Children, memo, useMemo, type ReactNode } from "react";
 import type { Element, ElementContent } from "hast";
@@ -20,16 +20,16 @@ import {
   FileText, Image as ImageIcon, LayoutDashboard, Sheet, Ticket as TicketIcon,
 } from "lucide-react";
 import {
-  detectEntity, EntityChip, esImagen, esPlanilla, useOpenEntity, EXT_ARCHIVO, type Entity,
+  detectEntity, EntityChip, isImage, isSpreadsheet, useOpenEntity, FILE_EXTENSIONS, type Entity,
 } from "./entities";
-import { nombreLegibleDeArchivo } from "./nombres";
-import { PARAM } from "./rutas";
+import { readableFileName } from "./names";
+import { PARAM } from "./routes";
 import Artifact from "./Artifact";
 import CodeBlock from "./CodeBlock";
 import Mermaid from "./Mermaid";
 import "katex/dist/katex.min.css";
 
-/* ── Parseo ─────────────────────────────────────────────────────────────── */
+/* ── Parsing ──────────────────────────────────────────────────────────────── */
 
 function nodeText(node: ElementContent): string {
   if (node.type === "text") return node.value;
@@ -37,13 +37,13 @@ function nodeText(node: ElementContent): string {
   return "";
 }
 
-/** Saca `{ code, lang }` del <pre><code class="language-x"> que arma remark. */
+/** Pulls `{ code, lang }` out of the <pre><code class="language-x"> remark builds. */
 function fenceOf(node: Element | undefined): { code: string; lang: string | null } | null {
   const child = node?.children.find((c) => c.type === "element");
   if (!child || child.type !== "element" || child.tagName !== "code") return null;
 
-  // `unknown` a propósito: hast lo tipa como string[], pero según el plugin
-  // puede llegar como string suelto.
+  // `unknown` on purpose: hast types it as string[], but depending on the
+  // plugin it can arrive as a bare string.
   const raw: unknown = child.properties?.className;
   const classes = Array.isArray(raw)
     ? raw.map(String)
@@ -63,10 +63,11 @@ function fenceOf(node: Element | undefined): { code: string; lang: string | null
 }
 
 /**
- * Cierra el fence que quedó abierto al final del texto. Sin esto, mientras el
- * agente escribe un bloque de código el markdown tiene ``` impares y remark lo
- * degrada a párrafo suelto: el bloque aparece, desaparece y vuelve. Cerrándolo
- * se dibuja desde el primer token y sólo crece.
+ * Closes a fence left open at the end of the text. Without this, while the
+ * agent is writing a code block the markdown has an odd number of ``` and
+ * remark demotes it to a bare paragraph: the block appears, disappears and
+ * comes back. Closing it draws it from the first token onward and it only
+ * ever grows.
  */
 export function closeOpenFence(md: string): string {
   const lines = md.split("\n");
@@ -81,7 +82,7 @@ export function closeOpenFence(md: string): string {
     const ch = fence[0];
 
     if (!openChar) {
-      // El info string de un fence de backticks no puede tener backticks.
+      // A backtick fence's info string can't contain backticks.
       if (ch === "`" && rest.includes("`")) continue;
       openChar = ch;
       openLen = fence.length;
@@ -95,144 +96,145 @@ export function closeOpenFence(md: string): string {
   return `${md}${md.endsWith("\n") ? "" : "\n"}${openChar.repeat(openLen)}`;
 }
 
-/** ¿La URL se puede pedir de verdad, o es un path del workspace del agente? */
+/** Can the URL actually be fetched, or is it a path in the agent's own workspace? */
 function isFetchable(src: string): boolean {
   return /^(https?:)?\/\//i.test(src) || /^(data|blob):/i.test(src);
 }
 
-/* ── Lo que el agente nombró, convertido en algo que se toca ─────────────── */
+/* ── What the agent named, turned into something you can touch ──────────── */
 
-/** ¿El portal sabe abrir esto?
+/** Does the portal know how to open this?
  *
- *  El adapter sirve SOLO lo que está adentro del workspace del agente
- *  (`GET /portal/files/{ruta}`, con la ruta relativa a él). Medido contra el
- *  adapter del lab (0.36):
- *    /portal/files/entregables%2F…-2026.md          → 200
- *    /portal/files/workspace%2Fentregables%2F…      → 404  (el prefijo se saca acá)
- *    /portal/files/..%2FSOUL.md                     → 404
- *  `detectEntity` acepta cualquier ruta con extensión conocida, así que una
- *  absoluta que no salga del workspace (`/opt/data/skills/x.md`, un archivo de
- *  la máquina del agente) entra como entidad y termina en un chip que promete
- *  abrir algo y contesta "no encontré ese archivo". Un link que no lleva a
- *  ningún lado es peor que texto: eso se queda como texto. */
-function abrible(entity: Entity): boolean {
+ *  The adapter only serves what's INSIDE the agent's workspace
+ *  (`GET /portal/files/{path}`, relative to it). Measured against the lab's
+ *  adapter (0.36):
+ *    /portal/files/entregables%2F…-2026.md          -> 200
+ *    /portal/files/workspace%2Fentregables%2F…      -> 404  (the prefix gets stripped here)
+ *    /portal/files/..%2FSOUL.md                     -> 404
+ *  `detectEntity` accepts any path with a known extension, so an absolute one
+ *  that never leaves the workspace (`/opt/data/skills/x.md`, a file on the
+ *  agent's own machine) still comes in as an entity and ends up as a chip that
+ *  promises to open something and answers "couldn't find that file". A link
+ *  that leads nowhere is worse than plain text: that one stays as text. */
+function isOpenable(entity: Entity): boolean {
   if (entity.kind !== "file") return true;
   return !entity.path.startsWith("/") && !entity.path.split("/").includes("..");
 }
 
-// Mismo encodeado que `lib/rutas.tsx`: la barra se deja legible en la URL.
-const enRuta = (s: string) => encodeURIComponent(s).replace(/%2F/gi, "/");
+// Same encoding as `lib/routes.tsx`: the slash is left readable in the URL.
+const enc = (s: string) => encodeURIComponent(s).replace(/%2F/gi, "/");
 
-/** Dónde vive la cosa, como link común y corriente. RELATIVO a propósito: con
- *  `window.location.origin` el href saldría distinto en el prerender y en el
- *  browser, y eso es un desajuste de hidratación en una página estática. */
-function urlDeLaCosa(entity: Entity): string {
-  if (entity.kind === "ticket") return `/app/pipeline?${PARAM.tarea}=${enRuta(entity.id)}`;
+/** Where the thing lives, as an ordinary link. RELATIVE on purpose: with
+ *  `window.location.origin` the href would come out different in prerender
+ *  and in the browser, and that's a hydration mismatch on a static page. */
+function urlOfThing(entity: Entity): string {
+  if (entity.kind === "ticket") return `/app/pipeline?${PARAM.task}=${enc(entity.id)}`;
   if (entity.kind === "artifact") {
-    return `/app/artefactos?${PARAM.visualizacion}=${enRuta(entity.id)}`;
+    return `/app/artifacts?${PARAM.artifact}=${enc(entity.id)}`;
   }
-  if (entity.kind === "file") return `/app/archivos?${PARAM.archivo}=${enRuta(entity.path)}`;
-  return `/app/conexiones?${PARAM.conexion}=${enRuta(entity.id)}`;
+  if (entity.kind === "file") return `/app/files?${PARAM.file}=${enc(entity.path)}`;
+  return `/app/connections?${PARAM.connection}=${enc(entity.id)}`;
 }
 
-const CLASE_COSA =
+const THING_CLASS =
   "inline rounded-md border border-c-violet bg-c-violet/40 px-1.5 py-0.5 align-baseline " +
   "text-[0.95em] font-medium text-primary transition hover:border-primary hover:bg-c-violet";
 
-/** Lo que el agente nombró (un archivo suyo, una tarea, una visualización),
- *  dibujado como algo que se abre.
+/** What the agent named (one of its files, a task, a visualization), drawn as
+ *  something you can open.
  *
- *  DOS COSAS ESTABAN ROTAS EN EL MISMO RENGLÓN, y las dos las anotó la misma
- *  clienta de prueba sobre el link con el que su agente le entregaba el informe
- *  que acababa de pedir:
+ *  TWO THINGS WERE BROKEN ON THE SAME LINE, and the same test client wrote
+ *  both down about the link her agent used to deliver the report she'd just
+ *  asked for:
  *
- *  1. NO SE PODÍA TOCAR. El chip abre un modal pidiéndoselo al proveedor de
- *     entidades, y afuera del chat —el alta, que ahora tiene el chat adentro—
- *     no hay proveedor: el chip se dibujaba como `<code>`, inerte. "Le hice
- *     click tres veces." Ahora, sin proveedor, es un link a la pestaña donde la
- *     cosa vive, que es exactamente adónde quería ir.
- *  2. DECÍA LA RUTA, EN MONOESPACIADA Y CORTADA.
+ *  1. IT COULDN'T BE TOUCHED. The chip opens a modal by asking the entity
+ *     provider for it, and outside the chat -- hiring, which now has the chat
+ *     inside it -- there's no provider: the chip drew as `<code>`, inert. "I
+ *     clicked it three times." Now, with no provider, it's a link to the tab
+ *     where the thing lives, which is exactly where they wanted to go.
+ *  2. IT SAID THE PATH, IN MONOSPACE AND CUT OFF.
  *     `workspace/entregables/control-semanal-contratos/2026-08-13-prueba-del-…`
- *     es una dirección, no un nombre. Ahora dice el nombre en criollo
- *     (`lib/nombres.ts`) y con la tipografía del portal; la ruta sigue viajando
- *     en el link. */
-function Cosa({ entity, texto }: { entity: Entity; texto?: string }) {
-  const abrir = useOpenEntity();
+ *     is an address, not a name. Now it says the name in plain terms
+ *     (`lib/names.ts`) with the portal's own type; the path still travels in
+ *     the link. */
+function Thing({ entity, text }: { entity: Entity; text?: string }) {
+  const open = useOpenEntity();
 
-  const etiqueta =
-    texto?.trim() ||
-    (entity.kind === "file" ? nombreLegibleDeArchivo(entity.path) : entity.id);
+  const label =
+    text?.trim() ||
+    (entity.kind === "file" ? readableFileName(entity.path) : entity.id);
 
   const Icon =
     entity.kind === "ticket" ? TicketIcon
       : entity.kind === "artifact" ? LayoutDashboard
-        : entity.kind === "file" && esImagen(entity.path) ? ImageIcon
-          : entity.kind === "file" && esPlanilla(entity.path) ? Sheet
+        : entity.kind === "file" && isImage(entity.path) ? ImageIcon
+          : entity.kind === "file" && isSpreadsheet(entity.path) ? Sheet
             : FileText;
 
-  const titulo =
+  const title =
     entity.kind === "ticket" ? "Ver la tarea"
       : entity.kind === "artifact" ? "Ver la visualización"
         : "Abrir el archivo";
 
-  const adentro = (
+  const inner = (
     <>
       <Icon className="mr-1 inline h-[1em] w-[1em] -translate-y-[0.1em]" aria-hidden />
-      {etiqueta}
+      {label}
     </>
   );
 
-  // Con proveedor se abre acá mismo, sin salir de la conversación.
-  if (abrir) {
+  // With a provider it opens right here, without leaving the conversation.
+  if (open) {
     return (
-      <button onClick={() => abrir(entity)} title={titulo} className={`${CLASE_COSA} text-left`}>
-        {adentro}
+      <button onClick={() => open(entity)} title={title} className={`${THING_CLASS} text-left`}>
+        {inner}
       </button>
     );
   }
-  // Sin proveedor, pestaña nueva. Las dos pantallas que dibujan markdown sin
-  // proveedor son el chat del alta y la cola de aprobaciones: en las dos el
-  // cliente está a mitad de algo (contestando el alta, decidiendo un pedido) y
-  // llevárselo a otra pestaña del portal sería sacarlo de ahí. Así abre el
-  // documento y vuelve a lo suyo con cerrar.
+  // With no provider, a new tab. The two screens that draw markdown with no
+  // provider are the hiring chat and the approvals queue: on both the client
+  // is in the middle of something (answering onboarding, deciding on a
+  // request), and taking them to another portal tab would pull them away from
+  // it. This way the document opens and they're back to where they were by
+  // closing it.
   return (
-    <a href={urlDeLaCosa(entity)} target="_blank" rel="noopener noreferrer"
-      title={titulo} className={CLASE_COSA}>
-      {adentro}
+    <a href={urlOfThing(entity)} target="_blank" rel="noopener noreferrer"
+      title={title} className={THING_CLASS}>
+      {inner}
     </a>
   );
 }
 
-/** El chip de una entidad, sea del tipo que sea. Las conexiones, los permisos y
- *  las capacidades tienen tarjeta propia (`entities.tsx`); el resto se abre. */
-function ChipDeEntidad({ entity, texto }: { entity: Entity; texto?: string }) {
-  if (entity.kind === "conexion" || entity.kind === "permisos" || entity.kind === "capacidad") {
-    return <EntityChip entity={entity} label={texto?.trim() || entity.id} />;
+/** The chip for an entity, whatever kind it is. Connections, permissions and
+ *  capabilities have their own card (`entities.tsx`); everything else opens. */
+function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
+  if (entity.kind === "connection" || entity.kind === "permissions" || entity.kind === "capability") {
+    return <EntityChip entity={entity} label={text?.trim() || entity.id} />;
   }
-  return <Cosa entity={entity} texto={texto} />;
+  return <Thing entity={entity} text={text} />;
 }
 
-/* ── Componentes ────────────────────────────────────────────────────────── */
+/* ── Components ───────────────────────────────────────────────────────────── */
 
-// El agente también nombra tickets, archivos y conexiones en prosa, sin
-// backticks. El \b va DENTRO de cada alternativa: si estuviera antes del
-// prefijo opcional /opt/data/, nunca casaría (el `/` no es carácter de
-// palabra) y el prefijo quedaría suelto como texto al lado del chip.
-// `capacidad:` va acá también: el SOUL le enseña al agente a escribirlo solo en
-// una línea, pero lo escribe en prosa la mitad de las veces.
+// The agent also names tickets, files and connections in prose, with no
+// backticks. The \b sits INSIDE each alternative: if it were before the
+// optional /opt/data/ prefix, it would never match (`/` isn't a word
+// character) and the prefix would be left dangling as text next to the chip.
+// `capability:` goes here too: the SOUL teaches the agent to write it alone on
+// its own line, but it writes it in prose about half the time.
 //
-// Las carpetas de primer nivel del workspace van también sin el prefijo: el
-// kit le enseña a citar `workspace/entregables/…` (skills/entregable/SKILL.md),
-// pero la mitad de las veces escribe `entregables/…` a secas y ese renglón
-// quedaba sin chip — el mismo archivo, entregado dos veces, una clicable y la
-// otra no. Son las tres carpetas de la convención (las mismas que separa la
-// pestaña Archivos), no cualquier ruta relativa: `informe.md` suelto en una
-// frase no es una promesa de que el portal lo pueda abrir.
+// The workspace's top-level folders also go with no prefix: the kit teaches it
+// to cite `workspace/entregables/…` (skills/deliverable/SKILL.md), but about
+// half the time it writes bare `entregables/…` and that line ended up with no
+// chip -- the same file, delivered twice, one clickable and the other not.
+// These are the convention's three folders (the same ones the Files tab
+// separates), not just any relative path: a bare `informe.md` in a sentence
+// isn't a promise that the portal can open it.
 const INLINE_ENTITY_RE = new RegExp(
   "(\\bt_[0-9a-f]{6,16}\\b" +
-  "|\\bconexi[oó]n:[a-z0-9][a-z0-9-]*\\b" +
-  "|\\bcapacidad:[a-z0-9][a-z0-9-]*\\b" +
-  `|(?:/opt/data/)?\\b(?:workspace|entregables|entrada|interno)/[\\w./-]+\\.(?:${EXT_ARCHIVO})\\b)`,
+  "|\\bconnection:[a-z0-9][a-z0-9-]*\\b" +
+  "|\\bcapability:[a-z0-9][a-z0-9-]*\\b" +
+  `|(?:/opt/data/)?\\b(?:workspace|entregables|entrada|interno)/[\\w./-]+\\.(?:${FILE_EXTENSIONS})\\b)`,
   "gi");
 
 function linkify(children: ReactNode): ReactNode {
@@ -242,9 +244,9 @@ function linkify(children: ReactNode): ReactNode {
     let last = 0;
     for (const m of Array.from(child.matchAll(INLINE_ENTITY_RE))) {
       const entity = detectEntity(m[0]);
-      if (!entity || !abrible(entity) || m.index === undefined) continue;
+      if (!entity || !isOpenable(entity) || m.index === undefined) continue;
       if (m.index > last) parts.push(child.slice(last, m.index));
-      parts.push(<ChipDeEntidad key={m.index} entity={entity} />);
+      parts.push(<EntityChipFor key={m.index} entity={entity} />);
       last = m.index + m[0].length;
     }
     if (!parts.length) return child;
@@ -258,32 +260,32 @@ function makeComponents(streaming: boolean): Components {
     p: ({ children }) => (
       <p className="my-2 leading-relaxed first:mt-0 last:mb-0">{linkify(children)}</p>
     ),
-    // Un href que no se puede pedir NO puede ser un link.
+    // An href that can't be fetched CANNOT be a link.
     //
-    // El agente escribe rutas de su propio workspace y remark las convierte en
-    // `<a href="workspace/entregables/cartel.jpg">`. Tocarlo navegaba a
-    // /app/workspace/… y el cliente recibía "404: This page could not be
-    // found" por un archivo que su agente acababa de hacer bien. Si la ruta es
-    // una entidad conocida se dibuja el chip que la abre de verdad; si no,
-    // queda como texto — feo, pero nunca miente.
+    // The agent writes paths from its own workspace and remark turns them into
+    // `<a href="workspace/entregables/cartel.jpg">`. Clicking it navigated to
+    // /app/workspace/… and the client got "404: This page could not be found"
+    // for a file their agent had just made correctly. If the path is a known
+    // entity, the chip that actually opens it gets drawn; if not, it stays as
+    // text -- ugly, but it never lies.
     a: ({ href, children }) => {
       const url = typeof href === "string" ? href : "";
-      // `/opt/…` entra acá aunque empiece con barra: es la ruta absoluta del
-      // workspace, la que el agente usa para releer sus archivos, y como link
-      // del portal daba 404. El resto de las rutas absolutas (`/app/…`,
-      // `/blog/…`) son del sitio y siguen siendo links comunes.
-      const delAgente = !url.startsWith("/") || url.startsWith("/opt/");
-      if (url && !isFetchable(url) && delAgente && !url.startsWith("#")) {
+      // `/opt/…` comes in here even though it starts with a slash: it's the
+      // workspace's absolute path, the one the agent uses to re-read its own
+      // files, and as a portal link it gave a 404. The rest of the absolute
+      // paths (`/app/…`, `/blog/…`) belong to the site and stay ordinary links.
+      const fromAgent = !url.startsWith("/") || url.startsWith("/opt/");
+      if (url && !isFetchable(url) && fromAgent && !url.startsWith("#")) {
         const entity = detectEntity(url);
-        const texto = Children.toArray(children).every((c) => typeof c === "string")
+        const text = Children.toArray(children).every((c) => typeof c === "string")
           ? Children.toArray(children).join("")
           : "";
-        // El texto del link sirve como etiqueta sólo si el agente escribió uno:
-        // cuando repite la ruta (que es lo que hace remark con un link
-        // automático) vuelve a ser una dirección, y ahí manda el nombre.
-        const etiqueta = texto.trim() === url.trim() ? "" : texto.trim();
-        if (entity && abrible(entity)) {
-          return <ChipDeEntidad entity={entity} texto={etiqueta} />;
+        // The link's text only works as a label if the agent wrote one: when
+        // it repeats the path (which is what remark does with an automatic
+        // link), it's an address again, and the name takes over there.
+        const label = text.trim() === url.trim() ? "" : text.trim();
+        if (entity && isOpenable(entity)) {
+          return <EntityChipFor entity={entity} text={label} />;
         }
         return <>{children}</>;
       }
@@ -349,7 +351,7 @@ function makeComponents(streaming: boolean): Components {
       </blockquote>
     ),
 
-    // El bloque de código se dibuja desde <pre>, así `code` sólo ve el inline.
+    // The code block is drawn from <pre>, so `code` only ever sees the inline case.
     pre: ({ children, node }) => {
       const fence = fenceOf(node);
       if (!fence) {
@@ -363,18 +365,18 @@ function makeComponents(streaming: boolean): Components {
       if (lang === "mermaid") {
         return <Mermaid chart={fence.code} streaming={streaming} />;
       }
-      // HTML/SVG completo: mostrarlo como código no sirve de nada, se dibuja.
+      // A whole HTML/SVG document: showing it as code is no use, so it's drawn.
       if (lang === "html" || lang === "svg") {
         return <Artifact code={fence.code} lang={lang} streaming={streaming} />;
       }
       return <CodeBlock code={fence.code} lang={fence.lang} />;
     },
-    // El agente nombra sus tickets y archivos en código inline: los volvemos
-    // chips que abren el detalle sin salir del chat.
+    // The agent names its tickets and files in inline code: we turn those into
+    // chips that open the detail without leaving the chat.
     code: ({ children }) => {
       const raw = Array.isArray(children) ? children.join("") : String(children ?? "");
       const entity = detectEntity(raw);
-      if (entity && abrible(entity)) return <ChipDeEntidad entity={entity} />;
+      if (entity && isOpenable(entity)) return <EntityChipFor entity={entity} />;
       return (
         <code className="rounded bg-black/[0.06] px-1.5 py-0.5 font-mono text-[0.88em] text-ink">
           {children}
@@ -401,16 +403,16 @@ function makeComponents(streaming: boolean): Components {
       const url = typeof src === "string" ? src : "";
       if (!url) return null;
 
-      // El agente escribe paths de su propio workspace (./out/plot.png): pedir
-      // eso al portal da 404 e ícono roto. La imagen SÍ se puede abrir —el
-      // visor la muestra pidiéndole los bytes al adapter—, así que va el mismo
-      // chip que el resto: antes era una cajita muerta con la ruta adentro, o
-      // sea el cartel que el agente acababa de hacer, a la vista y sin manera
-      // de mirarlo.
+      // The agent writes paths from its own workspace (./out/plot.png):
+      // requesting that from the portal gives a 404 and a broken-image icon.
+      // The image CAN be opened -- the viewer shows it by asking the adapter
+      // for the bytes -- so it gets the same chip as everything else: before,
+      // it was a dead little box with the path inside, i.e. the banner the
+      // agent had just made, in plain sight and with no way to look at it.
       if (!isFetchable(url)) {
         const entity = detectEntity(url);
-        if (entity && abrible(entity)) {
-          return <ChipDeEntidad entity={entity} texto={alt?.trim()} />;
+        if (entity && isOpenable(entity)) {
+          return <EntityChipFor entity={entity} text={alt?.trim()} />;
         }
         return (
           <span className="my-1 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-black/[0.07] bg-black/[0.03] px-2 py-1 align-middle text-ink-soft">
@@ -442,22 +444,23 @@ function makeComponents(streaming: boolean): Components {
 const STATIC_COMPONENTS = makeComponents(false);
 const STREAMING_COMPONENTS = makeComponents(true);
 
-// `singleDollarTextMath: false` NO es un detalle: acá se habla de plata en
-// pesos y en dólares, y con el default de remark-math un "$ 5.100 … $ 31.500"
-// se lee como una fórmula — KaTeX se come el texto del medio, junta las
-// palabras y lo deja en itálica de matemática. Una lista de clientes con
-// montos quedaba ilegible en el chat aunque el archivo estuviera perfecto.
-// La matemática de verdad sigue andando con `$$…$$`.
+// `singleDollarTextMath: false` is NOT a minor detail: this is where money
+// gets talked about, in pesos and dollars, and with remark-math's default a
+// "$ 5.100 … $ 31.500" reads as a formula -- KaTeX eats the text in between,
+// runs the words together and italicizes them as math. A client list with
+// amounts turned unreadable in the chat even though the file itself was
+// perfect. Real math still works with `$$…$$`.
 const remarkPlugins: Options["remarkPlugins"] = [
   remarkGfm,
   [remarkMath, { singleDollarTextMath: false }],
 ];
 
-// El agente a veces escribe HTML dentro del markdown (una tabla, un <details>).
-// Sin rehype-raw se ve escapado como texto; con raw a secas sería XSS. Va raw +
-// sanitize con allowlist: se permite marcado de contenido, jamás script, iframe,
-// style, event handlers ni javascript: en href. El HTML "de verdad" (una página
-// entera) llega como bloque ```html y se dibuja aislado en Artifact.
+// The agent sometimes writes HTML inside the markdown (a table, a <details>).
+// Without rehype-raw it shows up escaped as text; with raw alone it would be
+// XSS. So it's raw + sanitize with an allowlist: content markup is allowed,
+// never script, iframe, style, event handlers, or javascript: in an href.
+// "Real" HTML (a whole page) arrives as a ```html block and gets drawn
+// isolated in Artifact.
 const schema = {
   ...defaultSchema,
   tagNames: [...(defaultSchema.tagNames ?? []), "details", "summary", "figure", "figcaption", "mark"],
@@ -468,54 +471,55 @@ const schema = {
   },
 };
 
-// rehype-katex ya fuerza throwOnError:false; el errorColor apagado evita el
-// rojo chillón mientras una fórmula está a medio escribir.
+// rehype-katex already forces throwOnError:false; the muted errorColor avoids
+// a jarring red while a formula is still half-written.
 const rehypePlugins: Options["rehypePlugins"] = [
   rehypeRaw,
   [rehypeSanitize, schema],
   [rehypeKatex, { errorColor: "#4B4A5C", strict: "ignore" }],
 ];
 
-/* ── Lo que el portal le escribe AL AGENTE ───────────────────────────────── */
+/* ── What the portal writes TO THE AGENT ──────────────────────────────────── */
 
-/** La orden que el portal mete adentro del cuerpo del ticket cuando el cliente
- *  pide una conexión. NO SE PUEDE BORRAR: es lo único que evita que el agente
- *  salga a conectar WhatsApp por su cuenta (el ticket nace bloqueado, pero el
- *  cuerpo es lo que lee cuando alguien lo desbloquea). Y no la puede leer el
- *  cliente: está escrita en imperativo y en segunda persona, así que la clienta
- *  de prueba la leyó como una orden PARA ELLA — "me quedé sin saber si podía
- *  tocar algo".
+/** The order the portal puts inside a ticket's body when the client requests a
+ *  connection. IT CANNOT BE DELETED: it's the only thing keeping the agent
+ *  from going off and connecting WhatsApp on its own (the ticket is born
+ *  blocked, but the body is what gets read when someone unblocks it). And the
+ *  client can't read it: it's written as an imperative in the second person,
+ *  so the test client read it as an order AIMED AT HER -- "I was left not
+ *  knowing if I was allowed to touch anything".
  *
- *  Se exporta para que la escriba un solo lado. Hoy la arman por su cuenta
- *  `conexiones/page.tsx` y el alta; el arreglo de fondo es que la ponga
- *  `crearPedidoDeConexion` adentro de un comentario HTML —el mismo mecanismo
- *  que ya usa `MARCA_PEDIDO`, que el sanitizador no muestra— y entonces todo
- *  este bloque se borra. Mientras tanto se reconoce por su primera frase, que
- *  es feo y está atado a un texto: por eso está acá y no repartido. */
-export const INSTRUCCION_AL_AGENTE =
+ *  Exported so only one side writes it. Today `connections/page.tsx` and
+ *  hiring each build it on their own; the real fix is having
+ *  `createConnectionRequest` put it inside an HTML comment -- the same
+ *  mechanism `REQUEST_MARKER` already uses, which the sanitizer hides -- and
+ *  then this whole block goes away. Until then it's recognized by its first
+ *  sentence, which is ugly and tied to a literal string: that's why it lives
+ *  here instead of being spread around. */
+export const AGENT_INSTRUCTION =
   "No hagas nada por tu cuenta con esto: avisale al equipo de tuagente " +
   "que hay que conectarlo y dejá el ticket esperando.";
 
-/** Convención para lo nuevo: lo que va entre estas marcas es para el agente y
- *  el cliente no lo ve. Van como comentario HTML para que el agente —que lee el
- *  cuerpo crudo— las tenga igual. */
-const BLOQUE_PARA_EL_AGENTE = /<!--\s*para-el-agente\s*-->[\s\S]*?<!--\s*\/para-el-agente\s*-->/gi;
+/** Convention going forward: whatever sits between these marks is for the
+ *  agent and the client never sees it. They go as an HTML comment so the
+ *  agent -- which reads the raw body -- still gets them. */
+const AGENT_ONLY_BLOCK_RE = /<!--\s*para-el-agente\s*-->[\s\S]*?<!--\s*\/para-el-agente\s*-->/gi;
 
-// El párrafo entero, desde la frase que lo abre hasta el renglón en blanco.
-const PARRAFO_INSTRUCCION = /(?:^|\n)[ \t]*No hagas nada por tu cuenta con esto:[\s\S]*?(?=\n[ \t]*\n|$)/gi;
+// The whole paragraph, from the sentence that opens it to the blank line.
+const INSTRUCTION_PARAGRAPH_RE = /(?:^|\n)[ \t]*No hagas nada por tu cuenta con esto:[\s\S]*?(?=\n[ \t]*\n|$)/gi;
 
-function sinLoQueEsParaElAgente(md: string): string {
+function stripAgentOnlyContent(md: string): string {
   if (!md.includes("<!--") && !md.includes("No hagas nada por tu cuenta")) return md;
   return md
-    .replace(BLOQUE_PARA_EL_AGENTE, "")
-    .replace(PARRAFO_INSTRUCCION, "")
+    .replace(AGENT_ONLY_BLOCK_RE, "")
+    .replace(INSTRUCTION_PARAGRAPH_RE, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
 function MarkdownImpl({ children, streaming = false }: { children: string; streaming?: boolean }) {
   const source = useMemo(
-    () => closeOpenFence(sinLoQueEsParaElAgente(children ?? "")), [children]);
+    () => closeOpenFence(stripAgentOnlyContent(children ?? "")), [children]);
 
   return (
     <div className="break-words text-[15px] text-ink [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden [&_.katex-display]:py-1 [&_.katex-error]:font-mono [&_.katex-error]:text-[0.9em]">

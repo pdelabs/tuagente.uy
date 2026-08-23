@@ -1,9 +1,9 @@
 "use client";
 
-// Artefactos: cuando el agente devuelve un HTML o un SVG entero, mostrarlo como
-// código es inútil. Lo renderizamos en un iframe AISLADO (sandbox sin
-// allow-same-origin: puede correr su JS pero no puede tocar el portal, ni la
-// clave del agente, ni el localStorage) con solapas Vista / Código.
+// Artifacts: when the agent returns a whole HTML or SVG document, showing it
+// as code is useless. We render it in an ISOLATED iframe (sandbox with no
+// allow-same-origin: it can run its own JS but can't touch the portal, the
+// agent's key, or localStorage) with Preview / Code tabs.
 
 import { useMemo, useState } from "react";
 import { Code2, Eye, ExternalLink } from "lucide-react";
@@ -17,7 +17,7 @@ export default function Artifact({ code, lang, streaming }: {
   lang: string;
   streaming?: boolean;
 }) {
-  const [tab, setTab] = useState<"vista" | "codigo">("vista");
+  const [tab, setTab] = useState<"preview" | "code">("preview");
   const doc = useMemo(
     () => (lang === "svg" ? SVG_SHELL(code) : code),
     [code, lang],
@@ -32,8 +32,8 @@ export default function Artifact({ code, lang, streaming }: {
   return (
     <div className="my-3 overflow-hidden rounded-lg border border-black/[0.07]">
       <div className="flex items-center gap-1 border-b border-black/[0.07] bg-black/[0.02] px-2 py-1.5">
-        <Tab active={tab === "vista"} onClick={() => setTab("vista")} icon={Eye} label="Vista" />
-        <Tab active={tab === "codigo"} onClick={() => setTab("codigo")} icon={Code2} label="Código" />
+        <Tab active={tab === "preview"} onClick={() => setTab("preview")} icon={Eye} label="Vista" />
+        <Tab active={tab === "code"} onClick={() => setTab("code")} icon={Code2} label="Código" />
         <span className="ml-1 text-[11px] uppercase tracking-wide text-ink-soft/70">{lang}</span>
         <button
           onClick={openInTab}
@@ -45,7 +45,7 @@ export default function Artifact({ code, lang, streaming }: {
         </button>
       </div>
 
-      {tab === "codigo" ? (
+      {tab === "code" ? (
         <div className="[&>div]:my-0 [&>div]:rounded-none [&>div]:border-0">
           <CodeBlock code={code} lang={lang} />
         </div>
@@ -55,7 +55,7 @@ export default function Artifact({ code, lang, streaming }: {
         </p>
       ) : (
         <iframe
-          // Sin allow-same-origin a propósito: origen opaco, sin acceso al portal.
+          // No allow-same-origin, on purpose: opaque origin, no access to the portal.
           sandbox="allow-scripts allow-popups allow-forms"
           srcDoc={doc}
           title="Vista previa del artefacto"

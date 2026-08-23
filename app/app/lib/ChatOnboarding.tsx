@@ -1,138 +1,145 @@
 "use client";
 
-// El chat DENTRO del onboarding: el cliente elige algo del carrusel y la
-// conversación empieza ahí mismo, sin salir de la bienvenida.
+// The chat INSIDE onboarding: the client picks something from the carousel
+// and the conversation starts right there, without leaving the welcome screen.
 //
-// POR QUÉ NO SE REUSA LA PESTAÑA CHAT: la puerta del onboarding sigue montada
-// y atrapa cualquier ruta, así que navegar desde acá no hace NADA visible. Y
-// aunque se cerrara primero, mandar al cliente a otra pantalla en el medio de
-// la bienvenida rompe el hilo justo cuando recién entendió qué le podés pedir.
+// WHY THE CHAT TAB ISN'T REUSED: onboarding's gate stays mounted and swallows
+// any route, so navigating from here does NOTHING visible. And even if it
+// closed first, sending the client to another screen in the middle of the
+// welcome flow breaks their train of thought right when they just understood
+// what they can ask for.
 //
-// NO QUEDA HUÉRFANA: `chatStream` crea la sesión del lado del agente igual que
-// el chat normal, así que esta misma conversación aparece después en la
-// pestaña Chat. Es la bienvenida la que es efímera, no lo que se habló.
+// NOTHING IS ORPHANED: `chatStream` creates the session on the agent's side
+// just like the regular chat, so this same conversation shows up later on the
+// Chat tab. It's the welcome screen that's ephemeral, not what got talked about.
 //
-// Es a propósito más chico que el chat de verdad: sin sesiones, sin adjuntos,
-// sin editar mensajes. Lo único que tiene que pasar acá es la primera vuelta.
+// It's deliberately smaller than the real chat: no sessions, no attachments,
+// no editing messages. The only thing that has to happen here is the first
+// exchange.
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp } from "lucide-react";
 import { chatStream, type ChatMessage, type PortalConfig } from "./agent";
-import { accionDe } from "./palabras";
+import { actionFor } from "./labels";
 import Markdown from "./Markdown";
 import { Btn, inputCls } from "./ui";
 
-export default function ChatOnboarding({ cfg, pedido, nombreAgente, onListo, volviendoA }: {
+export default function ChatOnboarding({ cfg, request, agentName, onDone, returningTo }: {
   cfg: PortalConfig;
-  pedido: string;
-  nombreAgente: string;
-  onListo: () => void;
-  /** El cliente entró por un link a algo concreto: al cerrar vuelve ahí. */
-  volviendoA?: boolean;
+  request: string;
+  agentName: string;
+  onDone: () => void;
+  /** The client arrived through a link to something specific: closing returns them there. */
+  returningTo?: boolean;
 }) {
   const [msgs, setMsgs] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [enviando, setEnviando] = useState(false);
+  const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // QUÉ ESTÁ HACIENDO MIENTRAS NO ESCRIBE NADA. La primera respuesta del alta
-  // tarda: una clienta de prueba esperó cinco minutos con "está pensando…"
-  // fijo y un perro en la camilla. El gateway ya manda qué herramienta arranca
-  // (`hermes.tool.progress`) y el chat de verdad lo usa; acá no se escuchaba.
-  const [haciendo, setHaciendo] = useState<string | null>(null);
-  const [segundos, setSegundos] = useState(0);
-  const enCurso = useRef(false);
-  const arrancado = useRef(false);
-  const caja = useRef<HTMLDivElement>(null);
+  // WHAT IT'S DOING WHILE IT WRITES NOTHING. Onboarding's first reply takes a
+  // while: a test client waited five minutes staring at a fixed "está
+  // pensando…" with a dog on the exam table. The gateway already sends which
+  // tool is starting (`hermes.tool.progress`) and the real chat uses it; this
+  // one wasn't listening.
+  const [doing, setDoing] = useState<string | null>(null);
+  const [seconds, setSeconds] = useState(0);
+  const inFlight = useRef(false);
+  const started = useRef(false);
+  const box = useRef<HTMLDivElement>(null);
 
-  const correr = async (texto: string, base: ChatMessage[]) => {
-    if (enCurso.current || !texto.trim()) return;
-    enCurso.current = true;
-    setEnviando(true);
+  const run = async (text: string, base: ChatMessage[]) => {
+    if (inFlight.current || !text.trim()) return;
+    inFlight.current = true;
+    setSending(true);
     setErr(null);
-    setHaciendo(null);
-    setSegundos(0);
-    const historia: ChatMessage[] = [...base, { role: "user", content: texto }];
-    setMsgs([...historia, { role: "assistant", content: "" }]);
+    setDoing(null);
+    setSeconds(0);
+    const history: ChatMessage[] = [...base, { role: "user", content: text }];
+    setMsgs([...history, { role: "assistant", content: "" }]);
 
-    // Los deltas se pintan agrupados por frame: el markdown se re-parsea
-    // entero en cada repintado y token por token trabaría la página.
-    let pendiente: string | null = null;
+    // Deltas are painted grouped per frame: the markdown gets fully
+    // re-parsed on every repaint, and doing it token by token would lock up
+    // the page.
+    let pending: string | null = null;
     let frame = 0;
-    const pintar = (t: string) => {
-      pendiente = t;
+    const paint = (t: string) => {
+      pending = t;
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        if (pendiente !== null) {
-          setMsgs([...historia, { role: "assistant", content: pendiente }]);
+        if (pending !== null) {
+          setMsgs([...history, { role: "assistant", content: pending }]);
         }
       });
     };
 
     try {
-      const final = await chatStream(cfg, historia, pintar, (tool) => setHaciendo(tool));
+      const final = await chatStream(cfg, history, paint, (tool) => setDoing(tool));
       if (frame) cancelAnimationFrame(frame);
-      setMsgs([...historia, { role: "assistant", content: final }]);
+      setMsgs([...history, { role: "assistant", content: final }]);
     } catch (e) {
       if (frame) cancelAnimationFrame(frame);
-      setMsgs(historia);
+      setMsgs(history);
       setErr(e instanceof Error ? e.message : "no pude hablar con tu agente");
     } finally {
-      enCurso.current = false;
-      setEnviando(false);
-      setHaciendo(null);
+      inFlight.current = false;
+      setSending(false);
+      setDoing(null);
     }
   };
 
   useEffect(() => {
-    if (arrancado.current) return;
-    arrancado.current = true;
-    correr(pedido, []);
+    if (started.current) return;
+    started.current = true;
+    run(request, []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // El reloj de la espera. No es decoración: mientras el agente no escribe una
-  // sola letra, es lo único que distingue "está trabajando" de "se colgó".
+  // The waiting clock. Not decoration: while the agent hasn't written a
+  // single letter, it's the only thing that tells "it's working" apart from
+  // "it hung".
   useEffect(() => {
-    if (!enviando) return;
-    const t = setInterval(() => setSegundos((s) => s + 1), 1000);
+    if (!sending) return;
+    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
-  }, [enviando]);
+  }, [sending]);
 
-  // EL CHAT BAJA SOLO, Y BAJA CON scrollTop.
+  // THE CHAT SCROLLS DOWN ON ITS OWN, AND IT DOES SO WITH scrollTop.
   //
-  // Antes era `fin.scrollIntoView({behavior:"smooth"})` y no funcionaba: el
-  // markdown se re-pinta en cada frame del stream, así que cada repintado
-  // cancelaba la animación suave del anterior y la caja nunca terminaba de
-  // llegar abajo — el cliente tenía que arrastrar la barra a mano para leer lo
-  // que su agente le estaba contestando. Mover `scrollTop` es instantáneo, no
-  // se puede interrumpir, y mueve SOLO la caja (scrollIntoView además empuja
-  // la página entera, que en el onboarding corre el personaje fuera de vista).
+  // It used to be `end.scrollIntoView({behavior:"smooth"})` and it didn't
+  // work: the markdown repaints on every frame of the stream, so each repaint
+  // canceled the previous smooth animation and the box never finished
+  // reaching the bottom -- the client had to drag the scrollbar by hand to
+  // read what their agent was answering. Setting `scrollTop` is instant, it
+  // can't be interrupted, and it moves ONLY the box (scrollIntoView also
+  // pushes the whole page, which in onboarding scrolls the character out of
+  // view).
   //
-  // OJO CON CÓMO SE DECIDE "EL CLIENTE SUBIÓ A RELEER": tiene que salir del
-  // evento `scroll`, no de medir la distancia al fondo en cada repintado. Con
-  // la medición, un párrafo largo que entra de golpe deja la caja a más de un
-  // renglón del fondo sin que nadie haya tocado nada, y el chat se queda
-  // clavado arriba para siempre. Probado en vivo: la respuesta bajaba y la
-  // caja no la seguía. El navegador NO emite `scroll` cuando el contenido
-  // crece, así que la bandera sobrevive intacta al stream.
-  const pegado = useRef(true);
-  const alScrollear = () => {
-    const el = caja.current;
+  // WATCH HOW "THE CLIENT SCROLLED UP TO RE-READ" GETS DECIDED: it has to come
+  // from the `scroll` event, not from measuring the distance to the bottom on
+  // every repaint. With the measurement, a long paragraph arriving all at
+  // once leaves the box more than a line from the bottom with nobody having
+  // touched anything, and the chat stays stuck at the top forever. Tested
+  // live: the reply scrolled down and the box didn't follow it. The browser
+  // does NOT emit `scroll` when content grows, so the flag survives the
+  // stream untouched.
+  const stuck = useRef(true);
+  const onScroll = () => {
+    const el = box.current;
     if (!el) return;
-    pegado.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   };
   useEffect(() => {
-    const el = caja.current;
-    if (!el || !pegado.current) return;
+    const el = box.current;
+    if (!el || !stuck.current) return;
     el.scrollTop = el.scrollHeight;
-  }, [msgs, haciendo, segundos]);
+  }, [msgs, doing, seconds]);
 
   return (
     <div className="w-full animate-fadeup text-left">
       <div
-        ref={caja}
-        onScroll={alScrollear}
+        ref={box}
+        onScroll={onScroll}
         className="max-h-[46vh] overflow-y-auto rounded-card border border-black/[0.07] bg-white p-4"
       >
         {msgs.map((m, i) =>
@@ -147,7 +154,7 @@ export default function ChatOnboarding({ cfg, pedido, nombreAgente, onListo, vol
               {m.content.trim() ? (
                 <Markdown>{m.content}</Markdown>
               ) : (
-                <Esperando nombre={nombreAgente} haciendo={haciendo} segundos={segundos} />
+                <Waiting name={agentName} doing={doing} seconds={seconds} />
               )}
             </div>
           ),
@@ -164,24 +171,24 @@ export default function ChatOnboarding({ cfg, pedido, nombreAgente, onListo, vol
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !enviando && input.trim()) {
+            if (e.key === "Enter" && !sending && input.trim()) {
               const t = input.trim();
               setInput("");
-              correr(t, msgs.filter((m) => m.content.trim()));
+              run(t, msgs.filter((m) => m.content.trim()));
             }
           }}
-          disabled={enviando}
+          disabled={sending}
           placeholder="Contestale…"
           aria-label="Tu respuesta"
           className={inputCls}
         />
         <Btn
           size="sm"
-          disabled={enviando || !input.trim()}
+          disabled={sending || !input.trim()}
           onClick={() => {
             const t = input.trim();
             setInput("");
-            correr(t, msgs.filter((m) => m.content.trim()));
+            run(t, msgs.filter((m) => m.content.trim()));
           }}
         >
           <ArrowUp className="h-4 w-4" />
@@ -189,8 +196,8 @@ export default function ChatOnboarding({ cfg, pedido, nombreAgente, onListo, vol
       </div>
 
       <div className="mt-5 flex flex-col items-center gap-2">
-        <Btn kind="secondary" size="sm" onClick={onListo}>
-          {volviendoA ? "Llevame a lo que vine a ver" : "Entrar al portal"}
+        <Btn kind="secondary" size="sm" onClick={onDone}>
+          {returningTo ? "Llevame a lo que vine a ver" : "Entrar al portal"}
         </Btn>
         <span className="text-[12px] text-ink-soft">
           Esta charla te espera en el chat, no se pierde.
@@ -200,31 +207,33 @@ export default function ChatOnboarding({ cfg, pedido, nombreAgente, onListo, vol
   );
 }
 
-/** La espera, contada. Tres cosas y ninguna inventada: qué herramienta está
- *  usando (traducida, nunca el nombre del motor), cuánto lleva, y —cuando se
- *  hace larga— que puede tardar de verdad y que no hace falta quedarse mirando.
+/** The wait, narrated. Three things and none of them invented: which tool
+ *  it's using (translated, never the engine's own name), how long it's been,
+ *  and -- once it runs long -- that it can genuinely take a while and there's
+ *  no need to sit staring at it.
  *
- *  Lo último es lo importante y es honesto: el primer pedido del alta suele ser
- *  el más caro de todos (el agente todavía no sabe nada del negocio) y hay
- *  respuestas de varios minutos. Eso no lo arregla el portal; lo que sí puede
- *  hacer es no dejar a alguien esperando en silencio delante de una pantalla. */
-function Esperando({ nombre, haciendo, segundos }: {
-  nombre: string; haciendo: string | null; segundos: number;
+ *  That last part is the important one and it's honest: onboarding's first
+ *  request tends to be the most expensive of all (the agent doesn't know
+ *  anything about the business yet) and some replies take several minutes.
+ *  The portal can't fix that; what it can do is not leave someone waiting in
+ *  silence in front of a screen. */
+function Waiting({ name, doing, seconds }: {
+  name: string; doing: string | null; seconds: number;
 }) {
-  const que = haciendo ? accionDe(haciendo).curso : null;
+  const what = doing ? actionFor(doing).inProgress : null;
   return (
     <div className="text-[13px] leading-relaxed text-ink-soft">
       <p>
-        {que ? `${nombre}: ${que.toLowerCase()}…` : `${nombre} está pensando…`}
-        {segundos >= 5 && (
+        {what ? `${name}: ${what.toLowerCase()}…` : `${name} está pensando…`}
+        {seconds >= 5 && (
           <span className="ml-1.5 tabular-nums text-ink-soft/70">
-            {segundos < 60
-              ? `${segundos} s`
-              : `${Math.floor(segundos / 60)} min ${segundos % 60} s`}
+            {seconds < 60
+              ? `${seconds} s`
+              : `${Math.floor(seconds / 60)} min ${seconds % 60} s`}
           </span>
         )}
       </p>
-      {segundos >= 45 && (
+      {seconds >= 45 && (
         <p className="mt-1 text-[12.5px]">
           Esta primera puede llevarle unos minutos: todavía no sabe nada de tu
           negocio y está armando todo de cero. Podés dejar la pantalla abierta y

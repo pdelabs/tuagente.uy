@@ -1,17 +1,17 @@
 "use client";
 
-// Compositor: `@` le habla a alguien del equipo, `/` busca cosas tuyas
-// (archivos y tickets). Un prefijo para "hablarle a alguien", otro para
-// "encontrar algo mío" -- la misma convención que la gente ya conoce.
+// Composer: `@` addresses someone on the team, `/` searches your own things
+// (files and tickets). One prefix for "talk to someone", another for
+// "find something of mine" -- the same convention people already know.
 //
-// `@` era de los archivos. Se los lleva `/` porque en una sala `@` significa
-// una sola cosa, y pelearla contra la costumbre de todo el mundo es perder.
-// `#` sigue vivo para tickets: no cuesta nada y a quien lo aprendió no se le
-// saca.
+// `@` used to belong to files. `/` takes it over because in a room `@` means
+// one single thing, and fighting that against everyone's habit is a losing
+// battle. `#` stays alive for tickets: it costs nothing, and whoever already
+// learned it doesn't lose it.
 //
-// Al elegir un archivo o un ticket se inserta su id/ruta y el chat lo dibuja
-// como chip. Al elegir a alguien del equipo NO se inserta texto: se cambia el
-// destinatario del turno, que es lo que un `@` significa.
+// Picking a file or a ticket inserts its id/path and the chat draws it as a
+// chip. Picking someone on the team does NOT insert text: it changes the
+// turn's recipient, which is what an `@` means.
 
 import { useEffect, useMemo, useState } from "react";
 import { FileText, Ticket as TicketIcon, User } from "lucide-react";
@@ -21,7 +21,7 @@ import { roleName, type RolesById } from "../lib/roles";
 export type MentionKind = "ticket" | "file" | "role";
 export type MentionItem = { insert: string; label: string; hint?: string };
 
-/** Token de mención inmediatamente antes del cursor, si lo hay. */
+/** The mention token immediately before the caret, if there is one. */
 export function mentionAt(text: string, caret: number):
   { kind: MentionKind; term: string; start: number } | null {
   const before = text.slice(0, caret);
@@ -39,7 +39,7 @@ export function mentionAt(text: string, caret: number):
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-/** Trae y filtra candidatos. Cachea por tipo: el tablero no cambia por tecla. */
+/** Fetches and filters candidates. Cached per type: the board doesn't change per keystroke. */
 export function useMentionItems(
   cfg: PortalConfig | null,
   kind: MentionKind | null,
@@ -88,7 +88,7 @@ export function useMentionItems(
 
   return useMemo(() => {
     const pool = kind === "ticket" ? tickets : kind === "file" ? files : kind === "role" ? team : null;
-    if (!pool) return null; // null = cargando
+    if (!pool) return null; // null = still loading
     const needle = norm(term);
     const hit = needle
       ? pool.filter((i) => norm(i.label).includes(needle) || norm(i.insert).includes(needle))

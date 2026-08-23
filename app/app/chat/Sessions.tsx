@@ -1,9 +1,9 @@
 "use client";
 
-// Sidebar de conversaciones: búsqueda, agrupado por fecha, fijadas, renombrar,
-// borrar y filtro de sesiones de sistema (crons, workers, títulos automáticos).
-// Endpoints verificados contra :8642 — PATCH /api/sessions/{id} renombra (200),
-// DELETE /api/sessions/{id} borra (200).
+// Conversations sidebar: search, grouped by date, pinning, rename, delete, and
+// a filter for system sessions (crons, workers, auto-generated titles).
+// Endpoints verified against :8642 — PATCH /api/sessions/{id} renames (200),
+// DELETE /api/sessions/{id} deletes (200).
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -12,8 +12,8 @@ import {
 import {
   deleteSession, renameSession, type PortalConfig,
 } from "../lib/agent";
-import { esConversacionHumana } from "../lib/eventos";
-import { momentoDe } from "../lib/palabras";
+import { isHumanConversation } from "../lib/events";
+import { momentOf } from "../lib/labels";
 import { ErrorState, Spinner, inputCls } from "../lib/ui";
 
 export type SessionSummary = {
@@ -22,34 +22,36 @@ export type SessionSummary = {
   title: string | null;
   preview: string | null;
   message_count: number;
-  started_at: number; // epoch en segundos
+  started_at: number; // epoch in seconds
   last_active: number;
 };
 
 const PINNED_KEY = "tuagente_chat_pinned";
 
-// Cuáles son conversaciones del cliente y cuáles maquinaria del motor lo decide
-// `lib/eventos.ts` y nadie más: este criterio vivía acá y Actividad tenía el
-// suyo —sólo por canal—, así que la misma sesión de avisos internos era una
-// conversación de más en una pantalla y no existía en la otra.
-const isHumanSession = (s: SessionSummary) => esConversacionHumana(s);
+// Which are the client's conversations and which are engine machinery is
+// decided by `lib/events.ts` and nobody else: this criterion used to live
+// here, and Activity had its own -- channel-only -- so the same internal-
+// notices session was one conversation too many on one screen and didn't
+// exist on the other.
+const isHumanSession = (s: SessionSummary) => isHumanConversation(s);
 
 export function sessionTitle(s: SessionSummary): string {
   return s.title?.trim() || s.preview?.trim() || "Conversación";
 }
 
-/** EL DÍA ES EL DEL NEGOCIO, NO EL DEL BROWSER. Esto contaba los días con
- *  `new Date()` local mientras Actividad —que lista las mismas conversaciones—
- *  los contaba con el reloj del agente. Medido el 13/8 en el agente de una
- *  veterinaria con el browser en -06: la conversación de las 02:40 de
- *  Montevideo caía en el chat bajo "AYER" y en Actividad bajo "HOY". El cliente
- *  encontraba la charla de esta mañana archivada en ayer, en la pantalla que
- *  más usa. `momentoDe` es la puerta única del portal: acepta el epoch en
- *  segundos y devuelve los días ya contados allá (0 hoy, -1 ayer). */
+/** THE DAY IS THE BUSINESS'S, NOT THE BROWSER'S. This used to count days
+ *  with a local `new Date()` while Activity -- which lists the same
+ *  conversations -- counted them with the agent's clock. Measured on 8/13 on
+ *  a veterinary clinic's agent with the browser at -06: the 02:40 Montevideo
+ *  conversation fell under "YESTERDAY" in the chat and under "TODAY" in
+ *  Activity. The client found this morning's chat filed under yesterday, on
+ *  the screen they use the most. `momentOf` is the portal's single gate: it
+ *  takes the epoch in seconds and returns the days already counted over
+ *  there (0 today, -1 yesterday). */
 function dayGroup(epochSeconds: number): string {
-  const m = momentoDe(epochSeconds);
+  const m = momentOf(epochSeconds);
   if (!m) return "Anteriores";
-  const diff = -m.dias;
+  const diff = -m.days;
   if (diff <= 0) return "Hoy";
   if (diff === 1) return "Ayer";
   if (diff < 7) return "Últimos 7 días";
@@ -74,7 +76,7 @@ export default function Sessions({
   onRefresh: () => void;
   onDeletedActive: () => void;
   searchRef?: React.RefObject<HTMLInputElement>;
-  onNavigate?: () => void; // cerrar el drawer en mobile
+  onNavigate?: () => void; // close the drawer on mobile
 }) {
   const [q, setQ] = useState("");
   const [showSystem, setShowSystem] = useState(false);
@@ -96,7 +98,7 @@ export default function Sessions({
     try { localStorage.setItem(PINNED_KEY, JSON.stringify(next)); } catch { /* noop */ }
   };
 
-  // Cerrar el menú contextual al hacer click afuera o con Escape.
+  // Close the context menu on an outside click or Escape.
   useEffect(() => {
     if (!menuId) return;
     const onDown = (e: MouseEvent) => {

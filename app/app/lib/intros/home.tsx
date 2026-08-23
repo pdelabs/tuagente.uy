@@ -1,38 +1,38 @@
 "use client";
 
-// Bienvenida general del portal: la primera pantalla que ve un cliente.
-// A diferencia de las otras, no explica un módulo sino la idea entera —
-// qué es tener un agente trabajando y dónde se ve cada cosa.
+// The portal's general welcome screen: the first thing a client sees.
+// Unlike the others, it doesn't explain one module but the whole idea --
+// what having an agent working means and where everything shows up.
 
 import {
   ArrowRight, Columns3, Hand, LayoutDashboard, MessageSquare, Sparkles,
 } from "lucide-react";
 import { IntroPage, Eyebrow, Title, Lead, type IntroProps } from "./shell";
 
-const PASOS = [
+const STEPS = [
   {
     icon: MessageSquare,
-    titulo: "Le pedís",
-    texto: "Por chat, como a cualquiera del equipo.",
-    tono: "bg-c-violet",
+    title: "Le pedís",
+    description: "Por chat, como a cualquiera del equipo.",
+    tone: "bg-c-violet",
   },
   {
     icon: Columns3,
-    titulo: "Trabaja",
-    texto: "Cada cosa que hace queda como una tarea que podés seguir.",
-    tono: "bg-c-amber",
+    title: "Trabaja",
+    description: "Cada cosa que hace queda como una tarea que podés seguir.",
+    tone: "bg-c-amber",
   },
   {
     icon: Hand,
-    titulo: "Te consulta",
-    texto: "Antes de los pasos sensibles, frena y te pide el visto bueno.",
-    tono: "bg-c-coral",
+    title: "Te consulta",
+    description: "Antes de los pasos sensibles, frena y te pide el visto bueno.",
+    tone: "bg-c-coral",
   },
   {
     icon: LayoutDashboard,
-    titulo: "Te entrega",
-    texto: "Informes, listas y visualizaciones que quedan guardadas acá.",
-    tono: "bg-c-green",
+    title: "Te entrega",
+    description: "Informes, listas y visualizaciones que quedan guardadas acá.",
+    tone: "bg-c-green",
   },
 ];
 
@@ -46,23 +46,23 @@ export default function HomeIntro({ onOk }: IntroProps) {
         registro de todo lo que toca y te pregunta cuando corresponde.
       </Lead>
 
-      {/* El ciclo completo, que es lo que nadie entiende de entrada.
-          SIN TARJETA: cuatro bloques blancos con borde en una grilla son, en
-          este portal, cosas que se tocan —así se ven los ejemplos de flujos y
-          las conexiones—. Una clienta de prueba le tocó las del alta, que son
-          estas mismas, y anotó que "no hacen nada". Son cuatro pasos de un
-          dibujo: quedan como el ícono, el título y el texto, sin caja. */}
+      {/* The whole cycle, which is what nobody gets right away.
+          WITH NO CARD: four white bordered blocks in a grid are, on this
+          portal, things you touch -- that's what the flow examples and the
+          connections look like. A test client tapped this same set on
+          onboarding and wrote that "they don't do anything". These are four
+          steps drawn as an icon, a title and text, with no box. */}
       <div className="mt-8 grid gap-x-3 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
-        {PASOS.map((p, i) => {
+        {STEPS.map((p, i) => {
           const Icon = p.icon;
           return (
-            <div key={p.titulo} className="relative pr-4">
-              <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${p.tono}`}>
+            <div key={p.title} className="relative pr-4">
+              <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${p.tone}`}>
                 <Icon className="h-4 w-4 text-ink" />
               </div>
-              <p className="text-sm font-bold text-ink">{p.titulo}</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{p.texto}</p>
-              {i < PASOS.length - 1 && (
+              <p className="text-sm font-bold text-ink">{p.title}</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{p.description}</p>
+              {i < STEPS.length - 1 && (
                 <ArrowRight
                   className="absolute right-0 top-3 hidden h-4 w-4 text-ink-soft/40 lg:block"
                   aria-hidden

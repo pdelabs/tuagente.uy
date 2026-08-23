@@ -1,29 +1,28 @@
 "use client";
 
-// Bienvenida del módulo Pipeline.
-// Idea visual: el tablero en miniatura arriba de todo —tres columnas con
-// tarjetitas— y el texto abajo, alineado en tres puntos que hacen eco de las
-// tres columnas.
+// Pipeline module's welcome screen.
+// Visual idea: a tiny board at the top -- three columns with little cards --
+// and the text below, laid out as three points echoing the three columns.
 //
-// DOS COSAS QUE ESTE DIBUJO YA NO HACE. Pasaba por el tablero de verdad: una
-// clienta de prueba leyó «Confirmar antes de seguir» y «Resumen de la semana»
-// como tareas suyas. Ahora va adentro de `Maqueta`, que lo marca como ejemplo.
-// Y tenía arriba a la derecha un «+ Nueva tarea» violeta, calcado del botón de
-// verdad, que no hacía nada: un botón dibujado es una promesa de clic.
+// TWO THINGS THIS DRAWING NO LONGER DOES. It used to pass for the real board:
+// a test client read "Confirmar antes de seguir" and "Resumen de la semana"
+// as her own tasks. Now it sits inside `Mockup`, which marks it as an example.
+// And it used to have a violet "+ Nueva tarea" top right, a copy of the real
+// button, that did nothing: a drawn button is a promised click.
 
 import type { ReactNode } from "react";
 import { Check, Columns3, Hand, MessageCircle, PanelRightOpen, Plus, Search, UserRound } from "lucide-react";
-import { IntroPage, Eyebrow, Title, Lead, Maqueta, Point, type IntroProps } from "./shell";
+import { IntroPage, Eyebrow, Title, Lead, Mockup, Point, type IntroProps } from "./shell";
 
-function MiniCard({ title, meta, destacada }: {
+function MiniCard({ title, meta, highlighted }: {
   title: string;
   meta: ReactNode;
-  destacada?: boolean;
+  highlighted?: boolean;
 }) {
   return (
     <div
       className={`rounded-lg border bg-white p-1.5 sm:p-2 ${
-        destacada ? "border-primary/45" : "border-black/[0.07]"
+        highlighted ? "border-primary/45" : "border-black/[0.07]"
       }`}
     >
       <p className="line-clamp-2 break-words text-[11px] font-medium leading-tight text-ink">
@@ -36,7 +35,7 @@ function MiniCard({ title, meta, destacada }: {
   );
 }
 
-function Columna({ dot, label, children }: {
+function Column({ dot, label, children }: {
   dot: string;
   label: string;
   children: ReactNode;
@@ -52,10 +51,10 @@ function Columna({ dot, label, children }: {
   );
 }
 
-/** El tablero dibujado. Ejemplo declarado y sin un solo control adentro. */
-function TableroDemo() {
+/** The drawn board. Declared as an example, with not a single control inside. */
+function BoardDemo() {
   return (
-    <Maqueta className="bg-white" nota="Tarjetas de ejemplo: no son tus tareas.">
+    <Mockup className="bg-white" note="Tarjetas de ejemplo: no son tus tareas.">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-ink-soft">
           <Columns3 className="h-3.5 w-3.5 shrink-0" />
@@ -63,13 +62,13 @@ function TableroDemo() {
         </span>
       </div>
 
-      {/* En anchos ridículamente chicos el tablero scrollea dentro de su propia
-          caja: la página nunca se corre para el costado. */}
+      {/* At ridiculously narrow widths the board scrolls inside its own box:
+          the page never shifts sideways. */}
       <div className="overflow-x-auto">
         <div className="grid min-w-[21rem] grid-cols-3 gap-1.5 sm:gap-2">
-          <Columna dot="bg-primary" label="Esperando aprobación">
+          <Column dot="bg-primary" label="Esperando aprobación">
             <MiniCard
-              destacada
+              highlighted
               title="Confirmar antes de seguir"
               meta={
                 <>
@@ -78,9 +77,9 @@ function TableroDemo() {
                 </>
               }
             />
-          </Columna>
+          </Column>
 
-          <Columna dot="bg-c-amber-ink" label="En curso">
+          <Column dot="bg-c-amber-ink" label="En curso">
             <MiniCard
               title="Armando lo que pediste"
               meta={
@@ -99,9 +98,9 @@ function TableroDemo() {
                 </>
               }
             />
-          </Columna>
+          </Column>
 
-          <Columna dot="bg-c-green-ink" label="Completadas">
+          <Column dot="bg-c-green-ink" label="Completadas">
             <MiniCard
               title="Resumen de la semana"
               meta={
@@ -120,17 +119,17 @@ function TableroDemo() {
                 </>
               }
             />
-          </Columna>
+          </Column>
         </div>
       </div>
-    </Maqueta>
+    </Mockup>
   );
 }
 
 export default function PipelineIntro({ onOk }: IntroProps) {
   return (
     <IntroPage onOk={onOk} cta="Ver el tablero" note="Se actualiza solo cada 30 s.">
-      <TableroDemo />
+      <BoardDemo />
 
       <div className="mt-6 max-w-2xl">
         <Eyebrow icon={Columns3}>Tablero</Eyebrow>

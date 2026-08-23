@@ -1,33 +1,33 @@
 "use client";
 
-// Kit UI del portal — v2 profesional: superficies planas separadas por
-// bordes hairline (sin sombras), radios contenidos, foco visible en inputs.
-// Los features importan de acá; no re-estilar por feature.
+// The portal's UI kit -- professional v2: flat surfaces separated by hairline
+// borders (no shadows), contained radii, visible focus on inputs. Modules
+// import from here; no re-styling per module.
 
 import { ReactNode } from "react";
 import { Hand, LifeBuoy, Loader2, type LucideIcon } from "lucide-react";
 
-// Soporte de tuagente (nuestro, igual para todos los clientes — no es dato de
-// cliente, así que no viola el principio cero). Existe porque un cliente de
-// prueba se quedó dos veces frente a una pantalla rota sin nadie a quien
-// avisarle: "no tenía a quién preguntarle" fue de lo primero que anotó.
-export const SOPORTE = {
+// tuagente's support (ours, the same for every client -- not client data, so
+// it doesn't violate principle zero). Exists because a test client sat twice
+// in front of a broken screen with nobody to tell: "I had nobody to ask" was
+// one of the first things she wrote down.
+export const SUPPORT = {
   whatsapp: "https://wa.me/59899002835",
   mail: "mailto:hola@tuagente.uy",
-  telefono: "+598 99 002 835",
+  phone: "+598 99 002 835",
 };
 
-/** Link de auxilio. Va en las pantallas donde el cliente se puede quedar
- *  trabado (login, sin conexión, error) y al pie del menú.
+/** Support link. Goes on screens where the client can get stuck (login, no
+ *  connection, error) and at the bottom of the menu.
  *
- *  `label` lo reusa donde escribirnos no es un pedido de auxilio -- sumar a
- *  alguien al equipo, por ejemplo. La URL sigue viviendo en UN solo lugar, que
- *  es el punto: un mailto escrito a mano en cada pantalla es otro dato que se
- *  desincroniza el día que cambiamos de número. */
-export function Soporte({ className = "", label }: { className?: string; label?: string }) {
+ *  `label` gets reused where writing to us isn't a cry for help -- adding
+ *  someone to the team, for instance. The URL still lives in ONE single
+ *  place, which is the point: a hand-written mailto on every screen is one
+ *  more thing that drifts out of sync the day our number changes. */
+export function Support({ className = "", label }: { className?: string; label?: string }) {
   return (
     <a
-      href={SOPORTE.whatsapp}
+      href={SUPPORT.whatsapp}
       target="_blank"
       rel="noopener noreferrer"
       className={`inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-soft transition hover:text-primary ${className}`}
@@ -38,7 +38,7 @@ export function Soporte({ className = "", label }: { className?: string; label?:
   );
 }
 
-// Clases de input compartidas (texto, búsqueda, textarea).
+// Shared input classes (text, search, textarea).
 export const inputCls =
   "w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-ink " +
   "placeholder:text-ink-soft/60 outline-none transition " +
@@ -110,7 +110,7 @@ export function Btn({ kind = "primary", size = "md", disabled, onClick, children
 }
 
 export function IconBtn({ label, onClick, disabled, children }: {
-  label: string; // accesibilidad + tooltip nativo
+  label: string; // accessibility + native tooltip
   onClick?: () => void;
   disabled?: boolean;
   children: ReactNode;
@@ -162,16 +162,16 @@ export function Modal({ onClose, children, wide = false }: {
   );
 }
 
-/** El link que te mandaron ya no lleva a nada.
+/** The link you were sent doesn't lead anywhere anymore.
  *
- *  Pasa solo: una aprobación se aprueba, una tarea se archiva, un archivo se
- *  renombra. Un link que el agente mandó por mail hace dos días se pone viejo
- *  sin que nadie haga nada mal. Antes cada pantalla reaccionaba distinto —una
- *  en silencio, otra clavada en "Abriendo…" para siempre, otra con "No pude
- *  hablar con tu agente", que además era mentira—. Ahora es siempre lo mismo:
- *  se dice en criollo y se muestra la lista, que es donde el cliente puede
- *  seguir. */
-export function AvisoLinkViejo({ children }: { children: ReactNode }) {
+ *  It happens on its own: an approval gets approved, a task gets archived, a
+ *  file gets renamed. A link the agent sent by mail two days ago goes stale
+ *  without anyone doing anything wrong. Every screen used to react
+ *  differently -- one silently, another stuck on "Abriendo…" forever, another
+ *  with "No pude hablar con tu agente", which was also a lie. Now it's always
+ *  the same: it's said plainly and the list is shown, which is where the
+ *  client can carry on. */
+export function StaleLinkNotice({ children }: { children: ReactNode }) {
   return (
     <p className="mb-4 rounded-lg border border-c-amber bg-c-amber/25 px-3 py-2 text-[13px] leading-snug text-c-amber-ink">
       {children}

@@ -1,9 +1,9 @@
 "use client";
 
-// Módulo Chat — hilo centrado estilo Open WebUI con streaming, markdown rico,
-// bloque de herramientas colapsable, regenerar/editar, exportar y scroll vivo.
-// Conversación nueva → /v1/chat/completions; retomar sesión → SSE nativo de
-// Hermes (assistant.delta / tool.progress / run.completed).
+// Chat module — thread centered like Open WebUI, with streaming, rich markdown,
+// a collapsible tool block, regenerate/edit, export and live scroll.
+// New conversation → /v1/chat/completions; resuming a session → Hermes'
+// native SSE (assistant.delta / tool.progress / run.completed).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -17,24 +17,24 @@ import {
 } from "../lib/agent";
 import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
 import {
-  CopiarLink, PARAM, PARAM_PEDIDO_CHAT, abrirEnRuta, reemplazarEnRuta, useParamRuta,
-} from "../lib/rutas";
+  CopyLink, PARAM, PARAM_CHAT_REQUEST, openInRoute, replaceInRoute, useRouteParam,
+} from "../lib/routes";
 import { EntityProvider } from "../lib/EntityViewer";
 import Markdown from "../lib/Markdown";
 import ArtifactPreview, { artifactIdsIn } from "../lib/ArtifactPreview";
 import dynamic from "next/dynamic";
 import { loadAgentName } from "../lib/onboarding";
-import { AgentitoAvatar, AgentitoCargando, LOOK_DEFAULT, loadAgentLook, type AgentitoLook } from "../lib/agentito";
+import { AgentitoAvatar, AgentitoLoading, LOOK_DEFAULT, loadAgentLook, type AgentitoLook } from "../lib/agentito";
 import { roleName, useRoles } from "../lib/roles";
-import type { EstadoAgentito } from "../lib/AgentitoRive";
+import type { AgentitoState } from "../lib/AgentitoRive";
 
-// El personaje animado se trae solo cuando el chat se muestra; mientras, la
-// cara estática. Mismo patrón que el onboarding.
+// The animated character is only pulled in once the chat shows; until then,
+// the static face. Same pattern as onboarding.
 const AgentitoRive = dynamic(() => import("../lib/AgentitoRive"), {
   ssr: false,
-  loading: () => <AgentitoCargando />,
+  loading: () => <AgentitoLoading />,
 });
-import { accionDe, resumenDeAcciones } from "../lib/palabras";
+import { actionFor, summarizeActions } from "../lib/labels";
 import Sessions, { sessionTitle, type SessionSummary } from "./Sessions";
 import {
   MentionList, mentionAt, useMentionItems,
@@ -51,7 +51,7 @@ type StoredMessage = {
 type Msg = {
   role: "user" | "assistant";
   content: string;
-  tools?: string[]; // herramientas usadas en el run (solo en vivo)
+  tools?: string[]; // tools used in the run (live only)
   /** Which member of the team answered. `assistant` messages only, and only
    *  when the client addressed someone: absent means the agent they named, and
    *  that one is never signed -- badging it would turn their agent into an
@@ -61,40 +61,39 @@ type Msg = {
 
 const THINKING = "_thinking";
 
-// Lo que el agente está haciendo, en palabras del cliente. El nombre crudo de
-// la herramienta NO se muestra nunca: "Usando skill view…" y "Usando kanban
-// show…" fueron dos de las frases que el QA anotó como "no sé qué son esas
-// palabras, y son las que me muestra mientras espero". El nombre técnico sigue
-// viajando en el `title` para nosotros.
+// What the agent is doing, in the client's words. The tool's raw name is
+// NEVER shown: "Using skill view…" and "Using kanban show…" were two of the
+// phrases QA flagged as "I don't know what those words mean, and they're what
+// I see while I wait." The technical name still travels in the `title` for us.
 
-/** Qué cara pone el agentito según lo que está haciendo AHORA.
+/** Which face the agentito wears based on what it's doing RIGHT NOW.
  *
- *  El gesto dice la verdad: sale del nombre de herramienta que reporta Hermes
- *  por `tool.progress`, no de una rotación al azar. Lo que no cae en ninguna
- *  familia va a "haciendo", que es el gesto genérico de estar trabajando
+ *  The gesture tells the truth: it comes from the tool name Hermes reports
+ *  via `tool.progress`, not a random rotation. Whatever doesn't fall into any
+ *  family goes to "doing", the generic gesture for being at work
  *  (terminal, execute_code, process, cronjob, send_message, delegate_task…). */
-function gestoDe(tool: string | undefined): EstadoAgentito {
-  if (!tool || tool === THINKING) return "pensando";
-  if (/^(clarify|todo|memory)$/.test(tool)) return "pensando";
+function gestureFor(tool: string | undefined): AgentitoState {
+  if (!tool || tool === THINKING) return "thinking";
+  if (/^(clarify|todo|memory)$/.test(tool)) return "thinking";
   if (/^(read_file|search_files|session_search|read_terminal|skill_view|skills_list|feishu_doc_read|kanban_(show|list)|project_list)$/.test(tool)) {
-    return "leyendo";
+    return "reading";
   }
   if (/^(write_file|patch|image_generate|video_generate|kanban_(create|comment|complete|block|unblock|link)|project_create)$/.test(tool)) {
-    return "escribiendo";
+    return "writing";
   }
   if (/^(web_search|web_extract|x_search|browser_|vision_analyze|video_analyze)/.test(tool)) {
-    return "buscando";
+    return "searching";
   }
-  return "haciendo";
+  return "doing";
 }
 
-/** Bloque colapsable con lo que el agente hizo antes de responder. */
+/** Collapsible block with what the agent did before answering. */
 function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
   const [open, setOpen] = useState(false);
   if (!tools.length) return null;
   const last = tools[tools.length - 1];
   const used = tools.filter((t) => t !== THINKING);
-  const summary = resumenDeAcciones(tools);
+  const summary = summarizeActions(tools);
   return (
     <div className="mb-2">
       <button
@@ -105,7 +104,7 @@ function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
         {live ? (
           <>
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-            {accionDe(last).curso}…
+            {actionFor(last).inProgress}…
           </>
         ) : (
           <>
@@ -118,7 +117,7 @@ function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
         <ol className="ml-4 mt-1 flex flex-col gap-1 border-l border-black/[0.08] pl-3">
           {tools.map((t, i) => (
             <li key={`${t}-${i}`} title={t} className="text-[12px] text-ink-soft">
-              {accionDe(t).hecho}
+              {actionFor(t).done}
             </li>
           ))}
         </ol>
@@ -146,34 +145,36 @@ function CopyBtn({ text }: { text: string }) {
 
 export default function ChatPage() {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
-  // El agente tiene nombre y cara: el chat los usa en vez de "tu agente".
-  // El look va lazy (sin efecto) para no pintar el violeta default un frame.
-  const [lookAgente] = useState(loadAgentLook);
+  // The agent has a name and a face: the chat uses them instead of "your agent".
+  // The look is loaded lazily (no effect) so the default violet doesn't flash
+  // for a frame.
+  const [agentLook] = useState(loadAgentLook);
   // The team, if this agent has one. Empty on every agent running today, so the
   // chat keeps drawing exactly one face: the one the client named.
   const roles = useRoles();
   /** The face for a message: the role that answered, or the client's own agent. */
-  const lookDe = (by?: string): AgentitoLook =>
+  const lookFor = (by?: string): AgentitoLook =>
     by && roles[by]?.look
       ? ({ ...LOOK_DEFAULT, ...roles[by].look } as AgentitoLook)
-      : lookAgente;
+      : agentLook;
   /** Who the next message goes to. null = the agent the client named. */
-  const [hablarCon, setHablarCon] = useState<string | null>(null);
+  const [talkingTo, setTalkingTo] = useState<string | null>(null);
   // WITH A TEAM THE CHAT IS A ROOM, stored by the adapter. Without one it is an
   // engine session, exactly as it has always been -- so no agent running today
-  // changes. Both live under the same `?conversacion=` param and are told apart
+  // changes. Both live under the same `?conversation=` param and are told apart
   // by the prefix the portal itself mints.
   const roomMode = Object.keys(roles).length > 0;
-  const [nombreAgente, setNombreAgente] = useState<string | null>(null);
-  useEffect(() => { setNombreAgente(loadAgentName()); }, []);
+  const [agentName, setAgentName] = useState<string | null>(null);
+  useEffect(() => { setAgentName(loadAgentName()); }, []);
 
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [sessionsErr, setSessionsErr] = useState<string | null>(null);
   const [drawer, setDrawer] = useState(false);
 
-  // Qué conversación está abierta lo dice la URL (`?conversacion=<id>`): así se
-  // comparte, refrescar la deja donde estaba y "atrás" vuelve a la anterior.
-  const activeId = useParamRuta(PARAM.conversacion);
+  // Which conversation is open is decided by the URL (`?conversation=<id>`):
+  // that way it can be shared, a refresh keeps its place, and "back" returns
+  // to the previous one.
+  const activeId = useRouteParam(PARAM.conversation);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [loadingThread, setLoadingThread] = useState(false);
   const [threadErr, setThreadErr] = useState<string | null>(null);
@@ -186,16 +187,17 @@ export default function ChatPage() {
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [atBottom, setAtBottom] = useState(true);
-  // Menciones: `#` referencia tickets, `@` archivos del workspace.
+  // Mentions: `#` references tickets, `@` workspace files.
   const [mention, setMention] = useState<{ kind: MentionKind; term: string; start: number } | null>(null);
   const [mentionIdx, setMentionIdx] = useState(0);
 
   const [uploading, setUploading] = useState(false);
-  // Los adjuntos NO se pegan como texto en el cuadro de escribir: ahí el
-  // cliente veía aparecer "workspace/entrada/clientes.csv" mezclado con sus
-  // palabras ("feo, pero funcionó"). Viven acá y se suman al mensaje recién
-  // al enviarlo, que es lo que el agente necesita leer.
-  const [adjuntos, setAdjuntos] = useState<{ nombre: string; path: string }[]>([]);
+  // Attachments do NOT get pasted as text into the compose box: that's where
+  // the client used to see "workspace/entrada/clientes.csv" show up mixed in
+  // with their own words ("ugly, but it worked"). They live here instead and
+  // get appended to the message only when it's sent, which is what the agent
+  // needs to read.
+  const [attachments, setAttachments] = useState<{ name: string; path: string }[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const sendingRef = useRef(false);
@@ -207,21 +209,21 @@ export default function ChatPage() {
 
   useEffect(() => { setCfg(loadConfig()); }, []);
 
-  // ABRIR EL CHAT CON EL PEDIDO YA ESCRITO: /app/chat?p=<texto>.
-  // Es lo que convierte una tarjeta de ejemplo en algo que PASA. Sin esto, el
-  // cliente que toca "armar el primero" cae en una caja de texto vacía — que
-  // es exactamente el problema que la pantalla venía a resolver.
+  // OPEN THE CHAT WITH THE REQUEST ALREADY WRITTEN: /app/chat?p=<text>.
+  // This is what turns an example card into something that ACTUALLY HAPPENS.
+  // Without it, the client who taps "set up the first one" lands on an empty
+  // text box — exactly the problem this screen was meant to solve.
   //
-  // Se manda UNA sola vez: `arrancado` evita que un re-render lo repita, y se
-  // limpia la URL para que refrescar no vuelva a mandarlo.
-  const arrancado = useRef(false);
+  // Sent ONCE: `started` keeps a re-render from repeating it, and the URL
+  // gets cleaned up so a refresh doesn't send it again.
+  const started = useRef(false);
   useEffect(() => {
-    if (arrancado.current || !cfg) return;
-    const pedido = new URLSearchParams(window.location.search).get("p");
-    if (!pedido?.trim()) return;
-    arrancado.current = true;
-    reemplazarEnRuta({ [PARAM_PEDIDO_CHAT]: null });
-    run(pedido.trim(), []);
+    if (started.current || !cfg) return;
+    const request = new URLSearchParams(window.location.search).get("p");
+    if (!request?.trim()) return;
+    started.current = true;
+    replaceInRoute({ [PARAM_CHAT_REQUEST]: null });
+    run(request.trim(), []);
   }, [cfg]);
 
   const refreshSessions = useCallback((c: PortalConfig, rooms: boolean) => {
@@ -230,7 +232,7 @@ export default function ChatPage() {
       getRooms(c)
         .then((r) => {
           setSessionsErr(null);
-          setSessions((r.salas ?? []).map((s) => ({
+          setSessions((r.rooms ?? []).map((s) => ({
             id: s.id,
             title: s.title,
             last_active: s.updated_at,
@@ -249,7 +251,7 @@ export default function ChatPage() {
   }, []);
   useEffect(() => { if (cfg) refreshSessions(cfg, roomMode); }, [cfg, roomMode, refreshSessions]);
 
-  // Scroll: seguimos el stream solo si el usuario está mirando el final.
+  // Scroll: we follow the stream only if the user is looking at the bottom.
   const onScroll = () => {
     const el = threadRef.current;
     if (!el) return;
@@ -287,7 +289,7 @@ export default function ChatPage() {
     const el = taRef.current;
     const caret = el?.selectionStart ?? input.length;
     if (mention.kind === "role") {
-      setHablarCon(item.insert);
+      setTalkingTo(item.insert);
       setInput(`${input.slice(0, mention.start)}${input.slice(caret)}`);
       setMention(null);
       setMentionIdx(0);
@@ -308,17 +310,17 @@ export default function ChatPage() {
     });
   };
 
-  // Adjuntar: el archivo va al buzón del agente y en el mensaje queda su ruta,
-  // que el chat muestra como chip y el agente sabe abrir.
+  // Attach: the file goes to the agent's mailbox and its path stays in the
+  // message, which the chat shows as a chip and the agent knows how to open.
   const attach = async (file: File) => {
     if (!cfg || uploading) return;
     setUploading(true);
     setSendErr(null);
     try {
       const r = await uploadFile(cfg, file);
-      setAdjuntos((prev) => (prev.some((a) => a.path === r.path)
+      setAttachments((prev) => (prev.some((a) => a.path === r.path)
         ? prev
-        : [...prev, { nombre: file.name, path: r.path }]));
+        : [...prev, { name: file.name, path: r.path }]));
       taRef.current?.focus();
     } catch (e) {
       setSendErr(e instanceof Error ? e.message : "no pude subir el archivo");
@@ -334,20 +336,20 @@ export default function ChatPage() {
     if (!found) setMentionIdx(0);
   };
 
-  // Abrir una conversación (o empezar una nueva) es NAVEGAR. El hilo lo carga
-  // el efecto de abajo mirando la URL, así da igual si llegaste por la lista,
-  // por un link pegado o apretando "atrás".
+  // Opening a conversation (or starting a new one) is NAVIGATING. The thread
+  // is loaded by the effect below, watching the URL, so it doesn't matter
+  // whether you got here from the list, a pasted link, or hitting "back".
   const newConversation = useCallback(() => {
     if (sendingRef.current) return;
-    abrirEnRuta({ [PARAM.conversacion]: null });
+    openInRoute({ [PARAM.conversation]: null });
   }, []);
 
-  const irASesion = useCallback((id: string) => {
+  const goToSession = useCallback((id: string) => {
     if (sendingRef.current) return;
-    abrirEnRuta({ [PARAM.conversacion]: id });
+    openInRoute({ [PARAM.conversation]: id });
   }, []);
 
-  const cargarHilo = useCallback((c: PortalConfig, id: string) => {
+  const loadThread = useCallback((c: PortalConfig, id: string) => {
     const seq = ++openSeq.current;
     setMsgs([]);
     setThreadErr(null);
@@ -356,60 +358,62 @@ export default function ChatPage() {
     setEditingIdx(null);
     setLoadingThread(true);
     setAtBottom(true);
-    const cargar = id.startsWith("sala_")
+    const load = id.startsWith("sala_")
       // A room keeps who answered each turn, which is what lets the thread be
       // redrawn with the right faces after a reload instead of one voice.
-      ? getRoom(c, id).then((r) => (r.turnos ?? []).map((t: RoomTurn) => ({
+      ? getRoom(c, id).then((r) => (r.turns ?? []).map((t: RoomTurn) => ({
           role: t.role, content: t.content, by: t.by,
         })))
       : getSessionMessages(c, id).then((r: { data?: StoredMessage[] }) => (r.data ?? [])
           .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
           .map((m) => ({ role: m.role as "user" | "assistant", content: m.content as string })));
-    cargar
-      .then((turnos: Msg[]) => {
+    load
+      .then((turns: Msg[]) => {
         if (openSeq.current !== seq) return;
-        setMsgs(turnos);
+        setMsgs(turns);
       })
       .catch((e) => {
         if (openSeq.current !== seq) return;
-        // Un 404 acá no es una caída: es un link viejo a una conversación que
-        // ya no está (se borró, o es de otro agente). "No pude hablar con tu
-        // agente — 404 en /api/sessions" era mentira y encima en jerga.
+        // A 404 here isn't an outage: it's an old link to a conversation that
+        // isn't there anymore (deleted, or from another agent). "Couldn't talk
+        // to your agent — 404 on /api/sessions" was a lie, and jargon on top.
         const msg = e instanceof Error ? e.message : "error de red";
         setThreadErr(/\b404\b/.test(msg) ? "__vieja__" : msg);
       })
       .finally(() => { if (openSeq.current === seq) setLoadingThread(false); });
   }, []);
 
-  // De qué conversación es lo que hay en pantalla. Sin esto, la guarda de
-  // "hay un envío en curso" se tragaba los CAMBIOS de conversación: apretar
-  // atrás mientras el agente contestaba dejaba la URL y el encabezado en A, el
-  // hilo en pantalla en B, y el mensaje siguiente se escribía en A. Verificado
-  // por API. La guarda tiene que proteger el envío, no esconder la navegación.
+  // Which conversation is on screen. Without this, the "a send is in flight"
+  // guard swallowed conversation CHANGES: hitting back while the agent was
+  // answering left the URL and header on A, the thread on screen on B, and
+  // the next message got written into A. Verified via the API. The guard has
+  // to protect the send, not hide the navigation.
   const activeIdRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
     if (!cfg) return;
-    const previo = activeIdRef.current;
+    const previous = activeIdRef.current;
     activeIdRef.current = activeId;
-    // `undefined` = primera vuelta: no es un cambio de conversación.
-    const cambioDeHilo = previo !== undefined && previo !== activeId;
+    // `undefined` = first pass: not a conversation change.
+    const threadChanged = previous !== undefined && previous !== activeId;
 
     if (sendingRef.current) {
-      // Mismo hilo y envío en curso: no tocar nada. Es el caso de `?p=`, que
-      // arranca la conversación en el mismo commit que este efecto.
-      if (!cambioDeHilo) return;
-      // Te fuiste a otra conversación: el envío que estaba en vuelo pertenece
-      // a la anterior. Se corta y se carga la que pediste. Cualquier otra cosa
-      // termina escribiendo en la conversación equivocada.
+      // Same thread and a send in flight: don't touch anything. This is the
+      // `?p=` case, which starts the conversation in the same commit as this
+      // effect.
+      if (!threadChanged) return;
+      // You navigated to another conversation: the send that was in flight
+      // belongs to the previous one. It gets aborted and the one you asked
+      // for gets loaded. Anything else ends up writing into the wrong
+      // conversation.
       abortRef.current?.abort();
       sendingRef.current = false;
       setSending(false);
       setLiveTools([]);
     }
     if (!activeId) {
-      // Conversación nueva: pizarra limpia. No se toca lo que se está
-      // escribiendo en el compositor.
+      // New conversation: clean slate. Don't touch what's being typed in the
+      // composer.
       openSeq.current++;
       setMsgs([]);
       setLoadingThread(false);
@@ -420,18 +424,19 @@ export default function ChatPage() {
       setAtBottom(true);
       return;
     }
-    cargarHilo(cfg, activeId);
-  }, [cfg, activeId, cargarHilo]);
+    loadThread(cfg, activeId);
+  }, [cfg, activeId, loadThread]);
 
-  // Envía `text` partiendo de `base` como historia previa.
+  // Sends `text`, starting from `base` as the prior history.
   const run = async (text: string, base: Msg[]) => {
     if (!cfg || !text.trim() || sendingRef.current) return;
     sendingRef.current = true;
-    // A qué hilo pertenece ESTE envío. Si mientras corre el cliente se va a
-    // otra conversación, `openSeq` cambia y todo lo que llegue tarde se
-    // descarta en vez de pintarse encima de lo que está mirando ahora.
-    const seqEnvio = openSeq.current;
-    const vigente = () => openSeq.current === seqEnvio;
+    // Which thread THIS send belongs to. If the client navigates to another
+    // conversation while it's running, `openSeq` changes and anything that
+    // arrives late gets discarded instead of painted over what they're
+    // looking at now.
+    const sendSeq = openSeq.current;
+    const isCurrent = () => openSeq.current === sendSeq;
 
     // THE ROOM, SEEN FROM WHOEVER IS ANSWERING.
     //
@@ -445,10 +450,10 @@ export default function ChatPage() {
     // in the room, attributed by name. Only the answerer's own turns stay
     // `assistant`. That is what makes the transcript a room instead of one
     // confused monologue.
-    const speaker = (by?: string) => (by ? roleName(by, roles) : nombreAgente || "Tu agente");
+    const speaker = (by?: string) => (by ? roleName(by, roles) : agentName || "Tu agente");
     const history: ChatMessage[] = [
       ...base.map((m): ChatMessage => {
-        if (m.role !== "assistant" || (m.by ?? null) === hablarCon) {
+        if (m.role !== "assistant" || (m.by ?? null) === talkingTo) {
           return { role: m.role, content: m.content };
         }
         return { role: "user", content: `[${speaker(m.by)} dijo] ${m.content}` };
@@ -459,14 +464,15 @@ export default function ChatPage() {
     setInput("");
     setSendErr(null);
     setFailedText(null);
-    // Arranca "Pensando…" de una, sin esperar al primer evento del agente. Va
-    // solo en liveTools (lo que se ve mientras corre) y NO en `tools`, que es
-    // lo que queda guardado: si no, cada mensaje terminaría con un rastro
-    // "Pensó un momento" aunque no haya usado nada.
+    // Starts "Pensando…" [Thinking…] right away, without waiting for the
+    // agent's first event. Goes only into liveTools (what's shown while it
+    // runs) and NOT into `tools`, which is what gets saved: otherwise every
+    // message would end up with a "thought for a moment" trace even when it
+    // used nothing.
     setLiveTools([THINKING]);
     setEditingIdx(null);
     setMsgs([...base, { role: "user", content: text },
-             { role: "assistant", content: "", by: hablarCon ?? undefined }]);
+             { role: "assistant", content: "", by: talkingTo ?? undefined }]);
     setSending(true);
     setAtBottom(true);
 
@@ -475,18 +481,18 @@ export default function ChatPage() {
     // THE ROOM THIS TURN BELONGS TO. An open conversation keeps its id; a new
     // one gets minted here and goes into the URL, so a reload -- or the link --
     // comes back to the same room.
-    const sala = roomMode
+    const room = roomMode
       ? (activeId?.startsWith("sala_") ? activeId
         : `sala_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`)
       : null;
-    if (sala && sala !== activeId) reemplazarEnRuta({ [PARAM.conversacion]: sala });
+    if (room && room !== activeId) replaceInRoute({ [PARAM.conversation]: room });
 
     const tools: string[] = [];
     // Who takes this turn. Starts as whoever the client named -- null when
     // nobody was -- and the room may fill it in before the first token.
-    let answeredBy: string | null = hablarCon;
+    let answeredBy: string | null = talkingTo;
     const apply = (content: string) => {
-      if (!vigente()) return;
+      if (!isCurrent()) return;
       setMsgs((ms) => [
         ...ms.slice(0, -1),
         {
@@ -501,8 +507,8 @@ export default function ChatPage() {
       ]);
     };
 
-    // El markdown se re-parsea entero en cada repintado (código resaltado,
-    // fórmulas, diagramas): agrupamos deltas por frame en vez de por token.
+    // The markdown gets re-parsed whole on every repaint (syntax highlight,
+    // formulas, diagrams): we batch deltas per frame instead of per token.
     let pendingText: string | null = null;
     let frame = 0;
     const paint = (content: string) => {
@@ -528,8 +534,8 @@ export default function ChatPage() {
       // conversation. `sessionChatStream` sends only the new message and leans
       // on a session stored INSIDE one profile: down that path a teammate would
       // answer having read nothing, which is exactly the bubble we are leaving.
-      if (activeId && !hablarCon && !roomMode) {
-        // Un run puede traer varios mensajes del asistente (rondas de tools).
+      if (activeId && !talkingTo && !roomMode) {
+        // A run can bring several assistant messages (rounds of tools).
         const segments: string[] = [""];
         const render = () => paint(segments.filter((s) => s.trim()).join("\n\n"));
         await sessionChatStream(cfg, activeId, text, {
@@ -542,9 +548,10 @@ export default function ChatPage() {
             if (tools[tools.length - 1] !== tool) tools.push(tool);
             setLiveTools([...tools]);
           },
-          // OJO: run.completed trae TODA la historia de la sesión, no los
-          // mensajes de este turno. Solo lo usamos de red de seguridad si no
-          // llegó nada por los deltas, y ahí vale el último del asistente.
+          // NOTE: run.completed brings the WHOLE session history, not just
+          // this turn's messages. We only use it as a safety net when nothing
+          // arrived via the deltas, and then only the assistant's last one
+          // counts.
           onRunComplete: (messages) => {
             if (segments.some((s) => s.trim())) return;
             const last = [...messages]
@@ -552,50 +559,51 @@ export default function ChatPage() {
               .find((m) => m.role === "assistant" && m.content?.trim());
             if (last?.content) paint(last.content);
           },
-        }, ac.signal, hablarCon);
+        }, ac.signal, talkingTo);
       } else {
-        // Conversación nueva: el gateway también reporta herramientas, pero
-        // por otro evento. Sin esto el rastro y el gesto se quedan en
-        // "Pensando" toda la respuesta.
+        // New conversation: the gateway also reports tools, but through a
+        // different event. Without this the trace and the gesture would
+        // stay on "Pensando" [Thinking] for the whole answer.
         await chatStream(cfg, history, paint, (tool) => {
           if (tools[tools.length - 1] !== tool) tools.push(tool);
           setLiveTools([...tools]);
-        }, ac.signal, hablarCon, roomMode, (who) => {
+        }, ac.signal, talkingTo, roomMode, (who) => {
           answeredBy = who;
           // Repaint the placeholder message so the face and the name are right
           // from the first token, not after the answer lands.
           setMsgs((ms) => [...ms.slice(0, -1), { ...ms[ms.length - 1], by: who }]);
-        }, sala);
+        }, room);
       }
       flush();
-      if (vigente()) {
+      if (isCurrent()) {
         setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
       }
       refreshSessions(cfg, roomMode);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         flush();
-        if (vigente()) {
+        if (isCurrent()) {
           setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
         }
         refreshSessions(cfg, roomMode);
-      } else if (vigente()) {
+      } else if (isCurrent()) {
         setMsgs(base);
         setInput(text);
         setFailedText(text);
-        // Al ABRIR un hilo viejo el 404 ya se traducía ("Esa conversación ya no
-        // está"); al MANDAR salía crudo: "No pude enviar tu mensaje. 404 en
-        // chat de sesión". Es exactamente lo mismo pasando —la conversación no
-        // existe más— y encima acá Reintentar no puede funcionar nunca: vuelve
-        // a pegarle a la misma sesión que no está.
+        // OPENING an old thread already translated the 404 ("Esa conversación
+        // ya no está" [That conversation isn't there anymore]); SENDING left
+        // it raw: "Couldn't send your message. 404 on session chat." It's
+        // exactly the same thing happening -- the conversation no longer
+        // exists -- and on top of that Retry here can never work: it just
+        // hits the same session that isn't there.
         const msg = e instanceof Error ? e.message : "error de red";
         setSendErr(/\b404\b/.test(msg) ? "__vieja__" : msg);
       }
     } finally {
       abortRef.current = null;
-      // Si el cliente ya cambió de conversación, el efecto de `activeId` limpió
-      // esto antes: no lo pisamos de nuevo.
-      if (vigente()) {
+      // If the client already changed conversation, the `activeId` effect
+      // already cleaned this up: we don't stomp on it again.
+      if (isCurrent()) {
         sendingRef.current = false;
         setSending(false);
         setLiveTools([]);
@@ -604,16 +612,16 @@ export default function ChatPage() {
   };
 
   const send = (raw: string) => {
-    const rutas = adjuntos.map((a) => a.path).join("\n");
-    const texto = [raw.trim(), rutas].filter(Boolean).join("\n");
-    if (!texto) return;
-    setAdjuntos([]);
-    run(texto, msgs);
+    const paths = attachments.map((a) => a.path).join("\n");
+    const text = [raw.trim(), paths].filter(Boolean).join("\n");
+    if (!text) return;
+    setAttachments([]);
+    run(text, msgs);
   };
 
-  // Regenerar: repite el último pedido del usuario. En conversación nueva
-  // reemplaza la respuesta; en una sesión guardada del agente no se puede
-  // reescribir la historia, así que queda como un turno nuevo.
+  // Regenerate: repeats the user's last request. In a new conversation it
+  // replaces the answer; in a saved agent session history can't be rewritten,
+  // so it goes in as a new turn.
   const regenerate = () => {
     const lastUser = [...msgs].reverse().find((m) => m.role === "user");
     if (!lastUser || sending) return;
@@ -645,7 +653,7 @@ export default function ChatPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Atajos: ⌘K busca, ⌘⇧O nueva conversación.
+  // Shortcuts: ⌘K searches, ⌘⇧O starts a new conversation.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -676,7 +684,7 @@ export default function ChatPage() {
       sessionsErr={sessionsErr}
       activeId={activeId}
       sending={sending}
-      onOpen={irASesion}
+      onOpen={goToSession}
       onNew={newConversation}
       onRefresh={() => refreshSessions(cfg, roomMode)}
       onDeletedActive={newConversation}
@@ -714,10 +722,10 @@ export default function ChatPage() {
           <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
             {activeSession ? sessionTitle(activeSession) : "Nueva conversación"}
           </p>
-          {/* Solo las conversaciones guardadas tienen link. Una recién
-              empezada todavía no existe del lado del agente: prometerle un
-              link que no lleva a nada sería peor que no ofrecerlo. */}
-          {activeId && <CopiarLink titulo="Copiar el link de esta conversación" />}
+          {/* Only saved conversations have a link. One just started doesn't
+              exist yet on the agent's side: promising a link that leads
+              nowhere would be worse than not offering it. */}
+          {activeId && <CopyLink label="Copiar el link de esta conversación" />}
           {msgs.length > 0 && (
             <IconBtn label="Exportar a Markdown" onClick={exportMd}>
               <Download className="h-3.5 w-3.5" />
@@ -738,16 +746,16 @@ export default function ChatPage() {
                 />
               </div>
             ) : threadErr ? (
-              <ErrorState message={threadErr} onRetry={() => activeId && cargarHilo(cfg, activeId)} />
+              <ErrorState message={threadErr} onRetry={() => activeId && loadThread(cfg, activeId)} />
             ) : msgs.length === 0 && !sending ? (
               <div className="flex flex-col items-center pt-24 text-center">
-                {/* El agentito recibe — el ANIMADO: mientras no le pedís nada,
-                    se ceba unos mates (estado tranquilo). */}
+                {/* The agentito greets you — the ANIMATED one: while you're
+                    not asking for anything, it sips some mate (calm state). */}
                 <div className="mb-5 h-36 w-36">
-                  <AgentitoRive festejos={0} look={lookAgente} estado="tranquilo" className="h-full w-full" />
+                  <AgentitoRive celebrations={0} look={agentLook} state="calm" className="h-full w-full" />
                 </div>
                 <p className="text-base font-bold text-ink">
-                  {nombreAgente ? `¿En qué te puede ayudar ${nombreAgente}?` : "¿En qué te puedo ayudar?"}
+                  {agentName ? `¿En qué te puede ayudar ${agentName}?` : "¿En qué te puedo ayudar?"}
                 </p>
                 <p className="mt-1 max-w-sm text-sm leading-relaxed text-ink-soft">
                   Preguntale lo que necesites o encargale una tarea. Las conversaciones
@@ -800,21 +808,21 @@ export default function ChatPage() {
                     </div>
                   ) : (
                     <div key={i} className="group flex gap-2.5">
-                      {/* Un solo agentito por mensaje: el animado mientras
-                          está trabajando, el quieto cuando terminó.
+                      {/* One agentito per message: the animated one while
+                          it's working, the still one once it's done.
                           When a member of the team answered, it is THEIR face:
                           the same identity the board and the roster draw, so
                           "who did this" reads the same everywhere. */}
                       <div className="mt-0.5 h-7 w-7 shrink-0">
                         {sending && i === lastIdx ? (
                           <AgentitoRive
-                            festejos={0}
-                            look={lookDe(m.by)}
-                            estado={gestoDe(liveTools[liveTools.length - 1])}
+                            celebrations={0}
+                            look={lookFor(m.by)}
+                            state={gestureFor(liveTools[liveTools.length - 1])}
                             className="h-full w-full"
                           />
                         ) : (
-                          <AgentitoAvatar look={lookDe(m.by)} className="h-full w-full" />
+                          <AgentitoAvatar look={lookFor(m.by)} className="h-full w-full" />
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -830,9 +838,10 @@ export default function ChatPage() {
                         />
                       )}
                       {m.content.trim() && <Markdown>{m.content}</Markdown>}
-                      {/* La visualización se mira ACÁ. El chip sigue estando en
-                          la prosa para citarla; esto es para no tener que irse a
-                          otra pestaña cuando el agente pregunta "¿está bien?". */}
+                      {/* The visualization is viewed HERE. The chip stays in
+                          the prose so it can be cited; this is so you don't
+                          have to switch tabs when the agent asks "does this
+                          look right?". */}
                       {cfg && !(sending && i === lastIdx) &&
                         artifactIdsIn(m.content).map((id) => (
                           <ArtifactPreview key={id} cfg={cfg} id={id} />
@@ -894,18 +903,18 @@ export default function ChatPage() {
                 onPick={pickMention}
               />
             )}
-            {adjuntos.length > 0 && (
+            {attachments.length > 0 && (
               <div className="mb-1.5 flex flex-wrap gap-1.5">
-                {adjuntos.map((a) => (
+                {attachments.map((a) => (
                   <span
                     key={a.path}
                     className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-black/[0.07] bg-white px-2 py-1 text-[12px] text-ink"
                   >
                     <Paperclip className="h-3 w-3 shrink-0 text-ink-soft" />
-                    <span className="truncate">{a.nombre}</span>
+                    <span className="truncate">{a.name}</span>
                     <button
-                      aria-label={`Quitar ${a.nombre}`}
-                      onClick={() => setAdjuntos((prev) => prev.filter((x) => x.path !== a.path))}
+                      aria-label={`Quitar ${a.name}`}
+                      onClick={() => setAttachments((prev) => prev.filter((x) => x.path !== a.path))}
                       className="shrink-0 rounded p-0.5 text-ink-soft transition hover:text-c-coral-ink"
                     >
                       <X className="h-3 w-3" />
@@ -918,14 +927,14 @@ export default function ChatPage() {
                 room's default is the agent the client named, and a standing row
                 of every teammate would say that picking is a step before every
                 message. `@` aims it; this shows it, and takes it back. */}
-            {hablarCon && (
+            {talkingTo && (
               <div className="mb-2 flex items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-c-violet/40 px-2 py-1 text-[12px] font-medium text-ink">
-                  <AgentitoAvatar look={lookDe(hablarCon)} className="h-4 w-4 shrink-0" />
-                  Para {roleName(hablarCon, roles)}
+                  <AgentitoAvatar look={lookFor(talkingTo)} className="h-4 w-4 shrink-0" />
+                  Para {roleName(talkingTo, roles)}
                   <button
                     aria-label="Escribirle a todo el equipo"
-                    onClick={() => setHablarCon(null)}
+                    onClick={() => setTalkingTo(null)}
                     className="ml-0.5 text-ink-soft transition hover:text-ink"
                   >
                     <X className="h-3 w-3" />
@@ -990,9 +999,9 @@ export default function ChatPage() {
                   // The field says who is actually going to read it. With a
                   // member selected it said the agent's name anyway, which
                   // quietly contradicted the row right above.
-                  hablarCon
-                    ? `Escribile a ${roleName(hablarCon, roles)}…`
-                    : nombreAgente ? `Escribile a ${nombreAgente}…` : "Escribile a tu agente…"
+                  talkingTo
+                    ? `Escribile a ${roleName(talkingTo, roles)}…`
+                    : agentName ? `Escribile a ${agentName}…` : "Escribile a tu agente…"
                 }
                 disabled={sending}
                 className="max-h-52 flex-1 resize-none bg-transparent py-1.5 text-[15px] text-ink outline-none placeholder:text-ink-soft/60 disabled:opacity-60"

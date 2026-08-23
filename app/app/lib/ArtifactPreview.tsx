@@ -1,27 +1,27 @@
 "use client";
 
-/* Vista previa de un artefacto DENTRO de la conversación.
+/* Artifact preview INSIDE the conversation.
  *
- * Antes, cuando el agente terminaba una visualización, el chat mostraba un chip
- * con el id y el cliente tenía que irse a otra pestaña para ver su propio
- * trabajo. Para algo como el kit de marca eso rompe la conversación justo en el
- * momento en que hay que mirarlo y contestar "sí, está bien".
+ * Before, when the agent finished a visualization, the chat showed a chip
+ * with the id and the client had to go to another tab to see their own work.
+ * For something like the brand kit that breaks the conversation right at the
+ * moment they need to look at it and answer "yes, that's good".
  *
- * EL HTML DEL AGENTE NUNCA ENTRA AL DOM DEL PORTAL. Va en un iframe con
- * `sandbox=""` —cero permisos: ni scripts, ni forms, ni same-origin— igual que
- * las miniaturas de la pestaña Artefactos. Es la misma regla y por la misma
- * razón: es HTML que escribió un modelo.
+ * THE AGENT'S HTML NEVER ENTERS THE PORTAL'S DOM. It goes in an iframe with
+ * `sandbox=""` -- zero permissions: no scripts, no forms, no same-origin --
+ * same as the thumbnails on the Artifacts tab. Same rule, same reason: it's
+ * HTML a model wrote.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, TriangleAlert } from "lucide-react";
 import { getArtifact, type PortalConfig } from "./agent";
-import { PARAM } from "./rutas";
+import { PARAM } from "./routes";
 import { Spinner } from "./ui";
 
 const ARTIFACT_IN_TEXT = /\bart_\d{10}_[\w-]+\b/g;
 
-/** Los artefactos que nombra un mensaje, sin repetir y en orden de aparición. */
+/** The artifacts a message names, deduplicated and in order of appearance. */
 export function artifactIdsIn(text: string): string[] {
   const found: string[] = text.match(ARTIFACT_IN_TEXT) ?? [];
   return found.filter((id, i) => found.indexOf(id) === i);
@@ -37,8 +37,8 @@ export default function ArtifactPreview({ cfg, id }: { cfg: PortalConfig; id: st
   const [visible, setVisible] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
-  // Perezoso: una conversación larga puede nombrar muchos artefactos y cada uno
-  // es una llamada al adapter. Se traen cuando el cliente llega a ellos.
+  // Lazy: a long conversation can name a lot of artifacts and each one is a
+  // call to the adapter. They're fetched once the client scrolls to them.
   useEffect(() => {
     const node = box.current;
     if (!node || visible) return;
@@ -66,7 +66,7 @@ export default function ArtifactPreview({ cfg, id }: { cfg: PortalConfig; id: st
     return () => { alive = false; };
   }, [visible, cfg, id]);
 
-  const href = `/app/artefactos?${PARAM.visualizacion}=${encodeURIComponent(id)}`;
+  const href = `/app/artifacts?${PARAM.artifact}=${encodeURIComponent(id)}`;
 
   return (
     <div ref={box} className="mt-2 overflow-hidden rounded-xl border border-black/[0.07]">
@@ -96,7 +96,7 @@ export default function ArtifactPreview({ cfg, id }: { cfg: PortalConfig; id: st
 
       {state.status === "ready" && (
         <iframe
-          // sandbox="" = cero permisos. Ver la nota de arriba.
+          // sandbox="" = zero permissions. See the note above.
           sandbox=""
           srcDoc={state.html}
           title={state.title}

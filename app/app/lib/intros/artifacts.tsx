@@ -1,33 +1,33 @@
 "use client";
 
-// Bienvenida de Artefactos.
+// Artifacts' welcome screen.
 //
-// El concepto es NUEVO para el cliente ("¿artefacto?"), así que la pantalla no
-// lo cuenta: lo muestra. Arriba una maqueta de tres mini-artefactos (un
-// gráfico, una tabla y unos KPIs) para que se entienda de un vistazo que acá
-// viven visualizaciones; abajo un pedacito de chat que enseña las dos mitades
-// que la gente no adivina sola: cómo se piden y cómo se citan.
+// The concept is NEW to the client ("artifact?"), so the screen doesn't
+// explain it: it shows it. Up top, a mockup of three mini-artifacts (a chart,
+// a table and some KPIs) so it clicks at a glance that visualizations live
+// here; below, a small piece of chat that teaches the two halves people don't
+// guess on their own: how you ask for one and how it gets quoted.
 //
-// Todo es div/SVG inline: ni imágenes, ni datos reales, ni nada del dominio de
-// ningún cliente. Pero "no son datos de nadie" no se ve desde afuera: 1.284 y
-// +12% dibujados con la tipografía de los números de verdad se leen como los
-// números de uno. Por eso los dos dibujos van adentro de `Maqueta`, que lo dice
-// con todas las letras.
+// Everything is inline div/SVG: no images, no real data, nothing from any
+// client's own domain. But "this isn't anyone's data" doesn't show from the
+// outside: 1,284 and +12% drawn with real numbers' own typography read as
+// someone's actual numbers. That's why both drawings sit inside `Mockup`,
+// which spells it out.
 
 import type { ReactNode } from "react";
 import {
   BarChart3, Download, LayoutDashboard, Search, Sparkles,
 } from "lucide-react";
-import { Eyebrow, IntroPage, Lead, Maqueta, Point, Title, type IntroProps } from "./shell";
+import { Eyebrow, IntroPage, Lead, Mockup, Point, Title, type IntroProps } from "./shell";
 
-// Alturas de las barras del mini-gráfico (%), con una forma que se lee como
-// "esto viene creciendo" sin afirmar nada de nadie.
-const BARRAS = [40, 63, 48, 82, 66, 96];
+// Heights of the mini-chart's bars (%), shaped to read as "this has been
+// growing" without asserting anything about anyone.
+const BARS = [40, 63, 48, 82, 66, 96];
 
-// Sparkline de la tarjeta de KPIs.
+// Sparkline for the KPI card.
 const SPARK = "3,20 13,14 23,17 33,9 44,11 55,4";
 
-function Etiqueta({ tone, children }: {
+function Tag({ tone, children }: {
   tone: "violet" | "green" | "amber";
   children: ReactNode;
 }) {
@@ -43,26 +43,26 @@ function Etiqueta({ tone, children }: {
   );
 }
 
-/** Marco de cada mini-artefacto: hairline, sin sombra, radio contenido. */
-function Mini({ titulo, etiqueta, className = "", children }: {
-  titulo: string;
-  etiqueta: ReactNode;
+/** Frame for each mini-artifact: hairline, no shadow, contained radius. */
+function Mini({ title, label, className = "", children }: {
+  title: string;
+  label: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
   return (
     <div className={`rounded-2xl border border-black/[0.07] bg-white p-3 ${className}`}>
       <div className="mb-2.5 flex items-center gap-2">
-        <p className="truncate text-[11px] font-bold text-ink">{titulo}</p>
-        <span className="ml-auto">{etiqueta}</span>
+        <p className="truncate text-[11px] font-bold text-ink">{title}</p>
+        <span className="ml-auto">{label}</span>
       </div>
       {children}
     </div>
   );
 }
 
-/** Celda de la mini-tabla: una barrita gris que insinúa texto. */
-function Celda({ w }: { w: string }) {
+/** Mini-table cell: a gray bar hinting at text. */
+function Cell({ w }: { w: string }) {
   return <span className="block h-1.5 rounded-pill bg-black/[0.09]" style={{ width: w }} />;
 }
 
@@ -87,21 +87,21 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
         A eso le decimos una visualización.
       </Lead>
 
-      {/* ── Maqueta: tres artefactos como se ven en la grilla ─────────────── */}
-      <Maqueta
+      {/* ── Mockup: three artifacts as they look in the grid ──────────────── */}
+      <Mockup
         className="mt-6 overflow-hidden bg-gradient-to-br from-c-violet/70 via-surface to-white"
-        nota="Gráficos y números inventados, para que se vea la forma."
+        note="Gráficos y números inventados, para que se vea la forma."
       >
         <div className="grid gap-3 sm:grid-cols-5">
-          {/* Gráfico */}
+          {/* Chart */}
           <Mini
-            titulo="Evolución mensual"
-            etiqueta={<Etiqueta tone="violet">Gráfico</Etiqueta>}
+            title="Evolución mensual"
+            label={<Tag tone="violet">Gráfico</Tag>}
             className="flex flex-col sm:col-span-3"
           >
-            {/* flex-1: el gráfico estira hasta igualar la columna de la derecha. */}
+            {/* flex-1: the chart stretches to match the right column's height. */}
             <div className="flex min-h-[6rem] flex-1 items-end gap-1.5 border-b border-black/[0.09]">
-              {BARRAS.map((h, i) => (
+              {BARS.map((h, i) => (
                 <div
                   key={i}
                   className="tga-art-bar flex-1 rounded-t-[3px] bg-primary"
@@ -116,8 +116,8 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
           </Mini>
 
           <div className="grid gap-3 sm:col-span-2">
-            {/* Tabla */}
-            <Mini titulo="Detalle" etiqueta={<Etiqueta tone="green">Tabla</Etiqueta>}>
+            {/* Table */}
+            <Mini title="Detalle" label={<Tag tone="green">Tabla</Tag>}>
               <div className="space-y-2">
                 <div className="grid grid-cols-[1.5fr_1fr_0.8fr] items-center gap-2 border-b border-black/[0.07] pb-2">
                   <span className="block h-1.5 rounded-pill bg-ink/30" />
@@ -125,25 +125,25 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
                   <span className="block h-1.5 rounded-pill bg-ink/30" />
                 </div>
                 <div className="grid grid-cols-[1.5fr_1fr_0.8fr] items-center gap-2">
-                  <Celda w="100%" />
-                  <Celda w="70%" />
+                  <Cell w="100%" />
+                  <Cell w="70%" />
                   <span className="block h-2.5 w-full rounded-md bg-c-green" />
                 </div>
                 <div className="grid grid-cols-[1.5fr_1fr_0.8fr] items-center gap-2">
-                  <Celda w="85%" />
-                  <Celda w="90%" />
+                  <Cell w="85%" />
+                  <Cell w="90%" />
                   <span className="block h-2.5 w-full rounded-md bg-c-amber" />
                 </div>
                 <div className="grid grid-cols-[1.5fr_1fr_0.8fr] items-center gap-2">
-                  <Celda w="95%" />
-                  <Celda w="55%" />
+                  <Cell w="95%" />
+                  <Cell w="55%" />
                   <span className="block h-2.5 w-full rounded-md bg-c-green" />
                 </div>
               </div>
             </Mini>
 
             {/* KPIs */}
-            <Mini titulo="Resumen" etiqueta={<Etiqueta tone="amber">Informe</Etiqueta>}>
+            <Mini title="Resumen" label={<Tag tone="amber">Informe</Tag>}>
               <div className="flex items-end gap-4">
                 <div className="min-w-0">
                   <p className="text-[17px] font-extrabold leading-none tracking-tight text-ink">
@@ -176,9 +176,9 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
             </Mini>
           </div>
         </div>
-      </Maqueta>
+      </Mockup>
 
-      {/* ── Cómo se piden + qué podés hacer con ellos ─────────────────────── */}
+      {/* ── How they're requested + what you can do with them ─────────────── */}
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <div className="rounded-card border border-black/[0.07] bg-white p-4">
           <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
@@ -188,9 +188,9 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
             Con tus palabras, en el chat de siempre.
           </p>
 
-          {/* El chip de la entrega va SIN la flechita de "abrir": con ella era
-              el chip clickeable de verdad, y acá no lleva a ningún lado. */}
-          <Maqueta className="mt-3 bg-surface" nota="Así se pide.">
+          {/* The deliverable's chip goes WITHOUT the "open" arrow: with it, it
+              looked like the real clickable chip, and here it leads nowhere. */}
+          <Mockup className="mt-3 bg-surface" note="Así se pide.">
             <div className="flex flex-col gap-2">
               <p className="max-w-[92%] self-end rounded-2xl rounded-br-md bg-c-violet px-3 py-2 text-[13px] leading-snug text-c-violet-ink">
                 Mostrame cómo viene evolucionando esto mes a mes
@@ -203,7 +203,7 @@ export default function ArtifactsIntro({ onOk }: IntroProps) {
                 </span>
               </div>
             </div>
-          </Maqueta>
+          </Mockup>
 
           <p className="mt-3 border-t border-black/[0.07] pt-3 text-[12px] leading-relaxed text-ink-soft">
             Cuando tu agente cita una entrega en una respuesta, se abre de un click.

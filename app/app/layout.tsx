@@ -1,7 +1,7 @@
 "use client";
 
-// Shell del portal: sidebar por manifest + estado de conexión con el agente.
-// Los features viven en subcarpetas y NO tocan este archivo.
+// Portal shell: sidebar built from the manifest + connection status with the
+// agent. Features live in subfolders and do NOT touch this file.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -12,93 +12,97 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  loadConfig, clearConfig, getManifest, getApprovals, EVENTO_APROBACIONES,
-  esPedidoDelCliente, aprenderHusoDelAgente, CLAVE_CONFIG, configGuardada,
-  credencialEnLaURL, mismaSesion,
+  loadConfig, clearConfig, getManifest, getApprovals, APPROVALS_EVENT,
+  isClientRequest, learnAgentUtcOffset, CONFIG_KEY, savedConfig,
+  credentialInUrl, sameSession,
   type PortalConfig, type Manifest,
 } from "./lib/agent";
-import { Btn, SOPORTE, Soporte, Spinner, inputCls } from "./lib/ui";
+import { Btn, SUPPORT, Support, Spinner, inputCls } from "./lib/ui";
 import {
-  avisarRuta, limpiarCredencialDeLaURL, urlApuntaADetalle, useApuntaADetalle,
-  volverAlaPestania,
-} from "./lib/rutas";
+  notifyRouteChange, stripCredentialFromUrl, urlPointsToDetail, useUrlPointsToDetail,
+  backToTab,
+} from "./lib/routes";
 import { INTROS, useIntroGate } from "./lib/intros";
 import Onboarding, {
-  AvisoSinCanal, altaYaContestada, avisoYaContestado, loadAgentName, saveAgentName,
+  NoChannelNotice, hiringAlreadyAnswered, channelAlreadyAnswered, loadAgentName, saveAgentName,
 } from "./lib/onboarding";
-import AltaDeEquipo, { useAltaDeEquipo } from "./lib/altaEquipo";
+import TeamHiring, { useTeamHiring } from "./lib/hiring";
 import {
-  AgentitoAvatar, hayLookGuardado, loadAgentLook, lookDesdeAgente, saveAgentLook,
+  AgentitoAvatar, hasSavedLook, loadAgentLook, lookFromAgent, saveAgentLook,
 } from "./lib/agentito";
 
-// Orden y rótulos de módulos; se muestran solo los que el manifest habilita
-// (salvo "home", que es nuestro y no depende de lo que exponga el agente).
-// `sec` = vive bajo "Más": son las vistas de taller (archivos, uso, skills…).
-// El nav principal es lo que el cliente usa a diario: sus flujos, su chat,
-// sus trabajos en curso. "Tareas" (crons) se fue del nav: era la vista de
-// máquina que Flujos reemplaza (la ruta sigue viva para nosotros).
-// Módulos que el agente declara pero que el portal NO muestra todavía. Es un
-// interruptor, no un borrado: la pantalla, su ruta y su bienvenida siguen
-// enteras, y sacar la clave de acá las devuelve al nav.
+// Module order and labels; only the ones the manifest enables get shown
+// (except "home", which is ours and doesn't depend on what the agent
+// exposes). `sec` = lives under "Más": the workshop views (files, usage,
+// skills…). The main nav is what the client uses daily: their flows, their
+// chat, their in-progress work. "Tareas" (crons) left the nav: it was the
+// machine-facing view that Flujos replaces (the route is still alive for us).
+// Modules the agent declares but the portal does NOT show yet. It's a switch,
+// not a deletion: the screen, its route and its welcome screen stay whole,
+// and removing the key from here brings them back to the nav.
 //
-// Hoy no hay ninguno. `usage` estuvo acá del 16 al 19/8/2026, porque el número
-// que mostraba era FALSO y falso para abajo, que es la peor dirección: sólo veía
-// lo que pasaba por litellm, y la generación de imágenes le pega directo al
-// proveedor (la pestaña decía US$ 0,17 el día que el proveedor cobró US$ 1,52 —
-// 9x). Volvió cuando el número dejó de ser nuestro: ahora sale de la cuenta de
-// OpenRouter del agente (`/portal/uso`), que es lo que le cobraron.
-export const MODULOS_OCULTOS = new Set<string>([]);
+// There's none today. `usage` sat here from 8/16 to 8/19/2026, because the
+// number it showed was FALSE, and false in the worst direction: it only saw
+// what passed through litellm, and image generation hits the provider
+// directly (the tab said US$0.17 the day the provider charged US$1.52 -- 9x).
+// It came back once the number stopped being ours: it now comes from the
+// agent's own OpenRouter account (`/portal/usage`), which is what they were
+// actually charged.
+export const HIDDEN_MODULES = new Set<string>([]);
 
 export const MODULES: { key: string; path: string; label: string; icon: LucideIcon; sec?: boolean }[] = [
-  { key: "home", path: "/app/inicio", label: "Inicio", icon: Home },
+  { key: "home", path: "/app/home", label: "Inicio", icon: Home },
   { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
   // WHO works for you comes before WHAT they are doing, so this sits high and
   // never under "Más". It only appears on an agent that has a team: the module
   // is false on every single-role agent, which is all of them today.
-  { key: "roles", path: "/app/equipo", label: "Equipo", icon: Users },
-  { key: "flujos", path: "/app/flujos", label: "Flujos", icon: Workflow },
-  // Actividad sale de "Más" (13/8) y queda pegada a Flujos. Las dos clientas
-  // del QA a ciegas la fueron a buscar y las dos dijeron lo mismo: "es donde
-  // está la verdad" y "debería estar arriba". Una de ellas descubrió AHÍ que
-  // sus dos flujos habían fallado, mientras Flujos los mostraba en verde. Ese
-  // agujero ya está tapado del otro lado, pero la bitácora de lo que hizo el
-  // agente no es una vista de taller: es la prueba de que trabajó.
-  { key: "activity", path: "/app/actividad", label: "Actividad", icon: Activity },
+  { key: "roles", path: "/app/team", label: "Equipo", icon: Users },
+  { key: "flows", path: "/app/flows", label: "Flujos", icon: Workflow },
+  // Actividad left "Más" (8/13) and sits right next to Flujos. Both blind-QA
+  // clients went looking for it and both said the same thing: "it's where the
+  // truth is" and "it should be up top". One of them discovered THERE that her
+  // two flows had failed, while Flujos showed them in green. That gap is
+  // already patched on the other side, but the log of what the agent did
+  // isn't a workshop view: it's the proof that it worked.
+  { key: "activity", path: "/app/activity", label: "Actividad", icon: Activity },
   { key: "kanban", path: "/app/pipeline", label: "Tablero", icon: Columns3 },
-  { key: "approvals", path: "/app/aprobaciones", label: "Aprobaciones", icon: Hand },
-  // Principal por decisión de Luis (7/8): la vitrina de lo producido —
-  // entregables de los flujos + visualizaciones, en una sola pestaña.
-  { key: "artifacts", path: "/app/artefactos", label: "Entregas", icon: LayoutDashboard },
-  // Conexiones sale de "Más" (8/8): es lo PRIMERO que necesita un cliente
-  // nuevo — sin su correo y sus planillas el agente no puede hacer nada — y
-  // estaba escondido abajo de todo. Un cliente de prueba lo buscó por cinco
-  // pestañas y su frase fue "es como poner la llave de la luz adentro del
-  // ropero". Media docena de pantallas le prometen "los sistemas que le
-  // conectaste": el lugar donde se conectan no puede estar plegado.
-  { key: "connections", path: "/app/conexiones", label: "Conexiones", icon: Plug },
-  { key: "files", path: "/app/archivos", label: "Archivos", icon: Folder, sec: true },
-  { key: "usage", path: "/app/uso", label: "Uso", icon: BarChart3, sec: true },
-  { key: "capabilities", path: "/app/habilidades", label: "Habilidades", icon: Puzzle, sec: true },
+  { key: "approvals", path: "/app/approvals", label: "Aprobaciones", icon: Hand },
+  // Primary by Luis's decision (8/7): the showcase of what's been produced --
+  // flow deliverables + visualizations, on a single tab.
+  { key: "artifacts", path: "/app/artifacts", label: "Entregas", icon: LayoutDashboard },
+  // Conexiones left "Más" (8/8): it's the FIRST thing a new client needs --
+  // without their email and their spreadsheets the agent can't do anything --
+  // and it was hidden at the very bottom. A test client hunted for it across
+  // five tabs and her line was "it's like putting the light switch inside the
+  // closet". Half a dozen screens promise "the systems you connected to it":
+  // the place where you connect them can't be folded away.
+  { key: "connections", path: "/app/connections", label: "Conexiones", icon: Plug },
+  { key: "files", path: "/app/files", label: "Archivos", icon: Folder, sec: true },
+  { key: "usage", path: "/app/usage", label: "Uso", icon: BarChart3, sec: true },
+  { key: "skills", path: "/app/skills", label: "Habilidades", icon: Puzzle, sec: true },
 ];
 
 function Login({ onReady }: { onReady: () => void }) {
   const [link, setLink] = useState("");
   const [err, setErr] = useState("");
-  // Quien llega por un link compartido (a un entregable, a una tarea) y no
-  // tiene sesión en ESTE browser caía en un login que no explicaba nada: se
-  // veía como el portal equivocado. Le decimos que el link es bueno y que
-  // apenas entre lo llevamos ahí — y es cierto: `reload()` conserva la ruta.
-  const [venia, setVenia] = useState(false);
-  useEffect(() => { setVenia(urlApuntaADetalle()); }, []);
-  // "magic link" era jerga: un cliente de prueba leyó "link mágico" y no supo
-  // qué pegar, porque el único link que tenía era con el que ya había entrado.
+  // Whoever arrives via a shared link (to a deliverable, to a task) with no
+  // session on THIS browser used to land on a login that explained nothing: it
+  // looked like the wrong portal. We tell them the link is good and that as
+  // soon as they enter we'll take them there -- and it's true: `reload()`
+  // keeps the route.
+  const [hasDestination, setHasDestination] = useState(false);
+  useEffect(() => { setHasDestination(urlPointsToDetail()); }, []);
+  // "magic link" was jargon: a test client read "link mágico" and didn't know
+  // what to paste, because the only link she had was the one she'd already
+  // entered with.
   const enter = () => {
     const hash = link.includes("#") ? link.slice(link.indexOf("#")) : `#key=${link.trim()}`;
     if (!/key=[^&]+/.test(hash)) { setErr("A ese link le falta el código del final. Copialo entero, desde https hasta el último carácter."); return; }
     window.location.hash = hash;
-    // Recarga COMPLETA a propósito: cambiar solo el hash deja vivo el JS del
-    // build anterior, y tras un redeploy ese runtime pide chunks que ya no
-    // existen (404) y la app queda colgada en el spinner. Verificado el 7/8.
+    // A FULL reload, on purpose: changing only the hash leaves the previous
+    // build's JS alive, and after a redeploy that runtime requests chunks that
+    // no longer exist (404) and the app gets stuck on the spinner. Verified
+    // on 8/7.
     window.location.reload();
   };
   return (
@@ -106,7 +110,7 @@ function Login({ onReady }: { onReady: () => void }) {
       <div className="w-full max-w-md rounded-xl border border-black/[0.07] bg-white p-8">
         <AgentitoAvatar className="mb-3 h-14 w-14" />
         <h1 className="text-xl font-bold tracking-tight text-ink">tuagente</h1>
-        {venia && (
+        {hasDestination && (
           <p className="mt-1 rounded-lg border border-c-violet bg-c-violet/40 px-3 py-2 text-[13px] leading-snug text-c-violet-ink">
             Este link lleva a algo que está adentro de tu portal. Entrá y te dejo
             justo ahí.
@@ -125,7 +129,7 @@ function Login({ onReady }: { onReady: () => void }) {
         />
         {err && <p className="mt-2 text-sm text-c-coral-ink">{err}</p>}
         <div className="mt-4"><Btn onClick={enter}>Entrar</Btn></div>
-        <div className="mt-5 border-t border-black/[0.07] pt-3"><Soporte /></div>
+        <div className="mt-5 border-t border-black/[0.07] pt-3"><Support /></div>
       </div>
     </main>
   );
@@ -133,128 +137,132 @@ function Login({ onReady }: { onReady: () => void }) {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // /app/avatar es la página utilitaria que fotografía Chrome headless para el
-  // PNG del bot: va SIN shell (ni sidebar ni puerta de onboarding — un browser
-  // headless siempre tiene localStorage virgen y caería en la bienvenida:
-  // exactamente la foto equivocada que subimos el 7/8).
+  // /app/avatar is the utility page headless Chrome photographs for the bot's
+  // PNG: it goes with NO shell (no sidebar, no onboarding gate -- a headless
+  // browser always has virgin localStorage and would land on the welcome
+  // screen: exactly the wrong photo we uploaded on 8/7).
   if (pathname.startsWith("/app/avatar")) return <>{children}</>;
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [manifest, setManifest] = useState<Manifest | null>(null);
-  const [state, setState] = useState<"loading" | "login" | "error" | "ok" | "otro">("loading");
+  const [state, setState] = useState<"loading" | "login" | "error" | "ok" | "other">("loading");
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState(0);
-  // Nombre y look que el cliente le dio a su agente en el onboarding.
-  // El look se lee lazy y no en un efecto: si no, el primer frame pinta el
-  // agentito violeta por defecto y se ve el parpadeo.
-  const [nombre, setNombre] = useState<string | null>(null);
-  const [lookAgente, setLookAgente] = useState(loadAgentLook);
-  // "Más" arranca cerrado: las vistas de taller no compiten con los flujos.
-  const [verMas, setVerMas] = useState(false);
-  useEffect(() => { setNombre(loadAgentName()); }, []);
+  // Name and look the client gave their agent during onboarding.
+  // The look is read lazily and not in an effect: otherwise the first frame
+  // paints the default violet agentito and the flash shows.
+  const [name, setName] = useState<string | null>(null);
+  const [agentLook, setAgentLook] = useState(loadAgentLook);
+  // "Más" starts closed: the workshop views don't compete with the flows.
+  const [showMore, setShowMore] = useState(false);
+  useEffect(() => { setName(loadAgentName()); }, []);
   const { seen, dismiss } = useIntroGate();
-  // ¿Este cliente todavía no contrató a nadie? Solo pregunta de verdad si el
-  // agente declara equipo; en un agente de uno se aparta sin pedir nada.
-  const alta = useAltaDeEquipo(manifest, cfg);
+  // Has this client not hired anyone yet? Only actually asks if the agent
+  // declares a team; on a single agent it steps aside without asking anything.
+  const hiring = useTeamHiring(manifest, cfg);
 
-  // LOS HOOKS VAN TODOS ACÁ ARRIBA, antes de cualquier `return` condicional.
-  // Puestos más abajo —después de los returns de loading/login/error— la
-  // cantidad de hooks cambia entre renders y React tira el #310, que en
-  // producción es una pantalla en blanco con "Application error". Me pasó el
-  // 11/8 y dejó el chat inusable.
+  // ALL HOOKS GO UP HERE, before any conditional `return`. Placed further
+  // down -- after the loading/login/error returns -- the number of hooks
+  // changes between renders and React throws #310, which in production is a
+  // blank screen with "Application error". Happened to me on 8/11 and left
+  // the chat unusable.
   //
-  // Se lee de window y no con useSearchParams: ese hook obliga a envolver todo
-  // el layout en un <Suspense> para que Next prerenderice, y no vale la pena
-  // por un parámetro que solo importa después de montar. `useApuntaADetalle`
-  // hace justamente eso, y además se entera de los cambios de URL.
+  // Read from window and not with useSearchParams: that hook forces wrapping
+  // the whole layout in a <Suspense> for Next to prerender, and it isn't
+  // worth it for a param that only matters after mounting.
+  // `useUrlPointsToDetail` does exactly that, and it also learns about URL
+  // changes.
   //
-  // Cuenta como intención CUALQUIER link a algo concreto, no solo el `?p=` del
-  // chat: si el agente te manda el link de un entregable y esa pestaña nunca la
-  // abriste, la bienvenida del módulo se te pone adelante de lo que viniste a
-  // ver. Un link compartido tiene que abrir la cosa, no la portada.
+  // ANY link to something concrete counts as intent, not just the chat's
+  // `?p=`: if the agent sends you the link to a deliverable and you've never
+  // opened that tab, the module's welcome screen puts itself in front of what
+  // you came to see. A shared link has to open the thing, not the home screen.
   //
-  // Se PEGA mientras no cambies de pestaña, y esa es la parte importante: el
-  // chat borra su `?p=` de la URL apenas manda el mensaje, y si esto lo
-  // siguiera al pie, la bienvenida volvería a aparecer arriba de la
-  // conversación que el cliente acaba de empezar (el bug del 11/8).
-  const apuntaADetalle = useApuntaADetalle(pathname);
-  const [conIntencion, setConIntencion] = useState(false);
-  useEffect(() => { setConIntencion(false); }, [pathname]);
-  useEffect(() => { if (apuntaADetalle) setConIntencion(true); }, [apuntaADetalle, pathname]);
-  const moduloActual = MODULES.find((m) => pathname.startsWith(m.path));
+  // It STAYS SET as long as you don't switch tabs, and that's the important
+  // part: the chat clears its own `?p=` from the URL the moment it sends the
+  // message, and if this followed suit, the welcome screen would pop back up
+  // over the conversation the client just started (the 8/11 bug).
+  const pointsToDetail = useUrlPointsToDetail(pathname);
+  const [withIntent, setWithIntent] = useState(false);
+  useEffect(() => { setWithIntent(false); }, [pathname]);
+  useEffect(() => { if (pointsToDetail) setWithIntent(true); }, [pointsToDetail, pathname]);
+  const currentModule = MODULES.find((m) => pathname.startsWith(m.path));
 
-  // La credencial viaja en el hash y se queda pegada en la barra de
-  // direcciones. Con "copiar link" en cada pantalla, eso pasa de ser feo a ser
-  // peligroso: el cliente copia la URL a mano y comparte su clave. Se limpia
-  // apenas está guardada. En un timeout porque el parche de history de Next se
-  // instala en un efecto del router, que corre DESPUÉS de los efectos de sus
-  // hijos: sin esperar un tick, el replaceState se lo comería el original.
+  // The credential travels in the hash and stays stuck in the address bar.
+  // With "copy link" on every screen, that goes from ugly to dangerous: the
+  // client copies the URL by hand and shares their key. It gets cleaned up as
+  // soon as it's saved. On a timeout because Next's history patch installs in
+  // one of the router's own effects, which run AFTER its children's effects:
+  // without waiting a tick, the original replaceState would eat this one.
   useEffect(() => {
-    const t = setTimeout(limpiarCredencialDeLaURL, 0);
+    const t = setTimeout(stripCredentialFromUrl, 0);
     return () => clearTimeout(t);
   }, []);
 
-  // PEGAR UN SEGUNDO MAGIC LINK ESTANDO YA ADENTRO. Si la ruta es la misma que
-  // la abierta, el browser lo trata como una navegación de FRAGMENTO: no
-  // recarga nada, `loadConfig()` —que corre una vez al cargar el JS— ya pasó, y
-  // la credencial nueva queda decorando la barra de direcciones sin efecto
-  // hasta que el cliente refresque a mano. Es la forma más natural de cambiar
-  // de agente (o de volver a entrar con la clave rotada) y fallaba en silencio:
-  // el portal seguía mostrando al agente anterior como si el link no sirviera.
+  // PASTING A SECOND MAGIC LINK WHILE ALREADY INSIDE. If the route is the same
+  // as the one open, the browser treats it as a FRAGMENT navigation: nothing
+  // reloads, `loadConfig()` -- which runs once when the JS loads -- already
+  // ran, and the new credential sits decorating the address bar with no
+  // effect until the client refreshes by hand. It's the most natural way to
+  // switch agents (or re-enter with a rotated key) and it used to fail
+  // silently: the portal kept showing the previous agent as if the link
+  // didn't work.
   //
-  // Recargamos y listo: en el arranque `loadConfig()` la guarda, olvida lo del
-  // agente anterior y el portal entra derecho al nuevo. Si el link es el que ya
-  // está puesto, no se recarga nada — solo se limpia la clave de la barra.
-  // (`replaceState` no dispara `hashchange`, así que esto no se llama solo.)
+  // We just reload: on startup `loadConfig()` saves it, forgets the previous
+  // agent's stuff, and the portal goes straight into the new one. If the link
+  // is the one already set, nothing reloads -- only the key gets cleared from
+  // the bar. (`replaceState` doesn't fire `hashchange`, so this doesn't call
+  // itself.)
   useEffect(() => {
     if (!cfg) return;
-    const alPegarOtroLink = () => {
-      const nueva = credencialEnLaURL();
-      if (!nueva?.key) return;
-      const efectiva = {
-        endpoint: nueva.endpoint ?? cfg.endpoint,
-        adapter: nueva.adapter ?? cfg.adapter,
-        key: nueva.key,
+    const onAnotherLinkPasted = () => {
+      const incoming = credentialInUrl();
+      if (!incoming?.key) return;
+      const effective = {
+        endpoint: incoming.endpoint ?? cfg.endpoint,
+        adapter: incoming.adapter ?? cfg.adapter,
+        key: incoming.key,
       };
-      if (mismaSesion(efectiva, cfg)) { limpiarCredencialDeLaURL(); return; }
+      if (sameSession(effective, cfg)) { stripCredentialFromUrl(); return; }
       window.location.reload();
     };
-    window.addEventListener("hashchange", alPegarOtroLink);
-    return () => window.removeEventListener("hashchange", alPegarOtroLink);
+    window.addEventListener("hashchange", onAnotherLinkPasted);
+    return () => window.removeEventListener("hashchange", onAnotherLinkPasted);
   }, [cfg]);
 
-  // Un `<Link>` de Next hacia la pestaña donde ya estás no dispara popstate, así
-  // que las pantallas no se enterarían de que la URL cambió.
-  useEffect(() => { avisarRuta(); }, [pathname]);
-  // OJO: entrar por un link NO marca la bienvenida como vista. Antes sí, y el
-  // cliente que estrenaba el portal con el link de un entregable se quedaba sin
-  // conocer nunca esa pestaña. Alcanza con no mostrarla ahora (`showIntro` ya
-  // mira `conIntencion`, que se mantiene mientras siga en esa pestaña).
+  // A Next `<Link>` to the tab you're already on doesn't fire popstate, so
+  // screens would never learn the URL changed.
+  useEffect(() => { notifyRouteChange(); }, [pathname]);
+  // HEADS UP: arriving via a link does NOT mark the welcome screen as seen.
+  // It used to, and the client whose first taste of the portal was a
+  // deliverable's link never got to see that tab's own welcome screen.
+  // Not showing it now is enough (`showIntro` already checks `withIntent`,
+  // which stays set as long as they're on that tab).
 
-  // Si este browser no conoce al agente pero el agente sí se conoce a sí mismo
-  // (el cliente lo bautizó desde otra máquina, o entró con otro link y se
-  // limpió lo del anterior), el portal se lo copia.
+  // If this browser doesn't know the agent but the agent knows itself (the
+  // client named it from another machine, or entered with a different link
+  // and the previous one got wiped), the portal copies it over.
   //
-  // El NOMBRE también, y no solo la pinta: media docena de pantallas lo leen
-  // del browser sin tener el manifiesto a mano (`loadAgentName() || "Tu
-  // agente"`), así que sin esta copia el cliente que entra desde otra máquina
-  // ve a su agente llamado "Tu agente" en el tablero y en las aprobaciones.
-  const aprenderDelAgente = (m: Manifest) => {
-    if (m.bautizado && m.agent && !loadAgentName()) {
+  // The NAME too, not just the look: half a dozen screens read it from the
+  // browser with no manifest at hand (`loadAgentName() || "Tu agente"`), so
+  // without this copy a client entering from another machine sees their agent
+  // called "Tu agente" on the board and in approvals.
+  const learnFromAgent = (m: Manifest) => {
+    if (m.named && m.agent && !loadAgentName()) {
       saveAgentName(m.agent);
-      setNombre(m.agent);
+      setName(m.agent);
     }
-    if (hayLookGuardado()) return;
-    const suyo = lookDesdeAgente(m.look);
-    if (suyo) { saveAgentLook(suyo); setLookAgente(suyo); }
+    if (hasSavedLook()) return;
+    const theirs = lookFromAgent(m.look);
+    if (theirs) { saveAgentLook(theirs); setAgentLook(theirs); }
   };
 
-  // EN QUÉ RELOJ VIVE EL NEGOCIO, ANTES DE PINTAR NADA. Todas las pantallas
-  // muestran las fechas en el huso del agente, pero sólo tres lo aprendían:
-  // entrar derecho a cualquiera de las otras ocho —el primer día de un cliente,
-  // o con Inicio caído— dejaba el portal contando las horas con el reloj del
-  // browser sin avisar. Se pide una vez, en el arranque, y vale para todas.
-  const conocerElReloj = (c: PortalConfig, m: Manifest) => {
-    aprenderHusoDelAgente(c, m).catch(() => { /* sin huso se sigue como antes */ });
+  // WHAT CLOCK THE BUSINESS LIVES ON, BEFORE PAINTING ANYTHING. Every screen
+  // shows dates in the agent's own offset, but only three used to learn it:
+  // landing straight on any of the other eight -- a client's first day, or
+  // with Home down -- left the portal counting hours on the browser's clock
+  // with no warning. Requested once, at startup, and it's good for all of them.
+  const learnTheClock = (c: PortalConfig, m: Manifest) => {
+    learnAgentUtcOffset(c, m).catch(() => { /* with no offset, it carries on as before */ });
   };
 
   const boot = () => {
@@ -263,96 +271,98 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setCfg(c);
     getManifest(c)
       .then((m) => {
-        setManifest(m); aprenderDelAgente(m); conocerElReloj(c, m);
+        setManifest(m); learnFromAgent(m); learnTheClock(c, m);
         setOnline(true); setState("ok");
       })
       .catch(() => setState("error"));
   };
   useEffect(boot, []);
 
-  // Reintento a mano: sin esto el botón no da NINGUNA señal de que hizo algo
-  // (mismo pantallazo, mismo texto) y el cliente concluye que no funciona el
-  // botón. El mínimo de 600 ms es para que el cambio se llegue a ver.
-  const [reintentando, setReintentando] = useState(false);
-  const reintentar = () => {
-    setReintentando(true);
-    const desde = Date.now();
-    const listo = () => setTimeout(() => setReintentando(false), Math.max(0, 600 - (Date.now() - desde)));
+  // Manual retry: without this the button gives NO signal that it did
+  // anything (same screen, same text) and the client concludes the button
+  // doesn't work. The 600ms floor is so the change is actually visible.
+  const [retrying, setRetrying] = useState(false);
+  const retry = () => {
+    setRetrying(true);
+    const since = Date.now();
+    const done = () => setTimeout(() => setRetrying(false), Math.max(0, 600 - (Date.now() - since)));
     const c = loadConfig();
-    if (!c) { setState("login"); listo(); return; }
+    if (!c) { setState("login"); done(); return; }
     setCfg(c);
     getManifest(c)
       .then((m) => {
-        setManifest(m); aprenderDelAgente(m); conocerElReloj(c, m);
+        setManifest(m); learnFromAgent(m); learnTheClock(c, m);
         setOnline(true); setState("ok");
       })
       .catch(() => setState("error"))
-      .finally(listo);
+      .finally(done);
   };
 
-  // La credencial vive en localStorage, que es del ORIGEN y no de la pestaña:
-  // si en otra pestaña se entra con el link de OTRO agente, esta se queda con
-  // el agente viejo en memoria (el shell, el manifiesto, la pestaña que ya
-  // estaba abierta) y el nuevo en el disco — y desde ahí cada pantalla que se
-  // monta lee el nuevo. El resultado es una ventana mostrando dos clientes a la
-  // vez: el sidebar con las aprobaciones de uno y el chat con las
-  // conversaciones del otro. (Reproducido el 12/8 con dos agentes de prueba.)
+  // The credential lives in localStorage, which belongs to the ORIGIN and not
+  // the tab: if another tab enters with a DIFFERENT agent's link, this one
+  // keeps the old agent in memory (the shell, the manifest, whatever tab was
+  // already open) while the new one sits on disk -- and from there every
+  // screen that mounts reads the new one. The result is one window showing
+  // two clients at once: the sidebar with one's approvals and the chat with
+  // the other's conversations. (Reproduced on 8/12 with two test agents.)
   //
-  // No recargamos solos: puede haber un mensaje a medio escribir. Frenamos la
-  // pestaña —los módulos ni se pintan— y que el cliente decida.
+  // We don't reload on our own: there could be a message half-typed. We
+  // freeze the tab -- the modules don't even paint -- and let the client decide.
   useEffect(() => {
     if (!cfg) return;
-    const alCambiar = (e: StorageEvent) => {
-      // `key === null` es un `localStorage.clear()` de otra pestaña.
-      if (e.key !== null && e.key !== CLAVE_CONFIG) return;
-      if (!mismaSesion(configGuardada(), cfg)) setState("otro");
+    const onStorageChange = (e: StorageEvent) => {
+      // `key === null` is a `localStorage.clear()` from another tab.
+      if (e.key !== null && e.key !== CONFIG_KEY) return;
+      if (!sameSession(savedConfig(), cfg)) setState("other");
     };
-    window.addEventListener("storage", alCambiar);
-    return () => window.removeEventListener("storage", alCambiar);
+    window.addEventListener("storage", onStorageChange);
+    return () => window.removeEventListener("storage", onStorageChange);
   }, [cfg]);
 
-  // El indicador tiene que decir la verdad: si el agente se apaga mientras el
-  // portal está abierto, el punto verde mintiendo es peor que no tenerlo.
-  // De paso traemos los pendientes, que es lo que el cliente quiere ver al entrar.
+  // The indicator has to tell the truth: if the agent goes down while the
+  // portal is open, a lying green dot is worse than not having one.
+  // While we're at it, we fetch the pending count, which is what the client
+  // wants to see on arrival.
   useEffect(() => {
     if (state !== "ok" || !cfg) return;
     const tick = () => {
       getManifest(cfg).then((m) => { setManifest(m); setOnline(true); })
         .catch(() => setOnline(false));
       getApprovals(cfg)
-        // El badge cuenta lo que ESPERA TU OK. Los pedidos que hizo el propio
-        // cliente ("conectame el correo") están en la misma lista pero son
-        // nuestros: su tarjeta dice "no tenés que hacer nada" y el menú, al
-        // mismo tiempo, le marcaba un pendiente. Contar eso es pedirle algo
-        // que no tiene que hacer. El MISMO filtro que Inicio y Aprobaciones:
-        // uno solo, en `lib/agent.ts`.
+        // The badge counts what's WAITING ON YOUR OK. Requests the client
+        // themselves made ("connect my email") are on the same list but are
+        // ours: their card says "you don't have to do anything" while the
+        // menu, at the same time, marked it as pending. Counting that is
+        // asking them to do something that isn't theirs to do. The SAME
+        // filter as Home and Approvals: one single one, in `lib/agent.ts`.
         .then((r) => setPending(
-          (r.approvals ?? []).filter((a: { body?: string }) => !esPedidoDelCliente(a?.body)).length,
+          (r.approvals ?? []).filter((a: { body?: string }) => !isClientRequest(a?.body)).length,
         ))
         .catch(() => setPending(0));
     };
     tick();
     const id = setInterval(tick, 60_000);
-    // Y cuando el cliente resuelve una aprobación, ya: esperar hasta un minuto
-    // con el "1" puesto le hace creer que su clic no llegó. El segundo tick es
-    // porque destrabar el ticket tarda un segundo del lado del agente y el
-    // primero puede llegar a leer la cola todavía sin actualizar.
-    const alResolver = () => { tick(); setTimeout(tick, 2500); };
-    window.addEventListener(EVENTO_APROBACIONES, alResolver);
+    // And the moment the client resolves an approval, right away: waiting up
+    // to a minute with the "1" still showing makes them think their click
+    // didn't land. The second tick is because unblocking the ticket takes a
+    // second on the agent's side and the first one can still read the queue
+    // before it updates.
+    const onResolved = () => { tick(); setTimeout(tick, 2500); };
+    window.addEventListener(APPROVALS_EVENT, onResolved);
     return () => {
       clearInterval(id);
-      window.removeEventListener(EVENTO_APROBACIONES, alResolver);
+      window.removeEventListener(APPROVALS_EVENT, onResolved);
     };
   }, [state, cfg]);
 
   if (state === "loading") return <main className="app-shell min-h-screen bg-surface"><Spinner /></main>;
   if (state === "login") return <Login onReady={boot} />;
-  // Otro agente entró en este navegador. Antes que mezclar dos clientes en una
-  // pantalla, esta pestaña se queda quieta.
-  if (state === "otro") {
+  // Another agent was entered in this browser. Rather than mix two clients on
+  // one screen, this tab freezes.
+  if (state === "other") {
     return (
       <main className="app-shell flex min-h-screen flex-col items-center justify-center bg-surface p-6 text-center">
-        <AgentitoAvatar look={lookAgente} apagado className="mb-2 h-20 w-20 opacity-45 grayscale" />
+        <AgentitoAvatar look={agentLook} asleep className="mb-2 h-20 w-20 opacity-45 grayscale" />
         <p className="text-sm font-semibold text-ink">Se abrió otro portal en este navegador</p>
         <p className="mb-4 mt-1 max-w-sm text-sm text-ink-soft">
           En otra pestaña se entró con un link distinto. Para no mezclar el trabajo
@@ -360,70 +370,73 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           está activo ahora.
         </p>
         <Btn size="sm" onClick={() => window.location.reload()}>Recargar</Btn>
-        <Soporte className="mt-5" />
+        <Support className="mt-5" />
       </main>
     );
   }
   if (state === "error" || !manifest || !cfg) {
     return (
       <main className="app-shell flex min-h-screen flex-col items-center justify-center bg-surface p-6 text-center">
-        {/* Apagado: el mismo agentito, dormido y sin color. */}
-        <AgentitoAvatar look={lookAgente} apagado className="mb-2 h-20 w-20 opacity-45 grayscale" />
+        {/* Asleep: the same agentito, dozing off and colorless. */}
+        <AgentitoAvatar look={agentLook} asleep className="mb-2 h-20 w-20 opacity-45 grayscale" />
         <p className="text-sm font-semibold text-ink">No pude conectar con tu agente</p>
         <p className="mb-4 mt-1 max-w-sm text-sm text-ink-soft">
           Puede estar apagado un rato, o puede ser tu conexión a internet. No perdiste nada:
           el trabajo de tu agente sigue guardado.
         </p>
         <div className="flex gap-2">
-          <Btn size="sm" disabled={reintentando} onClick={reintentar}>
-            {reintentando ? "Probando…" : "Probar de nuevo"}
+          <Btn size="sm" disabled={retrying} onClick={retry}>
+            {retrying ? "Probando…" : "Probar de nuevo"}
           </Btn>
           <Btn kind="secondary" size="sm" onClick={() => { clearConfig(); setState("login"); }}>Cambiar link</Btn>
         </div>
-        <Soporte className="mt-5" />
+        <Support className="mt-5" />
       </main>
     );
   }
 
-  // ALTA DE EQUIPO, ANTES QUE EL ONBOARDING DE UN AGENTE SOLO. En un agente con
-  // equipo, el cliente no tiene todavía a quién bautizar: lo primero que hace
-  // es contratar su primer rol. Bautizar "tu agente" ahí sería ponerle nombre a
-  // alguien que no eligió, y el portal quedaría lleno de pestañas de un equipo
-  // vacío.
+  // TEAM HIRING, BEFORE A SINGLE AGENT'S ONBOARDING. On an agent with a team,
+  // the client has nobody to name yet: the first thing they do is hire their
+  // first role. Naming "your agent" there would mean giving a name to
+  // somebody they didn't choose, and the portal would end up full of tabs for
+  // an empty team.
   //
-  // La precedencia entera vive en `useAltaDeEquipo` y la decide EL ROSTER, no
-  // el browser: si el agente no declara equipo, o si el roster no contesta,
-  // esto se aparta y sigue todo como antes.
-  if (alta.estado === "cargando") {
+  // The whole precedence lives in `useTeamHiring` and is decided by THE
+  // ROSTER, not the browser: if the agent doesn't declare a team, or if the
+  // roster doesn't answer, this steps aside and everything carries on as before.
+  if (hiring.state === "loading") {
     return <main className="app-shell min-h-screen bg-surface"><Spinner /></main>;
   }
-  if (alta.estado === "alta" || alta.estado === "en-camino") {
+  if (hiring.state === "hiring" || hiring.state === "pending") {
     return (
-      <AltaDeEquipo cfg={cfg} roles={alta.roles} onContratado={alta.marcarContratado} />
+      <TeamHiring cfg={cfg} roles={hiring.roles} onHired={hiring.markHired} />
     );
   }
 
-  // Y APENAS LLEGÓ EL PRIMERO, LO QUE EL ALTA DE EQUIPO NO PREGUNTA. Elegir y
-  // bautizar no dice de qué es el negocio —que es lo que dispara el brief— ni
-  // por dónde avisarle. Son las dos preguntas que el alta de un agente solo
-  // hace igual, y acá las hace el compañero que el cliente acaba de contratar,
-  // sin bautizo: a ese ya lo bautizó cuando lo eligió.
+  // AND AS SOON AS THE FIRST ONE ARRIVES, WHAT TEAM HIRING DOESN'T ASK. Picking
+  // and naming don't say what the business is -- which is what triggers the
+  // brief -- or where to notify them. They're the same two questions a single
+  // agent's onboarding always asks, and here they're asked by the teammate the
+  // client just hired, with no naming step: that one already got named when
+  // they picked it.
   //
-  // Se recuerda IGUAL QUE EL ONBOARDING (la misma llave del browser): si el
-  // cliente lo abandona a la mitad, la próxima vez que entre el roster ya dice
-  // "contratado" y no hay nada pendiente, así que cae de nuevo acá y no en el
-  // alta. Lo que no se le vuelve a preguntar es a quien ya contestó el canal en
-  // otra máquina: eso lo dice el agente (`avisoYaContestado`), y volver a
-  // preguntarlo le pisaría el canal que ya tiene.
-  if (alta.estado === "contratado" && seen && !seen.onboarding && !avisoYaContestado(manifest)) {
+  // Remembered THE SAME WAY AS ONBOARDING (the same browser key): if the
+  // client abandons it halfway, the next time they enter the roster already
+  // says "hired" and there's nothing pending, so it falls back here and not
+  // into hiring. What doesn't get asked again is whoever already answered the
+  // channel question on another machine: the agent says so
+  // (`channelAlreadyAnswered`), and asking again would overwrite the channel
+  // it already has.
+  if (hiring.state === "hired" && seen && !seen.onboarding && !channelAlreadyAnswered(manifest)) {
     return (
       <Onboarding
         manifest={manifest}
         cfg={cfg}
-        equipo={alta.equipo ?? { nombre: manifest.agent, look: lookAgente }}
+        team={hiring.team ?? { name: manifest.agent, look: agentLook }}
         onDone={() => {
-          // El nombre y el look son del compañero, no del agente: no se copian
-          // al browser. Lo único que queda marcado es que la bienvenida ya pasó.
+          // The name and the look are the teammate's, not the agent's: they
+          // don't get copied to the browser. All that stays marked is that
+          // the welcome screen already happened.
           dismiss("onboarding");
           dismiss("home");
         }}
@@ -431,38 +444,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Onboarding: antes que cualquier módulo, el cliente bautiza a su agente y
-  // el agente se presenta. Completa la bienvenida general, así que también
-  // marca la intro de "home" (si no, hay dos pantallas de bienvenida seguidas).
+  // Onboarding: before any module, the client names their agent and the agent
+  // introduces itself. It completes the general welcome screen, so it also
+  // marks the "home" intro (otherwise there'd be two welcome screens back to back).
   //
-  // QUIÉN DECIDE SI EL ALTA VA ES EL AGENTE, NO EL BROWSER. Se decidía sólo con
-  // lo que este navegador se acordaba, y cambiar de agente borra todo lo del
-  // anterior (`olvidarAgente`): entrar con el link de un agente ya bautizado y
-  // configurado le volvía a correr el alta entera —incluido "¿Por dónde te
-  // aviso?"— y contestarla le ESCRIBE al agente, pisándole el canal que ya
-  // tenía. Le pasó a un auditor con un agente configurado hacía rato: tuvo que
-  // saltear la pregunta a mano para no escribirle. El manifiesto ya dice
-  // `bautizado` y `aviso`: si el agente contestó, no se le vuelve a preguntar.
-  // Un agente nuevo (sin bautizar) sigue viendo el alta completa, y uno
-  // bautizado al que le falta el canal la ve desde la presentación —que es
-  // donde `Onboarding` arranca cuando `bautizado` es true—.
+  // WHO DECIDES WHETHER ONBOARDING RUNS IS THE AGENT, NOT THE BROWSER. It used
+  // to be decided only by what this browser remembered, and switching agents
+  // wipes everything from the previous one (`forgetAgent`): entering with the
+  // link to an already-named, already-configured agent ran the whole flow
+  // again -- including "Where do I notify you?" -- and answering it WRITES to
+  // the agent, overwriting the channel it already had. It happened to an
+  // auditor with an agent configured a while back: he had to skip the
+  // question by hand to avoid writing to it. The manifest already says
+  // `named` and `notify_channel`: if the agent answered, it doesn't get asked
+  // again. A brand-new (unnamed) agent still sees the full flow, and a named
+  // one missing a channel sees it starting from the overview -- which is
+  // where `Onboarding` starts when `named` is true.
   //
-  // Y NUNCA EN UN AGENTE CON EQUIPO (`modules.roles`). Ahí no hay "tu agente"
-  // que bautizar: el cliente contrata gente, y el bautizo es de cada uno cuando
-  // lo elige. Sin esta condición, un cliente de equipo en un browser virgen
-  // —salió, entró en incógnito, cambió de máquina— caía en el bautizo de un
-  // agente solo apenas el roster no llegaba a tiempo o quedaba fuera de juego,
-  // y contestarlo ESCRIBE en el agente (`POST /portal/identity`): le ponía
-  // nombre y cara a un agente que ninguno de sus compañeros es. Lo que le toca
-  // a un cliente de equipo lo deciden los dos gates de arriba.
-  if (seen && !seen.onboarding && !altaYaContestada(manifest) && !manifest.modules.roles) {
+  // AND NEVER ON A TEAM AGENT (`modules.roles`). There's no "your agent" to
+  // name there: the client hires people, and the naming happens for each one
+  // when they pick it. Without this condition, a team client on a virgin
+  // browser -- they logged out, went incognito, switched machines -- used to
+  // fall into a single agent's naming step whenever the roster didn't arrive
+  // in time or was out of the picture, and answering it WRITES to the agent
+  // (`POST /portal/identity`): it gave a name and a face to an agent that
+  // isn't any of its teammates. What a team client gets is decided by the two
+  // gates above.
+  if (seen && !seen.onboarding && !hiringAlreadyAnswered(manifest) && !manifest.modules.roles) {
     return (
       <Onboarding
         manifest={manifest}
         cfg={cfg}
         onDone={(n) => {
-          setNombre(n);
-          setLookAgente(loadAgentLook());
+          setName(n);
+          setAgentLook(loadAgentLook());
           dismiss("onboarding");
           dismiss("home");
         }}
@@ -471,19 +486,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const enabled = MODULES.filter(
-    (m) => !MODULOS_OCULTOS.has(m.key)
-      && (m.key === "home" || m.key === "capabilities" || manifest.modules[m.key]));
-  // Bienvenida por módulo: se ve una sola vez, hasta que el cliente da "Ok".
-  const current = moduloActual;
+    (m) => !HIDDEN_MODULES.has(m.key)
+      && (m.key === "home" || m.key === "skills" || manifest.modules[m.key]));
+  // Welcome screen per module: shown once, until the client says "Ok".
+  const current = currentModule;
   const Intro = current ? INTROS[current.key] : undefined;
-  // La bienvenida del módulo NO se muestra si el cliente llegó con una
-  // intención explícita (/app/chat?p=…): venía de tocar "armá esto" y su
-  // mensaje ya está enviado. Mostrarle la portada del chat encima es una
-  // puerta que se abre después de que entró — y esconde la conversación que
-  // él mismo pidió. Se marca como vista para que no reaparezca más tarde,
-  // en el medio de esa conversación.
+  // The module's welcome screen does NOT show if the client arrived with an
+  // explicit intent (/app/chat?p=…): they came from tapping "build this" and
+  // their message is already sent. Showing them the chat's home screen on top
+  // of that is a door that opens after they've already come in -- and it
+  // hides the conversation they themselves asked for. It gets marked as seen
+  // so it doesn't reappear later, in the middle of that conversation.
   const showIntro = Boolean(
-    current && Intro && seen && !seen[current.key] && !conIntencion);
+    current && Intro && seen && !seen[current.key] && !withIntent);
 
   const item = (m: (typeof MODULES)[number]) => {
     const active = pathname.startsWith(m.path);
@@ -492,16 +507,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Link
         key={m.key}
         href={m.path}
-        // Tocar la pestaña en la que ya estás cierra el detalle abierto. Sin
-        // esto el `<Link>` cambia la URL, Next no navega a ningún lado (mismo
-        // path) y el modal queda abierto sobre una URL que ya no lo nombra.
+        // Tapping the tab you're already on closes the open detail. Without
+        // this the `<Link>` changes the URL, Next doesn't navigate anywhere
+        // (same path) and the modal stays open over a URL that no longer names it.
         onClick={(e) => {
           if (pathname === m.path && window.location.search) {
             e.preventDefault();
-            volverAlaPestania();
+            backToTab();
           }
         }}
-        // relative: el badge se posiciona sobre el ícono en el riel.
+        // relative: the badge positions itself over the icon on the rail.
         title={m.label}
         className={`relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition max-md:justify-center max-md:px-0 ${
           active
@@ -518,8 +533,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {pending}
           </span>
         )}
-        {/* Conexiones que el flujo necesita y faltan: puntito ámbar. */}
-        {m.key === "connections" && (manifest.conexiones_pendientes ?? 0) > 0 && (
+        {/* Connections the flow needs and is missing: an amber dot. */}
+        {m.key === "connections" && (manifest.pending_connections ?? 0) > 0 && (
           <span className="h-2 w-2 shrink-0 rounded-full bg-c-amber-ink max-md:absolute max-md:right-1 max-md:top-1" />
         )}
       </Link>
@@ -527,14 +542,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
   return (
     <div className="app-shell flex min-h-screen bg-surface">
-      {/* En pantallas chicas la barra se reduce a un riel de íconos: 224px
-          fijos dejaban sin aire al contenido. */}
+      {/* On small screens the bar shrinks to an icon rail: a fixed 224px left
+          the content cramped. */}
       <aside className="sticky top-0 flex h-screen w-14 shrink-0 flex-col border-r border-black/[0.07] px-2 py-4 md:w-56 md:px-3">
         <div className="mb-4 flex items-center gap-2.5 px-1 md:px-2">
-          {/* El agente con su look, no un logo genérico: este portal es SU casa. */}
-          <AgentitoAvatar look={lookAgente} className="h-9 w-9 shrink-0" />
+          {/* The agent with its own look, not a generic logo: this portal is ITS home. */}
+          <AgentitoAvatar look={agentLook} className="h-9 w-9 shrink-0" />
           <div className="hidden min-w-0 md:block">
-            <p className="truncate text-sm font-bold tracking-tight text-ink">{nombre || manifest.agent}</p>
+            <p className="truncate text-sm font-bold tracking-tight text-ink">{name || manifest.agent}</p>
             <p className="flex items-center gap-1 text-[11px] text-ink-soft">
               <span className={`h-1.5 w-1.5 rounded-full ${online ? "bg-c-green-ink" : "bg-c-coral-ink"}`} />
               {online ? "conectado" : "sin conexión"}
@@ -544,32 +559,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav className="flex flex-col gap-0.5">
           {enabled.filter((m) => !m.sec).map(item)}
 
-          {/* "Más": las vistas de taller. Si algo ahí adentro le pide algo al
-              cliente (conexión pendiente), el puntito sube al propio "Más"
-              para que colapsado no esconda nada importante. */}
+          {/* "Más": the workshop views. If something inside asks the client
+              for something (a pending connection), the dot rises to "Más"
+              itself so it never hides anything important while collapsed. */}
           {enabled.some((m) => m.sec) && (
             <>
               <button
-                onClick={() => setVerMas((v) => !v)}
-                aria-expanded={verMas}
+                onClick={() => setShowMore((v) => !v)}
+                aria-expanded={showMore}
                 title="Más"
                 className="relative mt-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink-soft transition hover:bg-black/[0.04] hover:text-ink max-md:justify-center max-md:px-0"
               >
-                <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${verMas ? "" : "-rotate-90"}`} />
+                <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${showMore ? "" : "-rotate-90"}`} />
                 <span className="hidden flex-1 text-left md:inline">Más</span>
-                {!verMas && (manifest.conexiones_pendientes ?? 0) > 0 && (
+                {!showMore && (manifest.pending_connections ?? 0) > 0 && (
                   <span className="h-2 w-2 shrink-0 rounded-full bg-c-amber-ink max-md:absolute max-md:right-1 max-md:top-1" />
                 )}
               </button>
-              {verMas && enabled.filter((m) => m.sec).map(item)}
+              {showMore && enabled.filter((m) => m.sec).map(item)}
             </>
           )}
         </nav>
-        {/* Auxilio siempre a la vista: cuando algo se rompe, el cliente no
-            tiene que salir a buscar un teléfono en un mail viejo. */}
+        {/* Support always in view: when something breaks, the client
+            shouldn't have to go dig up a phone number from an old email. */}
         <div className="mt-auto flex flex-col gap-0.5 px-1">
           <a
-            href={SOPORTE.whatsapp}
+            href={SUPPORT.whatsapp}
             target="_blank"
             rel="noopener noreferrer"
             title="Escribinos"
@@ -593,10 +608,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <Intro onOk={() => dismiss(current.key)} />
         ) : (
           <>
-            {/* El alta dejó pasar sin canal de aviso: acá se vuelve a ofrecer.
-                Se dibuja solo cuando el cliente contestó "ahora no"; el resto
-                del tiempo no ocupa ni un píxel. */}
-            <AvisoSinCanal manifest={manifest} />
+            {/* Onboarding let them through with no notify channel: it gets
+                offered again here. Only drawn when the client answered "not
+                now"; the rest of the time it doesn't take up a single pixel. */}
+            <NoChannelNotice manifest={manifest} />
             {children}
           </>
         )}

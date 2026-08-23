@@ -1,12 +1,12 @@
 "use client";
 
-// Logos reales de las marcas que el cliente reconoce de un vistazo (pedido de
-// Luis, 6/8: "meter logos reales de las cosas"). Los paths monocromos vienen de
-// simple-icons (CC0) coloreados con el color oficial de cada marca; la "G" de
-// Google es el path multicolor clasico. Slack no esta: simple-icons lo retiro
-// por temas de marca, y esa conexion conserva su icono generico.
+// Real logos of the brands the client recognizes at a glance (Luis's request,
+// 8/6: "put in real logos of the things"). The monochrome paths come from
+// simple-icons (CC0) colored with each brand's official color; Google's "G"
+// is the classic multicolor path. Slack isn't here: simple-icons pulled it for
+// trademark reasons, and that connection keeps its generic icon.
 //
-// Todos dibujan en viewBox 0 0 24 24 y toman el tamano por className.
+// All of them draw in viewBox 0 0 24 24 and take their size from className.
 
 type P = { className?: string };
 

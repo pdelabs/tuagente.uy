@@ -1,110 +1,108 @@
 "use client";
 
-// Bienvenida de Actividad.
+// Activity's welcome screen.
 //
-// Acá la ilustración ES el producto: una bitácora vertical con su hilo, la hora
-// a la izquierda y un puntito de color por evento. Se muestran dos días para
-// que se entienda el agrupado, y el segundo se va desvaneciendo: la línea
-// sigue hacia abajo.
+// Here the illustration IS the product: a vertical log with its thread, the
+// time on the left and a colored dot per event. Two days are shown so the
+// grouping makes sense, and the second one fades out: the line keeps going down.
 //
-// El código de colores no se explica en un párrafo: se ve en la maqueta y se
-// confirma en la fila de referencias de abajo.
+// The color code isn't explained in a paragraph: it's seen in the mockup and
+// confirmed in the reference row below.
 //
-// Y la bitácora dibujada va adentro de `Maqueta`: era la pantalla de verdad,
-// con hora de hoy y un "Chequeo de novedades — falló" a las 11:15. Una mala
-// noticia inventada en la pestaña que existe justamente para dar las noticias
-// es de lo peor que puede afirmar un dibujo.
+// And the drawn log sits inside `Mockup`: it used to be the real screen, with
+// today's time and a "Chequeo de novedades — falló" at 11:15. A made-up piece
+// of bad news on the tab that exists specifically to deliver the news is one
+// of the worst things a drawing can claim.
 
 import type { ReactNode } from "react";
 import { Activity, CalendarDays, Eye, Layers } from "lucide-react";
-import { Eyebrow, IntroPage, Lead, Maqueta, Point, Title, type IntroProps } from "./shell";
+import { Eyebrow, IntroPage, Lead, Mockup, Point, Title, type IntroProps } from "./shell";
 
-type Tono = "green" | "amber" | "coral";
+type Tone = "green" | "amber" | "coral";
 
-type Evento = {
-  hora: string;
-  tono: Tono;
-  texto: string;
-  tipo: "Tarea programada" | "Ticket";
-  estado: string;
-  enCurso?: boolean;
+type Event = {
+  time: string;
+  tone: Tone;
+  text: string;
+  kind: "Tarea programada" | "Ticket";
+  status: string;
+  inProgress?: boolean;
 };
 
-// Más nuevo arriba, como en la pantalla real.
-const HOY: Evento[] = [
-  { hora: "14:20", tono: "green", texto: "Tarjeta cerrada", tipo: "Ticket", estado: "listo" },
-  { hora: "12:05", tono: "amber", texto: "Tarjeta movida a En curso", tipo: "Ticket", estado: "en curso", enCurso: true },
-  { hora: "11:15", tono: "coral", texto: "Chequeo de novedades", tipo: "Tarea programada", estado: "falló" },
-  { hora: "08:00", tono: "green", texto: "Resumen de la mañana", tipo: "Tarea programada", estado: "ok" },
+// Newest on top, like on the real screen.
+const TODAY: Event[] = [
+  { time: "14:20", tone: "green", text: "Tarjeta cerrada", kind: "Ticket", status: "listo" },
+  { time: "12:05", tone: "amber", text: "Tarjeta movida a En curso", kind: "Ticket", status: "en curso", inProgress: true },
+  { time: "11:15", tone: "coral", text: "Chequeo de novedades", kind: "Tarea programada", status: "falló" },
+  { time: "08:00", tone: "green", text: "Resumen de la mañana", kind: "Tarea programada", status: "ok" },
 ];
 
-const AYER: Evento[] = [
-  { hora: "19:30", tono: "green", texto: "Reporte semanal", tipo: "Tarea programada", estado: "ok" },
+const YESTERDAY: Event[] = [
+  { time: "19:30", tone: "green", text: "Reporte semanal", kind: "Tarea programada", status: "ok" },
 ];
 
-// Los puntos son "dona": relleno tonal claro + borde en el ink del mismo tono.
-// Un disco de 10px pintado solo con el ink (#0B3B2C, #4A3608, #4A1405) se lee
-// negro; así se distingue el verde del coral de un vistazo, que es todo el
-// punto de esta pantalla.
-const DOT: Record<Tono, string> = {
+// The dots are "donut"-style: light tonal fill + a border in that same tone's
+// ink color. A 10px disc painted only with the ink (#0B3B2C, #4A3608,
+// #4A1405) reads as black; this way green is told apart from coral at a
+// glance, which is the whole point of this screen.
+const DOT: Record<Tone, string> = {
   green: "border-c-green-ink bg-c-green",
   amber: "border-c-amber-ink bg-c-amber",
   coral: "border-c-coral-ink bg-c-coral",
 };
 
-const PULSO: Record<Tono, string> = {
+const PULSE: Record<Tone, string> = {
   green: "bg-c-green-ink",
   amber: "bg-c-amber-ink",
   coral: "bg-c-coral-ink",
 };
 
-function Fila({ ev }: { ev: Evento }) {
+function Row({ event }: { event: Event }) {
   return (
     <li className="flex items-center gap-3 py-2">
-      <span className="w-11 shrink-0 text-[12px] tabular-nums text-ink-soft">{ev.hora}</span>
-      {/* El anillo blanco corta el hilo detrás del punto. */}
+      <span className="w-11 shrink-0 text-[12px] tabular-nums text-ink-soft">{event.time}</span>
+      {/* The white ring cuts the thread behind the dot. */}
       <span className="relative z-10 flex h-3 w-3 shrink-0 items-center justify-center rounded-full ring-4 ring-white">
-        {ev.enCurso && (
-          <span className={`tga-act-pulse absolute -inset-1 rounded-full ${PULSO[ev.tono]}`} />
+        {event.inProgress && (
+          <span className={`tga-act-pulse absolute -inset-1 rounded-full ${PULSE[event.tone]}`} />
         )}
-        <span className={`h-3 w-3 rounded-full border-2 ${DOT[ev.tono]}`} />
+        <span className={`h-3 w-3 rounded-full border-2 ${DOT[event.tone]}`} />
       </span>
-      <p className="min-w-0 flex-1 truncate text-[13px] text-ink">{ev.texto}</p>
+      <p className="min-w-0 flex-1 truncate text-[13px] text-ink">{event.text}</p>
       <span className="hidden shrink-0 rounded-md bg-black/[0.05] px-1.5 py-0.5 text-[10px] font-semibold text-ink-soft sm:inline">
-        {ev.tipo}
+        {event.kind}
       </span>
-      <span className="w-14 shrink-0 text-right text-[11px] text-ink-soft">{ev.estado}</span>
+      <span className="w-14 shrink-0 text-right text-[11px] text-ink-soft">{event.status}</span>
     </li>
   );
 }
 
-function Grupo({ titulo, eventos, className = "" }: {
-  titulo: string;
-  eventos: Evento[];
+function Group({ title, events, className = "" }: {
+  title: string;
+  events: Event[];
   className?: string;
 }) {
   return (
     <div className={className}>
-      <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-ink-soft">{titulo}</p>
+      <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-ink-soft">{title}</p>
       <ul className="relative">
-        {/* Hilo de la bitácora: pasa por el centro de los puntos (44px de hora
-            + 12px de gap + 6px de radio). */}
+        {/* Log's thread: passes through the dots' center (44px for the time +
+            12px gap + 6px radius). */}
         <span className="absolute bottom-3 left-[62px] top-3 w-px bg-black/[0.13]" />
-        {eventos.map((ev) => (
-          <Fila key={`${titulo}-${ev.hora}`} ev={ev} />
+        {events.map((event) => (
+          <Row key={`${title}-${event.time}`} event={event} />
         ))}
       </ul>
     </div>
   );
 }
 
-/** Referencia del color. Sin cápsula ni fondo: es una leyenda, no un filtro —
- *  con forma de pastilla se leía como los chips que en otras pantallas SÍ
- *  filtran. */
-function Ref({ tono, children }: { tono: Tono; children: ReactNode }) {
+/** Color reference. No pill or background: it's a legend, not a filter --
+ *  pill-shaped it read as the chips that DO filter on other screens. */
+function Ref({ tone, children }: { tone: Tone; children: ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-soft">
-      <span className={`h-3 w-3 rounded-full border-2 ${DOT[tono]}`} />
+      <span className={`h-3 w-3 rounded-full border-2 ${DOT[tone]}`} />
       {children}
     </span>
   );
@@ -130,24 +128,24 @@ export default function ActivityIntro({ onOk }: IntroProps) {
         cada tarjeta del tablero, mezclados en una sola línea. Del movimiento más nuevo para atrás.
       </Lead>
 
-      {/* ── La bitácora ───────────────────────────────────────────────────── */}
-      <Maqueta
+      {/* ── The log ───────────────────────────────────────────────────────── */}
+      <Mockup
         className="relative mt-6 overflow-hidden bg-white"
-        nota="Movimientos inventados: no son los de tu agente."
+        note="Movimientos inventados: no son los de tu agente."
       >
         <div className="relative">
-          <Grupo titulo="Hoy" eventos={HOY} />
-          <Grupo titulo="Ayer" eventos={AYER} className="mt-4 opacity-55" />
-          {/* La línea no termina: se va hacia abajo. */}
+          <Group title="Hoy" events={TODAY} />
+          <Group title="Ayer" events={YESTERDAY} className="mt-4 opacity-55" />
+          {/* The line doesn't end: it fades going down. */}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white via-white/80 to-transparent" />
         </div>
-      </Maqueta>
+      </Mockup>
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="text-[12px] font-semibold text-ink-soft">El color dice cómo salió:</span>
-        <Ref tono="green">salió bien</Ref>
-        <Ref tono="amber">en curso</Ref>
-        <Ref tono="coral">algo falló</Ref>
+        <Ref tone="green">salió bien</Ref>
+        <Ref tone="amber">en curso</Ref>
+        <Ref tone="coral">algo falló</Ref>
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-3">

@@ -1,30 +1,31 @@
 "use client";
 
-// Bienvenida de "Archivos".
-// Composición: mesa de trabajo del agente a la izquierda (pila de archivos +
-// visor abierto) y los tres puntos a la derecha. Ilustración en divs, sin
-// imágenes externas; la animación de entrada respeta prefers-reduced-motion.
+// "Files" welcome screen.
+// Composition: the agent's workbench on the left (stack of files + an open
+// viewer) and the three points on the right. Illustration in divs, no
+// external images; the entry animation respects prefers-reduced-motion.
 //
-// "informe-mensual.md · 14 KB · hace 2 h" tiene la forma exacta de un archivo
-// de verdad —nombre, peso, cuándo—, así que la pila va adentro de `Maqueta`:
-// tres archivos inventados en la pantalla que promete mostrar los tuyos son
-// tres archivos que alguien va a ir a buscar.
+// "informe-mensual.md · 14 KB · hace 2 h" has the exact shape of a real
+// file -- name, size, when -- so the stack sits inside `Mockup`: three made-up
+// files on the screen that promises to show your own would be three files
+// someone's going to go looking for.
 //
-// ESTA BIENVENIDA DECÍA "SOLO LECTURA" Y DEJÓ DE SER CIERTO. La pestaña ahora
-// tiene subida propia: botón en el encabezado, se puede soltar un archivo en
-// cualquier parte de la pantalla y lo que cae queda en `entrada/`, el buzón,
-// que subió al segundo lugar de la raíz. Salió de la misma prueba a ciegas que
-// el resto: "falta una pantalla que no existe: dónde meto YO mis papeles; si
-// quiero darle mi planilla tengo que encontrar el clipcito del chat".
+// THIS WELCOME SCREEN USED TO SAY "READ ONLY" AND THAT STOPPED BEING TRUE. The
+// tab now has its own upload: a button in the header, you can drop a file
+// anywhere on the screen, and whatever lands stays in `entrada/`, the inbox,
+// which moved up to second place at the root. It came out of the same blind
+// test as everything else: "there's a missing screen: where do I put MY OWN
+// papers; if I want to hand it my spreadsheet I have to go find the chat's
+// little paperclip."
 //
-// PERO NO TODOS LOS AGENTES LA TIENEN, y prometerla es peor que no nombrarla:
-// el cliente busca un botón que no está y cree que se le rompió algo. La subida
-// sale sólo si el manifiesto declara `modules.upload` — la MISMA condición que
-// usa la pestaña (`sePuedeSubir`), así que lo que promete esta pantalla y lo
-// que aparece en la siguiente no se pueden separar. Es la salida de la
-// bienvenida de Conexiones aplicada al mismo problema: si el portal puede saber
-// la verdad, la pregunta, y mientras no la sabe no afirma nada en ninguna de
-// las dos direcciones.
+// BUT NOT EVERY AGENT HAS IT, and promising it is worse than not naming it:
+// the client looks for a button that isn't there and thinks something broke.
+// Upload only shows up if the manifest declares `modules.upload` -- the SAME
+// condition the tab itself uses (`canUpload`), so what this screen promises
+// and what shows up on the next one can't drift apart. It's Connections'
+// welcome-screen solution applied to the same problem: if the portal can know
+// the truth, it asks, and while it doesn't know it asserts nothing in either
+// direction.
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -32,7 +33,7 @@ import {
   Lock, MessagesSquare, Upload, Wrench, type LucideIcon,
 } from "lucide-react";
 import { getManifest, loadConfig } from "../agent";
-import { IntroPage, Eyebrow, Title, Lead, Maqueta, Paso, Point, type IntroProps } from "./shell";
+import { IntroPage, Eyebrow, Title, Lead, Mockup, Step, Point, type IntroProps } from "./shell";
 
 const CSS = `
 @keyframes tgf-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
@@ -40,34 +41,34 @@ const CSS = `
 @media (prefers-reduced-motion: reduce) { .tgf-in { animation: none; } }
 `;
 
-/* ── ¿Este agente acepta que le dejes algo? ──────────────────────────────── */
+/* ── Does this agent accept you dropping something off? ──────────────────── */
 
-/** `null` mientras no se sabe: ahí no se dice ni que sí ni que no.
+/** `null` while unknown: neither yes nor no gets said there.
  *
- *  Si el manifiesto no contesta, la respuesta es NO: es la misma regla que la
- *  pestaña (ante la duda no se ofrece la subida), y tiene que ser la misma o la
- *  bienvenida termina prometiendo un botón que la pantalla no va a dibujar. */
-function useSubidaDeclarada(): boolean | null {
-  const [puede, setPuede] = useState<boolean | null>(null);
+ *  If the manifest doesn't answer, the answer is NO: same rule as the tab
+ *  (when in doubt, upload isn't offered), and it has to be the same one or
+ *  this welcome screen ends up promising a button the real screen won't draw. */
+function useDeclaredUpload(): boolean | null {
+  const [can, setCan] = useState<boolean | null>(null);
 
   useEffect(() => {
     const cfg = loadConfig();
-    if (!cfg) { setPuede(false); return; }
-    let vivo = true;
+    if (!cfg) { setCan(false); return; }
+    let alive = true;
     getManifest(cfg)
-      .then((m) => { if (vivo) setPuede(m?.modules?.upload === true); })
-      .catch(() => { if (vivo) setPuede(false); });
-    return () => { vivo = false; };
+      .then((m) => { if (alive) setCan(m?.modules?.upload === true); })
+      .catch(() => { if (alive) setCan(false); });
+    return () => { alive = false; };
   }, []);
 
-  return puede;
+  return can;
 }
 
-/* ── La ilustración ──────────────────────────────────────────────────────── */
+/* ── The illustration ─────────────────────────────────────────────────────── */
 
 type Row = { name: string; meta: string; icon: LucideIcon; tone: string; open?: boolean };
 
-// Tres extensiones bien distintas, cada una con su ícono y su tonal.
+// Three very different extensions, each with its own icon and tone.
 const ROWS: Row[] = [
   {
     name: "informe-mensual.md",
@@ -90,32 +91,32 @@ const ROWS: Row[] = [
   },
 ];
 
-/** Una línea de texto "renderizado" del visor. */
+/** One "rendered" line of text in the viewer. */
 function Line({ w }: { w: string }) {
   return <div className={`h-1.5 rounded-full bg-black/[0.09] ${w}`} />;
 }
 
-/** Un token del bloque de código (fondo oscuro, resaltado tonal). */
+/** A token in the code block (dark background, tonal highlight). */
 function Tok({ w, tone }: { w: string; tone: string }) {
   return <div className={`h-1.5 rounded-full ${tone} ${w}`} />;
 }
 
-// min-w-0 en la raíz: sin eso la celda del grid se agranda hasta el nombre de
-// archivo más largo (el truncate solo no alcanza) y el portal queda con scroll
-// lateral. Por lo mismo, los anchos de adentro van en % y no en píxeles.
+// min-w-0 on the root: without it the grid cell grows to fit the longest file
+// name (truncate alone isn't enough) and the portal ends up with horizontal
+// scroll. For the same reason, the inner widths are in % and not pixels.
 //
-// `conBuzon` dibuja arriba de la pila la carpeta `entrada/`, que es donde caen
-// los archivos del cliente. No se dibuja cuando el agente no declara la subida:
-// sería una carpeta que en su pantalla no existe.
-function Workspace({ conBuzon }: { conBuzon: boolean }) {
+// `withInbox` draws the `entrada/` folder above the stack, which is where the
+// client's files land. It doesn't draw when the agent doesn't declare
+// upload: it would be a folder that doesn't exist on their own screen.
+function Workspace({ withInbox }: { withInbox: boolean }) {
   return (
-    <Maqueta
+    <Mockup
       className="min-w-0 bg-gradient-to-br from-c-violet/70 via-white to-c-green/25"
-      nota={conBuzon
+      note={withInbox
         ? "Carpetas y archivos inventados: no son los tuyos."
         : "Archivos inventados: no son los tuyos."}
     >
-      {conBuzon && (
+      {withInbox && (
         <div className="tgf-in mb-1.5 flex items-center gap-2.5 rounded-xl border border-black/[0.06] bg-white px-2.5 py-2">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-c-green text-c-green-ink">
             <Inbox className="h-3.5 w-3.5" />
@@ -127,7 +128,7 @@ function Workspace({ conBuzon }: { conBuzon: boolean }) {
         </div>
       )}
 
-      {/* La pila: se distingue el .md del .csv y del .py por ícono y color. */}
+      {/* The stack: .md, .csv and .py told apart by icon and color. */}
       <div className="space-y-1.5">
         {ROWS.map((r, i) => (
           <div
@@ -149,7 +150,7 @@ function Workspace({ conBuzon }: { conBuzon: boolean }) {
         ))}
       </div>
 
-      {/* El visor: título, texto formateado y el bloque de código resaltado. */}
+      {/* The viewer: title, formatted text and the highlighted code block. */}
       <div
         style={{ animationDelay: "300ms" }}
         className="tgf-in mt-2.5 overflow-hidden rounded-xl border border-black/[0.07] bg-white"
@@ -192,13 +193,13 @@ function Workspace({ conBuzon }: { conBuzon: boolean }) {
           </div>
         </div>
       </div>
-    </Maqueta>
+    </Mockup>
   );
 }
 
-/* ── Lo que cambia según el agente ───────────────────────────────────────── */
+/* ── What changes depending on the agent ──────────────────────────────────── */
 
-function Caja({ children }: { children: ReactNode }) {
+function Box({ children }: { children: ReactNode }) {
   return (
     <div className="mt-5 rounded-card border border-black/[0.07] bg-white px-4 py-3">
       {children}
@@ -206,7 +207,7 @@ function Caja({ children }: { children: ReactNode }) {
   );
 }
 
-function Encabezado({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
+function Header({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
   return (
     <p className="flex items-center gap-1.5 text-[13px] font-bold text-ink">
       <Icon className="h-3.5 w-3.5 shrink-0 text-ink-soft" />
@@ -215,78 +216,79 @@ function Encabezado({ icon: Icon, children }: { icon: LucideIcon; children: Reac
   );
 }
 
-/** Con subida: dónde van los papeles del cliente y qué pasa después.
+/** With upload: where the client's papers go and what happens next.
  *
- *  Los tres pasos van con `Paso` —ícono y texto— y no con pastillas: "Lo
- *  soltás acá" y "Se lo pedís por el chat" son cosas que se hacen en OTRAS
- *  pantallas, y dibujarlas con forma de botón es prometer un clic que en esta
- *  no pasa nada. */
-function ConBuzon() {
+ *  The three steps use `Step` -- icon and text -- and not pills: "Lo soltás
+ *  acá" and "Se lo pedís por el chat" are things that happen on OTHER
+ *  screens, and drawing them shaped like a button promises a click that does
+ *  nothing here. */
+function WithInbox() {
   return (
-    <Caja>
-      <Encabezado icon={Inbox}>Y acá le dejás lo tuyo</Encabezado>
+    <Box>
+      <Header icon={Inbox}>Y acá le dejás lo tuyo</Header>
       <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
         Una planilla, un listado, un PDF: soltalo en cualquier parte de esta pantalla —o usá el
         botón de arriba— y queda en <span className="font-semibold text-ink">Entrada</span>, el
         buzón de tu agente. No hace falta ir a buscar el clip del chat.
       </p>
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Paso icon={Upload}>Lo soltás acá</Paso>
+        <Step icon={Upload}>Lo soltás acá</Step>
         <ArrowRight className="h-3 w-3 shrink-0 text-ink-soft/50" aria-hidden />
-        <Paso icon={Inbox}>Queda en Entrada</Paso>
+        <Step icon={Inbox}>Queda en Entrada</Step>
         <ArrowRight className="h-3 w-3 shrink-0 text-ink-soft/50" aria-hidden />
-        <Paso icon={MessagesSquare}>Se lo pedís por el chat</Paso>
+        <Step icon={MessagesSquare}>Se lo pedís por el chat</Step>
       </div>
-      {/* SUBIRLO NO ES PEDIRLE NADA: el archivo queda en su buzón y él lo va a
-          encontrar ahí, pero nadie le avisó. Lo dice igual la pestaña arriba del
-          acuse; que lo diga también acá evita el "se lo dejé y no hizo nada". */}
+      {/* DROPPING IT OFF ISN'T ASKING IT FOR ANYTHING: the file sits in its
+          inbox and it'll find it there, but nobody told it. The tab already
+          says as much above the acknowledgment; saying it here too avoids the
+          "I left it there and it didn't do anything". */}
       <p className="mt-2 text-[12px] leading-snug text-ink-soft">
         Dejárselo no lo pone a trabajar: el archivo lo espera ahí hasta que se lo pidas.
       </p>
-    </Caja>
+    </Box>
   );
 }
 
-/** Sin subida declarada: la pantalla es de lectura, y así se dice. */
-function SoloLectura() {
+/** With no declared upload: the screen is read-only, and it says so. */
+function ReadOnly() {
   return (
-    <Caja>
-      <Encabezado icon={Lock}>Solo lectura</Encabezado>
+    <Box>
+      <Header icon={Lock}>Solo lectura</Header>
       <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
         Es una ventana al workspace de tu agente: los archivos se miran y se bajan, pero desde el
         portal no se modifica nada. Si le querés pasar algo tuyo, mandáselo por el chat.
       </p>
-    </Caja>
+    </Box>
   );
 }
 
-/** Mientras se pregunta. No afirma nada en ninguna de las dos direcciones. */
-function Averiguando() {
+/** While it's being asked. Asserts nothing in either direction. */
+function Checking() {
   return (
-    <Caja>
+    <Box>
       <p className="text-[12px] text-ink-soft">Viendo si a este agente le podés dejar archivos…</p>
       <div className="mt-2 space-y-1.5" aria-hidden>
         <div className="h-2 w-2/3 rounded-pill bg-black/[0.06]" />
         <div className="h-2 w-1/3 rounded-pill bg-black/[0.05]" />
       </div>
-    </Caja>
+    </Box>
   );
 }
 
-/* ── La pantalla ─────────────────────────────────────────────────────────── */
+/* ── The screen ────────────────────────────────────────────────────────────── */
 
 export default function FilesIntro({ onOk }: IntroProps) {
-  const puedeSubir = useSubidaDeclarada();
+  const canUpload = useDeclaredUpload();
 
   return (
     <IntroPage
       onOk={onOk}
       cta="Ver mis archivos"
-      // Sin saberlo todavía no se promete nada: la nota aparece cuando el
-      // manifiesto contestó.
-      note={puedeSubir === null
+      // Without knowing yet, nothing gets promised: the note shows up once
+      // the manifest answered.
+      note={canUpload === null
         ? undefined
-        : puedeSubir
+        : canUpload
           ? "Le podés dejar archivos; editar o borrar los suyos, no."
           : "Solo lectura: desde acá no se modifica nada."}
     >
@@ -298,10 +300,10 @@ export default function FilesIntro({ onOk }: IntroProps) {
         y los leés, sin bajar nada ni salir del portal.
       </Lead>
 
-      {puedeSubir === null ? <Averiguando /> : puedeSubir ? <ConBuzon /> : <SoloLectura />}
+      {canUpload === null ? <Checking /> : canUpload ? <WithInbox /> : <ReadOnly />}
 
       <div className="mt-6 grid gap-6 md:grid-cols-2 md:items-start">
-        <Workspace conBuzon={puedeSubir === true} />
+        <Workspace withInbox={canUpload === true} />
         <div className="grid min-w-0 gap-5">
           <Point icon={Eye} title="Se leen como corresponde">
             Los .md se ven formateados, las planillas como planilla y el código con resaltado. Si lo

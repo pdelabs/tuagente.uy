@@ -1,11 +1,12 @@
 "use client";
 
-// Bloque de código del chat.
+// The chat's code block.
 //
-// Highlighting con PrismLight + registro selectivo: importamos SÓLO los
-// lenguajes que el agente usa en la práctica (y por path profundo, no por el
-// barrel `react-syntax-highlighter`, que arrastra highlight.js y Prism enteros
-// al bundle). Un lenguaje desconocido se renderiza plano, sin warnings.
+// Highlighting via PrismLight + selective registration: we import ONLY the
+// languages the agent actually uses in practice (via a deep path, not the
+// `react-syntax-highlighter` barrel, which drags all of highlight.js and
+// Prism into the bundle). An unknown language renders as plain text, with no
+// warnings.
 
 import {
   memo,
@@ -33,8 +34,8 @@ import tsx from "react-syntax-highlighter/dist/esm/languages/prism/tsx";
 import typescript from "react-syntax-highlighter/dist/esm/languages/prism/typescript";
 import yaml from "react-syntax-highlighter/dist/esm/languages/prism/yaml";
 
-// registerLanguage(name, fn) ignora `name` y registra por el displayName del
-// lenguaje, así que los alias los resolvemos nosotros (ver ALIASES).
+// registerLanguage(name, fn) ignores `name` and registers by the language's
+// own displayName, so we resolve the aliases ourselves (see ALIASES).
 const REGISTERED: Record<string, unknown> = {
   bash,
   css,
@@ -55,8 +56,8 @@ for (const [name, lang] of Object.entries(REGISTERED)) {
   SyntaxHighlighter.registerLanguage(name, lang);
 }
 
-// Set y no `in`: `"constructor" in REGISTERED` sería true por la cadena de
-// prototipos y le pasaríamos basura al highlighter.
+// A Set and not `in`: `"constructor" in REGISTERED` would be true because of
+// the prototype chain, and we'd pass garbage to the highlighter.
 const SUPPORTED = new Set(Object.keys(REGISTERED));
 
 const ALIASES: Record<string, string> = {
@@ -90,13 +91,13 @@ const ALIASES: Record<string, string> = {
   patch: "diff",
 };
 
-/** Primer token del info string: ```ts title="x" o ```js:app.js → ts / js. */
+/** First token of the info string: ```ts title="x" or ```js:app.js -> ts / js. */
 function langHead(raw: string | null | undefined): string {
   const trimmed = (raw ?? "").trim();
   return trimmed.split(/[\s:{,]/)[0] || trimmed;
 }
 
-/** Lenguaje canónico soportado, o null si no lo tenemos registrado. */
+/** Canonical supported language, or null if we don't have it registered. */
 export function normalizeLang(raw: string | null | undefined): string | null {
   const head = langHead(raw).toLowerCase();
   if (!head) return null;
@@ -107,8 +108,8 @@ export function normalizeLang(raw: string | null | undefined): string | null {
 const MONO =
   'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
 
-// El contenedor pone fondo/borde/radio; el <pre> del highlighter va desnudo y
-// sólo se encarga del scroll horizontal.
+// The container provides background/border/radius; the highlighter's <pre>
+// goes bare and only handles horizontal scroll.
 const PRE_STYLE: CSSProperties = {
   margin: 0,
   padding: "0.75rem 0.875rem",
@@ -165,9 +166,9 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
 
 export type CodeBlockProps = {
   code: string;
-  /** El tag crudo del fence (```ts). Puede ser desconocido o null. */
+  /** The fence's raw tag (```ts). Can be unknown or null. */
   lang?: string | null;
-  /** Nota discreta al pie del bloque (la usa Mermaid cuando no puede dibujar). */
+  /** Discreet note at the foot of the block (used by Mermaid when it can't draw). */
   note?: ReactNode;
 };
 
@@ -189,7 +190,7 @@ function CodeBlockImpl({ code, lang, note }: CodeBlockProps) {
           />
         </div>
       ) : (
-        // Sin lenguaje no metemos barra: el botón aparece flotando al hover.
+        // With no language we skip the bar: the button floats in on hover.
         <CopyButton
           text={text}
           className="absolute right-1.5 top-1.5 z-10 bg-surface/80 opacity-0 backdrop-blur transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
@@ -221,7 +222,7 @@ function CodeBlockImpl({ code, lang, note }: CodeBlockProps) {
   );
 }
 
-// Durante el streaming el mensaje entero se re-renderiza por token: memoizamos
-// para que sólo se vuelva a tokenizar el bloque que está creciendo.
+// During streaming the whole message re-renders per token: we memoize so only
+// the block that's growing gets re-tokenized.
 const CodeBlock = memo(CodeBlockImpl);
 export default CodeBlock;

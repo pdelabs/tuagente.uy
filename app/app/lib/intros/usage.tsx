@@ -1,28 +1,28 @@
 "use client";
 
-// Bienvenida de "Uso".
-// Composición: los tres números de la pestaña (hoy, este mes, desde siempre) en
-// una fila, y abajo tres puntos. Ilustración en divs, sin imágenes externas.
+// "Usage" welcome screen.
+// Composition: the tab's three numbers (today, this month, all-time) in a
+// row, and three points below. Illustration in divs, no external images.
 //
-// ACÁ NO SE HABLA DE TOKENS. Esta bienvenida mostraba "TOKENS 1,24 M" al lado de
-// las sesiones. La clienta de prueba lo citó textual: "no sé qué es un token y
-// no me importa; US$ 0,10 es lo único que quiero saber".
+// TOKENS AREN'T MENTIONED HERE. This welcome screen used to show "TOKENS 1.24
+// M" next to the sessions. The test client quoted it verbatim: "I don't know
+// what a token is and I don't care; US$0.10 is the only thing I want to know."
 //
-// Y TAMPOCO SE DIBUJA UN GRÁFICO QUE NO EXISTE. Hasta el 19/8/2026 el panel
-// tenía catorce barras de gasto por día: la pestaña las mostraba porque el
-// número lo armábamos nosotros sumando llamadas — y esa suma le erraba 9x para
-// abajo. Ahora el número lo da el proveedor, que informa tres totales y ninguna
-// serie. Una bienvenida que promete un gráfico que la pestaña no tiene manda a
-// buscar algo que no está.
+// AND NO CHART THAT DOESN'T EXIST GETS DRAWN EITHER. Until 8/19/2026 the panel
+// had fourteen bars of daily spend: the tab showed them because we built the
+// number ourselves by summing calls -- and that sum missed by 9x LOW. Now the
+// number comes from the provider, which reports three totals and no series. A
+// welcome screen promising a chart the tab doesn't have sends people looking
+// for something that isn't there.
 //
-// EL PANEL ES UN DIBUJO, y acá importa más que en ningún lado: "US$ 7,80" abajo
-// de un título que dice cuánto gastaste es la plata de alguien. Va adentro de
-// `Maqueta`, que lo rotula como ejemplo.
+// THE PANEL IS A DRAWING, and here that matters more than anywhere else: "US$
+// 7.80" under a title that says how much you spent is someone's real money.
+// It sits inside `Mockup`, which labels it as an example.
 
 import { BarChart3, CalendarDays, Receipt, Wallet } from "lucide-react";
-import { IntroPage, Eyebrow, Title, Lead, Maqueta, Point, type IntroProps } from "./shell";
+import { IntroPage, Eyebrow, Title, Lead, Mockup, Point, type IntroProps } from "./shell";
 
-function Numero({ label, value, big = false }: { label: string; value: string; big?: boolean }) {
+function Stat({ label, value, big = false }: { label: string; value: string; big?: boolean }) {
   return (
     <div className="min-w-0 rounded-xl border border-black/[0.06] bg-surface px-3 py-2.5">
       <p className="truncate text-[10px] font-bold uppercase tracking-wide text-ink-soft">{label}</p>
@@ -39,16 +39,16 @@ function Numero({ label, value, big = false }: { label: string; value: string; b
 
 function Panel() {
   return (
-    <Maqueta className="min-w-0 bg-white" nota="Números inventados: no es tu consumo.">
+    <Mockup className="min-w-0 bg-white" note="Números inventados: no es tu consumo.">
       <div className="grid gap-2 sm:grid-cols-3">
-        <Numero label="Hoy" value="US$ 0,42" big />
-        <Numero label="Este mes" value="US$ 7,80" />
-        <Numero label="Desde siempre" value="US$ 23,10" />
+        <Stat label="Hoy" value="US$ 0,42" big />
+        <Stat label="Este mes" value="US$ 7,80" />
+        <Stat label="Desde siempre" value="US$ 23,10" />
       </div>
       <p className="mt-3 text-[11px] leading-snug text-ink-soft">
         Los números vienen de OpenRouter: es lo que tu agente gasta de verdad.
       </p>
-    </Maqueta>
+    </Mockup>
   );
 }
 

@@ -1,19 +1,20 @@
 "use client";
 
-// El agentito de verdad: personaje Rive (public/agentito.riv, hecho con
-// rivemcp — sesión "Onboarding" del 6-8/8). El state machine "Agentito" expone:
-//   miradaX / miradaY (number 0-100): hacia dónde miran las pupilas
-//   gesto (number): qué está haciendo — 0 nada, 1 pensar (cabeza ladeada y
-//     una ceja en arco), 2 libro, 3 libreta y lápiz, 4 lupa, 5 llave inglesa
-//     girando un tornillo, 10 el celu (no lo pide el portal: es el fondo de la
-//     escalera del ocio, más abajo)
-//   festejar / matear / bostezar (trigger): el rebote de festejo, la cebada de
-//     mate y el bostezo de aburrido
-//   tono, antena, accesorio, pupila, boca, piel, traje, cejas: los ejes del look
-// Encima trae flote y parpadeo como loops propios. El runtime es el "lite"
-// (solo vectores) y el wasm se sirve desde /public — nada sale a un CDN.
-// Mientras carga (o si algo falla) se ve la cara estática, que es el mismo
-// dibujo: el reemplazo no salta.
+// The real agentito: a Rive character (public/agentito.riv, made with
+// rivemcp -- "Onboarding" session, 8/6-8). The "Agentito" state machine
+// exposes:
+//   miradaX / miradaY (number 0-100): where the pupils are looking
+//   gesto (number): what it's doing -- 0 nothing, 1 thinking (head tilted and
+//     an eyebrow arched), 2 book, 3 notepad and pencil, 4 magnifying glass,
+//     5 wrench turning a screw, 10 the phone (the portal never requests it:
+//     it's the bottom of the idle staircase, below)
+//   festejar / matear / bostezar (trigger): the celebration bounce, sipping
+//     mate, and the bored yawn
+//   tono, antena, accesorio, pupila, boca, piel, traje, cejas: the look's axes
+// On top of that it carries float and blink as its own loops. The runtime is
+// the "lite" one (vectors only) and the wasm is served from /public -- nothing
+// goes out to a CDN. While it loads (or if something fails) the static face
+// shows, which is the same drawing: the swap never jumps.
 
 import { useEffect, useRef, useState } from "react";
 import { useRive, useStateMachineInput, RuntimeLoader } from "@rive-app/react-canvas-lite";
@@ -21,262 +22,271 @@ import { AgentitoAvatar, type AgentitoLook } from "./agentito";
 
 RuntimeLoader.setWasmUrl("/rive.wasm");
 
-/** Qué está haciendo el agente. Lo decide quien lo muestra, no el personaje.
+/** What the agent is doing. Decided by whoever shows it, not by the character.
  *
- *  Los cinco últimos son los gestos de TRABAJO. Cada uno son DOS cosas a la vez:
- *  la pose (animación del .riv, por el input `gesto`) y el recorrido de la
- *  mirada (código, moviendo miradaX/miradaY). Van juntos a propósito: la pose
- *  dice QUÉ está haciendo y la mirada apunta a donde está la acción. Mientras
- *  hay un gesto puesto, la mirada no sigue al cursor. */
-export type EstadoAgentito =
-  | "normal"      // sigue el cursor y nada más
-  | "tranquilo"   // no hay nada esperándote: se ceba unos mates
-  | "esperando"   // hay algo para tu ok: cada tanto mira hacia la barra lateral
-  | "pensando"    // ladea la cabeza, arquea una ceja y se le va la mirada arriba
-  | "leyendo"     // sostiene un libro y lo lee renglón a renglón; cada tanto pasa página
-  | "escribiendo" // libreta y lápiz: el lápiz garabatea y él mira la punta
-  | "buscando"    // lupa que barre la cara, con vistazos secos y salteados
-  | "haciendo";   // llave inglesa que gira un tornillo, con temblorcito de esfuerzo
+ *  The last five are the WORK gestures. Each one is TWO things at once: the
+ *  pose (the .riv's animation, via the `gesto` input) and the gaze's path
+ *  (code, moving miradaX/miradaY). They go together on purpose: the pose says
+ *  WHAT it's doing and the gaze points at where the action is. While a
+ *  gesture is set, the gaze stops following the cursor. */
+export type AgentitoState =
+  | "normal"    // follows the cursor and nothing else
+  | "calm"      // nothing waiting on you: it sips some mate
+  | "waiting"   // something needs your ok: every so often it glances at the sidebar
+  | "thinking"  // tilts its head, arches an eyebrow, gaze drifts up
+  | "reading"   // holds a book and reads it line by line; turns the page now and then
+  | "writing"   // notepad and pencil: the pencil scribbles and it watches the tip
+  | "searching" // a magnifying glass sweeping its face, with short, choppy glances
+  | "doing";    // a wrench turning a screw, with a little tremor of effort
 
-const GESTOS_DE_TRABAJO: EstadoAgentito[] = [
-  "pensando", "leyendo", "escribiendo", "buscando", "haciendo",
+const WORK_GESTURES: AgentitoState[] = [
+  "thinking", "reading", "writing", "searching", "doing",
 ];
-const trabajando = (e: EstadoAgentito) => GESTOS_DE_TRABAJO.includes(e);
+const isWorking = (e: AgentitoState) => WORK_GESTURES.includes(e);
 
-/** El input `gesto` del .riv. El orden es el del state machine, no alfabético. */
-const NUMERO_DE_GESTO: Record<string, number> = {
-  pensando: 1, leyendo: 2, escribiendo: 3, buscando: 4, haciendo: 5,
+/** The .riv's `gesto` input. The order is the state machine's, not alphabetical. */
+const GESTURE_NUMBER: Record<string, number> = {
+  thinking: 1, reading: 2, writing: 3, searching: 4, doing: 5,
 };
 
-/** El celu. No está en NUMERO_DE_GESTO a propósito: no es un estado que el
- *  portal pida, sino el fondo de la escalera del ocio (más abajo). */
-const GESTO_CELU = 10;
+/** The phone. Deliberately not in GESTURE_NUMBER: it isn't a state the portal
+ *  requests, it's the bottom of the idle staircase (below). */
+const PHONE_GESTURE = 10;
 
 type Props = {
-  /** Contador: cada incremento dispara el trigger de festejo. */
-  festejos: number;
+  /** Counter: each increment fires the celebration trigger. */
+  celebrations: number;
   look: AgentitoLook;
-  estado?: EstadoAgentito;
+  state?: AgentitoState;
   className?: string;
 };
 
 export default function AgentitoRive(props: Props) {
-  // Se puede leer en el render: este módulo entra solo por next/dynamic con
-  // ssr:false, así que siempre corre en el browser.
-  const [quieto] = useState(
+  // Safe to read during render: this module only ever loads via next/dynamic
+  // with ssr:false, so it always runs in the browser.
+  const [still] = useState(
     () => typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
 
-  // Con reduced-motion NO montamos Rive: va el dibujo estático, que respeta el
-  // look y encima se ahorra el wasm. Pausar el runtime no servía — quedaba
-  // pausado antes de que el state machine aplicara los ejes, y salía el
-  // agentito violeta por defecto en vez del que eligió el cliente.
-  if (quieto) return <AgentitoAvatar look={props.look} className={props.className} />;
-  return <AgentitoAnimado {...props} />;
+  // With reduced-motion we do NOT mount Rive: the static drawing goes up
+  // instead, which respects the look and saves the wasm too. Pausing the
+  // runtime didn't work -- it ended up paused before the state machine
+  // applied the axes, so the default violet agentito showed up instead of
+  // the one the client chose.
+  if (still) return <AgentitoAvatar look={props.look} className={props.className} />;
+  return <AnimatedAgentito {...props} />;
 }
 
-// A partir de esta distancia del personaje, la mirada ya está al tope. Más
-// corto y satura enseguida (deja de decir hacia dónde); más largo y casi no
-// mueve los ojos.
-const ALCANCE_MIRADA = 300;
+// Past this distance from the character, the gaze is already maxed out.
+// Shorter and it saturates right away (stops saying which direction); longer
+// and the eyes barely move.
+const GAZE_RANGE = 300;
 
-// ── La escalera del ocio ──
-// Cuánto hace que el cliente no toca nada. NO habla del agente sino del
-// USUARIO, por eso vive acá adentro y no en el prop `estado`: el portal sabe
-// si hay pendientes, no si te fuiste a hacer otra cosa. Solo corre con
-// `estado === "tranquilo"`: si algo espera tu ok o el agente está laburando,
-// no es momento de bostezar.
-const OCIO_BOSTEZO = 90_000;   // 1½ min sin actividad: el primer bostezo
-const OCIO_CELU = 240_000;     // 4 min: se aburre y saca el celu
-const REPETIR_BOSTEZO = 50_000;
-// Lo que dura `tomarMate` (260 frames a 60 fps), con un pelín de más para el
-// cruce de salida. Es la ventana en la que el bostezo NO puede salir.
-const DURA_MATE = 4_600;
+// ── The idle staircase ──
+// How long since the client last touched anything. This is about the USER,
+// not the agent, which is why it lives here and not in the `state` prop: the
+// portal knows if something's pending, not whether you went off to do
+// something else. Only runs with `state === "calm"`: if something's
+// waiting on your ok or the agent is working, it isn't time to yawn.
+const IDLE_YAWN = 90_000;    // 1.5 min with no activity: the first yawn
+const IDLE_PHONE = 240_000;  // 4 min: it gets bored and takes out its phone
+const REPEAT_YAWN = 50_000;
+// How long `tomarMate` lasts (260 frames at 60fps), with a bit extra for the
+// exit crossfade. It's the window during which the yawn CANNOT fire.
+const MATE_DURATION = 4_600;
 
-// Mover el mouse cuenta como "estás acá" para que no saque el celu mientras
-// leés, pero NO se lo guarda: si el mousemove cortara el gesto, la guardada no
-// se vería nunca (siempre movés el mouse ANTES de hacer clic). Una vez que
-// está enganchado con el celu, solo lo despierta una acción deliberada.
-const ACTIVIDAD = ["mousemove", "pointerdown", "keydown", "wheel", "touchstart"] as const;
-const DELIBERADAS = ["pointerdown", "keydown", "wheel", "touchstart"] as const;
+// Moving the mouse counts as "you're here" so it doesn't take out the phone
+// while you're reading, but it does NOT put the phone away: if a mousemove
+// cut the gesture short, putting it away would never be seen (you always move
+// the mouse BEFORE clicking). Once it's hooked on the phone, only a
+// deliberate action wakes it up.
+const ACTIVITY_EVENTS = ["mousemove", "pointerdown", "keydown", "wheel", "touchstart"] as const;
+const DELIBERATE_EVENTS = ["pointerdown", "keydown", "wheel", "touchstart"] as const;
 
-function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props) {
-  // Mientras mira el badge, el cursor no manda: si no, se pisan.
-  const mirandoBadge = useRef(false);
-  // Enganchado con el celu (el fondo de la escalera del ocio).
-  const [distraido, setDistraido] = useState(false);
-  // Cuándo empezó la última cebada. El bostezo lo necesita: los dos usan
-  // `bocaChupa` —el mate como boquita para la bombilla, el bostezo escalado a
-  // óvalo— y el bostezo corre en un layer más alto, así que si caen juntos la
-  // boca se abre enorme CON LA BOMBILLA ADENTRO. Se pisan solos ~1 de cada 12
-  // bostezos, porque los dos relojes son independientes.
-  const ultimoMate = useRef(0);
-  // Dónde está el personaje en la pantalla: la mirada se calcula desde ACÁ, no
-  // desde el centro de la ventana. Si no, mira torcido en cuanto no está
-  // centrado (por ejemplo arriba a la izquierda, en Inicio).
-  const caja = useRef<HTMLDivElement>(null);
+function AnimatedAgentito({ celebrations, look, state = "normal", className }: Props) {
+  // While it's looking at the badge, the cursor doesn't get a say: otherwise
+  // they'd fight over it.
+  const lookingAtBadge = useRef(false);
+  // Hooked on the phone (the bottom of the idle staircase).
+  const [distracted, setDistracted] = useState(false);
+  // When the last sip started. The yawn needs this: both use `bocaChupa`
+  // (mate as a little mouth around the straw, the yawn scaled up into an
+  // oval) and the yawn runs on a higher layer, so if they land together the
+  // mouth opens huge WITH THE STRAW STILL IN IT. They collide on their own
+  // about 1 in every 12 yawns, because the two clocks are independent.
+  const lastMate = useRef(0);
+  // Where the character sits on screen: the gaze is computed FROM HERE, not
+  // from the window's center. Otherwise it looks crooked as soon as it's off
+  // center (for instance, top-left, on Home).
+  const box = useRef<HTMLDivElement>(null);
 
   const { rive, RiveComponent } = useRive({
     src: "/agentito.riv",
     stateMachines: "Agentito",
     autoplay: true,
   });
-  const miradaX = useStateMachineInput(rive, "Agentito", "miradaX");
-  const miradaY = useStateMachineInput(rive, "Agentito", "miradaY");
-  const inGesto = useStateMachineInput(rive, "Agentito", "gesto");
-  const festejar = useStateMachineInput(rive, "Agentito", "festejar");
-  const inTono = useStateMachineInput(rive, "Agentito", "tono");
-  const inAntena = useStateMachineInput(rive, "Agentito", "antena");
-  const inAccesorio = useStateMachineInput(rive, "Agentito", "accesorio");
-  const inPupila = useStateMachineInput(rive, "Agentito", "pupila");
-  const inBoca = useStateMachineInput(rive, "Agentito", "boca");
-  const inPiel = useStateMachineInput(rive, "Agentito", "piel");
-  const inTraje = useStateMachineInput(rive, "Agentito", "traje");
-  const inCejas = useStateMachineInput(rive, "Agentito", "cejas");
-  const matear = useStateMachineInput(rive, "Agentito", "matear");
-  const bostezar = useStateMachineInput(rive, "Agentito", "bostezar");
+  // The input names are baked into public/agentito.riv: they stay Spanish.
+  const gazeX = useStateMachineInput(rive, "Agentito", "miradaX");
+  const gazeY = useStateMachineInput(rive, "Agentito", "miradaY");
+  const gestureInput = useStateMachineInput(rive, "Agentito", "gesto");
+  const celebrateTrigger = useStateMachineInput(rive, "Agentito", "festejar");
+  const toneInput = useStateMachineInput(rive, "Agentito", "tono");
+  const antennaInput = useStateMachineInput(rive, "Agentito", "antena");
+  const accessoryInput = useStateMachineInput(rive, "Agentito", "accesorio");
+  const pupilInput = useStateMachineInput(rive, "Agentito", "pupila");
+  const mouthInput = useStateMachineInput(rive, "Agentito", "boca");
+  const skinInput = useStateMachineInput(rive, "Agentito", "piel");
+  const suitInput = useStateMachineInput(rive, "Agentito", "traje");
+  const browsInput = useStateMachineInput(rive, "Agentito", "cejas");
+  const mateTrigger = useStateMachineInput(rive, "Agentito", "matear");
+  const yawnTrigger = useStateMachineInput(rive, "Agentito", "bostezar");
 
   useEffect(() => {
-    if (inTono) inTono.value = look.tono;
-    if (inAntena) inAntena.value = look.antena;
-    if (inAccesorio) inAccesorio.value = look.accesorio;
-    if (inPupila) inPupila.value = look.pupila;
-    if (inBoca) inBoca.value = look.boca;
-    if (inPiel) inPiel.value = look.piel;
-    if (inTraje) inTraje.value = look.traje;
-    if (inCejas) inCejas.value = look.cejas;
-  }, [look, inTono, inAntena, inAccesorio, inPupila, inBoca, inPiel, inTraje, inCejas]);
+    if (toneInput) toneInput.value = look.tone;
+    if (antennaInput) antennaInput.value = look.antenna;
+    if (accessoryInput) accessoryInput.value = look.accessory;
+    if (pupilInput) pupilInput.value = look.pupil;
+    if (mouthInput) mouthInput.value = look.mouth;
+    if (skinInput) skinInput.value = look.skin;
+    if (suitInput) suitInput.value = look.suit;
+    if (browsInput) browsInput.value = look.brows;
+  }, [look, toneInput, antennaInput, accessoryInput, pupilInput, mouthInput, skinInput, suitInput, browsInput]);
 
   useEffect(() => {
-    if (festejos > 0) festejar?.fire();
-  }, [festejos, festejar]);
+    if (celebrations > 0) celebrateTrigger?.fire();
+  }, [celebrations, celebrateTrigger]);
 
-  // Cuando no hay nada esperando tu ok, se ceba unos mates. El primero a los
-  // ~20s de estar en pantalla; después cuando pinta (45s-2min).
+  // When nothing's waiting on your ok, it sips some mate. The first one at
+  // ~20s on screen; after that whenever it feels like it (45s-2min).
   useEffect(() => {
-    if (!matear || estado !== "tranquilo") return;
+    if (!mateTrigger || state !== "calm") return;
     let t: ReturnType<typeof setTimeout>;
-    const programar = (ms: number) => {
+    const schedule = (ms: number) => {
       t = setTimeout(() => {
-        matear.fire();
-        ultimoMate.current = Date.now();
-        programar(45_000 + Math.random() * 75_000);
+        mateTrigger.fire();
+        lastMate.current = Date.now();
+        schedule(45_000 + Math.random() * 75_000);
       }, ms);
     };
-    programar(20_000 + Math.random() * 15_000);
+    schedule(20_000 + Math.random() * 15_000);
     return () => clearTimeout(t);
-  }, [matear, estado]);
+  }, [mateTrigger, state]);
 
-  // ── La escalera del ocio: mates → bostezo → el celu ──
-  // Un solo reloj: cada actividad lo pone en cero y reprograma los dos
-  // escalones. La guardada del celu no se programa: la dispara el clic.
+  // ── The idle staircase: mate -> yawn -> the phone ──
+  // A single clock: any activity resets it to zero and reschedules both
+  // steps. Putting the phone away isn't scheduled: the click fires it.
   useEffect(() => {
-    if (estado !== "tranquilo") {
-      setDistraido(false);
+    if (state !== "calm") {
+      setDistracted(false);
       return;
     }
-    let aBostezo: ReturnType<typeof setTimeout>;
-    let aCelu: ReturnType<typeof setTimeout>;
+    let yawnTimer: ReturnType<typeof setTimeout>;
+    let phoneTimer: ReturnType<typeof setTimeout>;
 
-    const programar = () => {
-      clearTimeout(aBostezo);
-      clearTimeout(aCelu);
-      // El bostezo se repite solo mientras siga sin pasar nada; el celu es el
-      // final del camino y se queda hasta que lo interrumpan.
-      const bostezos = () => {
-        // Si está cebando, el bostezo espera a que termine (ver `ultimoMate`).
-        const cebando = Date.now() - ultimoMate.current < DURA_MATE;
-        if (!cebando) {
-          try { bostezar?.fire(); } catch { /* el runtime se fue */ }
+    const schedule = () => {
+      clearTimeout(yawnTimer);
+      clearTimeout(phoneTimer);
+      // The yawn keeps repeating as long as nothing happens; the phone is the
+      // end of the road and stays until something interrupts it.
+      const yawnLoop = () => {
+        // If it's mid-sip, the yawn waits for it to finish (see `lastMate`).
+        const sipping = Date.now() - lastMate.current < MATE_DURATION;
+        if (!sipping) {
+          try { yawnTrigger?.fire(); } catch { /* the runtime is gone */ }
         }
-        aBostezo = setTimeout(
-          bostezos,
-          cebando ? DURA_MATE : REPETIR_BOSTEZO + Math.random() * 20_000,
+        yawnTimer = setTimeout(
+          yawnLoop,
+          sipping ? MATE_DURATION : REPEAT_YAWN + Math.random() * 20_000,
         );
       };
-      aBostezo = setTimeout(bostezos, OCIO_BOSTEZO);
-      aCelu = setTimeout(() => setDistraido(true), OCIO_CELU);
+      yawnTimer = setTimeout(yawnLoop, IDLE_YAWN);
+      phoneTimer = setTimeout(() => setDistracted(true), IDLE_PHONE);
     };
 
-    const alMoverse = () => {
-      // Con el celu afuera el mousemove NO lo interrumpe (está enganchado, no
-      // te ve): solo reprograma para cuando vuelva a guardarlo.
-      programar();
+    const onIdleActivity = () => {
+      // With the phone out, mousemove does NOT interrupt it (it's hooked, it
+      // doesn't see you): it only reschedules for whenever it puts it away
+      // again.
+      schedule();
     };
-    const alTocar = () => {
-      // Acá está el chiste: te ve, guarda el celu de golpe y vuelve a lo suyo.
-      // El `guardarCelu` del .riv sale solo al dejar de ser gesto 10.
-      setDistraido(false);
-      programar();
+    const onDeliberateActivity = () => {
+      // This is the trick: it sees you, puts the phone away right away and
+      // goes back to normal. The .riv's own `guardarCelu` fires on its own
+      // once it stops being gesture 10.
+      setDistracted(false);
+      schedule();
     };
 
-    programar();
-    for (const ev of ACTIVIDAD) {
-      const deliberada = (DELIBERADAS as readonly string[]).includes(ev);
-      window.addEventListener(ev, deliberada ? alTocar : alMoverse, { passive: true });
+    schedule();
+    for (const ev of ACTIVITY_EVENTS) {
+      const isDeliberate = (DELIBERATE_EVENTS as readonly string[]).includes(ev);
+      window.addEventListener(ev, isDeliberate ? onDeliberateActivity : onIdleActivity, { passive: true });
     }
     return () => {
-      clearTimeout(aBostezo);
-      clearTimeout(aCelu);
-      for (const ev of ACTIVIDAD) {
-        const deliberada = (DELIBERADAS as readonly string[]).includes(ev);
-        window.removeEventListener(ev, deliberada ? alTocar : alMoverse);
+      clearTimeout(yawnTimer);
+      clearTimeout(phoneTimer);
+      for (const ev of ACTIVITY_EVENTS) {
+        const isDeliberate = (DELIBERATE_EVENTS as readonly string[]).includes(ev);
+        window.removeEventListener(ev, isDeliberate ? onDeliberateActivity : onIdleActivity);
       }
     };
-  }, [estado, bostezar]);
+  }, [state, yawnTrigger]);
 
-  // Si algo espera tu visto bueno, cada tanto pega una mirada a la barra
-  // lateral —donde está el badge de aprobaciones— y vuelve.
+  // If something's waiting on your ok, every so often it glances at the
+  // sidebar -- where the approvals badge is -- and looks back.
   useEffect(() => {
-    if (!miradaX || !miradaY || estado !== "esperando") return;
-    let ida: ReturnType<typeof setTimeout>;
-    let vuelta: ReturnType<typeof setTimeout>;
-    const ciclo = () => {
-      ida = setTimeout(() => {
-        mirandoBadge.current = true;
-        // Abajo a la izquierda: el badge de aprobaciones queda en la barra
-        // lateral, más abajo que el saludo donde vive el personaje.
-        miradaX.value = 5;
-        miradaY.value = 68;
-        vuelta = setTimeout(() => {
-          mirandoBadge.current = false;
-          miradaX.value = 50;
-          miradaY.value = 50;
-          ciclo();
+    if (!gazeX || !gazeY || state !== "waiting") return;
+    let there: ReturnType<typeof setTimeout>;
+    let back: ReturnType<typeof setTimeout>;
+    const cycle = () => {
+      there = setTimeout(() => {
+        lookingAtBadge.current = true;
+        // Bottom left: the approvals badge sits in the sidebar, lower than
+        // the greeting where the character lives.
+        gazeX.value = 5;
+        gazeY.value = 68;
+        back = setTimeout(() => {
+          lookingAtBadge.current = false;
+          gazeX.value = 50;
+          gazeY.value = 50;
+          cycle();
         }, 1300);
       }, 6000 + Math.random() * 5000);
     };
-    ciclo();
+    cycle();
     return () => {
-      clearTimeout(ida);
-      clearTimeout(vuelta);
-      mirandoBadge.current = false;
+      clearTimeout(there);
+      clearTimeout(back);
+      lookingAtBadge.current = false;
     };
-  }, [miradaX, miradaY, estado]);
+  }, [gazeX, gazeY, state]);
 
-  // ── Los gestos de trabajo, parte 1: el objeto ──
-  // El .riv se encarga de sacarlo y guardarlo (el state machine cruza suave
-  // entre gestos, 220ms). Acá solo se dice cuál. Se escribe en el cuerpo del
-  // efecto, NUNCA en el cleanup: al desmontar, el cleanup de `useRive` ya
-  // destruyó la instancia y escribir después revienta la pantalla entera.
+  // ── Work gestures, part 1: the pose ──
+  // The .riv handles picking it up and holding it (the state machine
+  // crossfades smoothly between gestures, 220ms). Here we only say which one.
+  // Written in the effect's body, NEVER in the cleanup: on unmount,
+  // `useRive`'s cleanup has already destroyed the instance, and writing
+  // afterward crashes the whole screen.
   useEffect(() => {
-    if (!inGesto) return;
+    if (!gestureInput) return;
     try {
-      // El celu gana sobre el reposo, pero nunca sobre un gesto pedido: si
-      // llega laburo mientras estaba distraído, guarda y va a lo suyo.
-      inGesto.value = distraido ? GESTO_CELU : (NUMERO_DE_GESTO[estado] ?? 0);
+      // The phone wins over idling, but never over a requested gesture: if
+      // work arrives while it was distracted, it puts the phone away and gets
+      // to it.
+      gestureInput.value = distracted ? PHONE_GESTURE : (GESTURE_NUMBER[state] ?? 0);
     } catch {
-      /* el runtime se fue; el personaje es adorno, no puede tumbar el chat */
+      /* the runtime is gone; the character is decoration, it can't take down the chat */
     }
-  }, [inGesto, estado, distraido]);
+  }, [gestureInput, state, distracted]);
 
-  // ── Los gestos de trabajo, parte 2: la mirada ──
-  // La gracia es que DICEN LA VERDAD: el chat sabe qué herramienta está
-  // corriendo y elige el gesto, no rota al azar. Mientras hay uno puesto, el
-  // cursor no manda. Cada recorrido apunta a DONDE ESTÁ SU OBJETO.
+  // ── Work gestures, part 2: the gaze ──
+  // The point is that they TELL THE TRUTH: the chat knows which tool is
+  // running and picks the gesture, it doesn't rotate at random. While one is
+  // set, the cursor doesn't get a say. Each path points at WHERE ITS OBJECT
+  // IS.
   useEffect(() => {
-    if (!miradaX || !miradaY || !trabajando(estado)) return;
+    if (!gazeX || !gazeY || !isWorking(state)) return;
     let raf = 0;
     let t0 = 0;
     const tick = (t: number) => {
@@ -284,138 +294,140 @@ function AgentitoAnimado({ festejos, look, estado = "normal", className }: Props
       const s = (t - t0) / 1000;
       let x = 50;
       let y = 50;
-      // OJO con las amplitudes: el avatar del chat mide 28px, así que el rango
-      // ENTERO de la mirada son ~2px en pantalla. Medido: por debajo de ±8 el
-      // movimiento queda sub-píxel y no se ve. Por eso los gestos acá van
-      // exagerados y se distinguen por AMPLITUD y VELOCIDAD, no por matiz.
-      switch (estado) {
-        case "leyendo": {
-          // Un renglón: barre despacio y pega la vuelta rápido al margen.
+      // WATCH THE AMPLITUDES: the chat's avatar is 28px, so the gaze's WHOLE
+      // range is ~2px on screen. Measured: below +-8 the movement is
+      // sub-pixel and invisible. That's why the gestures here go exaggerated
+      // and are told apart by AMPLITUDE and SPEED, not by nuance.
+      switch (state) {
+        case "reading": {
+          // One line: sweeps slowly and snaps back fast to the margin.
           const p = (s % 1.6) / 1.6;
           x = p < 0.8 ? 18 + (p / 0.8) * 64 : 82 - ((p - 0.8) / 0.2) * 64;
-          y = 62 + Math.sin(s * 0.7) * 5; // y va bajando por la página
+          y = 62 + Math.sin(s * 0.7) * 5; // y drifts down the page
           break;
         }
-        case "pensando":
-          // Arriba y a la derecha, del lado de la ceja en arco, a la deriva.
+        case "thinking":
+          // Up and to the right, on the side of the arched eyebrow, drifting.
           x = 68 + Math.sin(s * 0.5) * 16;
           y = 22 + Math.cos(s * 0.38) * 10;
           break;
-        case "escribiendo":
-          // Bien abajo, en la punta del lápiz.
+        case "writing":
+          // Right down at the pencil's tip.
           x = 50 + Math.sin(s * 2.4) * 14;
           y = 80 + Math.sin(s * 1.2) * 4;
           break;
-        case "buscando": {
-          // Acá la lupa la mueve el .riv, no el código: barre de la derecha al
-          // centro y vuelve, en 2,8 s. Los ojos la ACOMPAÑAN —al 70%, no
-          // clavados— porque si miran para otro lado mientras se la pasan por
-          // la cara queda rarísimo. Los tiempos son los keyframes de
-          // `gestoBuscando` pasados a segundos (a 60fps: quieta hasta f12,
-          // barre hasta f74, espera hasta f94, vuelve en f156, quieta hasta
-          // f168). Arrancan juntos porque los dos salen del mismo cambio de
-          // estado, y los dos corren contra el reloj real: no se desfasan.
+        case "searching": {
+          // Here the magnifying glass is moved by the .riv, not the code: it
+          // sweeps from the right to the center and back, in 2.8s. The eyes
+          // FOLLOW it -- at 70%, not locked on -- because if they looked
+          // elsewhere while it passes over the face it would look very odd.
+          // The timings are `gestoBuscando`'s keyframes converted to seconds
+          // (at 60fps: still until f12, sweeps until f74, waits until f94,
+          // returns by f156, still until f168). They start together because
+          // both come out of the same state change, and both run against the
+          // real clock: they never drift apart.
           const p = s % 2.8;
-          const suave = (u: number) => u * u * (3 - 2 * u); // ≈ el easeInOut del .riv
-          let lupaX: number;
-          if (p < 0.2) lupaX = 95;
-          else if (p < 1.233) lupaX = 95 - 129 * suave((p - 0.2) / 1.033);
-          else if (p < 1.567) lupaX = -34;
-          else if (p < 2.6) lupaX = -34 + 129 * suave((p - 1.567) / 1.033);
-          else lupaX = 95;
-          const lupaY = 25 + 19 * Math.sin((p / 2.8) * Math.PI);
-          // 184 y 176 son los semiejes del cuerpo: pasan la posición del
-          // objeto a la escala 0-100 de la mirada.
-          x = 50 + (lupaX / 184) * 35 + Math.sin(s * 6) * 3; // + un temblorcito
-          y = 50 + (lupaY / 176) * 35;
+          const easeInOut = (u: number) => u * u * (3 - 2 * u); // ~ the .riv's own easeInOut
+          let magnifierX: number;
+          if (p < 0.2) magnifierX = 95;
+          else if (p < 1.233) magnifierX = 95 - 129 * easeInOut((p - 0.2) / 1.033);
+          else if (p < 1.567) magnifierX = -34;
+          else if (p < 2.6) magnifierX = -34 + 129 * easeInOut((p - 1.567) / 1.033);
+          else magnifierX = 95;
+          const magnifierY = 25 + 19 * Math.sin((p / 2.8) * Math.PI);
+          // 184 and 176 are the body's semi-axes: they convert the object's
+          // position to the gaze's 0-100 scale.
+          x = 50 + (magnifierX / 184) * 35 + Math.sin(s * 6) * 3; // + a little tremor
+          y = 50 + (magnifierY / 176) * 35;
           break;
         }
-        case "haciendo":
-          // Abajo a la derecha, mirándose la llave: tics cortos y RÁPIDOS. Se
-          // distingue de "leyendo" por la velocidad, no por el tamaño: quieto
-          // no servía — a 28px, quieto e "inactivo" se ven igual.
+        case "doing":
+          // Down and to the right, looking at the wrench: short, FAST ticks.
+          // Told apart from "reading" by speed, not size: still didn't work --
+          // at 28px, still and "idle" look the same.
           x = 62 + Math.sin(s * 9) * 10;
           y = 62 + Math.sin(s * 7) * 5;
           break;
       }
-      // El runtime puede irse entre frames (Rive se reinicia, el componente se
-      // desmonta): escribir sobre un input muerto tira "Cannot set properties
-      // of null" y se lleva puesta la pantalla ENTERA del cliente. Si pasa,
-      // cortamos el loop en silencio — el personaje es adorno, no puede tumbar
-      // el chat.
+      // The runtime can be gone between frames (Rive restarts, the component
+      // unmounts): writing to a dead input throws "Cannot set properties of
+      // null" and takes down the client's ENTIRE screen with it. If it
+      // happens, silently stop the loop -- the character is decoration, it
+      // can't take down the chat.
       try {
-        miradaX.value = x;
-        miradaY.value = y;
+        gazeX.value = x;
+        gazeY.value = y;
       } catch {
         return;
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    // Solo cortar el loop. NO escribir en los inputs acá: `useRive` está
-    // declarado ANTES que este efecto, así que al desmontar su cleanup corre
-    // primero y destruye la instancia — escribir después revienta con
-    // "Cannot set properties of null". Y no hace falta: si arranca otro gesto
-    // escribe él, y si el que sigue es el cursor, escribe al primer movimiento.
+    // Only stop the loop. Do NOT write to the inputs here: `useRive` is
+    // declared BEFORE this effect, so on unmount its cleanup runs first and
+    // destroys the instance -- writing afterward crashes with "Cannot set
+    // properties of null". And there's no need to: if another gesture starts
+    // it writes its own values, and if the cursor takes over next it writes
+    // on the first movement.
     return () => cancelAnimationFrame(raf);
-  }, [miradaX, miradaY, estado]);
+  }, [gazeX, gazeY, state]);
 
-  // Con el celu afuera la mirada la manda el .riv (pupilas leyendo la
-  // pantalla): la dejamos estacionada mirando el aparato y no seguimos al
-  // cursor. Estacionarla no es redundante con los keyframes: los layers de
-  // mirada corren después y le ganarían, y ahí los ojos volverían al frente
-  // con el celu en la mano.
+  // With the phone out, the .riv itself drives the gaze (pupils reading the
+  // screen): we leave it parked looking at the device and stop following the
+  // cursor. Parking it isn't redundant with the keyframes: the gaze layers run
+  // afterward and would win anyway, and then the eyes would snap back to the
+  // front with the phone still in hand.
   useEffect(() => {
-    if (!miradaX || !miradaY || !distraido) return;
+    if (!gazeX || !gazeY || !distracted) return;
     try {
-      miradaX.value = 58;
-      miradaY.value = 82;
+      gazeX.value = 58;
+      gazeY.value = 82;
     } catch {
-      /* el runtime se fue */
+      /* the runtime is gone */
     }
-  }, [miradaX, miradaY, distraido]);
+  }, [gazeX, gazeY, distracted]);
 
   useEffect(() => {
-    if (!miradaX || !miradaY || trabajando(estado) || distraido) return;
+    if (!gazeX || !gazeY || isWorking(state) || distracted) return;
     if (window.matchMedia("(pointer: coarse)").matches) return;
     const onMove = (e: MouseEvent) => {
-      if (mirandoBadge.current) return;
-      const r = caja.current?.getBoundingClientRect();
+      if (lookingAtBadge.current) return;
+      const r = box.current?.getBoundingClientRect();
       if (!r || r.width === 0) return;
-      // Vector desde la cara del personaje hasta el cursor: la dirección la da
-      // el ángulo y la intensidad la distancia (con el cursor encima, mira al
-      // frente; lejos, al tope).
+      // Vector from the character's face to the cursor: the angle gives the
+      // direction and the distance gives the intensity (with the cursor right
+      // on it, it looks straight ahead; far away, it maxes out).
       const dx = e.clientX - (r.left + r.width / 2);
       const dy = e.clientY - (r.top + r.height / 2);
       const d = Math.hypot(dx, dy);
-      if (d < 1) { miradaX.value = 50; miradaY.value = 50; return; }
-      const fuerza = Math.min(1, d / ALCANCE_MIRADA);
-      miradaX.value = 50 + (dx / d) * fuerza * 50;
-      miradaY.value = 50 + (dy / d) * fuerza * 50;
+      if (d < 1) { gazeX.value = 50; gazeY.value = 50; return; }
+      const strength = Math.min(1, d / GAZE_RANGE);
+      gazeX.value = 50 + (dx / d) * strength * 50;
+      gazeY.value = 50 + (dy / d) * strength * 50;
     };
     window.addEventListener("mousemove", onMove, { passive: true });
     return () => window.removeEventListener("mousemove", onMove);
-  }, [miradaX, miradaY, estado, distraido]);
+  }, [gazeX, gazeY, state, distracted]);
 
-  // Sin cursor (táctil) la mirada quedaría clavada al frente: paseo lento.
+  // With no cursor (touch), the gaze would stay locked forward: a slow drift.
   useEffect(() => {
-    if (!miradaX || !miradaY || trabajando(estado) || distraido) return;
+    if (!gazeX || !gazeY || isWorking(state) || distracted) return;
     if (!window.matchMedia("(pointer: coarse)").matches) return;
     let raf = 0;
     const tick = (t: number) => {
-      if (!mirandoBadge.current) {
-        miradaX.value = 50 + 26 * Math.sin(t / 1700);
-        miradaY.value = 50 + 16 * Math.sin(t / 2600);
+      if (!lookingAtBadge.current) {
+        gazeX.value = 50 + 26 * Math.sin(t / 1700);
+        gazeY.value = 50 + 16 * Math.sin(t / 2600);
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [miradaX, miradaY, estado, distraido]);
+  }, [gazeX, gazeY, state, distracted]);
 
   return (
-    <div ref={caja} className={`relative ${className ?? ""}`}>
-      {!rive && <AgentitoAvatar look={look} vivo className="absolute inset-0 h-full w-full" />}
+    <div ref={box} className={`relative ${className ?? ""}`}>
+      {!rive && <AgentitoAvatar look={look} alive className="absolute inset-0 h-full w-full" />}
       <RiveComponent className={`h-full w-full ${rive ? "" : "opacity-0"}`} />
     </div>
   );

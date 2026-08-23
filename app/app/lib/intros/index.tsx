@@ -1,8 +1,8 @@
 "use client";
 
-// Registro de pantallas de bienvenida: una por módulo, cada una con su propia
-// composición. Se muestra la primera vez que el cliente entra a la pestaña y se
-// cierra con el botón (queda recordado en localStorage).
+// Registry of welcome screens: one per module, each with its own
+// composition. Shown the first time the client enters the tab and dismissed
+// with the button (remembered in localStorage).
 
 import { useEffect, useState, type ComponentType } from "react";
 import type { IntroProps } from "./shell";
@@ -16,17 +16,17 @@ import ActivityIntro from "./activity";
 import FilesIntro from "./files";
 import UsageIntro from "./usage";
 import ConnectionsIntro from "./connections";
-import FlujosIntro from "./flujos";
-import EquipoIntro from "./equipo";
+import FlowsIntro from "./flows";
+import TeamIntro from "./team";
 
 const KEY = "tuagente_intro_v2";
 
 export const INTROS: Record<string, ComponentType<IntroProps>> = {
   home: HomeIntro,
   chat: ChatIntro,
-  // La clave es la del MÓDULO, no la de la pestaña: el manifiesto declara
-  // `roles` y el nav lo rotula "Equipo".
-  roles: EquipoIntro,
+  // The key is the MODULE's, not the tab's: the manifest declares `roles` and
+  // the nav labels it "Equipo".
+  roles: TeamIntro,
   kanban: PipelineIntro,
   approvals: ApprovalsIntro,
   artifacts: ArtifactsIntro,
@@ -35,7 +35,7 @@ export const INTROS: Record<string, ComponentType<IntroProps>> = {
   files: FilesIntro,
   usage: UsageIntro,
   connections: ConnectionsIntro,
-  flujos: FlujosIntro,
+  flows: FlowsIntro,
 };
 
 export function useIntroGate() {
@@ -55,7 +55,7 @@ export function useIntroGate() {
       try {
         localStorage.setItem(KEY, JSON.stringify(next));
       } catch {
-        /* modo privado: al menos vale para esta sesión */
+        /* private mode: at least it's good for this session */
       }
       return next;
     });

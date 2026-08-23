@@ -1,79 +1,81 @@
 "use client";
 
-// Entidades del agente (tickets y archivos de su workspace) detectadas en el
-// texto y mostradas como chips clicables. Módulo HOJA a propósito: no importa
-// Markdown, así el renderer puede importar esto sin ciclo. El modal que abre
-// cada chip vive en EntityViewer.tsx.
+// Agent entities (tickets and files from its workspace) detected in text and
+// shown as clickable chips. LEAF module on purpose: it doesn't import
+// Markdown, so the renderer can import this without a cycle. The modal each
+// chip opens lives in EntityViewer.tsx.
 
 import { createContext, useContext } from "react";
 import { FileText, Image as ImageIcon, LayoutDashboard, Sheet, Ticket as TicketIcon } from "lucide-react";
-import { ConexionCardInline, PermisosInline } from "./ConexionChip";
-import { CapacidadInline } from "./CapacidadChip";
+import { ConnectionCardInline, PermissionsInline } from "./ConnectionChip";
+import { CapabilityInline } from "./CapabilityChip";
 
 export type Entity =
   | { kind: "ticket"; id: string }
   | { kind: "file"; path: string }
   | { kind: "artifact"; id: string }
-  | { kind: "conexion"; id: string }
-  | { kind: "permisos"; id: string }
-  | { kind: "capacidad"; id: string };
+  | { kind: "connection"; id: string }
+  | { kind: "permissions"; id: string }
+  | { kind: "capability"; id: string };
 
 const TICKET_RE = /^t_[0-9a-f]{6,16}$/i;
 const ARTIFACT_RE = /^art_\d{10}_[\w-]+$/i;
-// El agente menciona una conexión del catálogo como `conexion:google-workspace`
-// (se lo enseña su SOUL): el chat la dibuja como tarjeta con estado y botón.
-const CONEXION_RE = /^conexi[oó]n:([a-z0-9][a-z0-9-]*)$/i;
-// `permisos:whatsapp` — el agente NO puede cambiar la política, pero sí puede
-// señalar dónde se cambia: en vez de "no puedo mandar WhatsApps" a secas,
-// pone el control adelante y el cliente decide ahí mismo.
-const PERMISOS_RE = /^permisos:([a-z0-9][a-z0-9-]*)$/i;
-// `capacidad:imagenes` — lo que el agente NO puede hacer todavía y se puede
-// prender. El SOUL le enseña a escribirlo solo en una línea y promete que "el
-// portal la convierte en una tarjeta": hasta hoy el portal no lo hacía y el
-// token quedaba crudo en el medio de la respuesta.
-const CAPACIDAD_RE = /^capacidad:([a-z0-9][a-z0-9-]*)$/i;
+// The agent mentions a catalog connection as `connection:google-workspace`
+// (its SOUL teaches it to): the chat draws it as a card with status and a
+// button.
+const CONNECTION_RE = /^connection:([a-z0-9][a-z0-9-]*)$/i;
+// `permissions:whatsapp` -- the agent CAN'T change the policy, but it can
+// point at where it gets changed: instead of a flat "I can't send WhatsApps",
+// it puts the control right there and the client decides on the spot.
+const PERMISSIONS_RE = /^permissions:([a-z0-9][a-z0-9-]*)$/i;
+// `capability:image-editing` -- what the agent CAN'T do yet and could be
+// turned on. The SOUL teaches it to write this alone on its own line and
+// promises "the portal turns it into a card": until now the portal didn't,
+// and the token sat raw in the middle of the reply.
+const CAPABILITY_RE = /^capability:([a-z0-9][a-z0-9-]*)$/i;
 
-/** Extensiones que el agente produce y el cliente tiene que poder abrir.
+/** Extensions the agent produces that the client has to be able to open.
  *
- *  ESTA LISTA ES EL BUG MÁS CARO QUE TUVO EL CHAT: tenía solo texto y código,
- *  así que el JPG de 1080×1080 que el agente acababa de armar para WhatsApp no
- *  se dibujaba como chip — se dibujaba como link relativo y terminaba en
- *  "404: This page could not be found". Lo mismo con los `docx`, `xlsx` y `pdf`
- *  que el agente sabe generar de fábrica. El trabajo estaba hecho y el cliente
- *  no llegaba a él.
+ *  THIS LIST IS THE MOST EXPENSIVE BUG THE CHAT EVER HAD: it only had text and
+ *  code, so the 1080x1080 JPG the agent had just built for WhatsApp didn't
+ *  draw as a chip -- it drew as a relative link and ended in "404: This page
+ *  could not be found". Same with the `docx`, `xlsx` and `pdf` files the
+ *  agent can generate out of the box. The work was done and the client never
+ *  reached it.
  *
- *  Se exporta porque el renderer de markdown detecta las mismas rutas en prosa:
- *  una sola lista, no dos que se desincronizan. */
-export const EXT_ARCHIVO =
+ *  Exported because the markdown renderer detects the same paths in prose:
+ *  one list, not two that drift apart. */
+export const FILE_EXTENSIONS =
   "md|markdown|txt|text|csv|tsv|json|jsonl|ya?ml|toml|ini|cfg|conf|log|out|rst|env|" +
   "py|rb|ts|tsx|js|jsx|mjs|sh|bash|sql|xml|html?|css|" +
   "jpe?g|png|gif|webp|bmp|svg|ico|heic|avif|" +
   "pdf|xlsx|xls|ods|docx|doc|odt|pptx|ppt|odp|rtf|" +
   "zip|gz|tar|ics|mp3|wav|ogg|m4a|mp4|mov|webm";
 
-// Rutas del workspace: el agente las escribe con o sin prefijo.
+// Workspace paths: the agent writes them with or without a prefix.
 const FILE_RE = new RegExp(
-  `^(?:/opt/data/workspace/|workspace/|\\./)?([\\w./-]+\\.(?:${EXT_ARCHIVO}))$`, "i");
+  `^(?:/opt/data/workspace/|workspace/|\\./)?([\\w./-]+\\.(?:${FILE_EXTENSIONS}))$`, "i");
 
-const EXT_IMAGEN = /\.(jpe?g|png|gif|webp|bmp|svg|ico|heic|avif)$/i;
-const EXT_PLANILLA = /\.(xlsx|xls|csv|tsv|ods)$/i;
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|svg|ico|heic|avif)$/i;
+const SPREADSHEET_EXT = /\.(xlsx|xls|csv|tsv|ods)$/i;
 
-/** ¿Esta ruta es una imagen? La usan el visor (la muestra) y el chip (ícono). */
-export const esImagen = (path: string) => EXT_IMAGEN.test(path);
-export const esPlanilla = (path: string) => EXT_PLANILLA.test(path);
+/** Is this path an image? Used by the viewer (to show it) and the chip (for
+ *  its icon). */
+export const isImage = (path: string) => IMAGE_EXT.test(path);
+export const isSpreadsheet = (path: string) => SPREADSHEET_EXT.test(path);
 
-/** ¿Este texto suelto es una entidad del agente? */
+/** Is this bare piece of text an agent entity? */
 export function detectEntity(raw: string): Entity | null {
   const text = raw.trim();
   if (!text || /\s/.test(text)) return null;
   if (TICKET_RE.test(text)) return { kind: "ticket", id: text };
   if (ARTIFACT_RE.test(text)) return { kind: "artifact", id: text };
-  const cx = CONEXION_RE.exec(text);
-  if (cx) return { kind: "conexion", id: cx[1].toLowerCase() };
-  const pm = PERMISOS_RE.exec(text);
-  if (pm) return { kind: "permisos", id: pm[1].toLowerCase() };
-  const cap = CAPACIDAD_RE.exec(text);
-  if (cap) return { kind: "capacidad", id: cap[1].toLowerCase() };
+  const cx = CONNECTION_RE.exec(text);
+  if (cx) return { kind: "connection", id: cx[1].toLowerCase() };
+  const pm = PERMISSIONS_RE.exec(text);
+  if (pm) return { kind: "permissions", id: pm[1].toLowerCase() };
+  const cap = CAPABILITY_RE.exec(text);
+  if (cap) return { kind: "capability", id: cap[1].toLowerCase() };
   const m = FILE_RE.exec(text);
   if (m && m[1].includes(".")) return { kind: "file", path: m[1] };
   return null;
@@ -91,19 +93,20 @@ const ENTITY_HINT = {
 
 export function EntityChip({ entity, label }: { entity: Entity; label: string }) {
   const open = useOpenEntity();
-  // Una conexión no abre un modal: ES la tarjeta, con estado y botón.
-  if (entity.kind === "conexion") return <ConexionCardInline id={entity.id} />;
-  if (entity.kind === "permisos") return <PermisosInline id={entity.id} />;
-  if (entity.kind === "capacidad") return <CapacidadInline id={entity.id} />;
-  // El ícono dice de qué se trata antes de tocarlo: una foto se abre y se mira,
-  // una planilla se abre y se baja.
+  // A connection doesn't open a modal: it IS the card, with status and a button.
+  if (entity.kind === "connection") return <ConnectionCardInline id={entity.id} />;
+  if (entity.kind === "permissions") return <PermissionsInline id={entity.id} />;
+  if (entity.kind === "capability") return <CapabilityInline id={entity.id} />;
+  // The icon says what it is before you touch it: a photo opens to look at,
+  // a spreadsheet opens to download.
   const Icon =
     entity.kind === "ticket" ? TicketIcon
       : entity.kind === "artifact" ? LayoutDashboard
-        : esImagen(entity.path) ? ImageIcon
-          : esPlanilla(entity.path) ? Sheet
+        : isImage(entity.path) ? ImageIcon
+          : isSpreadsheet(entity.path) ? Sheet
             : FileText;
-  // Sin proveedor (fuera del chat) no hay a dónde abrir: queda como código.
+  // With no provider (outside the chat) there's nowhere to open it: it stays
+  // as code.
   if (!open) {
     return (
       <code className="rounded bg-black/[0.06] px-1.5 py-0.5 font-mono text-[0.88em] text-ink">

@@ -1,27 +1,28 @@
 "use client";
 
-// Bienvenida de Conexiones.
+// Connections' welcome screen.
 //
-// La idea a transmitir: tu agente no vive aislado — se enchufa a los sistemas
-// que la empresa YA usa, y cada enchufe es una decisión tuya.
+// The idea to get across: your agent doesn't live isolated -- it plugs into
+// the systems the company ALREADY uses, and every plug is your own decision.
 //
-// ACÁ NO HAY MAQUETA, Y ESO ES A PROPÓSITO. La versión anterior dibujaba un
-// tablero de enchufes inventado con tildes verdes al lado de Telegram, del
-// correo de la empresa y de las planillas. Una clienta de prueba entró
-// convencida de que ya tenía todo eso enchufado; lo único conectado que tenía
-// era la cuota de modelos que le ponemos nosotros. Un tilde verde al lado de
-// "Telegram" no es una ilustración: es una afirmación sobre SU cuenta.
+// THERE'S NO MOCKUP HERE, ON PURPOSE. The earlier version drew a made-up
+// board of plugs with green checkmarks next to Telegram, the company's email
+// and the spreadsheets. A test client walked in convinced she already had all
+// of that plugged in; the only thing actually connected was the model quota
+// we set up for her. A green checkmark next to "Telegram" isn't an
+// illustration: it's a claim about HER account.
 //
-// El estado real lo sabe el portal, así que se muestra el estado real —el mismo
-// `GET /portal/connections` que usa la pestaña, por `lib/agent.ts`—. Para un
-// cliente nuevo la respuesta honesta ("todavía no tenés ninguna conectada") es
-// además la más útil que puede dar esta pantalla: es lo que lo manda a
-// conectarlas. Si la llamada no se puede hacer o el agente no publica el
-// catálogo, se cae a un dibujo SIN estados, marcado como ejemplo.
+// The portal knows the real state, so the real state gets shown -- the same
+// `GET /portal/connections` the tab itself uses, via `lib/agent.ts`. For a
+// new client the honest answer ("you don't have any connected yet") is also
+// the most useful thing this screen can say: it's what sends them to connect
+// them. If the call can't be made or the agent doesn't publish the catalog,
+// it falls back to a drawing with NO statuses, marked as an example.
 //
-// Lo que NO promete: acá no se conecta nada con un clic ni se pegan claves.
-// Se pide, y lo conectamos nosotros. Prometer autoservicio y después pedir una
-// llamada sería peor que no prometerlo.
+// What it does NOT promise: nothing gets connected here with one click, and
+// no credentials get pasted in. It gets requested, and we connect it.
+// Promising self-service and then asking for a call back would be worse than
+// not promising it at all.
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -29,65 +30,65 @@ import {
 } from "lucide-react";
 import { getConnections, loadConfig, type Connection } from "../agent";
 import {
-  Eyebrow, IntroPage, Lead, Maqueta, Paso, Point, Title, type IntroProps,
+  Eyebrow, IntroPage, Lead, Mockup, Step, Point, Title, type IntroProps,
 } from "./shell";
 
-/* ── Estado real ─────────────────────────────────────────────────────────── */
+/* ── Real status ───────────────────────────────────────────────────────────── */
 
-/** Cómo se dice cada estado en criollo. Lo que no está en esta tabla no se
- *  nombra: un adapter más nuevo puede traer un estado que todavía no sabemos
- *  leer, y adivinarlo sería volver a afirmar algo que no nos consta. */
-const ROTULO: Record<string, string> = {
-  conectado: "Conectado",
-  lista: "Falta que le mandes un hola",
-  bloqueado: "La destrabamos nosotros",
-  sin_conectar: "Sin conectar",
+/** How each status is said in plain terms. Whatever isn't in this table
+ *  doesn't get named: a newer adapter might bring a status we don't know how
+ *  to read yet, and guessing at it would be asserting something we can't vouch for. */
+const LABEL: Record<string, string> = {
+  connected: "Conectado",
+  ready: "Falta que le mandes un hola",
+  blocked: "La destrabamos nosotros",
+  disconnected: "Sin conectar",
 };
 
-const ICONO: Record<string, LucideIcon> = {
-  conectado: Check,
-  lista: Clock,
-  bloqueado: Lock,
+const ICON: Record<string, LucideIcon> = {
+  connected: Check,
+  ready: Clock,
+  blocked: Lock,
 };
 
-/** Primero lo que ya anda, después lo que el flujo del cliente necesita. */
-const orden = (c: Connection) =>
-  c.estado === "conectado" ? 0 : c.requerida ? 1 : 2;
+/** First whatever's already working, then whatever the client's flow needs. */
+const order = (c: Connection) =>
+  c.status === "connected" ? 0 : c.required ? 1 : 2;
 
-const POR_COLUMNA = 4;
+const PER_COLUMN = 4;
 
-function useConexionesReales() {
-  const [conexiones, setConexiones] = useState<Connection[] | null>(null);
-  const [sinDatos, setSinDatos] = useState(false);
+function useRealConnections() {
+  const [connections, setConnections] = useState<Connection[] | null>(null);
+  const [noData, setNoData] = useState(false);
 
   useEffect(() => {
     const cfg = loadConfig();
-    if (!cfg) { setSinDatos(true); return; }
-    let vivo = true;
+    if (!cfg) { setNoData(true); return; }
+    let alive = true;
     getConnections(cfg)
       .then((r) => {
-        if (!vivo) return;
-        if (!r?.disponible || !Array.isArray(r.conexiones) || r.conexiones.length === 0) {
-          setSinDatos(true);
+        if (!alive) return;
+        if (!r?.available || !Array.isArray(r.connections) || r.connections.length === 0) {
+          setNoData(true);
           return;
         }
-        setConexiones([...r.conexiones].sort((a, b) => orden(a) - orden(b)));
+        setConnections([...r.connections].sort((a, b) => order(a) - order(b)));
       })
-      .catch(() => { if (vivo) setSinDatos(true); });
-    return () => { vivo = false; };
+      .catch(() => { if (alive) setNoData(true); });
+    return () => { alive = false; };
   }, []);
 
-  return { conexiones, sinDatos };
+  return { connections, noData };
 }
 
-function FilaReal({ c }: { c: Connection }) {
-  const conectado = c.estado === "conectado";
-  const Icon = ICONO[c.estado] ?? Plug;
+function RealRow({ c }: { c: Connection }) {
+  const connected = c.status === "connected";
+  const Icon = ICON[c.status] ?? Plug;
   return (
     <div className="flex items-center gap-3 py-2">
       <span
         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${
-          conectado
+          connected
             ? "border-c-green bg-c-green text-c-green-ink"
             : "border-black/[0.09] bg-black/[0.03] text-ink-soft"
         }`}
@@ -96,15 +97,15 @@ function FilaReal({ c }: { c: Connection }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13px] font-semibold text-ink">{c.label}</span>
-        <span className={`block truncate text-[11px] ${conectado ? "text-c-green-ink" : "text-ink-soft"}`}>
-          {ROTULO[c.estado] ?? ""}
+        <span className={`block truncate text-[11px] ${connected ? "text-c-green-ink" : "text-ink-soft"}`}>
+          {LABEL[c.status] ?? ""}
         </span>
       </span>
-      {/* El cable: entero cuando está conectado, punteado cuando falta. */}
+      {/* The cable: solid when connected, dashed when missing. */}
       <span
         aria-hidden
         className={`hidden h-px w-10 shrink-0 sm:block ${
-          conectado
+          connected
             ? "bg-primary/45"
             : "bg-[repeating-linear-gradient(to_right,rgba(0,0,0,.18)_0_4px,transparent_4px_8px)]"
         }`}
@@ -113,32 +114,32 @@ function FilaReal({ c }: { c: Connection }) {
   );
 }
 
-function ColumnaReal({ titulo, items }: { titulo: string; items: Connection[] }) {
-  const visibles = items.slice(0, POR_COLUMNA);
-  const resto = items.length - visibles.length;
+function RealColumn({ title, items }: { title: string; items: Connection[] }) {
+  const visible = items.slice(0, PER_COLUMN);
+  const remaining = items.length - visible.length;
   return (
     <div className="min-w-0">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{titulo}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{title}</p>
       <div className="mt-1 divide-y divide-black/[0.06]">
-        {visibles.map((c) => <FilaReal key={c.id} c={c} />)}
+        {visible.map((c) => <RealRow key={c.id} c={c} />)}
       </div>
-      {resto > 0 && (
+      {remaining > 0 && (
         <p className="mt-1.5 text-[11px] text-ink-soft">
-          y {resto} más adentro
+          y {remaining} más adentro
         </p>
       )}
-      {visibles.length === 0 && (
+      {visible.length === 0 && (
         <p className="mt-1.5 text-[12px] text-ink-soft">Nada de esto todavía.</p>
       )}
     </div>
   );
 }
 
-/** Mientras se pregunta. No dice nada de nadie: son barras. */
-function ColumnaCargando({ titulo }: { titulo: string }) {
+/** While it's being asked. Says nothing about anyone: they're just bars. */
+function LoadingColumn({ title }: { title: string }) {
   return (
     <div className="min-w-0">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{titulo}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{title}</p>
       <div className="mt-1 divide-y divide-black/[0.06]">
         {[0, 1, 2].map((i) => (
           <div key={i} className="flex items-center gap-3 py-2.5">
@@ -154,17 +155,18 @@ function ColumnaCargando({ titulo }: { titulo: string }) {
   );
 }
 
-/* ── El dibujo de reserva ────────────────────────────────────────────────── */
+/* ── The fallback drawing ──────────────────────────────────────────────────── */
 
-// Sin catálogo del agente no se puede decir NADA del estado de nadie: el
-// respaldo muestra de qué tipo de cosas hablamos, sin un solo tilde.
-const EJEMPLO_CANALES = ["Telegram", "Correo de la empresa", "WhatsApp"];
-const EJEMPLO_SISTEMAS = ["Planillas y Drive", "Agenda"];
+// With no catalog from the agent, NOTHING about anyone's status can be said:
+// the fallback shows what kind of things we're talking about, with not a
+// single checkmark.
+const EXAMPLE_CHANNELS = ["Telegram", "Correo de la empresa", "WhatsApp"];
+const EXAMPLE_SYSTEMS = ["Planillas y Drive", "Agenda"];
 
-function ColumnaEjemplo({ titulo, items }: { titulo: string; items: string[] }) {
+function ExampleColumn({ title, items }: { title: string; items: string[] }) {
   return (
     <div className="min-w-0">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{titulo}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{title}</p>
       <div className="mt-1 divide-y divide-black/[0.06]">
         {items.map((n) => (
           <div key={n} className="flex items-center gap-3 py-2">
@@ -179,7 +181,7 @@ function ColumnaEjemplo({ titulo, items }: { titulo: string; items: string[] }) 
   );
 }
 
-/* ── La pantalla ─────────────────────────────────────────────────────────── */
+/* ── The screen ────────────────────────────────────────────────────────────── */
 
 function Panel({ children }: { children: ReactNode }) {
   return (
@@ -190,12 +192,12 @@ function Panel({ children }: { children: ReactNode }) {
 }
 
 export default function ConnectionsIntro({ onOk }: IntroProps) {
-  const { conexiones, sinDatos } = useConexionesReales();
+  const { connections, noData } = useRealConnections();
 
-  const canales = (conexiones ?? []).filter((c) => c.grupo === "canal");
-  const sistemas = (conexiones ?? []).filter((c) => c.grupo !== "canal");
-  const conectadas = (conexiones ?? []).filter((c) => c.estado === "conectado").length;
-  const total = conexiones?.length ?? 0;
+  const channels = (connections ?? []).filter((c) => c.group === "channel");
+  const systems = (connections ?? []).filter((c) => c.group !== "channel");
+  const connectedCount = (connections ?? []).filter((c) => c.status === "connected").length;
+  const total = connections?.length ?? 0;
 
   return (
     <IntroPage
@@ -211,54 +213,55 @@ export default function ConnectionsIntro({ onOk }: IntroProps) {
         está conectado también aparece, con lo que implica conectarlo.
       </Lead>
 
-      {sinDatos ? (
-        // Sin catálogo no se afirma nada: pasa a ser un dibujo, y se dice.
-        <Maqueta
+      {noData ? (
+        // With no catalog nothing gets asserted: it becomes a drawing, and it says so.
+        <Mockup
           className="mt-6 bg-gradient-to-br from-c-violet/60 via-surface to-white"
-          nota="No pude leer las tuyas desde acá. Entrá y ahí están, con su estado."
+          note="No pude leer las tuyas desde acá. Entrá y ahí están, con su estado."
         >
           <div className="grid gap-5 sm:grid-cols-2">
-            <ColumnaEjemplo titulo="Por dónde te habla" items={EJEMPLO_CANALES} />
-            <ColumnaEjemplo titulo="Dónde trabaja" items={EJEMPLO_SISTEMAS} />
+            <ExampleColumn title="Por dónde te habla" items={EXAMPLE_CHANNELS} />
+            <ExampleColumn title="Dónde trabaja" items={EXAMPLE_SYSTEMS} />
           </div>
-        </Maqueta>
-      ) : conexiones === null ? (
+        </Mockup>
+      ) : connections === null ? (
         <Panel>
           <p className="mb-2 text-[12px] text-ink-soft">Mirando a qué está enchufado…</p>
           <div className="grid gap-5 sm:grid-cols-2">
-            <ColumnaCargando titulo="Por dónde te habla" />
-            <ColumnaCargando titulo="Dónde trabaja" />
+            <LoadingColumn title="Por dónde te habla" />
+            <LoadingColumn title="Dónde trabaja" />
           </div>
         </Panel>
       ) : (
         <Panel>
-          {/* La cuenta entera, arriba de todo: es la frase que evita que alguien
-              lea tres renglones y se vaya creyendo que tiene todo andando. */}
+          {/* The whole count, right at the top: it's the line that keeps
+              someone from reading three rows and walking away thinking
+              everything's already running. */}
           <p className="mb-2 flex flex-wrap items-baseline gap-x-2">
             <span className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">Hoy</span>
             <span className="text-[12px] font-semibold text-ink">
-              {conectadas === 0
+              {connectedCount === 0
                 ? "Todavía no tenés ninguna conectada."
-                : `${conectadas === 1 ? "1 conectada" : `${conectadas} conectadas`} de ${total}.`}
+                : `${connectedCount === 1 ? "1 conectada" : `${connectedCount} conectadas`} de ${total}.`}
             </span>
           </p>
           <div className="grid gap-5 sm:grid-cols-2">
-            <ColumnaReal titulo="Por dónde te habla" items={canales} />
-            <ColumnaReal titulo="Dónde trabaja" items={sistemas} />
+            <RealColumn title="Por dónde te habla" items={channels} />
+            <RealColumn title="Dónde trabaja" items={systems} />
           </div>
         </Panel>
       )}
 
-      {/* Tres pasos, no tres botones: «Pedís la conexión» es el nombre de algo
-          que se hace en la pestaña, y dibujarlo como pastilla lo hacía pasar
-          por un control que acá no existe. */}
+      {/* Three steps, not three buttons: "Pedís la conexión" is the name of
+          something you do on the tab, and drawing it as a pill made it pass
+          for a control that doesn't exist here. */}
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-black/[0.07] bg-white px-4 py-3">
         <p className="text-[12px] font-semibold text-ink-soft">Cómo funciona:</p>
-        <Paso icon={Plug}>Pedís la conexión</Paso>
+        <Step icon={Plug}>Pedís la conexión</Step>
         <ArrowRight className="h-3 w-3 shrink-0 text-ink-soft/50" aria-hidden />
-        <Paso icon={ShieldCheck}>La revisamos</Paso>
+        <Step icon={ShieldCheck}>La revisamos</Step>
         <ArrowRight className="h-3 w-3 shrink-0 text-ink-soft/50" aria-hidden />
-        <Paso icon={Check}>Queda andando</Paso>
+        <Step icon={Check}>Queda andando</Step>
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">

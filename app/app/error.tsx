@@ -1,17 +1,18 @@
 "use client";
 
-// Red de contención del portal. Sin esto, cualquier error de render deja la
-// pantalla BLANCA y sin menú: el cliente no tiene ni cómo volver ni a quién
-// avisarle. Le pasó a un cliente de prueba el 8/8 (dos pestañas en blanco tras
-// un redeploy) y su lectura fue la peor posible: "compré algo y no anda".
+// The portal's safety net. Without this, any render error leaves the screen
+// BLANK with no menu: the client has no way back and nobody to tell. It
+// happened to a test client on 8/8 (two blank tabs after a redeploy) and her
+// read on it was the worst possible one: "I paid for something and it doesn't
+// work."
 //
-// El caso más común es el chunk viejo después de un deploy: eso lo ataja el
-// script inline del layout raíz recargando una vez. Acá cae todo lo demás, y
-// el copy no acusa al cliente ni le pide leer una consola.
+// The most common case is a stale chunk after a deploy: the root layout's
+// inline script catches that by reloading once. Everything else lands here,
+// and the copy doesn't blame the client or ask them to read a console.
 
 import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
-import { Btn, Soporte } from "./lib/ui";
+import { Btn, Support } from "./lib/ui";
 
 export default function AppError({
   error,
@@ -21,8 +22,8 @@ export default function AppError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Queda en la consola para nosotros; al cliente no le mostramos el stack.
-    console.error("[portal] error de pantalla:", error);
+    // Stays in the console for us; we don't show the client the stack trace.
+    console.error("[portal] screen error:", error);
   }, [error]);
 
   return (
@@ -37,13 +38,13 @@ export default function AppError({
       </p>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         <Btn size="sm" onClick={reset}>Probar de nuevo</Btn>
-        {/* Navegación dura a propósito: si el estado del cliente quedó roto,
-            un push del router se lleva el problema puesto. */}
-        <Btn kind="secondary" size="sm" onClick={() => { window.location.href = "/app/inicio"; }}>
+        {/* Hard navigation on purpose: if the client's own state got broken,
+            a router push takes the problem along with it. */}
+        <Btn kind="secondary" size="sm" onClick={() => { window.location.href = "/app/home"; }}>
           Ir al inicio
         </Btn>
       </div>
-      <Soporte className="mt-4" />
+      <Support className="mt-4" />
     </div>
   );
 }

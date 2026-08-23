@@ -1,119 +1,121 @@
 "use client";
 
-// Onboarding del portal: se ve UNA sola vez, antes que cualquier módulo.
-// Paso 1: el cliente bautiza a su agente — ponerle nombre es la primera
-// decisión que toma sobre él. Paso 2: el agente, ya con nombre, cuenta en
-// tres líneas qué va a pasar acá adentro.
+// The portal's onboarding: shown ONCE, before any module. Step 1: the client
+// names their agent -- giving it a name is the first decision they make about
+// it. Step 2: the agent, now named, tells in three lines what's going to
+// happen in here.
 //
-// Nombre y look se guardan EN EL AGENTE (POST /portal/identity, adapter 0.26+)
-// y quedan cacheados en localStorage. Así el agente sigue siendo el suyo desde
-// cualquier máquina; el browser es solo la copia rápida. Que el agente además
-// se PRESENTE con ese nombre (escribirlo en el SOUL) sigue pendiente.
+// Name and look are saved ON THE AGENT (POST /portal/identity, adapter 0.26+)
+// and stay cached in localStorage. That way the agent is still theirs from any
+// machine; the browser is just the fast copy. Having the agent also INTRODUCE
+// itself with that name (writing it into the SOUL) is still pending.
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { ArrowRight, BellOff, Columns3, Dices, Hand, MessageSquare, X } from "lucide-react";
 import { Btn, inputCls } from "./ui";
-import { CarruselEjemplos } from "./ejemplosFlujos";
+import { ExampleCarousel } from "./flowExamples";
 import ChatOnboarding from "./ChatOnboarding";
-import { urlApuntaADetalle } from "./rutas";
+import { urlPointsToDetail } from "./routes";
 import {
-  activateTelegramPairing, crearPedidoDeConexion, getConnections, guardarIdentidad,
+  activateTelegramPairing, createConnectionRequest, getConnections, saveIdentity,
   type Connection, type Manifest, type PortalConfig,
 } from "./agent";
 import {
-  AgentitoCargando, EJES_RIVE, LOOK_DEFAULT, hayLookGuardado, loadAgentLook,
-  lookDesdeAgente, saveAgentLook, type AgentitoLook,
+  AgentitoLoading, RIVE_AXES, LOOK_DEFAULT, hasSavedLook, loadAgentLook,
+  lookFromAgent, saveAgentLook, type AgentitoLook,
 } from "./agentito";
 
-// El runtime de Rive (~330 KB gz) se trae solo cuando el onboarding se muestra;
-// el resto del portal no lo paga. Mientras tanto, la cara estática.
+// Rive's runtime (~330 KB gz) only gets brought in when onboarding shows; the
+// rest of the portal doesn't pay for it. Meanwhile, the static face.
 const AgentitoRive = dynamic(() => import("./AgentitoRive"), {
   ssr: false,
-  loading: () => <AgentitoCargando />,
+  loading: () => <AgentitoLoading />,
 });
 
 const NAME_KEY = "tuagente_agent_name";
 
-// Nombres para el placeholder del bautizo. Son apodos cortos y rioplatenses a
-// proposito: un apodo se lee como algo que le PONES a alguien cercano, no como
-// la identidad formal de una persona — que es justo la lectura que queremos
-// evitar. Y nadie se llama legalmente Chispa, asi que la chance de pisarle el
-// nombre al cliente es minima.
-const NOMBRES_SUGERIDOS = [
+// Names for the naming step's placeholder. They're short, Rioplatense
+// nicknames on purpose: a nickname reads as something you GIVE someone close
+// to you, not as a person's formal identity -- which is exactly the reading
+// we want to avoid. And nobody is legally named Chispa, so the odds of
+// stepping on the client's own name are minimal.
+const SUGGESTED_NAMES = [
   "Tota", "Rulo", "Pepa", "Milo", "Nina", "Beto", "Cuca", "Tito", "Lola",
   "Kiko", "Mora", "Nino", "Pocha", "Chispa", "Lino", "Juana", "Bruno", "Tuca", "Rosita", "Nilo",
 ];
 
-/** La cara que eligió, capturada del canvas de Rive: termina siendo la foto
- *  del bot de Telegram (la sube un tool nuestro por MTProto). Si el canvas no
- *  coopera, el bautizo sigue igual, sin foto. */
-function capturaDelAgentito(): { avatar_png?: string } {
+/** The face it chose, captured from Rive's canvas: it ends up as the Telegram
+ *  bot's photo (one of our tools uploads it over MTProto). If the canvas
+ *  doesn't cooperate, naming still goes through, just without a photo. */
+function agentitoCapture(): { avatar_png?: string } {
   try {
     const canvas = document.querySelector("canvas");
     if (!canvas || !canvas.width) return {};
 
-    // NO se sube el canvas tal cual. Rive dibuja con FONDO TRANSPARENTE, y
-    // Telegram no soporta alfa en las fotos de perfil: la aplasta contra
-    // NEGRO. La carita naranja del cliente terminaba recortada sobre un
-    // cuadrado negro, con los bordes dentados. (Visto el 11/8 con Washington.)
+    // The canvas does NOT get uploaded as-is. Rive draws with a TRANSPARENT
+    // BACKGROUND, and Telegram doesn't support alpha in profile photos: it
+    // flattens it against BLACK. The client's little orange face ended up
+    // cropped onto a black square, with jagged edges. (Seen on 8/11 with
+    // Washington.)
     //
-    // Así que se compone sobre el fondo del portal, cuadrado y en 512: es el
-    // tamaño que Telegram usa para el avatar grande, y salir con menos lo deja
-    // escalar a él —que es de donde venían los dientes—.
-    const LADO = 512;
-    const fuera = document.createElement("canvas");
-    fuera.width = LADO;
-    fuera.height = LADO;
-    const ctx = fuera.getContext("2d");
+    // So it gets composited onto the portal's own background, square, at
+    // 512: that's the size Telegram uses for the large avatar, and shipping
+    // anything smaller lets it get upscaled to that -- which is where the
+    // jagged edges came from.
+    const SIDE = 512;
+    const offscreen = document.createElement("canvas");
+    offscreen.width = SIDE;
+    offscreen.height = SIDE;
+    const ctx = offscreen.getContext("2d");
     if (!ctx) return {};
 
-    ctx.fillStyle = "#FBFAFF";           // bg-surface: la misma que ve en el portal
-    ctx.fillRect(0, 0, LADO, LADO);
+    ctx.fillStyle = "#FBFAFF";           // bg-surface: the same one seen in the portal
+    ctx.fillRect(0, 0, SIDE, SIDE);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
-    // Cuadrado, centrado y sin deformar: el canvas del onboarding no siempre
-    // es cuadrado y estirar la cara se nota más que cualquier otra cosa.
-    const escala = Math.min(LADO / canvas.width, LADO / canvas.height);
-    const w = canvas.width * escala;
-    const h = canvas.height * escala;
-    ctx.drawImage(canvas, (LADO - w) / 2, (LADO - h) / 2, w, h);
+    // Square, centered and undistorted: onboarding's canvas isn't always
+    // square, and a stretched face shows more than anything else would.
+    const scale = Math.min(SIDE / canvas.width, SIDE / canvas.height);
+    const w = canvas.width * scale;
+    const h = canvas.height * scale;
+    ctx.drawImage(canvas, (SIDE - w) / 2, (SIDE - h) / 2, w, h);
 
-    const data = fuera.toDataURL("image/png");
+    const data = offscreen.toDataURL("image/png");
     if (data.startsWith("data:image/png") && data.length > 2000) {
       return { avatar_png: data.split(",", 2)[1] };
     }
-  } catch { /* canvas contaminado o sin buffer: seguimos sin foto */ }
+  } catch { /* tainted canvas or no buffer: we carry on with no photo */ }
   return {};
 }
 
-/** Un look al azar, garantizado distinto del actual. El bautizo del agente y el
- *  del primer rol del equipo tiran el mismo dado. */
-export function sortearLook(actual: AgentitoLook): AgentitoLook {
+/** A random look, guaranteed different from the current one. The agent's own
+ *  naming and the team's first role naming roll the same dice. */
+export function randomizeLook(current: AgentitoLook): AgentitoLook {
   for (;;) {
-    const look = { ...actual };
-    for (const [eje, n] of Object.entries(EJES_RIVE) as [keyof AgentitoLook, number][]) {
-      look[eje] = Math.floor(Math.random() * n);
+    const look = { ...current };
+    for (const [axis, n] of Object.entries(RIVE_AXES) as [keyof AgentitoLook, number][]) {
+      look[axis] = Math.floor(Math.random() * n);
     }
-    if (Object.keys(EJES_RIVE).some((e) => look[e as keyof AgentitoLook] !== actual[e as keyof AgentitoLook])) {
+    if (Object.keys(RIVE_AXES).some((a) => look[a as keyof AgentitoLook] !== current[a as keyof AgentitoLook])) {
       return look;
     }
   }
 }
 
-/** La copia local del nombre. Un solo escritor: el bautizo y el layout cuando
- *  se lo aprende del manifiesto. */
+/** The name's local copy. A single writer: naming, and the layout when it
+ *  learns it from the manifest. */
 export function saveAgentName(n: string) {
   try {
     localStorage.setItem(NAME_KEY, n);
   } catch {
-    /* modo privado: al menos vale para esta sesión */
+    /* private mode: at least it's good for this session */
   }
 }
 
-/** Nombre que el cliente le puso a su agente, o null si nunca lo bautizó. */
+/** The name the client gave their agent, or null if they never named it. */
 export function loadAgentName(): string | null {
   if (typeof window === "undefined") return null;
   try {
@@ -123,417 +125,432 @@ export function loadAgentName(): string | null {
   }
 }
 
-/** Cómo llamamos al agente en el portal: el nombre del cliente, o el del manifest. */
+/** What we call the agent in the portal: the client's name, or the manifest's. */
 export function agentDisplayName(manifest: Manifest | null): string {
   return loadAgentName() || manifest?.agent || "tu agente";
 }
 
-/** ¿ESTE AGENTE YA PASÓ POR EL ALTA? Lo contesta EL AGENTE, no el browser.
+/** HAS THIS AGENT ALREADY GONE THROUGH HIRING/NAMING? THE AGENT answers this,
+ *  not the browser.
  *
- *  El alta se decidía con lo que este navegador se acordaba, y lo del browser
- *  se borra entero al cambiar de agente (`olvidarAgente`). O sea que entrar con
- *  el link de un agente ya configurado —desde otra máquina, en incógnito, o
- *  simplemente cambiando de agente— le volvía a correr el alta completa. Y el
- *  último paso, "¿Por dónde te aviso?", no es una pantalla informativa:
- *  contestarla ESCRIBE en el agente (`guardarIdentidad`) y le pisa el canal que
- *  ya tenía configurado.
+ *  It used to be decided by what this browser remembered, and the browser's
+ *  memory gets wiped entirely when the agent changes (`forgetAgent`). Meaning
+ *  that entering with the link to an already-configured agent -- from another
+ *  machine, in incognito, or simply switching agents -- ran the whole
+ *  onboarding flow again. And the last step, "Where do I notify you?", isn't
+ *  an informational screen: answering it WRITES to the agent (`saveIdentity`)
+ *  and overwrites whatever channel it already had configured.
  *
- *  Dos datos y los dos vienen del manifiesto:
- *  - `bautizado`: el cliente ya le puso nombre alguna vez.
- *  - `aviso`: ya contestó por dónde quiere que le avisen. `"ninguno"` ES una
- *    respuesta ("ahora no"), y la que hace que `AvisoSinCanal` se lo vuelva a
- *    ofrecer adentro del portal: no es lo mismo que no haber contestado nunca.
+ *  Two data points and both come from the manifest:
+ *  - `named`: the client has already given it a name at some point.
+ *  - `notify_channel`: they already answered where they want to be notified.
+ *    `"none"` IS an answer ("not right now"), and it's what makes
+ *    `NoChannelNotice` offer it again inside the portal: it isn't the same as
+ *    never having answered.
  *
- *  Ausente (`null`/`undefined`) es "todavía no contestó" — y también lo que
- *  manda un adapter viejo que no publica el campo. En los dos casos se prefiere
- *  preguntar: el precio de preguntar de más es una pantalla; el de no preguntar
- *  es un cliente sin canal de aviso, que es lo que este alta vino a arreglar. */
-export function altaYaContestada(manifest: Manifest | null | undefined): boolean {
-  return Boolean(manifest?.bautizado) && (manifest?.aviso ?? "").trim() !== "";
+ *  Absent (`null`/`undefined`) means "hasn't answered yet" -- and it's also
+ *  what an old adapter sends when it doesn't publish the field. In both
+ *  cases we'd rather ask: the price of asking too much is one screen; the
+ *  price of not asking is a client with no notification channel, which is
+ *  exactly what this flow exists to fix. */
+export function hiringAlreadyAnswered(manifest: Manifest | null | undefined): boolean {
+  return Boolean(manifest?.named) && (manifest?.notify_channel ?? "").trim() !== "";
 }
 
-/** LA MISMA PREGUNTA, PARA UN AGENTE CON EQUIPO. En un equipo no hay bautizo
- *  del agente —el cliente bautiza a quien contrata, no al agente— así que
- *  `bautizado` no llega nunca y `altaYaContestada` sería siempre false. Lo que
- *  queda es el canal de aviso, y vale la misma lección: contestarlo ESCRIBE en
- *  el agente, así que a un cliente que ya lo contestó no se le vuelve a
- *  preguntar cuando entra desde otra máquina. */
-export function avisoYaContestado(manifest: Manifest | null | undefined): boolean {
-  return (manifest?.aviso ?? "").trim() !== "";
+/** THE SAME QUESTION, FOR A TEAM AGENT. On a team there's no naming step for
+ *  the agent itself -- the client names whoever they hire, not the agent --
+ *  so `named` never arrives and `hiringAlreadyAnswered` would always be
+ *  false. What's left is the notify channel, and the same lesson applies:
+ *  answering it WRITES to the agent, so a client who already answered doesn't
+ *  get asked again when they come in from another machine. */
+export function channelAlreadyAnswered(manifest: Manifest | null | undefined): boolean {
+  return (manifest?.notify_channel ?? "").trim() !== "";
 }
 
-// Qué contamos en el paso 2: solo lo que el manifest habilita.
+// What we tell in step 2: only what the manifest turns on.
 //
-// SE MUESTRAN SIN TARJETA, y eso no es estética. Eran tres cajas blancas con
-// hairline en una grilla de tres — o sea, lo mismo que el carrusel de ejemplos
-// de la pantalla siguiente, que SÍ se toca y arranca la charla. Una clienta de
-// prueba las apretó una por una y anotó "se ven clickeables y no hacen nada".
-// Esto es un índice de lo que va a encontrar adentro, no un menú: sin caja no
-// hay nada que invite a tocarlo, y el único control de la pantalla queda siendo
-// el botón de abajo.
-const PUNTOS = [
+// SHOWN WITH NO CARD, and that's not just aesthetics. They used to be three
+// white boxes with a hairline border in a three-column grid -- i.e. the same
+// look as the next screen's example carousel, which you DO touch and which
+// starts the conversation. A test client tapped them one by one and wrote
+// "they look clickable and do nothing". This is an index of what they'll
+// find inside, not a menu: with no box there's nothing inviting a touch, and
+// the screen's only control stays the button at the bottom.
+const POINTS = [
   {
     key: "chat",
     icon: MessageSquare,
-    tono: "bg-c-violet",
-    titulo: "Chat",
-    texto: "Hablame como a cualquiera del equipo: me pedís las cosas en tus palabras.",
+    tone: "bg-c-violet",
+    title: "Chat",
+    description: "Hablame como a cualquiera del equipo: me pedís las cosas en tus palabras.",
   },
   {
     key: "kanban",
     icon: Columns3,
-    tono: "bg-c-amber",
-    titulo: "Tablero",
-    texto: "Cada cosa que me pedís queda como una tarea, y ves en qué anda.",
+    tone: "bg-c-amber",
+    title: "Tablero",
+    description: "Cada cosa que me pedís queda como una tarea, y ves en qué anda.",
   },
   {
     key: "approvals",
     icon: Hand,
-    tono: "bg-c-coral",
-    titulo: "Aprobaciones",
-    texto: "Antes de un paso sensible freno y espero tu visto bueno.",
+    tone: "bg-c-coral",
+    title: "Aprobaciones",
+    description: "Antes de un paso sensible freno y espero tu visto bueno.",
   },
 ];
 
-export default function Onboarding({ manifest, cfg, onDone, equipo }: {
+export default function Onboarding({ manifest, cfg, onDone, team }: {
   manifest: Manifest;
   cfg: PortalConfig;
   onDone: (name: string) => void;
-  /** ALTA DE EQUIPO: quién acaba de entrar al equipo del cliente.
+  /** TEAM HIRING: who just joined the client's team.
    *
-   *  Cuando viene, este onboarding entra RECORTADO — el negocio y el canal de
-   *  aviso, nada más — y lo hace en la voz del compañero que el cliente acaba
-   *  de contratar. El bautizo no va: ya lo bautizó cuando lo eligió
-   *  (`lib/altaEquipo.tsx`), y volver a pedirle un nombre es pedirle que
-   *  bautice a alguien dos veces. La presentación tampoco: las tres tarjetas
-   *  cuentan lo que hace UN agente, y este cliente tiene un equipo.
+   *  When this is set, this onboarding runs TRIMMED DOWN -- the business and
+   *  the notify channel, nothing else -- and it does so in the voice of the
+   *  teammate the client just hired. Naming doesn't happen here: it already
+   *  happened when they picked it (`lib/hiring.tsx`), and asking for a name
+   *  again would mean naming someone twice. The overview doesn't show either:
+   *  the three cards describe what ONE agent does, and this client has a team. *
    *
-   *  Lo que sí queda es lo que el alta de equipo no pregunta y el portal
-   *  necesita igual: de qué es el negocio (es lo que dispara el brief) y por
-   *  dónde avisarle (sin eso el agente trabaja y nadie se entera). */
-  equipo?: { nombre: string; look: AgentitoLook } | null;
+   *  What DOES stay is what team hiring doesn't ask and the portal still
+   *  needs: what the business is (it's what triggers the brief) and where to
+   *  notify them (without it the agent works and nobody finds out). */
+  team?: { name: string; look: AgentitoLook } | null;
 }) {
-  // Si el agente YA fue bautizado (otra máquina, otra persona de la empresa),
-  // no se le vuelve a pedir el nombre: se salta directo a la presentación.
-  const yaBautizado = Boolean(manifest.bautizado);
-  const [nombre, setNombre] = useState(
-    () => equipo?.nombre ?? loadAgentName() ?? (yaBautizado ? manifest.agent : ""));
-  // El canal de aviso es un paso PROPIO y no el pie de la presentación. Es la
-  // decisión que decide si el portal sirve —"la hoja espera que yo venga y yo
-  // no voy a venir"— y apretada abajo de tres tarjetas competía con ellas.
-  const [paso, setPaso] = useState<"bautismo" | "negocio" | "presentacion" | "aviso" | "automatizaciones" | "charla">(
-    equipo ? "negocio" : yaBautizado ? "presentacion" : "bautismo");
-  // Quien es EL CLIENTE. El onboarding le preguntaba el nombre al agente y
-  // nunca por el negocio: el portal terminaba hablandole de "nosotros" y el
-  // agente firmando con el nombre del dueño anterior.
-  // Una sola vez al montar: en el render cambiaria en cada tecla. Y el
-  // onboarding nunca se pinta en el server (la puerta espera a localStorage),
-  // asi que Math.random aca no rompe la hidratacion.
-  const [sugerido] = useState(
-    () => NOMBRES_SUGERIDOS[Math.floor(Math.random() * NOMBRES_SUGERIDOS.length)]);
-  const [empresa, setEmpresa] = useState("");
+  // If the agent was ALREADY named (another machine, another person at the
+  // company), it doesn't ask for the name again: it skips straight to the
+  // overview.
+  const alreadyNamed = Boolean(manifest.named);
+  const [name, setName] = useState(
+    () => team?.name ?? loadAgentName() ?? (alreadyNamed ? manifest.agent : ""));
+  // The notify channel is its OWN step, not the overview's footer. It's the
+  // decision that decides whether the portal is any use -- "the sheet is
+  // waiting for me to show up and I'm not going to" -- and squeezed below
+  // three cards it competed with them.
+  const [step, setStep] = useState<"naming" | "business" | "overview" | "notify" | "automations" | "chat">(
+    team ? "business" : alreadyNamed ? "overview" : "naming");
+  // Who THE CLIENT is. Onboarding used to ask the agent's name and never the
+  // business's: the portal ended up talking about "us" and the agent signing
+  // with the previous owner's name.
+  // Only once on mount: computing it during render would change on every
+  // keystroke. And onboarding is never painted server-side (the gate waits
+  // for localStorage), so Math.random here doesn't break hydration.
+  const [suggested] = useState(
+    () => SUGGESTED_NAMES[Math.floor(Math.random() * SUGGESTED_NAMES.length)]);
+  const [company, setCompany] = useState("");
   const [url, setUrl] = useState("");
-  // Las opciones son CANALES CON NOMBRE, y "ahora no" es una de ellas. Antes
-  // eran dos botones, "Por Telegram" y "No uso Telegram", y el segundo no era
-  // una respuesta sino otra obligación: te pedía el mail igual. Las dos
-  // clientas de prueba dijeron lo mismo con distintas palabras — "me sentí
-  // vieja por no usar Telegram" y "nadie en mi barrio usa Telegram" — y las
-  // dos terminaron dando un dato para que la pantalla las dejara pasar.
-  const [canal, setCanal] = useState<"telegram" | "whatsapp" | "correo" | "ninguno" | "">("");
+  // The options are NAMED CHANNELS, and "not now" is one of them. They used to
+  // be two buttons, "Via Telegram" and "I don't use Telegram", and the second
+  // wasn't an answer but another obligation: it asked for an email anyway.
+  // Both test clients said the same thing in different words -- "I felt old
+  // for not using Telegram" and "nobody in my neighborhood uses Telegram" --
+  // and both ended up giving a piece of data just so the screen would let
+  // them through.
+  const [channel, setChannel] = useState<"telegram" | "whatsapp" | "email" | "none" | "">("");
   const [mail, setMail] = useState("");
-  const [tel, setTel] = useState("");
-  // Elegir "Telegram" sin activarlo dejaria al agente sin donde escribir, asi
-  // que se activa acá mismo. Y el catálogo entero, no solo Telegram: es de
-  // donde sale qué puede hacer ESTE agente (si tiene bot, si su correo ya está
-  // enchufado) y con qué nombre se llama cada conexión.
-  const [conexiones, setConexiones] = useState<Connection[] | null>(null);
-  const [codigo, setCodigo] = useState("");
-  const [activando, setActivando] = useState(false);
+  const [phone, setPhone] = useState("");
+  // Choosing "Telegram" without activating it would leave the agent with
+  // nowhere to write, so it gets activated right here. And the whole catalog,
+  // not just Telegram: it's where we learn what THIS agent can do (does it
+  // have a bot, is its email already connected) and what each connection is
+  // called.
+  const [connections, setConnections] = useState<Connection[] | null>(null);
+  const [code, setCode] = useState("");
+  const [activating, setActivating] = useState(false);
   const [pairErr, setPairErr] = useState<string | null>(null);
-  const [pareado, setPareado] = useState(false);
-  // Lo que el cliente eligio del carrusel: arranca la charla sin salir de acá.
-  const [pedido, setPedido] = useState("");
-  // A DÓNDE VOLVER AL TERMINAR. El onboarding se pone adelante de CUALQUIER
-  // ruta, y al cerrarse mandaba siempre a /app/inicio: el que llegaba con el
-  // link de un entregable —el que el login le prometió que iba a respetar—
-  // terminaba en la portada y tenía que salir a buscar lo que le habían
-  // mandado. Se captura una sola vez al montar, antes de que cualquier cosa
-  // toque la URL. (La credencial ya se limpió del hash en el layout; acá solo
-  // viajan path y parámetros.)
-  const [destinoDelLink] = useState<string | null>(() => {
+  const [paired, setPaired] = useState(false);
+  // What the client picked from the carousel: starts the chat without leaving here.
+  const [prompt, setPrompt] = useState("");
+  // WHERE TO GO BACK TO ON FINISHING. Onboarding puts itself in front of ANY
+  // route, and closing it used to always send to /app/home: whoever arrived
+  // with a link to a deliverable -- the one login promised it would respect --
+  // ended up on the home page and had to go find what had been sent to them.
+  // Captured once on mount, before anything touches the URL. (The credential
+  // was already stripped from the hash in the layout; only the path and
+  // params travel here.)
+  const [linkDestination] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
-    return urlApuntaADetalle()
+    return urlPointsToDetail()
       ? window.location.pathname + window.location.search
       : null;
   });
-  // Mientras se saca la foto, el personaje se queda QUIETO. La captura toma el
-  // frame que hay en pantalla, y en `tranquilo` el agentito se ceba un mate a
-  // los ~20 s y despues cada rato — o sea que casi siempre lo agarraba con el
-  // mate en la mano y la bombilla a mitad de camino. Nadie bautiza a su agente
-  // en menos de veinte segundos. (Visto el 11/8 en la foto de Mr.Wobble.)
-  const [posando, setPosando] = useState(false);
+  // While the photo is taken, the character STAYS STILL. The capture grabs
+  // whatever frame is on screen, and in `calm` the agentito sips some
+  // mate at ~20s and then every so often -- so it almost always got caught
+  // mid-sip, straw halfway there. Nobody names their agent in under twenty
+  // seconds. (Seen on 8/11 in Mr.Wobble's photo.)
+  const [posing, setPosing] = useState(false);
 
   useEffect(() => {
-    if (paso !== "presentacion" && paso !== "aviso") return;
+    if (step !== "overview" && step !== "notify") return;
     getConnections(cfg)
       .then((r) => {
-        setConexiones(r.conexiones ?? []);
-        if ((r.conexiones ?? []).some((c) => c.id === "telegram" && c.estado === "conectado")) {
-          setPareado(true);
+        setConnections(r.connections ?? []);
+        if ((r.connections ?? []).some((c) => c.id === "telegram" && c.status === "connected")) {
+          setPaired(true);
         }
       })
-      .catch(() => { /* sin catalogo seguimos: se ofrece lo que se pueda probar */ });
-  }, [paso, cfg]);
+      .catch(() => { /* no catalog, we carry on: whatever can be tried gets offered */ });
+  }, [step, cfg]);
 
-  const conexionDe = (id: string) => conexiones?.find((c) => c.id === id) ?? null;
-  const tg = conexionDe("telegram");
+  const connectionOf = (id: string) => connections?.find((c) => c.id === id) ?? null;
+  const tg = connectionOf("telegram");
 
-  // Dos fuentes para el mismo dato, porque el paso NO se puede completar sin
-  // él: el manifiesto (adapter 0.35+, siempre presente) y la conexión (que
-  // puede no haber llegado si falló la llamada al catálogo).
-  const handleBot = manifest.telegram_bot
+  // Two sources for the same datum, because the step CANNOT complete without
+  // it: the manifest (adapter 0.35+, always present) and the connection
+  // (which may not have arrived if the catalog call failed).
+  const botHandle = manifest.telegram_bot
     || tg?.link?.replace(/^https:\/\/t\.me\//, "")
     || null;
-  const enlaceBot = handleBot ? `https://t.me/${handleBot}` : null;
-  // ¿ESTE agente tiene Telegram? PRINCIPIO CERO: el portal sirve a cualquier
-  // agente y el bot se lo instalamos nosotros, uno por cliente. Sin
-  // `TELEGRAM_BOT_TOKEN` no hay bot, la conexión queda `sin_conectar` y el
-  // manifiesto trae `telegram_bot: null` — o sea que no hay a quién escribirle
-  // y el paso del código es imposible de terminar. (Medido el 13/8 en los tres
-  // agentes del lab: los tres sin bot.) Si el catálogo no llegó, se asume que
-  // no hay: el error de prometer de más lo paga el cliente esperando un mensaje
-  // que no va a llegar nunca.
-  const hayTelegram = Boolean(manifest.telegram_bot)
-    || tg?.estado === "lista" || tg?.estado === "conectado";
-  // El mail solo sirve como canal si la casilla de la empresa YA está
-  // enchufada: si no, el agente no tiene desde dónde escribir.
-  const correoConectado = conexionDe("correo")?.estado === "conectado";
+  const botLink = botHandle ? `https://t.me/${botHandle}` : null;
+  // Does THIS agent have Telegram? PRINCIPLE ZERO: the portal serves any
+  // agent and we install the bot ourselves, one per client. With no
+  // `TELEGRAM_BOT_TOKEN` there's no bot, the connection stays `disconnected`
+  // and the manifest sends `telegram_bot: null` -- meaning there's nobody to
+  // write to and the code step is impossible to finish. (Measured on 8/13 on
+  // the lab's three agents: all three with no bot.) If the catalog didn't
+  // arrive, we assume there isn't one: the cost of over-promising is paid by
+  // the client waiting for a message that's never going to come.
+  const hasTelegram = Boolean(manifest.telegram_bot)
+    || tg?.status === "ready" || tg?.status === "connected";
+  // Email only works as a channel if the company's inbox is ALREADY
+  // connected: otherwise the agent has nowhere to write from.
+  const emailConnected = connectionOf("email")?.status === "connected";
 
-  const activarTelegram = async () => {
-    if (!codigo.trim()) return;
-    setActivando(true);
+  const activateTelegram = async () => {
+    if (!code.trim()) return;
+    setActivating(true);
     setPairErr(null);
     try {
-      const d = await activateTelegramPairing(cfg, codigo);
+      const d = await activateTelegramPairing(cfg, code);
       if (!d.ok) throw new Error("No se pudo activar Telegram.");
-      setPareado(true);
-      // El canal se anota EN EL MOMENTO en que empieza a existir, no al final
-      // del onboarding: si el cliente cierra acá, ya tiene Telegram andando y
-      // el portal no puede seguir recordándole que le falta un canal.
-      guardarIdentidad(cfg, { contacto: { canal: "telegram", valor: "portal" } })
-        .catch(() => { /* adapter viejo o caído: se reintenta al continuar */ });
+      setPaired(true);
+      // The channel gets recorded THE MOMENT it starts to exist, not at the
+      // end of onboarding: if the client closes here, Telegram is already
+      // running and the portal can't keep reminding them they're missing a
+      // channel.
+      saveIdentity(cfg, { contact: { channel: "telegram", value: "portal" } })
+        .catch(() => { /* old or down adapter: retried on continue */ });
     } catch (e) {
       setPairErr(e instanceof Error ? e.message : String(e));
     } finally {
-      setActivando(false);
+      setActivating(false);
     }
   };
 
-  // Investigar una web son DOS cosas y el personaje las tiene las dos: primero
-  // la lupa barriendo (buscar el sitio, recorrerlo) y después el libro (leer lo
-  // que encontró). Un solo gesto clavado un minuto se lee como una animación en
-  // loop; alternándolos parece alguien trabajando. Arranca por `buscando`
-  // porque es el orden real. El state machine cruza los gestos en 220 ms, así
-  // que el cambio no salta.
-  const leyendoWeb = (paso === "presentacion" || paso === "aviso") && Boolean(url.trim());
-  const [gesto, setGesto] = useState<"buscando" | "leyendo">("buscando");
+  // Researching a website is TWO things and the character has both: first the
+  // magnifying glass sweeping (finding the site, going through it) and then
+  // the book (reading what it found). A single gesture held for a minute
+  // reads as a looping animation; alternating them looks like someone
+  // working. It starts on `searching` because that's the real order. The state
+  // machine crossfades gestures in 220ms, so the change doesn't jump.
+  const readingWeb = (step === "overview" || step === "notify") && Boolean(url.trim());
+  const [gesture, setGesture] = useState<"searching" | "reading">("searching");
   useEffect(() => {
-    if (!leyendoWeb) return;
-    setGesto("buscando");
+    if (!readingWeb) return;
+    setGesture("searching");
     const t = setInterval(
-      () => setGesto((g) => (g === "buscando" ? "leyendo" : "buscando")), 5200);
+      () => setGesture((g) => (g === "searching" ? "reading" : "searching")), 5200);
     return () => clearInterval(t);
-  }, [leyendoWeb]);
+  }, [readingWeb]);
 
   const mailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail.trim());
-  // Un teléfono uruguayo son ocho o nueve dígitos; con o sin 598, con o sin
-  // espacios. No se valida más que eso: lo que llega es para que lo llamemos
-  // nosotros, y rebotarle el formato a alguien que escribió bien su número es
-  // el peaje de nuevo, más chico.
-  const telOk = (tel.match(/\d/g)?.length ?? 0) >= 8;
-  // YA NO HAY PUERTA. Antes era "o Telegram activado, o un mail": sin eso el
-  // botón quedaba apagado y no se entraba al portal. La decisión de producto
-  // (13/8) es que el canal se pueda dejar para después — el precio de forzarlo
-  // era que la clienta diera un dato cualquiera para pasar, que no es un canal
-  // sino un trámite trucho. Lo único que se pide es CONTESTAR la pregunta:
-  // "Ahora no" es una respuesta y está al lado de las otras.
-  const contestoAlgo = canal !== "";
-  // UN SOLO CRITERIO: ¿el agente puede escribirle HOY por acá? Es la única
-  // pregunta, y se contesta igual para las cuatro respuestas.
+  // A Uruguayan phone number is eight or nine digits; with or without 598,
+  // with or without spaces. Nothing more gets validated: what arrives is for
+  // US to call, and bouncing the format back at someone who typed their
+  // number correctly is the same toll, just smaller.
+  const phoneOk = (phone.match(/\d/g)?.length ?? 0) >= 8;
+  // THERE'S NO GATE ANYMORE. It used to be "either Telegram activated, or an
+  // email": without that the button stayed off and you couldn't enter the
+  // portal. The product decision (8/13) is that the channel can be left for
+  // later -- the cost of forcing it was the client handing over some random
+  // piece of data just to get through, which isn't a channel, it's a fake
+  // formality. The only thing asked is to ANSWER the question: "Not now" is
+  // an answer and sits next to the others.
+  const answeredSomething = channel !== "";
+  // ONE SINGLE CRITERION: can the agent write to them THROUGH HERE, TODAY?
+  // It's the only question, and it's answered the same way for all four answers.
   //
-  // Telegram cuenta solo si quedó pareado (si no, el agente escribiría a un
-  // chat que no existe). El correo cuenta solo si la casilla de la empresa ya
-  // está conectada — que es lo que esta misma pantalla le dice al cliente dos
-  // renglones más abajo. WhatsApp no cuenta nunca todavía. Todo lo demás es
-  // "no hay canal", y eso se GUARDA (ver `seguirDesdeAviso`): un canal que no
-  // existe y un cliente que nunca contestó no pueden ser el mismo dato.
-  const canalReal = canal === "telegram" && pareado ? "telegram"
-    : canal === "correo" && mailOk && correoConectado ? "correo"
+  // Telegram only counts if it ended up paired (otherwise the agent would
+  // write to a chat that doesn't exist). Email only counts if the company's
+  // inbox is already connected -- which is what this very screen tells the
+  // client two lines below. WhatsApp never counts yet. Everything else is "no
+  // channel", and that gets SAVED (see `continueFromNotify`): a channel that
+  // doesn't exist and a client who never answered can't be the same datum.
+  const realChannel = channel === "telegram" && paired ? "telegram"
+    : channel === "email" && mailOk && emailConnected ? "email"
       : null;
-  // Lo que se tramita a mano: acá no hay nada que el cliente pueda enchufar
-  // solo, así que queda un pedido nuestro con su dato al lado. Telegram entra
-  // en esta lista cuando el agente no tiene bot: el atajo no existe, y en vez
-  // de mandarlo a una pantalla donde tampoco va a poder, se lo pedimos.
-  const pedidoDeConexion = canal === "whatsapp" && telOk ? "whatsapp"
-    : canal === "correo" && mailOk && !correoConectado ? "correo"
-      : canal === "telegram" && !hayTelegram ? "telegram"
+  // What gets handled by hand: there's nothing here the client can plug in
+  // themselves, so it becomes a request of ours with their info attached.
+  // Telegram lands on this list when the agent has no bot: the shortcut
+  // doesn't exist, and instead of sending them to a screen where they still
+  // couldn't do it, we request it for them.
+  const connectionRequest = channel === "whatsapp" && phoneOk ? "whatsapp"
+    : channel === "email" && mailOk && !emailConnected ? "email"
+      : channel === "telegram" && !hasTelegram ? "telegram"
         : null;
-  // Contador de festejos: cada bautismo dispara el trigger del personaje.
-  const [festejos, setFestejos] = useState(0);
+  // Celebration counter: every naming fires the character's trigger.
+  const [celebrations, setCelebrations] = useState(0);
   const [look, setLook] = useState<AgentitoLook>(
-    () => (equipo?.look
-      ?? (hayLookGuardado()
+    () => (team?.look
+      ?? (hasSavedLook()
         ? loadAgentLook()
-        : lookDesdeAgente(manifest.look) ?? LOOK_DEFAULT)));
-  const listo = nombre.trim().length > 0;
+        : lookFromAgent(manifest.look) ?? LOOK_DEFAULT)));
+  const ready = name.trim().length > 0;
 
-  const otroLook = () => {
-    const nuevo = sortearLook(look);
-    saveAgentLook(nuevo);
-    setLook(nuevo);
+  const anotherLook = () => {
+    const next = randomizeLook(look);
+    saveAgentLook(next);
+    setLook(next);
   };
 
-  const bautizar = async () => {
-    if (!listo) return;
-    const n = nombre.trim();
-    // Pose primero, foto despues. Los 450 ms son para que Rive termine la
-    // transicion: sacarla en el mismo tick devuelve el frame viejo.
-    setPosando(true);
+  const submitName = async () => {
+    if (!ready) return;
+    const n = name.trim();
+    // Pose first, photo after. The 450ms give Rive time to finish the
+    // transition: capturing it on the same tick returns the old frame.
+    setPosing(true);
     await new Promise((r) => setTimeout(r, 450));
     saveAgentName(n);
-    setNombre(n);
-    setFestejos((f) => f + 1);
-    setPaso("negocio");
-    // El bautizo se guarda ACA, cuando pasa, y no al final del onboarding.
-    // Cuando el ultimo paso se volvio obligatorio (elegir canal), el nombre se
-    // quedaba en el browser hasta el final: el agente pasaba por todo el
-    // pairing de Telegram sin saber como se llamaba, su bot seguia con el
-    // nombre viejo, y si el cliente abandonaba ahi el bautizo se perdia.
-    const foto = capturaDelAgentito();
-    setPosando(false);
-    guardarIdentidad(cfg, { nombre: n, look, ...foto })
-      .catch(() => { /* adapter viejo o caido: queda la copia del browser */ });
+    setName(n);
+    setCelebrations((f) => f + 1);
+    setStep("business");
+    // The name gets saved HERE, when it happens, not at the end of
+    // onboarding. When the last step became mandatory (picking a channel),
+    // the name used to sit in the browser until the very end: the agent went
+    // through the whole Telegram pairing without knowing its own name, its
+    // bot kept the old one, and if the client abandoned the flow there the
+    // name was lost.
+    const photo = agentitoCapture();
+    setPosing(false);
+    saveIdentity(cfg, { name: n, look, ...photo })
+      .catch(() => { /* old or down adapter: the browser's copy stays */ });
   };
 
-  /** Paso 2 → presentación. La web se manda ACÁ y no al final: mientras el
-   *  cliente lee la presentación, el agente ya está leyendo su sitio.
+  /** Step 2 -> overview. The site gets sent HERE and not at the end: while the
+   *  client reads the overview, the agent is already reading their site.
    *
-   *  En el alta de equipo la presentación no existe, así que el brief se manda
-   *  igual y se pasa derecho a la pregunta del canal. */
-  const contarme = () => {
-    const e = empresa.trim();
+   *  On team hiring the overview doesn't exist, so the brief still gets sent
+   *  and it goes straight to the channel question. */
+  const submitCompany = () => {
+    const e = company.trim();
     if (!e) return;
-    guardarIdentidad(cfg, {
-      empresa: e,
+    saveIdentity(cfg, {
+      company: e,
       ...(url.trim() ? { url: url.trim() } : {}),
-    }).catch(() => { /* adapter viejo o caído: el portal sigue */ });
-    setPaso(equipo ? "aviso" : "presentacion");
+    }).catch(() => { /* old or down adapter: the portal carries on */ });
+    setStep(team ? "notify" : "overview");
   };
 
-  /** El mismo pedido que deja la pestaña Conexiones —mismo helper, mismo
-   *  ticket bloqueado de entrada— con el dato que el cliente acaba de dar.
+  /** The same request the Connections tab leaves -- same helper, same ticket
+   *  blocked from the start -- with the info the client just gave.
    *
-   *  EL TÍTULO SALE DEL CATÁLOGO, igual que allá (`Conectar ${label}`), y no de
-   *  una constante escrita acá. Es lo único con lo que Conexiones reconoce que
-   *  ya lo pediste: comparaba su label contra el título del ticket, y como el
-   *  alta escribía "Conectar el correo de la empresa" y el catálogo dice
-   *  "Correo de la empresa", no matcheaba — la clienta que lo pedía en el alta
-   *  entraba a Conexiones, veía "Sin conectar" y lo volvía a pedir. */
-  const pedirConexion = (id: "whatsapp" | "correo" | "telegram") => {
-    const label = conexionDe(id)?.label
-      ?? (id === "whatsapp" ? "WhatsApp" : id === "correo" ? "Correo de la empresa" : "Telegram");
-    const detalle = id === "whatsapp"
-      ? `Número: ${tel.trim()}\n\n` +
+   *  THE TITLE COMES FROM THE CATALOG, same as there (`Conectar ${label}`),
+   *  not from a constant written here. It's the only thing Connections uses
+   *  to recognize you already requested it: it used to compare its own label
+   *  against the ticket's title, and since onboarding wrote "Conectar el
+   *  correo de la empresa" while the catalog says "Correo de la empresa", it
+   *  never matched -- the client who requested it in onboarding went to
+   *  Connections, saw "Sin conectar", and requested it again. */
+  const requestConnection = (id: "whatsapp" | "email" | "telegram") => {
+    const label = connectionOf(id)?.label
+      ?? (id === "whatsapp" ? "WhatsApp" : id === "email" ? "Correo de la empresa" : "Telegram");
+    const detail = id === "whatsapp"
+      ? `Número: ${phone.trim()}\n\n` +
         `Vía oficial (Cloud API): pide verificación de la empresa ante Meta y ` +
         `la tramitamos nosotros.`
-      : id === "correo"
+      : id === "email"
         ? `Casilla: ${mail.trim()}\n\n` +
           `Hay que conectar la casilla de la empresa (IMAP/SMTP) para que el ` +
           `agente pueda escribir desde ahí.`
         : `Todavía no tiene un bot de Telegram propio: hay que crearlo y pasarle ` +
           `el link para que le mande el primer mensaje.`;
-    crearPedidoDeConexion(cfg, {
+    createConnectionRequest(cfg, {
       title: `Conectar ${label}`,
-      cuerpo:
+      body:
         `Lo pidió en el alta del portal, cuando eligió por dónde quiere que le avise.\n` +
-        detalle +
+        detail +
         `\n\nNo hagas nada por tu cuenta con esto: avisale al equipo de tuagente ` +
         `que hay que conectarlo y dejá el ticket esperando.`,
-    }).catch(() => { /* si no se pudo anotar, el alta no se traba por eso */ });
+    }).catch(() => { /* if it couldn't be recorded, onboarding doesn't get stuck over it */ });
   };
 
-  /** El paso del aviso, resuelto donde se decide y no al final del onboarding.
+  /** The notify step, resolved where it's decided and not at the end of onboarding.
    *
-   *  Es la misma lección que el bautizo: guardarlo recién en la última pantalla
-   *  significaba perderlo si el cliente cerraba antes — y encima solo se
-   *  guardaba si había pasado por el bautismo, así que el que entraba desde
-   *  otra máquina a un agente YA bautizado elegía canal y no se guardaba nunca.
+   *  Same lesson as naming: saving it only on the last screen meant losing it
+   *  if the client closed before that -- and on top of it, it only saved if
+   *  they'd gone through naming, so whoever entered from another machine into
+   *  an ALREADY-named agent picked a channel that never got saved.
    *
-   *  Lo que NO se manda: `whatsapp` como canal de aviso. El adapter solo acepta
-   *  telegram/correo/ninguno (`CANALES_AVISO`), y mandarle otra cosa hace
-   *  fallar la llamada entera. Mientras el kit no lo agregue, WhatsApp vive
-   *  como pedido —un ticket, igual que en Conexiones— y no como canal.
+   *  What does NOT get sent: `whatsapp` as a notify channel. The adapter only
+   *  accepts telegram/email/none, and sending anything else fails the whole
+   *  call. Until the kit adds it, WhatsApp lives as a request -- a ticket,
+   *  same as in Connections -- and not as a channel.
    *
-   *  Y SIEMPRE SE GUARDA ALGO. Antes solo se anotaba el "ninguno" de dos de las
-   *  cuatro respuestas: elegir WhatsApp, o correo con un mail inválido, no
-   *  escribía nada, así que el manifiesto quedaba en `aviso: null` —
-   *  indistinguible de un cliente que nunca llegó a contestar— y la franja que
-   *  le recuerda que le falta un canal no le aparecía nunca. Justo a la que
-   *  eligió WhatsApp, que es la que más tiempo va a estar sin canal. */
-  const seguirDesdeAviso = () => {
-    const contacto = canalReal === "telegram"
-      ? { canal: "telegram" as const, valor: "portal" }
-      : canalReal === "correo"
-        ? { canal: "correo" as const, valor: mail.trim() }
-        // No quedó ningún canal que funcione, sin importar cuál eligió: se
-        // guarda EXPLÍCITO. Es el dato que le permite al portal volver a
-        // ofrecerlo adentro y al agente saber que no tiene dónde escribir.
-        : { canal: "ninguno" as const };
-    if (contestoAlgo) {
-      guardarIdentidad(cfg, { contacto })
-        .catch(() => { /* adapter viejo o caído: el portal sigue */ });
+   *  AND SOMETHING ALWAYS GETS SAVED. It used to only record "none" for two of
+   *  the four answers: picking WhatsApp, or email with an invalid address,
+   *  wrote nothing, so the manifest stayed at `notify_channel: null` --
+   *  indistinguishable from a client who never got to answer -- and the
+   *  banner reminding them they're missing a channel never showed up. Right
+   *  for the one who picked WhatsApp, who's the one who'll go longest with no
+   *  channel. */
+  const continueFromNotify = () => {
+    const contact = realChannel === "telegram"
+      ? { channel: "telegram" as const, value: "portal" }
+      : realChannel === "email"
+        ? { channel: "email" as const, value: mail.trim() }
+        // No channel that actually works came out of this, no matter which
+        // one they picked: it gets saved EXPLICITLY. It's what lets the
+        // portal offer it again inside, and lets the agent know it has
+        // nowhere to write.
+        : { channel: "none" as const };
+    if (answeredSomething) {
+      saveIdentity(cfg, { contact })
+        .catch(() => { /* old or down adapter: the portal carries on */ });
     }
-    // Qué quedó en trámite, para que la franja de adentro no le hable como si
-    // no hubiera dicho nada. Es solo el TEXTO: quién muestra la franja lo
-    // decide el manifiesto, que es de donde sale la verdad.
-    recordarTramite(pedidoDeConexion);
-    if (pedidoDeConexion) pedirConexion(pedidoDeConexion);
-    // En el alta de equipo esta era la última pregunta: el cliente ya eligió a
-    // alguien y ya esperó a que llegara, y el carrusel de automatizaciones le
-    // ofrecería armar un flujo con un agente que todavía no conoce. Entra al
-    // portal, que es donde está su equipo.
-    if (equipo) { terminar(); return; }
-    setPaso("automatizaciones");
+    // What stayed in progress, so the inside banner doesn't talk to them as
+    // if they'd said nothing. It's just the TEXT: who shows the banner is
+    // decided by the manifest, which is where the truth comes from.
+    rememberChannelInProgress(connectionRequest);
+    if (connectionRequest) requestConnection(connectionRequest);
+    // On team hiring this was the last question: the client already picked
+    // someone and already waited for them to arrive, and the automations
+    // carousel would offer to build a flow with an agent they don't know yet.
+    // They enter the portal, which is where their team is.
+    if (team) { finish(); return; }
+    setStep("automations");
   };
 
-  /** Cierra el onboarding y deja al cliente donde iba.
+  /** Closes onboarding and leaves the client where they were headed.
    *
-   *  Sin destino explícito manda a donde APUNTABA EL LINK con el que entró, y
-   *  recién si no venía a nada concreto, al inicio. */
-  const terminar = (destino?: string) => {
-    const n = nombre.trim();
+   *  With no explicit destination it sends them to wherever the LINK THEY
+   *  ENTERED WITH pointed, and only if it wasn't pointing anywhere specific,
+   *  to home. */
+  const finish = (destination?: string) => {
+    const n = name.trim();
     onDone(n);
-    // Navegación DURA a propósito. Con router.push, al cerrar el onboarding se
-    // montaba la página de /app —que hace replace("/app/inicio") en un efecto—
-    // y se comía el destino: "Armar el primero" terminaba en Inicio. Esto pasa
-    // una vez en la vida del cliente; un reload de más es barato al lado de un
-    // llamado a la acción que no lleva a ningún lado.
-    window.location.assign(destino ?? destinoDelLink ?? "/app/inicio");
+    // A HARD navigation on purpose. With router.push, closing onboarding
+    // mounted the /app page -- which does replace("/app/home") in an effect
+    // -- and swallowed the destination: "Build the first one" ended up on
+    // Home. This happens once in a client's lifetime; one extra reload is
+    // cheap next to a call to action that leads nowhere.
+    window.location.assign(destination ?? linkDestination ?? "/app/home");
   };
 
-  // La pestaña Aprobaciones es condicional (existe cuando hay algo esperando),
-  // pero acá se presenta la CAPACIDAD, no la pestaña: si hay tablero, hay
-  // compuerta de aprobación — y es la promesa que más confianza construye.
-  const puntos = PUNTOS.filter((p) =>
+  // The Approvals tab is conditional (it exists when something's waiting),
+  // but here the CAPABILITY gets presented, not the tab: if there's a board,
+  // there's an approval gate -- and it's the promise that builds the most trust.
+  const points = POINTS.filter((p) =>
     p.key === "approvals" ? manifest.modules.kanban : manifest.modules[p.key]);
 
   return (
     <main className="app-shell flex min-h-screen items-center justify-center bg-surface px-6 py-12">
       <div className="flex w-full max-w-2xl flex-col items-center text-center">
-        {/* Lo primero que un cliente ve de tuagente: el título es la tesis del
-            producto, y convierte el bautismo en lo que es — darle nombre a
-            alguien que se suma al equipo. */}
-        {paso === "negocio" && (
+        {/* The first thing a client sees of tuagente: the title is the
+            product's thesis, and it turns naming into what it really is --
+            giving a name to someone joining the team. */}
+        {step === "business" && (
           <div className="mb-8 animate-fadeup">
             <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
               Ahora contame de vos
@@ -544,7 +561,7 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
             </p>
           </div>
         )}
-        {paso === "presentacion" && (
+        {step === "overview" && (
           <div className="mb-8 animate-fadeup">
             <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
               Así vamos a trabajar
@@ -555,7 +572,7 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
             </p>
           </div>
         )}
-        {paso === "charla" && (
+        {step === "chat" && (
           <div className="mb-6 animate-fadeup">
             <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
               Ya estamos
@@ -566,7 +583,7 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
             </p>
           </div>
         )}
-        {paso === "automatizaciones" && (
+        {step === "automations" && (
           <div className="mb-8 animate-fadeup">
             <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
               ¿Qué te saco de encima?
@@ -578,7 +595,7 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
             </p>
           </div>
         )}
-        {paso === "aviso" && (
+        {step === "notify" && (
           <div className="mb-8 animate-fadeup">
             <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
               ¿Por dónde te aviso?
@@ -589,7 +606,7 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
             </p>
           </div>
         )}
-        {paso === "bautismo" && (
+        {step === "naming" && (
           <div className="mb-10 animate-fadeup">
             <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
               Tu empresa tiene un empleado nuevo
@@ -602,22 +619,22 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
         )}
         <div
           className={`relative transition-all duration-500 ${
-            paso === "bautismo" ? "h-40 w-40" : paso === "charla" ? "h-16 w-16" : "h-28 w-28"
+            step === "naming" ? "h-40 w-40" : step === "chat" ? "h-16 w-16" : "h-28 w-28"
           }`}
         >
-          {/* Si le pasó la web, el agentito no está quieto: la está leyendo de
-              verdad — el adapter ya creó el ticket del brief. El gesto no es
-              decorativo, muestra lo que está pasando. */}
+          {/* If it was handed the site, the agentito isn't idle: it's really
+              reading it -- the adapter already created the brief's ticket.
+              The gesture isn't decorative, it shows what's actually happening. */}
           <AgentitoRive
-            festejos={festejos}
+            celebrations={celebrations}
             look={look}
-            estado={posando ? "normal" : leyendoWeb ? gesto : "tranquilo"}
+            state={posing ? "normal" : readingWeb ? gesture : "calm"}
             className="h-full w-full"
           />
-          {/* El dado vive pegado al personaje: cambia SU pinta, no la página. */}
-          {paso === "bautismo" && (
+          {/* The dice lives glued to the character: it changes ITS look, not the page. */}
+          {step === "naming" && (
             <button
-              onClick={otroLook}
+              onClick={anotherLook}
               title="Otro look"
               aria-label="Otro look"
               className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white shadow-soft transition hover:scale-105 hover:bg-black/[0.03] active:scale-95"
@@ -627,52 +644,54 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
           )}
         </div>
 
-        {/* "¡Hola! Soy ____" en la voz del agente es ambiguo a secas: un campo
-            de nombre debajo de una cara no tiene sujeto, y completarlo se
-            siente como presentarse uno mismo. Se resuelve con dos cosas y no
-            con la redaccion:
-            1. El PLACEHOLDER trae un nombre puesto. Con un nombre adentro, el
-               campo se lee como "acá va un nombre para él" sin explicar nada.
-               Sale al azar de una lista: que justo caiga el nombre del cliente
-               es lo bastante improbable como para no preocuparnos.
-            2. Antes de esta pantalla va a haber un login donde el cliente ya
-               puso SU nombre — cuando llega acá, la pregunta de quién es quién
-               ya está contestada. (Pendiente: ese login todavía no existe.) */}
-        {/* "¡Hola! Soy X" SOLO en el bautizo. Repetirlo después es presentarse
-            de nuevo con alguien que ya te puso el nombre dos pantallas atrás:
-            se lee como si no se acordara. En el resto va el nombre solo, y lo
-            que dice qué está pasando es el h1 de arriba. */}
-        <h2 className={`mt-6 font-extrabold leading-tight tracking-tight text-ink ${paso === "charla" ? "sr-only" : "text-[32px] sm:text-[38px]"}`}>
-          {paso !== "bautismo" ? (
-            <span className="text-primary">{nombre}</span>
+        {/* "Hi! I'm ____" in the agent's voice is just plain ambiguous: a name
+            field under a face has no subject, and filling it in feels like
+            introducing yourself. It's solved with two things, not with
+            wording:
+            1. The PLACEHOLDER carries a name already. With a name already in
+               there, the field reads as "here's a name for it" without
+               explaining anything. It comes at random from a list: the odds
+               of it landing on the client's own name are low enough not to
+               worry about.
+            2. Before this screen there'll be a login where the client already
+               entered THEIR OWN name -- by the time they get here, the
+               question of who's who is already answered. (Pending: that login
+               doesn't exist yet.) */}
+        {/* "Hi! I'm X" ONLY during naming. Repeating it afterward is
+            introducing yourself again to someone who already gave you your
+            name two screens ago: it reads as if it forgot. Everywhere else
+            it's just the name, and what says what's happening is the h1 above. */}
+        <h2 className={`mt-6 font-extrabold leading-tight tracking-tight text-ink ${step === "chat" ? "sr-only" : "text-[32px] sm:text-[38px]"}`}>
+          {step !== "naming" ? (
+            <span className="text-primary">{name}</span>
           ) : (
             <>
               ¡Hola! Soy{" "}
-              {paso === "bautismo" ? (
+              {step === "naming" ? (
                 <input
                   autoFocus
-                  value={nombre}
+                  value={name}
                   maxLength={24}
-                  onChange={(e) => setNombre(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && bautizar()}
-                  placeholder={sugerido}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitName()}
+                  placeholder={suggested}
                   aria-label="Nombre para tu agente"
                   className="inline-block w-[6.5em] max-w-[70vw] border-b-[3px] border-black/15 bg-transparent text-center text-[32px] font-extrabold tracking-tight text-primary outline-none transition placeholder:font-extrabold placeholder:text-ink-soft/35 focus:border-primary sm:text-[38px]"
                 />
               ) : (
-                <span className="text-primary">{nombre}</span>
+                <span className="text-primary">{name}</span>
               )}
             </>
           )}
         </h2>
 
-        {paso === "bautismo" ? (
+        {step === "naming" ? (
           <div className="mt-8">
-            <Btn disabled={!listo} onClick={bautizar}>
+            <Btn disabled={!ready} onClick={submitName}>
               Continuar <ArrowRight className="h-4 w-4" />
             </Btn>
           </div>
-        ) : paso === "negocio" ? (
+        ) : step === "business" ? (
           <div className="mt-6 w-full max-w-md animate-fadeup text-left">
             <label className="block text-[13px] font-semibold text-ink" htmlFor="ob-empresa">
               ¿Cómo se llama tu negocio?
@@ -680,10 +699,10 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
             <input
               id="ob-empresa"
               autoFocus
-              value={empresa}
+              value={company}
               maxLength={60}
-              onChange={(e) => setEmpresa(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && empresa.trim() && contarme()}
+              onChange={(e) => setCompany(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && company.trim() && submitCompany()}
               placeholder="Farmacia Artigas"
               className={`${inputCls} mt-1.5`}
             />
@@ -699,7 +718,7 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
               value={url}
               maxLength={200}
               onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && empresa.trim() && contarme()}
+              onKeyDown={(e) => e.key === "Enter" && company.trim() && submitCompany()}
               placeholder="farmaciaartigas.com.uy"
               className={`${inputCls} mt-1.5`}
             />
@@ -709,24 +728,24 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
             </p>
 
             <div className="mt-7 flex items-center gap-3">
-              <Btn disabled={!empresa.trim()} onClick={contarme}>
+              <Btn disabled={!company.trim()} onClick={submitCompany}>
                 Continuar <ArrowRight className="h-4 w-4" />
               </Btn>
             </div>
           </div>
-        ) : paso === "presentacion" ? (
+        ) : step === "overview" ? (
           <div className="animate-fadeup">
-            {puntos.length > 0 && (
+            {points.length > 0 && (
               <div className="mt-8 grid gap-x-5 gap-y-6 text-left sm:grid-cols-3">
-                {puntos.map((p) => {
+                {points.map((p) => {
                   const Icon = p.icon;
                   return (
                     <div key={p.key}>
-                      <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${p.tono}`}>
+                      <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-lg ${p.tone}`}>
                         <Icon className="h-4 w-4 text-ink" />
                       </div>
-                      <p className="text-sm font-bold text-ink">{p.titulo}</p>
-                      <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{p.texto}</p>
+                      <p className="text-sm font-bold text-ink">{p.title}</p>
+                      <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">{p.description}</p>
                     </div>
                   );
                 })}
@@ -734,17 +753,17 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
             )}
 
             <div className="mt-8">
-              <Btn onClick={() => setPaso("aviso")}>
+              <Btn onClick={() => setStep("notify")}>
                 Continuar <ArrowRight className="h-4 w-4" />
               </Btn>
             </div>
           </div>
-        ) : paso === "aviso" ? (
+        ) : step === "notify" ? (
           <div className="animate-fadeup">
-            {/* Es la ultima pregunta que hace EL AGENTE, y se lee como tal.
-                Tiene pantalla propia porque es lo que decide si el portal
-                sirve — un cliente de prueba lo dijo sin vueltas: "la hoja
-                espera que yo venga y yo no voy a venir". */}
+            {/* It's the last question THE AGENT asks, and it reads as such. It
+                gets its own screen because it's what decides whether the
+                portal is any use -- a test client said it plainly: "the sheet
+                is waiting for me to show up and I'm not going to". */}
             <div className="mx-auto mt-2 w-full max-w-md rounded-card border border-black/[0.07] bg-white p-5 text-left">
               <p className="text-[15px] font-bold text-ink">
                 ¿Por dónde te aviso cuando pase algo?
@@ -753,24 +772,24 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
                 Cuando algo necesite tu ok, o cuando anote algo tuyo y quiera confirmarlo.
                 Te escribo yo, no te llegan mails del sistema.
               </p>
-              {/* CUATRO RESPUESTAS, TODAS CON NOMBRE. La cuarta es "ahora no" y
-                  está al lado de las otras a propósito: es una respuesta, no
-                  una escapatoria escondida abajo. WhatsApp figura porque es lo
-                  que la mitad del país usa — y figura diciendo la verdad sobre
-                  lo que lleva, en vez de faltar y dejar a la clienta pensando
-                  que el producto no la entiende. */}
+              {/* FOUR ANSWERS, ALL NAMED. The fourth is "not now" and sits next
+                  to the others on purpose: it's an answer, not an escape hatch
+                  hidden at the bottom. WhatsApp is listed because it's what
+                  half the country uses -- and it's listed telling the truth
+                  about what it takes, instead of being missing and leaving the
+                  client thinking the product doesn't get her. */}
               <div className="mt-3 flex flex-wrap gap-2">
                 {([
                   ["telegram", "Telegram"],
                   ["whatsapp", "WhatsApp"],
-                  ["correo", "Correo"],
-                  ["ninguno", "Ahora no"],
+                  ["email", "Correo"],
+                  ["none", "Ahora no"],
                 ] as const).map(([k, label]) => (
                   <button
                     key={k}
-                    onClick={() => { setCanal(k); setPairErr(null); }}
+                    onClick={() => { setChannel(k); setPairErr(null); }}
                     className={`rounded-lg border px-3 py-2 text-[13px] font-semibold transition ${
-                      canal === k
+                      channel === k
                         ? "border-primary bg-c-violet/60 text-primary"
                         : "border-black/10 text-ink-soft hover:text-ink"
                     }`}
@@ -780,10 +799,11 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
                 ))}
               </div>
 
-              {/* Telegram se activa ACA, pero SOLO si este agente tiene bot.
-                  Sin bot no hay a quién escribirle: la caja del código quedaba
-                  ahí pidiendo algo que nunca iba a llegar. */}
-              {canal === "telegram" && !hayTelegram && (
+              {/* Telegram gets activated HERE, but ONLY if this agent has a
+                  bot. With no bot there's nobody to write to: the code box
+                  used to sit there asking for something that was never going
+                  to arrive. */}
+              {channel === "telegram" && !hasTelegram && (
                 <div className="mt-3">
                   <p className="text-[12.5px] leading-relaxed text-ink-soft">
                     Todavía no tengo un Telegram propio: el bot te lo creamos
@@ -793,16 +813,16 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
                   </p>
                 </div>
               )}
-              {canal === "telegram" && hayTelegram && (
-                pareado ? (
+              {channel === "telegram" && hasTelegram && (
+                paired ? (
                   <p className="mt-3 text-[13px] font-semibold text-c-green-ink">
                     Listo, ya nos hablamos por ahí.
                   </p>
                 ) : (
                   <div className="mt-3 flex flex-col gap-2">
-                    {enlaceBot && (
+                    {botLink && (
                       <a
-                        href={enlaceBot}
+                        href={botLink}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
@@ -810,27 +830,27 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
                         Abrir el chat conmigo
                       </a>
                     )}
-                    {/* El handle va TAMBIÉN escrito, no solo en el botón: si la
-                        llamada a conexiones falla, el paso vuelve a ser
-                        imposible. Y así se puede buscar a mano desde el
-                        teléfono, que es donde la gente tiene Telegram. */}
+                    {/* The handle is ALSO written out, not just in the button:
+                        if the connections call fails, the step goes back to
+                        impossible. And this way it can be searched by hand
+                        from the phone, which is where people have Telegram. */}
                     <p className="text-[12px] leading-snug text-ink-soft">
-                      {handleBot
-                        ? <>Buscame en Telegram como <span className="font-semibold text-ink">@{handleBot}</span> y mandame un hola. Te contesto con un código: pegalo acá.</>
+                      {botHandle
+                        ? <>Buscame en Telegram como <span className="font-semibold text-ink">@{botHandle}</span> y mandame un hola. Te contesto con un código: pegalo acá.</>
                         : <>Mandame un hola por Telegram. Te contesto con un código: pegalo acá.</>}
                     </p>
                     <div className="flex gap-2">
                       <input
-                        value={codigo}
-                        onChange={(e) => { setCodigo(e.target.value); setPairErr(null); }}
-                        onKeyDown={(e) => e.key === "Enter" && activarTelegram()}
+                        value={code}
+                        onChange={(e) => { setCode(e.target.value); setPairErr(null); }}
+                        onKeyDown={(e) => e.key === "Enter" && activateTelegram()}
                         placeholder="Código"
                         maxLength={16}
                         aria-label="Código de Telegram"
                         className={`${inputCls} w-36 font-mono uppercase`}
                       />
-                      <Btn size="sm" disabled={!codigo.trim() || activando} onClick={activarTelegram}>
-                        {activando ? "Activando…" : "Activar"}
+                      <Btn size="sm" disabled={!code.trim() || activating} onClick={activateTelegram}>
+                        {activating ? "Activando…" : "Activar"}
                       </Btn>
                     </div>
                     {pairErr && <p className="text-[12px] text-c-coral-ink">{pairErr}</p>}
@@ -838,14 +858,14 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
                 )
               )}
 
-              {/* WHATSAPP DICE LO QUE CUESTA Y NO SE OFRECE COMO SI FUERA UN
-                  BOTÓN. Lo que el kit tiene hoy son dos caminos: el oficial
-                  (Cloud API), que pide que Meta verifique a la empresa y lleva
-                  días, y un puente por QR que solo existe si se lo instalamos
-                  al agente y que puede hacer que le bloqueen el número. Ni uno
-                  ni otro es "apretar Conectar": ofrecerlo así fue lo que le
-                  devolvió un error de Python en la cara a una veterinaria. */}
-              {canal === "whatsapp" && (
+              {/* WHATSAPP SAYS WHAT IT COSTS AND ISN'T OFFERED AS IF IT WERE A
+                  BUTTON. What the kit has today are two paths: the official
+                  one (Cloud API), which needs Meta to verify the business and
+                  takes days, and a QR bridge that only exists if we install it
+                  on the agent and that can get the number blocked. Neither one
+                  is "press Connect": offering it that way is what threw a
+                  Python error in a vet clinic's face. */}
+              {channel === "whatsapp" && (
                 <div className="mt-3">
                   <p className="text-[12.5px] leading-relaxed text-ink-soft">
                     Por WhatsApp todavía no te puedo escribir solo. La vía que sirve
@@ -855,18 +875,18 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
                   </p>
                   <input
                     autoFocus
-                    value={tel}
-                    onChange={(e) => setTel(e.target.value)}
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
                     placeholder="099 123 456"
                     inputMode="tel"
                     maxLength={30}
                     aria-label="Tu número de WhatsApp"
                     className={`${inputCls} mt-2`}
                   />
-                  {/* El atajo se ofrece SOLO si existe en este agente. Ofrecer
-                      "Telegram en dos toques" a un agente sin bot es mandarla a
-                      una pantalla donde tampoco va a poder. */}
-                  {hayTelegram && (
+                  {/* The shortcut is offered ONLY if it exists on this agent.
+                      Offering "Telegram in two taps" to an agent with no bot
+                      sends her to a screen where she still can't do it either. */}
+                  {hasTelegram && (
                     <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
                       Mientras tanto, si querés que te avise desde hoy, Telegram se
                       activa acá en dos toques.
@@ -875,7 +895,7 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
                 </div>
               )}
 
-              {canal === "correo" && (
+              {channel === "email" && (
                 <div className="mt-3">
                   <input
                     autoFocus
@@ -885,12 +905,12 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
                     aria-label="Tu mail"
                     className={inputCls}
                   />
-                  {/* Honestidad: por mail NO te escribo todavia, SALVO que la
-                      casilla de la empresa ya esté conectada. El correo lo
-                      conectamos nosotros (necesita las claves de la casilla),
-                      asi que sin eso es un pedido y no una promesa. */}
+                  {/* Honesty: by mail I do NOT write to you yet, UNLESS the
+                      company's inbox is already connected. We connect the
+                      email ourselves (it needs the inbox's own credentials),
+                      so without that it's a request, not a promise. */}
                   <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
-                    {correoConectado
+                    {emailConnected
                       ? "La casilla de tu empresa ya está conectada: te escribo desde ahí."
                       : "Para escribirte por mail necesitamos conectar la casilla de la empresa, "
                         + "y eso lo hacemos nosotros. Dejanos tu dirección y te contactamos para "
@@ -899,9 +919,9 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
                 </div>
               )}
 
-              {/* Lo que se pierde, dicho una vez y sin dramatizar: no cambia lo
-                  que el agente hace, cambia quién avisa a quién. */}
-              {canal === "ninguno" && (
+              {/* What gets lost, said once and without drama: it doesn't
+                  change what the agent does, it changes who notifies whom. */}
+              {channel === "none" && (
                 <div className="mt-3">
                   <p className="text-[12.5px] leading-relaxed text-ink-soft">
                     Entonces no te escribo a ningún lado: lo que haga te va a estar
@@ -909,7 +929,7 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
                     cambia es que te enterás cuando venís, en vez de que te avise yo.
                   </p>
                   <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-soft">
-                    {hayTelegram
+                    {hasTelegram
                       ? "Cuando quieras prenderlo, está en Conexiones y son dos minutos."
                       : "Cuando quieras, entrá a Conexiones y pedilo desde ahí: lo dejamos andando nosotros y te avisamos."}
                   </p>
@@ -918,28 +938,29 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
             </div>
 
             <div className="mt-6 flex flex-col items-center gap-2">
-              <Btn disabled={!contestoAlgo} onClick={seguirDesdeAviso}>
+              <Btn disabled={!answeredSomething} onClick={continueFromNotify}>
                 Continuar <ArrowRight className="h-4 w-4" />
               </Btn>
-              {/* Qué va a pasar al tocar Continuar, dicho antes de tocarlo. Es
-                  el renglón que evita la sorpresa de la clienta que eligió algo,
-                  siguió, y recién adentro se enteró de que no le llegaba nada. */}
+              {/* What's going to happen on tapping Continue, said before
+                  tapping it. It's the line that spares the surprise of a
+                  client who picked something, continued, and only found out
+                  inside that nothing was going to reach her. */}
               <span className="max-w-sm text-[12px] leading-relaxed text-ink-soft">
-                {canal === ""
+                {channel === ""
                   ? "Elegí una, o tocá «Ahora no» si preferís verlo más adelante."
-                  : canalReal === "telegram"
+                  : realChannel === "telegram"
                     ? "Listo: te escribo por Telegram."
-                    : canalReal === "correo"
+                    : realChannel === "email"
                       ? "Listo: te escribo a esa dirección."
-                      : canal === "telegram"
-                        ? hayTelegram
+                      : channel === "telegram"
+                        ? hasTelegram
                           ? "Todavía no lo activaste: entrás sin avisos y lo terminás cuando quieras desde Conexiones."
                           : "Queda pedido: te lo dejamos andando y te avisamos. Mientras tanto entrás sin avisos."
-                        : canal === "whatsapp"
-                          ? telOk
+                        : channel === "whatsapp"
+                          ? phoneOk
                             ? "Queda pedido: te escribimos para conectarlo. Mientras tanto entrás sin avisos."
                             : "Dejanos el número, o seguí y lo vemos más adelante."
-                          : canal === "correo"
+                          : channel === "email"
                             ? mailOk
                               ? "Queda pedido: te escribimos para conectar la casilla. Mientras tanto entrás sin avisos."
                               : "Escribí tu dirección, o seguí y lo vemos más adelante."
@@ -950,36 +971,37 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
               </span>
             </div>
           </div>
-        ) : paso === "charla" ? (
+        ) : step === "chat" ? (
           <ChatOnboarding
             cfg={cfg}
-            pedido={pedido}
-            nombreAgente={nombre || "Tu agente"}
-            onListo={() => terminar()}
-            volviendoA={Boolean(destinoDelLink)}
+            request={prompt}
+            agentName={name || "Tu agente"}
+            onDone={() => finish()}
+            returningTo={Boolean(linkDestination)}
           />
         ) : (
           <div className="w-full animate-fadeup">
-            <CarruselEjemplos onElegir={(p) => { setPedido(p); setPaso("charla"); }} />
-            {/* Primaria a armar el primero: el objetivo del onboarding entero
-                es que el cliente salga con UNO andando, no que entre al portal.
-                "Ir al inicio" existe igual — obligarlo sería un peaje, y el
-                que quiere mirar antes de decidir tiene que poder. */}
+            <ExampleCarousel onPick={(p) => { setPrompt(p); setStep("chat"); }} />
+            {/* Primary is building the first one: the whole point of
+                onboarding is that the client walks away with ONE thing
+                running, not that they enter the portal. "Go to home" still
+                exists -- forcing it would be a toll, and whoever wants to
+                look around before deciding has to be able to. */}
             <div className="mt-7 flex flex-col items-center gap-3">
               <Btn onClick={() => {
-                setPedido(
+                setPrompt(
                   "Quiero que te encargues de algo que se repite en mi empresa. " +
                   "Proponeme dos o tres cosas que podrías hacer solo, de a una por " +
                   "vez, y armamos la que más me sirva.");
-                setPaso("charla");
+                setStep("chat");
               }}>
                 Contarle lo mío <ArrowRight className="h-4 w-4" />
               </Btn>
               <button
-                onClick={() => terminar()}
+                onClick={() => finish()}
                 className="text-[13px] font-semibold text-ink-soft underline-offset-4 transition hover:text-ink hover:underline"
               >
-                {destinoDelLink ? "Ahora no, llevame a lo que vine a ver" : "Ahora no, ir al inicio"}
+                {linkDestination ? "Ahora no, llevame a lo que vine a ver" : "Ahora no, ir al inicio"}
               </button>
             </div>
           </div>
@@ -989,85 +1011,86 @@ export default function Onboarding({ manifest, cfg, onDone, equipo }: {
   );
 }
 
-/* ── La otra mitad de dejar saltear el canal ─────────────────────────────── */
+/* ── The other half of letting the channel step be skipped ───────────────── */
 
-const AVISO_CANAL_KEY = "tuagente_canal_pospuesto";
-// Qué canal quedó EN TRÁMITE nuestro, para que la franja no le hable como si
-// no hubiera contestado nada. Es solo el texto: quién ve la franja lo decide el
-// manifiesto. Vive bajo el prefijo `tuagente_`, así que se borra al cambiar de
-// agente como todo lo demás.
-const AVISO_TRAMITE_KEY = "tuagente_canal_en_tramite";
+const CHANNEL_POSTPONED_KEY = "tuagente_channel_postponed";
+// Which channel is IN PROGRESS on our side, so the banner doesn't talk to
+// them as if they'd answered nothing. It's just the text: who sees the banner
+// is decided by the manifest. Lives under the `tuagente_` prefix, so it gets
+// wiped on an agent change like everything else.
+const CHANNEL_IN_PROGRESS_KEY = "tuagente_channel_in_progress";
 
-/** Qué le pedimos que conecte, si es que pidió algo. */
-export function recordarTramite(canal: "whatsapp" | "correo" | "telegram" | null) {
+/** What we asked them to connect, if they asked for anything. */
+export function rememberChannelInProgress(channel: "whatsapp" | "email" | "telegram" | null) {
   try {
-    if (canal) localStorage.setItem(AVISO_TRAMITE_KEY, canal);
-    else localStorage.removeItem(AVISO_TRAMITE_KEY);
-  } catch { /* modo privado: la franja cae al texto genérico, que es correcto igual */ }
+    if (channel) localStorage.setItem(CHANNEL_IN_PROGRESS_KEY, channel);
+    else localStorage.removeItem(CHANNEL_IN_PROGRESS_KEY);
+  } catch { /* private mode: the banner falls back to the generic text, which is still correct */ }
 }
 
-const EN_TRAMITE: Record<string, string> = {
+const IN_PROGRESS_MESSAGE: Record<string, string> = {
   whatsapp: "Estamos conectando tu WhatsApp; hasta que esté, lo que haga te espera acá.",
-  correo: "Estamos conectando la casilla de tu empresa; hasta que esté, lo que haga te espera acá.",
+  email: "Estamos conectando la casilla de tu empresa; hasta que esté, lo que haga te espera acá.",
   telegram: "Te estamos prendiendo el Telegram; hasta que esté, lo que haga te espera acá.",
 };
 
-/** El recordatorio de que todavía no hay por dónde avisarle.
+/** The reminder that there's still no channel to notify through.
  *
- *  Dejar entrar sin canal solo es honesto si el portal vuelve a ofrecerlo: si
- *  no, "después" es nunca y el cliente se queda con un agente que trabaja y no
- *  le avisa — que es exactamente lo que las dos clientas de prueba dijeron que
- *  las haría no pagar.
+ *  Letting them in with no channel is only honest if the portal offers it
+ *  again: otherwise "later" means never, and the client is left with an
+ *  agent that works and never tells them -- which is exactly what both test
+ *  clients said would keep them from paying.
  *
- *  Aparece cuando NO QUEDÓ NINGÚN CANAL QUE FUNCIONE, que el alta guarda como
- *  `aviso: "ninguno"` sin importar cuál eligió el cliente. Con adapters viejos
- *  el campo no viene y no se muestra nada: es preferible no recordar nada a
- *  recordarle algo a alguien que ya tiene su canal puesto. Se puede cerrar, y
- *  cerrarlo dura: el camino no se pierde porque Conexiones sigue estando. */
-export function AvisoSinCanal({ manifest }: { manifest: Manifest }) {
-  const [cerrado, setCerrado] = useState(true);
-  const [tramite, setTramite] = useState<string | null>(null);
+ *  Shows up when NO CHANNEL THAT ACTUALLY WORKS came out of onboarding, which
+ *  it saves as `notify_channel: "none"` no matter which one the client
+ *  picked. With old adapters the field doesn't arrive and nothing shows: it's
+ *  better to remind nobody than to remind someone who already has their
+ *  channel set. It can be dismissed, and dismissing it lasts: the path isn't
+ *  lost because Connections is still there. */
+export function NoChannelNotice({ manifest }: { manifest: Manifest }) {
+  const [closed, setClosed] = useState(true);
+  const [inProgress, setInProgress] = useState<string | null>(null);
   useEffect(() => {
     try {
-      setCerrado(localStorage.getItem(AVISO_CANAL_KEY) === "1");
-      setTramite(localStorage.getItem(AVISO_TRAMITE_KEY));
+      setClosed(localStorage.getItem(CHANNEL_POSTPONED_KEY) === "1");
+      setInProgress(localStorage.getItem(CHANNEL_IN_PROGRESS_KEY));
     } catch {
-      setCerrado(false);
+      setClosed(false);
     }
   }, []);
-  if (manifest.aviso !== "ninguno" || cerrado) return null;
-  const cerrar = () => {
-    setCerrado(true);
+  if (manifest.notify_channel !== "none" || closed) return null;
+  const close = () => {
+    setClosed(true);
     try {
-      localStorage.setItem(AVISO_CANAL_KEY, "1");
-    } catch { /* modo privado: vale para esta sesión */ }
+      localStorage.setItem(CHANNEL_POSTPONED_KEY, "1");
+    } catch { /* private mode: good for this session */ }
   };
-  // A dónde lleva: a lo que dejó pedido, si dejó algo; si no, al atajo de
-  // Telegram SOLO cuando este agente tiene bot; y si tampoco, a la pantalla
-  // entera, donde el camino real es pedirlo. Y el link no dice "elegir un
-  // canal": es la única vez que al cliente le aparecería la palabra que todo el
-  // flujo evitó a propósito.
-  const destino = tramite && EN_TRAMITE[tramite]
-    ? `/app/conexiones?conexion=${tramite}`
+  // Where it leads: to whatever it left requested, if it left something; if
+  // not, to the Telegram shortcut ONLY when this agent has a bot; and if not
+  // that either, to the whole screen, where the real path is to request it.
+  // And the link doesn't say "pick a channel": it's the one time the client
+  // would see the word the whole flow deliberately avoided.
+  const target = inProgress && IN_PROGRESS_MESSAGE[inProgress]
+    ? `/app/connections?connection=${inProgress}`
     : manifest.telegram_bot
-      ? "/app/conexiones?conexion=telegram"
-      : "/app/conexiones";
+      ? "/app/connections?connection=telegram"
+      : "/app/connections";
   return (
     <div className="border-b border-black/[0.07] bg-c-amber/25 px-6 py-2.5 md:px-8">
       <div className="mx-auto flex max-w-5xl items-center gap-3">
         <BellOff className="h-4 w-4 shrink-0 text-c-amber-ink" />
         <p className="min-w-0 flex-1 text-[13px] leading-snug text-c-amber-ink">
-          {(tramite && EN_TRAMITE[tramite])
+          {(inProgress && IN_PROGRESS_MESSAGE[inProgress])
             || "Todavía no tengo por dónde avisarte: lo que haga te espera acá hasta que entres."}{" "}
           <Link
-            href={destino}
+            href={target}
             className="font-semibold underline underline-offset-2"
           >
-            {tramite && EN_TRAMITE[tramite] ? "Ver cómo va" : "Decime por dónde te aviso"}
+            {inProgress && IN_PROGRESS_MESSAGE[inProgress] ? "Ver cómo va" : "Decime por dónde te aviso"}
           </Link>
         </p>
         <button
-          onClick={cerrar}
+          onClick={close}
           aria-label="Cerrar el aviso"
           title="Cerrar el aviso"
           className="shrink-0 rounded-lg p-1 text-c-amber-ink transition hover:bg-black/[0.05]"

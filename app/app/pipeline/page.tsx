@@ -1,12 +1,13 @@
 "use client";
 
-// Pipeline — kanban de tickets del agente (GET {adapter}/portal/tickets)
-// + detalle con comentarios (GET {adapter}/portal/tickets/{id}).
-// Ya no es solo de lectura: el cliente crea tickets, comenta y mueve estados.
-// GENÉRICO: títulos, tenants, estados, autores y eventos se muestran tal cual
-// llegan; cero parseo de dominio. La prosa larga del agente (descripción y
-// comentarios) viene en markdown y se dibuja con <Markdown> — el mismo renderer
-// del chat, con HTML sanitizado. Las cards del tablero quedan en texto plano.
+// Pipeline — kanban of the agent's tickets (GET {adapter}/portal/tickets)
+// + detail with comments (GET {adapter}/portal/tickets/{id}).
+// No longer read-only: the client creates tickets, comments, and moves
+// statuses. GENERIC: titles, tenants, statuses, authors and events are shown
+// exactly as they arrive; zero domain parsing. The agent's long prose
+// (description and comments) comes in markdown and is drawn with <Markdown>
+// -- the same renderer as the chat, with sanitized HTML. The board's cards
+// stay in plain text.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -34,12 +35,12 @@ import {
   approve,
   getTickets,
   getTicketDetail,
-  esElCliente,
-  esElSistema,
-  esFrenoPorConexion,
-  esPedidoDelCliente,
-  leerComentario,
-  rotuloAutor,
+  isTheClient,
+  isTheSystem,
+  isConnectionBlock,
+  isClientRequest,
+  readComment,
+  authorLabel,
   type PortalConfig,
   type Ticket,
   type TicketComment,
@@ -48,11 +49,11 @@ import {
 } from "../lib/agent";
 import { loadAgentName } from "../lib/onboarding";
 import {
-  COLUMNAS_TABLERO, columnaDeTarea, esEventoDeMaquina, estadoDeTarea, horaDe,
-  momentoDe, rotuloEvento, type ColumnaTarea, type Tono,
-} from "../lib/palabras";
+  BOARD_COLUMNS, columnForTask, isMachineEvent, taskStatus, timeOf,
+  momentOf, eventLabel, type TaskColumn, type Tone,
+} from "../lib/labels";
 import { AgentitoAvatar, loadAgentLook } from "../lib/agentito";
-import { CopiarLink, PARAM, abrirEnRuta, cerrarEnRuta, useParamRuta } from "../lib/rutas";
+import { CopyLink, PARAM, openInRoute, closeInRoute, useRouteParam } from "../lib/routes";
 import {
   Btn,
   Chip,
@@ -70,45 +71,46 @@ import { EntityChip } from "../lib/entities";
 import { RoleChip, useRoles } from "../lib/roles";
 
 const REFRESH_MS = 30_000;
-const SIN_TENANT = "__sin_tenant__"; // sentinel para tickets con tenant null
+const NO_TENANT = "__sin_tenant__"; // sentinel for tickets with a null tenant
 
-/* ── Autoría ─────────────────────────────────────────────────────────────── */
+/* ── Authorship ──────────────────────────────────────────────────────────── */
 
-/** Con qué firma el portal lo que escribe el cliente. */
-const AUTOR_PROPIO = "cliente";
+/** What the portal signs the client's own writing with. */
+const CLIENT_AUTHOR = "cliente";
 
-// QUIÉN ES EL CLIENTE Y CÓMO SE ROTULA UN AUTOR LO DECIDE `lib/agent.ts`, y
-// nadie más. Estaban acá, con su propio conjunto de autores propios y su propio
-// `rotuloAutor`, y las dos cosas se desincronizaron con la lib: `user` era el
-// cliente allá y no acá (el mismo renglón decía «user · Lo rechazaste»), y el
-// rótulo bueno —el que resuelve el nombre de un tercero— existía sólo en esta
-// pantalla mientras Aprobaciones, donde se autoriza, mostraba a un tercero como
-// si fuera el agente.
-const esPropio = esElCliente;
-const rotuloDe = (author: string) => rotuloAutor(author, loadAgentName() || "Tu agente");
+// WHO THE CLIENT IS AND HOW AN AUTHOR IS LABELED IS DECIDED BY `lib/agent.ts`,
+// and nobody else. They used to live here, with their own set of "own
+// authors" and their own `authorLabel`, and the two got out of sync with the
+// lib: `user` was the client over there and not here (the same line read
+// «user · Lo rechazaste»), and the good label -- the one that resolves a
+// third party's name -- existed only on this screen while Approvals, where
+// authorization happens, showed a third party as if it were the agent.
+const isOwn = isTheClient;
+const labelFor = (author: string) => authorLabel(author, loadAgentName() || "Tu agente");
 
-// Los eventos salen del diccionario único del portal (`lib/palabras.ts`): la
-// misma palabra en el historial, en Actividad y en el chat. Acá había una
-// tablita a medias y todo lo que no estaba salía crudo y en inglés —
-// "commented", "dependency_wait", "tip_scratch_workspace" — en el medio de una
-// pantalla en español.
-const rotuloEventoTicket = (kind: string) =>
-  rotuloEvento(kind, loadAgentName() || "Tu agente");
+// Events come from the portal's single dictionary (`lib/labels.ts`): the
+// same word in the history, in Activity, and in the chat. There used to be a
+// half-built table here, and anything not in it came out raw and in English
+// -- "commented", "dependency_wait", "tip_scratch_workspace" -- in the middle
+// of a Spanish-language screen.
+const ticketEventLabel = (kind: string) =>
+  eventLabel(kind, loadAgentName() || "Tu agente");
 
-/* ── Escrituras del portal ───────────────────────────────────────────────────
-   TODO: estas tres funciones DEBERÍAN GRADUARSE a ../lib/agent.ts, que es el
-   único punto de red del portal. Viven acá porque lib/ la está tocando otro
-   agente en paralelo. Al mover: son el mismo `post()` de la lib, con una
-   diferencia que vale la pena conservar — leen el `{error}` del cuerpo para
-   poder mostrárselo al cliente (la lib hoy tira solo el status). Contrato:
+/* ── Portal writes ────────────────────────────────────────────────────────
+   TODO: these three functions SHOULD GRADUATE to ../lib/agent.ts, which is
+   the portal's only network point. They live here because another agent is
+   touching lib/ in parallel. When moved: they're the same `post()` as the
+   lib, with one difference worth keeping -- they read the body's `{error}`
+   so it can be shown to the client (the lib today only throws the status).
+   Contract:
      POST /portal/tickets                {title, body?, tenant?} → {ok, id}
      POST /portal/tickets/{id}/comment   {body, author?}         → {ok}
      POST /portal/tickets/{id}/status    {status}                → {ok}
-   ────────────────────────────────────────────────────────────────────────── */
+   ──────────────────────────────────────────────────────────────────────── */
 
-type EstadoDestino = "done" | "blocked" | "ready" | "archived";
+type TargetStatus = "done" | "blocked" | "ready" | "archived";
 
-function describirError(e: unknown): string {
+function describeError(e: unknown): string {
   const status = (e as { status?: number } | null)?.status;
   if (status === 404) return "Tu agente todavía no expone esta acción (falta actualizarlo).";
   if (status === 401 || status === 403) return "Tu sesión venció: volvé a entrar con tu link.";
@@ -118,13 +120,13 @@ function describirError(e: unknown): string {
   return msg;
 }
 
-/* ── Tablero ─────────────────────────────────────────────────────────────── */
+/* ── Board ──────────────────────────────────────────────────────────────── */
 
-type ColKey = ColumnaTarea;
+type ColKey = TaskColumn;
 
-// De qué color es el puntito de cada columna. Esto sí lo decide la pantalla:
-// es pintura, no palabra.
-const PUNTO: Record<Tono, string> = {
+// What color each column's dot is. This one really is the screen's call:
+// it's paint, not a word.
+const DOT: Record<Tone, string> = {
   neutral: "bg-ink-soft/50",
   amber: "bg-c-amber-ink",
   violet: "bg-primary",
@@ -132,124 +134,126 @@ const PUNTO: Record<Tono, string> = {
   coral: "bg-c-coral-ink",
 };
 
-// CÓMO SE LLAMA UN ESTADO —Y CUÁLES SON LAS COLUMNAS— LO DICE `palabras.ts`.
-// Acá vivían las cinco palabras y el reparto, y de las cinco una era propia del
-// Tablero ("Lo estamos viendo"): Inicio contaba con otro reparto y con otro
-// nombre ("Frenadas", las dos clases juntas), y la prueba a ciegas leyó tres
-// nombres distintos para el mismo estado en tres pantallas. Ahora las cinco
-// salen de `COLUMNAS_TABLERO` y el reparto de `columnaDeTarea`, así que Inicio,
-// el Tablero, el chip del detalle y el visor de entidades no se pueden separar.
+// WHAT A STATUS IS CALLED -- AND WHAT THE COLUMNS ARE -- IS DECIDED BY
+// `palabras.ts`. The five words and the split used to live here, and one of
+// the five was specific to the Board ("Lo estamos viendo"): Home had its own
+// split and its own name ("Frenadas", both classes lumped together), and the
+// blind test read three different names for the same status on three
+// screens. Now all five come from `BOARD_COLUMNS` and the split from
+// `columnForTask`, so Home, the Board, the detail chip and the entity viewer
+// can't drift apart.
 const COLUMNS: { key: ColKey; label: string; dot: string }[] =
-  COLUMNAS_TABLERO.map((c) => ({ key: c.clave, label: c.label, dot: PUNTO[c.tono] }));
+  BOARD_COLUMNS.map((c) => ({ key: c.key, label: c.label, dot: DOT[c.tone] }));
 
-// La marca del pedido sólo desvía a los frenados: un pedido en curso o
-// terminado ya está en la columna que le corresponde, y ahí ninguna palabra
-// miente.
+// The request marker only redirects blocked ones: a request in progress or
+// finished is already in the column it belongs to, and there no word lies.
 const columnOf = (t: { status: string; body?: string | null }): ColKey =>
-  columnaDeTarea(t.status, esPedidoDelCliente(t.body));
+  columnForTask(t.status, isClientRequest(t.body));
 
-/** El cartel de un ticket: el estado, salvo cuando el que espera somos
- *  nosotros. Es lo que muestran la columna y el chip del detalle, para que el
- *  link a la tarea no diga otra cosa que el tablero. */
-const estadoDeTicket = (t: { status: string; body?: string | null }) =>
-  estadoDeTarea(t.status, esPedidoDelCliente(t.body));
+/** A ticket's banner: the status, except when we're the ones it's waiting
+ *  on. It's what the column and the detail chip show, so the link to the
+ *  task never says something different from the board. */
+const statusOf = (t: { status: string; body?: string | null }) =>
+  taskStatus(t.status, isClientRequest(t.body));
 
-// Transiciones que tienen sentido desde el estado actual. Archivar va aparte:
-// se ofrece siempre y con confirmación.
-type Transicion = { status: EstadoDestino; label: string; enCurso: string; icon: LucideIcon };
+// Transitions that make sense from the current status. Archiving is
+// separate: it's always offered, with confirmation.
+type Transition = { status: TargetStatus; label: string; inProgress: string; icon: LucideIcon };
 
-// APROBAR NO ES LA ACCIÓN DE TODO LO QUE ESTÁ FRENADO, y ofrecerla igual no es
-// gratis: aprobar es `unblock`, y un ticket tiene UN solo desbloqueo útil antes
-// de que el motor lo declare un loop y lo mande a `triage`, donde ya no se puede
-// aprobar nada. Sobre un pedido del propio cliente ("Conectar WhatsApp") además
-// larga al worker sobre un ticket cuyo cuerpo dice "no hagas nada por tu cuenta
-// con esto"; sobre un freno por una conexión que falta, la causa sigue ahí y el
-// agente lo vuelve a bloquear enseguida. Los dos casos van sin transición y con
-// una línea que dice dónde se resuelven. Ver `esFrenoPorConexion`.
-const sinAprobacion = (t: { status: string; body?: string | null }) =>
-  t.status === "blocked" && (esPedidoDelCliente(t.body) || esFrenoPorConexion(t.body));
+// APPROVING IS NOT THE ACTION FOR EVERYTHING THAT'S BLOCKED, and offering it
+// anyway isn't free: approving is `unblock`, and a ticket has ONE useful
+// unblock before the engine declares it a loop and sends it to `triage`,
+// where nothing can be approved anymore. On a request from the client
+// themselves ("Conectar WhatsApp") it also sets the worker loose on a ticket
+// whose body says "don't do anything on your own with this"; on a block from
+// a missing connection, the cause is still there and the agent blocks it
+// again right away. Both cases go without a transition and with a line
+// saying where they actually get resolved. See `isConnectionBlock`.
+const noApproval = (t: { status: string; body?: string | null }) =>
+  t.status === "blocked" && (isClientRequest(t.body) || isConnectionBlock(t.body));
 
-function transicionesDe(t: { status: string; body?: string | null }): Transicion[] {
+function transitionsFor(t: { status: string; body?: string | null }): Transition[] {
   if (t.status === "blocked") {
-    if (sinAprobacion(t)) return [];
-    // "Aprobar", igual que en la pestaña de Aprobaciones. Antes esta misma
-    // acción se llamaba "Desbloquear" acá, "Aprobar" allá y "se destraba" en
-    // la explicación: tres palabras para lo mismo, y el cliente sin saber si
-    // eran tres cosas distintas.
-    return [{ status: "ready", label: "Aprobar", enCurso: "Aprobando…", icon: Unlock }];
+    if (noApproval(t)) return [];
+    // "Aprobar", same as on the Approvals tab. This same action used to be
+    // called "Desbloquear" here, "Aprobar" there, and "se destraba" in the
+    // explanation: three words for the same thing, and the client with no
+    // way to know whether they were three different things.
+    return [{ status: "ready", label: "Aprobar", inProgress: "Aprobando…", icon: Unlock }];
   }
   if (t.status === "done")
-    return [{ status: "ready", label: "Reabrir", enCurso: "Reabriendo…", icon: RotateCcw }];
-  return [{ status: "done", label: "Marcar completado", enCurso: "Completando…", icon: Check }];
+    return [{ status: "ready", label: "Reabrir", inProgress: "Reabriendo…", icon: RotateCcw }];
+  return [{ status: "done", label: "Marcar completado", inProgress: "Completando…", icon: Check }];
 }
 
-// `created_at` llega del adapter como epoch en SEGUNDOS (int), aunque a veces
-// la lib lo tipa string. Quien lo lee es `momentoDe`, la puerta única del
-// portal: acepta las dos formas y devuelve el instante (`ms`, para ordenar) ya
-// leído en el reloj del negocio.
-const msDe = (v: string | number): number => momentoDe(v)?.ms ?? 0;
+// `created_at` arrives from the adapter as epoch in SECONDS (int), though the
+// lib sometimes types it as a string. Whoever reads it is `momentOf`, the
+// portal's single gate: it accepts both forms and returns the instant (`ms`,
+// for sorting) already read on the business's clock.
+const msOf = (v: string | number): number => momentOf(v)?.ms ?? 0;
 
-// Fecha relativa compacta; pasada una semana, fecha corta absoluta.
-// Lo relativo ("hace 3 h") se puede contar desde cualquier reloj; la fecha de
-// las viejas, no: se escribe en el del negocio, como el resto del portal.
-function fmtRelativa(v: string | number): string {
-  const m = momentoDe(v);
+// Compact relative date; past a week, a short absolute date.
+// The relative part ("3 h ago") can be counted from any clock; the date for
+// old ones can't: it's written in the business's, like the rest of the
+// portal.
+function formatRelative(v: string | number): string {
+  const m = momentOf(v);
   if (!m) return "";
   const min = Math.round((Date.now() - m.ms) / 60_000);
   if (min < 1) return "recién";
   if (min < 60) return `hace ${min} min`;
   const h = Math.round(min / 60);
   if (h < 24) return `hace ${h} h`;
-  const dias = Math.round(h / 24);
-  if (dias < 7) return dias === 1 ? "hace 1 día" : `hace ${dias} días`;
-  // El año también es el de allá: el 31/12 a las 23:30 del agente, mirado desde
-  // el norte, no puede quedar fechado en el año que viene.
-  const esteAnio = momentoDe(Date.now())?.anio;
-  return m.anio === esteAnio ? m.fecha : `${m.fecha} ${m.anio}`;
+  const days = Math.round(h / 24);
+  if (days < 7) return days === 1 ? "hace 1 día" : `hace ${days} días`;
+  // The year is also theirs: 12/31 at 23:30 on the agent's clock, looked at
+  // from up north, can't end up dated next year.
+  const thisYear = momentOf(Date.now())?.year;
+  return m.year === thisYear ? m.date : `${m.date} ${m.year}`;
 }
 
-// Búsqueda insensible a mayúsculas y tildes.
-function normalizar(s: string): string {
+// Search, insensitive to case and accents.
+function normalize(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-/** Cómo terminó (o por qué se frenó) el ticket, con lo que dejó escrito.
+/** How the ticket ended (or why it got blocked), with what it left in writing.
  *
- *  Hermes guarda el resumen y los entregables en el evento de cierre; el
- *  adapter los expone como `outcome`. Mostrarlo acá arriba es lo que evita el
- *  caso feo: un ticket que pasa de "creado" a "listo" sin que el cliente
- *  pueda saber qué se hizo ni dónde quedó. */
-function Resultado({ outcome, cfg, status }: {
+ *  Hermes stores the summary and the deliverables in the closing event; the
+ *  adapter exposes them as `outcome`. Showing it up here is what avoids the
+ *  ugly case: a ticket that goes from "created" to "done" with no way for the
+ *  client to know what was done or where it ended up. */
+function Outcome({ outcome, cfg, status }: {
   outcome: TicketOutcome; cfg: PortalConfig; status: string;
 }) {
-  const cerrado = outcome.kind === "completed";
-  // EL CARTEL NO PUEDE CONTRADECIR LO QUE EL CLIENTE ACABA DE HACER. El evento
-  // de bloqueo queda en el historial para siempre, así que un ticket ya
-  // aprobado seguía mostrando "POR QUÉ SE FRENÓ: Necesito tu aprobación
-  // explícita…" en la columna "Por hacer". El QA lo leyó como "se perdió mi
-  // ok". Si ya no está frenado, eso es historia, no estado: se cuenta en
-  // pasado y sin el tono de alerta.
-  const sigueFrenado = status === "blocked";
-  const Icono = cerrado ? CircleCheck : CirclePause;
-  const tono = cerrado
+  const closed = outcome.kind === "completed";
+  // THE BANNER CAN'T CONTRADICT WHAT THE CLIENT JUST DID. The block event
+  // stays in the history forever, so a ticket that was already approved kept
+  // showing "WHY IT GOT BLOCKED: I need your explicit approval…" in the "To
+  // do" column. QA read that as "my ok got lost". If it's no longer blocked,
+  // that's history, not status: it's told in the past tense and without the
+  // alert tone.
+  const stillBlocked = status === "blocked";
+  const Icon = closed ? CircleCheck : CirclePause;
+  const tone = closed
     ? "border-c-green bg-c-green/30 text-c-green-ink"
-    : sigueFrenado
+    : stillBlocked
       ? "border-c-amber bg-c-amber/30 text-c-amber-ink"
       : "border-black/[0.07] bg-black/[0.02] text-ink-soft";
-  // El payload del cierre trae `artifacts` sólo a veces (depende de cómo el
-  // agente haya completado). Por eso la fuente principal es el propio resumen:
-  // <Markdown> ya convierte las rutas del workspace en chips que abren el
-  // archivo, y acá abajo agregamos únicamente lo que el texto no nombró.
-  const enElTexto = (f: string) => (outcome.summary ?? "").includes(f.split("/").pop() ?? f);
-  const extra = (outcome.files ?? []).filter((f) => !enElTexto(f));
+  // The closing payload only brings `artifacts` sometimes (depends on how the
+  // agent completed it). That's why the main source is the summary itself:
+  // <Markdown> already turns workspace paths into chips that open the file,
+  // and down here we only add what the text didn't name.
+  const inText = (f: string) => (outcome.summary ?? "").includes(f.split("/").pop() ?? f);
+  const extra = (outcome.files ?? []).filter((f) => !inText(f));
   return (
     <EntityProvider cfg={cfg}>
-      <section className={`mt-6 rounded-xl border px-4 py-3 ${tono}`}>
+      <section className={`mt-6 rounded-xl border px-4 py-3 ${tone}`}>
         <h3 className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide">
-          <Icono className="h-3.5 w-3.5" />
-          {cerrado ? "Resultado" : sigueFrenado ? "Por qué se frenó" : "Estuvo frenada por esto"}
+          <Icon className="h-3.5 w-3.5" />
+          {closed ? "Resultado" : stillBlocked ? "Por qué se frenó" : "Estuvo frenada por esto"}
         </h3>
-        {!cerrado && !sigueFrenado && (
+        {!closed && !stillBlocked && (
           <p className="mb-1.5 text-[12px] font-medium text-c-green-ink">
             Ya la destrabaste — esto es lo que había pasado antes.
           </p>
@@ -273,15 +277,15 @@ function Resultado({ outcome, cfg, status }: {
   );
 }
 
-function FiltroTenant({ activo, onClick, children }: {
-  activo: boolean; onClick: () => void; children: string;
+function TenantFilter({ active, onClick, children }: {
+  active: boolean; onClick: () => void; children: string;
 }) {
   return (
     <button
       onClick={onClick}
-      aria-pressed={activo}
+      aria-pressed={active}
       className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition ${
-        activo
+        active
           ? "bg-ink text-white"
           : "bg-black/[0.05] text-ink-soft hover:bg-black/[0.08] hover:text-ink"
       }`}
@@ -291,7 +295,7 @@ function FiltroTenant({ activo, onClick, children }: {
   );
 }
 
-function Aviso({ children }: { children: ReactNode }) {
+function Notice({ children }: { children: ReactNode }) {
   return (
     <p className="rounded-lg border border-c-coral bg-c-coral/40 px-3 py-2 text-[13px] text-c-coral-ink">
       {children}
@@ -299,105 +303,106 @@ function Aviso({ children }: { children: ReactNode }) {
   );
 }
 
-function Etiqueta({ children, opcional }: { children: string; opcional?: boolean }) {
+function Label({ children, optional }: { children: string; optional?: boolean }) {
   return (
     <span className="mb-1.5 block text-[12px] font-semibold text-ink">
       {children}
-      {opcional && <span className="ml-1 font-normal text-ink-soft">(opcional)</span>}
+      {optional && <span className="ml-1 font-normal text-ink-soft">(opcional)</span>}
     </span>
   );
 }
 
-// Comentario todavía sin confirmar por el agente: se pinta igual que los
-// propios pero atenuado, y desaparece si el POST falla.
-type ComentarioLocal = TicketComment & { local: number };
+// A comment not yet confirmed by the agent: drawn the same as the client's
+// own but dimmed, and it disappears if the POST fails.
+type LocalComment = TicketComment & { local: number };
 
 export default function PipelinePage() {
   // The team, if this agent has one. Empty map on every agent running today.
   const roles = useRoles();
-  // La pinta del agente para el sello de sus comentarios (lazy: sin flash).
-  const [lookAgente] = useState(loadAgentLook);
+  // The agent's look for the stamp on its comments (lazy: no flash).
+  const [agentLook] = useState(loadAgentLook);
   const [cfg] = useState<PortalConfig | null>(() => loadConfig());
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cargando, setCargando] = useState(false);
-  const [ultima, setUltima] = useState<Date | null>(null);
-  const [tenant, setTenant] = useState<string | null>(null); // null = todos
-  const [busqueda, setBusqueda] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [tenant, setTenant] = useState<string | null>(null); // null = all
+  const [search, setSearch] = useState("");
 
-  // Detalle abierto: lo dice la URL (`?tarea=t_ab12`), no un estado local. Es
-  // un id y no el ticket entero para poder abrir uno recién creado que el
-  // tablero todavía no trajo, y para que el header del modal refleje el estado
-  // fresco que devuelve el detalle tras cada acción.
-  const abiertoId = useParamRuta(PARAM.tarea);
-  const [detalle, setDetalle] = useState<TicketDetail | null>(null);
-  const [detalleError, setDetalleError] = useState(false);
-  const [detalleCargando, setDetalleCargando] = useState(false);
-  const abiertoRef = useRef<string | null>(null); // el id vigente, sin esperar al render
+  // Open detail: decided by the URL (`?task=t_ab12`), not local state. It's
+  // an id and not the whole ticket so a just-created one the board hasn't
+  // brought yet can still be opened, and so the modal's header reflects the
+  // fresh status the detail returns after every action.
+  const openId = useRouteParam(PARAM.task);
+  const [detail, setDetail] = useState<TicketDetail | null>(null);
+  const [detailError, setDetailError] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const openIdRef = useRef<string | null>(null); // the current id, without waiting for a render
 
-  // Alta de ticket.
-  const [crearAbierto, setCrearAbierto] = useState(false);
-  const [nuevoTitulo, setNuevoTitulo] = useState("");
-  const [nuevoBody, setNuevoBody] = useState("");
-  const [nuevoTenant, setNuevoTenant] = useState("");
-  const [creando, setCreando] = useState(false);
-  const [crearError, setCrearError] = useState<string | null>(null);
+  // Ticket creation.
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newBody, setNewBody] = useState("");
+  const [newTenant, setNewTenant] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
-  // Comentarios.
-  const [borrador, setBorrador] = useState("");
-  const [comentando, setComentando] = useState(false);
-  const [pendientes, setPendientes] = useState<ComentarioLocal[]>([]);
-  const [comentarError, setComentarError] = useState<string | null>(null);
-  const seqLocal = useRef(0);
+  // Comments.
+  const [draft, setDraft] = useState("");
+  const [commenting, setCommenting] = useState(false);
+  const [pending, setPending] = useState<LocalComment[]>([]);
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const localSeq = useRef(0);
 
-  // Cambios de estado.
-  const [accionEnCurso, setAccionEnCurso] = useState<EstadoDestino | null>(null);
-  const [accionError, setAccionError] = useState<string | null>(null);
-  const [confirmarArchivo, setConfirmarArchivo] = useState(false);
-  const [verMaquina, setVerMaquina] = useState(false);
+  // Status changes.
+  const [actionInProgress, setActionInProgress] = useState<TargetStatus | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [showMachine, setShowMachine] = useState(false);
 
-  const enVuelo = useRef(false);
+  const inFlight = useRef(false);
 
-  const cargar = useCallback(async () => {
-    if (!cfg || enVuelo.current) return;
-    enVuelo.current = true;
-    setCargando(true);
+  const load = useCallback(async () => {
+    if (!cfg || inFlight.current) return;
+    inFlight.current = true;
+    setLoading(true);
     try {
       const res = await getTickets(cfg);
       setTickets(res.tickets);
       setError(null);
-      setUltima(new Date());
+      setLastUpdated(new Date());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      enVuelo.current = false;
-      setCargando(false);
+      inFlight.current = false;
+      setLoading(false);
     }
   }, [cfg]);
 
   useEffect(() => {
-    cargar();
-    const id = setInterval(cargar, REFRESH_MS);
+    load();
+    const id = setInterval(load, REFRESH_MS);
     return () => clearInterval(id);
-  }, [cargar]);
+  }, [load]);
 
-  // Detalle: devuelve lo leído para que quien escribe sepa si pudo confirmar.
-  // Descarta la respuesta si el cliente ya cerró o cambió de ticket.
-  const cargarDetalle = useCallback(
+  // Detail: returns what it read so the caller knows whether it could
+  // confirm. Discards the response if the client already closed it or
+  // switched tickets.
+  const loadDetail = useCallback(
     async (id: string): Promise<TicketDetail | null> => {
       if (!cfg) return null;
       try {
         const d = await getTicketDetail(cfg, id);
-        if (abiertoRef.current === id) {
-          setDetalle(d);
-          setDetalleError(false);
-          setDetalleCargando(false);
+        if (openIdRef.current === id) {
+          setDetail(d);
+          setDetailError(false);
+          setDetailLoading(false);
         }
         return d;
       } catch {
-        if (abiertoRef.current === id) {
-          setDetalleError(true);
-          setDetalleCargando(false);
+        if (openIdRef.current === id) {
+          setDetailError(true);
+          setDetailLoading(false);
         }
         return null;
       }
@@ -405,48 +410,51 @@ export default function PipelinePage() {
     [cfg],
   );
 
-  // Abrir y cerrar es NAVEGAR: cada tarea tiene su link y "atrás" la cierra.
-  const abrir = useCallback((id: string) => abrirEnRuta({ [PARAM.tarea]: id }), []);
-  const cerrar = useCallback(() => cerrarEnRuta(PARAM.tarea), []);
+  // Opening and closing is NAVIGATING: every task has its link and "back"
+  // closes it.
+  const openTask = useCallback((id: string) => openInRoute({ [PARAM.task]: id }), []);
+  const closeTask = useCallback(() => closeInRoute(PARAM.task), []);
 
-  // Todo lo que es "por ticket" se resetea cuando cambia el de la URL — que es
-  // el único lugar donde vive cuál está abierto. Va ANTES del efecto que trae
-  // el detalle: así `abiertoRef` ya apunta al nuevo id cuando la respuesta
-  // vuelve y decide si todavía se la está mirando.
+  // Everything "per ticket" resets when the URL's changes -- which is the
+  // only place where which one is open lives. Goes BEFORE the effect that
+  // fetches the detail: that way `openIdRef` already points at the new id by
+  // the time the response comes back and decides whether it's still being
+  // looked at.
   useEffect(() => {
-    abiertoRef.current = abiertoId;
-    setDetalle(null);
-    setDetalleError(false);
-    setDetalleCargando(abiertoId !== null);
-    setBorrador("");
-    setPendientes([]);
-    setComentarError(null);
-    setAccionError(null);
-    setAccionEnCurso(null);
-    setConfirmarArchivo(false);
-  }, [abiertoId]);
+    openIdRef.current = openId;
+    setDetail(null);
+    setDetailError(false);
+    setDetailLoading(openId !== null);
+    setDraft("");
+    setPending([]);
+    setCommentError(null);
+    setActionError(null);
+    setActionInProgress(null);
+    setConfirmArchive(false);
+  }, [openId]);
 
-  // El borrador del alta NO se limpia al cerrar: si el cliente cierra sin
-  // querer (click afuera), lo que escribió sigue ahí al volver a abrir.
-  const cerrarCrear = useCallback(() => {
-    setCrearAbierto(false);
-    setCrearError(null);
+  // The creation draft does NOT get cleared on close: if the client closes it
+  // by accident (a click outside), what they wrote is still there next time
+  // they open it.
+  const closeCreate = useCallback(() => {
+    setCreateOpen(false);
+    setCreateError(null);
   }, []);
 
   useEffect(() => {
-    if (abiertoId) cargarDetalle(abiertoId);
-  }, [abiertoId, cargarDetalle]);
+    if (openId) loadDetail(openId);
+  }, [openId, loadDetail]);
 
-  // Modales: cerrar con Escape y bloquear el scroll de fondo.
-  const hayModal = crearAbierto || abiertoId !== null;
+  // Modals: close on Escape and block the background scroll.
+  const hasModal = createOpen || openId !== null;
   useEffect(() => {
-    if (!hayModal) return;
+    if (!hasModal) return;
     const fn = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (crearAbierto) {
-        if (!creando) cerrarCrear();
+      if (createOpen) {
+        if (!creating) closeCreate();
       } else {
-        cerrar();
+        closeTask();
       }
     };
     window.addEventListener("keydown", fn);
@@ -455,162 +463,166 @@ export default function PipelinePage() {
       window.removeEventListener("keydown", fn);
       document.body.style.overflow = "";
     };
-  }, [hayModal, crearAbierto, creando, cerrar, cerrarCrear]);
+  }, [hasModal, createOpen, creating, closeTask, closeCreate]);
 
-  // Tenants presentes en los datos (nunca hardcodeados).
+  // Tenants present in the data (never hardcoded).
   const tenants = useMemo(() => {
     const set = new Set<string>();
-    let sinTenant = false;
+    let noTenant = false;
     for (const t of tickets ?? []) {
       if (t.tenant) set.add(t.tenant);
-      else sinTenant = true;
+      else noTenant = true;
     }
-    const lista = Array.from(set).sort((a, b) => a.localeCompare(b));
-    if (sinTenant) lista.push(SIN_TENANT);
-    return lista;
+    const list = Array.from(set).sort((a, b) => a.localeCompare(b));
+    if (noTenant) list.push(NO_TENANT);
+    return list;
   }, [tickets]);
 
-  const visibles = useMemo(() => {
-    const q = normalizar(busqueda.trim());
+  const visible = useMemo(() => {
+    const q = normalize(search.trim());
     return (tickets ?? []).filter((t) => {
-      if (tenant === SIN_TENANT && t.tenant) return false;
-      if (tenant && tenant !== SIN_TENANT && t.tenant !== tenant) return false;
-      if (q && !normalizar(t.title).includes(q)) return false;
+      if (tenant === NO_TENANT && t.tenant) return false;
+      if (tenant && tenant !== NO_TENANT && t.tenant !== tenant) return false;
+      if (q && !normalize(t.title).includes(q)) return false;
       return true;
     });
-  }, [tickets, tenant, busqueda]);
+  }, [tickets, tenant, search]);
 
-  const porColumna = useMemo(() => {
-    const m: Record<ColKey, Ticket[]> = { porHacer: [], curso: [], espera: [], nuestro: [], hechas: [] };
-    for (const t of visibles) m[columnOf(t)].push(t);
+  const byColumn = useMemo(() => {
+    const m: Record<ColKey, Ticket[]> = { todo: [], inProgress: [], waiting: [], ours: [], done: [] };
+    for (const t of visible) m[columnOf(t)].push(t);
     for (const k of Object.keys(m) as ColKey[]) {
-      m[k].sort((a, b) => msDe(b.created_at) - msDe(a.created_at));
+      m[k].sort((a, b) => msOf(b.created_at) - msOf(a.created_at));
     }
     return m;
-  }, [visibles]);
+  }, [visible]);
 
-  // La columna de los pedidos existe sólo si el cliente pidió algo alguna vez:
-  // en un agente recién instalado sería una quinta columna vacía para siempre.
-  // Se mira la lista COMPLETA y no la filtrada — si dependiera de la búsqueda,
-  // el tablero cambiaría de forma mientras el cliente escribe.
-  const hayPedidos = useMemo(
-    () => (tickets ?? []).some((t) => columnOf(t) === "nuestro"),
+  // The requests column only exists if the client has ever asked for
+  // something: on a freshly installed agent it would be a fifth column,
+  // empty forever. It looks at the FULL list, not the filtered one -- if it
+  // depended on the search, the board would change shape while the client
+  // types.
+  const hasRequests = useMemo(
+    () => (tickets ?? []).some((t) => columnOf(t) === "ours"),
     [tickets],
   );
 
-  // El detalle manda (trae el estado recién cambiado); si todavía no llegó,
-  // uso la card del tablero para pintar el modal sin esperar.
-  const abierto = useMemo<Ticket | null>(() => {
-    if (!abiertoId) return null;
-    return detalle?.ticket ?? (tickets ?? []).find((t) => t.id === abiertoId) ?? null;
-  }, [abiertoId, detalle, tickets]);
+  // The detail wins (it brings the just-changed status); if it hasn't
+  // arrived yet, the board's card is used to paint the modal without
+  // waiting.
+  const openTicket = useMemo<Ticket | null>(() => {
+    if (!openId) return null;
+    return detail?.ticket ?? (tickets ?? []).find((t) => t.id === openId) ?? null;
+  }, [openId, detail, tickets]);
 
-  /* ── Acciones ──────────────────────────────────────────────────────────── */
+  /* ── Actions ────────────────────────────────────────────────────────────── */
 
-  const crear = async () => {
-    if (!cfg || creando) return;
-    const title = nuevoTitulo.trim();
+  const create = async () => {
+    if (!cfg || creating) return;
+    const title = newTitle.trim();
     if (!title) return;
-    const body = nuevoBody.trim();
-    const tnt = nuevoTenant.trim();
-    setCreando(true);
-    setCrearError(null);
+    const body = newBody.trim();
+    const tnt = newTenant.trim();
+    setCreating(true);
+    setCreateError(null);
     try {
       const res = await createTicket(cfg, {
         title,
         ...(body ? { body } : {}),
         ...(tnt ? { tenant: tnt } : {}),
       });
-      setCrearAbierto(false);
-      setNuevoTitulo("");
-      setNuevoBody("");
-      setNuevoTenant("");
-      cargar(); // el tablero se pone al día por atrás
-      if (res?.id) abrir(res.id); // y abrimos el recién creado
+      setCreateOpen(false);
+      setNewTitle("");
+      setNewBody("");
+      setNewTenant("");
+      load(); // the board catches up in the background
+      if (res?.id) openTask(res.id); // and we open the just-created one
     } catch (e) {
-      setCrearError(describirError(e));
+      setCreateError(describeError(e));
     } finally {
-      setCreando(false);
+      setCreating(false);
     }
   };
 
-  const comentar = async () => {
-    if (!cfg || !abiertoId || comentando) return;
-    const body = borrador.trim();
+  const submitComment = async () => {
+    if (!cfg || !openId || commenting) return;
+    const body = draft.trim();
     if (!body) return;
-    const id = abiertoId;
-    const local = ++seqLocal.current;
-    setPendientes((p) => [
+    const id = openId;
+    const local = ++localSeq.current;
+    setPending((p) => [
       ...p,
-      { local, author: AUTOR_PROPIO, body, created_at: Math.floor(Date.now() / 1000) },
+      { local, author: CLIENT_AUTHOR, body, created_at: Math.floor(Date.now() / 1000) },
     ]);
-    setBorrador("");
-    setComentarError(null);
-    setComentando(true);
+    setDraft("");
+    setCommentError(null);
+    setCommenting(true);
     try {
-      await commentTicket(cfg, id, body, AUTOR_PROPIO);
-      // Releo el detalle para quedarme con el comentario tal como lo guardó el
-      // agente (timestamp y autor reales). Recién si eso vuelve bien saco el
-      // optimista; si la relectura falla, el comentario existe igual y lo dejo.
-      const d = await cargarDetalle(id);
-      if (d) setPendientes((p) => p.filter((c) => c.local !== local));
+      await commentTicket(cfg, id, body, CLIENT_AUTHOR);
+      // Re-read the detail to keep the comment as the agent actually stored it
+      // (real timestamp and author). Only once that comes back OK do we drop
+      // the optimistic one; if the re-read fails, the comment still exists
+      // and we leave it.
+      const d = await loadDetail(id);
+      if (d) setPending((p) => p.filter((c) => c.local !== local));
     } catch (e) {
-      setPendientes((p) => p.filter((c) => c.local !== local));
-      setBorrador((actual) => actual || body); // le devolvemos lo que escribió
-      setComentarError(describirError(e));
+      setPending((p) => p.filter((c) => c.local !== local));
+      setDraft((current) => current || body); // give back what they wrote
+      setCommentError(describeError(e));
     } finally {
-      setComentando(false);
+      setCommenting(false);
     }
   };
 
-  const cambiarEstado = async (status: EstadoDestino) => {
-    if (!cfg || !abiertoId || accionEnCurso) return;
-    const id = abiertoId;
-    const detalle = abierto;
-    // APROBAR NO ES DESTRABAR, aunque el botón diga lo mismo en las dos
-    // pestañas. `setTicketStatus(..., "ready")` termina en un `unblock` pelado:
-    // el ticket se libera y el agente se despierta SIN NINGÚN comentario de
-    // aprobación. Y el agente hace lo correcto con eso — no gasta plata porque
-    // alguien le sacó el freno sin decirle que sí—, así que cierra el pedido
-    // sin ejecutarlo y el cliente ve un "Aprobar" que no aprobó nada.
-    // Pasó: un pedido para generar 3 imágenes (US$0,135) se cerró sin hacerse.
-    // El endpoint de aprobaciones deja "Aprobado desde el portal" firmado antes
-    // de destrabar, que es lo que el agente busca. Es el mismo que usa la
-    // pestaña Aprobaciones: un solo camino para una sola palabra.
-    const esAprobacion = status === "ready" && detalle?.status === "blocked";
-    setAccionEnCurso(status);
-    setAccionError(null);
+  const changeStatus = async (status: TargetStatus) => {
+    if (!cfg || !openId || actionInProgress) return;
+    const id = openId;
+    const ticket = openTicket;
+    // APPROVING IS NOT UNBLOCKING, even though the button says the same thing
+    // on both tabs. `setTicketStatus(..., "ready")` ends up in a bare
+    // `unblock`: the ticket is freed and the agent wakes up with NO approval
+    // comment at all. And the agent does the right thing with that -- it
+    // doesn't spend money because someone released the block without saying
+    // yes -- so it closes the request without running it, and the client
+    // sees an "Approve" that approved nothing.
+    // It happened: a request to generate 3 images (US$0.135) got closed
+    // without being done. The approvals endpoint leaves "Aprobado desde el
+    // portal" signed before unblocking, which is what the agent looks for.
+    // It's the same one the Approvals tab uses: one path for one word.
+    const isApproval = status === "ready" && ticket?.status === "blocked";
+    setActionInProgress(status);
+    setActionError(null);
     try {
-      if (esAprobacion) await approve(cfg, id);
+      if (isApproval) await approve(cfg, id);
       else await setTicketStatus(cfg, id, status);
-      cargar();
-      if (status === "archived") cerrar(); // ya no está en el tablero
-      else await cargarDetalle(id);
-      setConfirmarArchivo(false);
+      load();
+      if (status === "archived") closeTask(); // no longer on the board
+      else await loadDetail(id);
+      setConfirmArchive(false);
     } catch (e) {
-      setAccionError(describirError(e));
+      setActionError(describeError(e));
     } finally {
-      setAccionEnCurso(null);
+      setActionInProgress(null);
     }
   };
 
   const wrap = "mx-auto max-w-6xl px-6 py-6 md:px-8";
 
-  if (!cfg) return <div className={wrap}><Spinner /></div>; // el layout muestra el login
+  if (!cfg) return <div className={wrap}><Spinner /></div>; // the layout shows the login
   if (tickets === null && error)
-    return <div className={wrap}><ErrorState message={error} onRetry={cargar} /></div>;
+    return <div className={wrap}><ErrorState message={error} onRetry={load} /></div>;
   if (tickets === null) return <div className={wrap}><Spinner /></div>;
 
-  // Historial más reciente primero, pase como pase del adapter.
-  const eventos = detalle
-    ? [...detalle.events].sort((a, b) => msDe(b.created_at) - msDe(a.created_at))
+  // Most recent history first, however the adapter sends it.
+  const events = detail
+    ? [...detail.events].sort((a, b) => msOf(b.created_at) - msOf(a.created_at))
     : [];
-  const comentarios: (TicketComment & { local?: number })[] = [
-    ...(detalle?.comments ?? []),
-    ...pendientes,
+  const comments: (TicketComment & { local?: number })[] = [
+    ...(detail?.comments ?? []),
+    ...pending,
   ];
-  const tenantsLibres = tenants.filter((t) => t !== SIN_TENANT);
-  const columnas = COLUMNS.filter((c) => c.key !== "nuestro" || hayPedidos);
+  const freeTenants = tenants.filter((t) => t !== NO_TENANT);
+  const columns = COLUMNS.filter((c) => c.key !== "ours" || hasRequests);
 
   return (
     <div className={wrap}>
@@ -619,28 +631,28 @@ export default function PipelinePage() {
         subtitle="Lo que tu agente tiene entre manos."
         actions={
           <>
-            {/* La hora del negocio, igual que el resto del portal: este sello
-                se lee CONTRA los datos de abajo ("actualizado 11:50" / "creada
-                hace 5 min"), así que en el reloj del que mira sería el único
-                número de la pantalla midiendo con otra vara. */}
-            {ultima && (
+            {/* The business's clock, same as the rest of the portal: this
+                stamp is read AGAINST the data below ("actualizado 11:50" /
+                "creada hace 5 min"), so on the viewer's clock it would be the
+                only number on the screen measuring with a different ruler. */}
+            {lastUpdated && (
               <span className="hidden text-xs tabular-nums text-ink-soft sm:inline">
-                Actualizado {horaDe(ultima.getTime())}
+                Actualizado {timeOf(lastUpdated.getTime())}
               </span>
             )}
             <div className="relative w-56">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft/60" />
               <input
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por título…"
                 className={`${inputCls} pl-8`}
               />
             </div>
-            <IconBtn label="Actualizar" disabled={cargando} onClick={cargar}>
-              <RefreshCw className={`h-4 w-4 ${cargando ? "animate-spin" : ""}`} />
+            <IconBtn label="Actualizar" disabled={loading} onClick={load}>
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </IconBtn>
-            <Btn onClick={() => setCrearAbierto(true)}>
+            <Btn onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" />
               Nueva tarea
             </Btn>
@@ -664,22 +676,22 @@ export default function PipelinePage() {
         <>
           {tenants.length > 0 && (
             <div className="mb-5 flex flex-wrap items-center gap-1.5">
-              <FiltroTenant activo={tenant === null} onClick={() => setTenant(null)}>
+              <TenantFilter active={tenant === null} onClick={() => setTenant(null)}>
                 Todos
-              </FiltroTenant>
+              </TenantFilter>
               {tenants.map((t) => (
-                <FiltroTenant
+                <TenantFilter
                   key={t}
-                  activo={tenant === t}
+                  active={tenant === t}
                   onClick={() => setTenant(tenant === t ? null : t)}
                 >
-                  {t === SIN_TENANT ? "Sin etiqueta" : t}
-                </FiltroTenant>
+                  {t === NO_TENANT ? "Sin etiqueta" : t}
+                </TenantFilter>
               ))}
             </div>
           )}
 
-          {visibles.length === 0 ? (
+          {visible.length === 0 ? (
             <EmptyState
               icon={SearchX}
               title="Ninguna tarea coincide"
@@ -688,25 +700,25 @@ export default function PipelinePage() {
           ) : (
             <div
               className={`grid items-start gap-4 md:grid-cols-2 ${
-                columnas.length === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4"
+                columns.length === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4"
               }`}
             >
-              {columnas.map((col) => (
+              {columns.map((col) => (
                 <section key={col.key} className="rounded-xl bg-black/[0.02] p-2">
-                  {/* UNA SOLA LÍNEA, SIEMPRE LA MISMA ALTURA. Con cinco
-                      columnas y la ventana entre ~1280 y ~1378 px, "Esperando
-                      aprobación" no entraba y se partía en dos renglones: esa
-                      cabecera medía 50 px contra 32 de las otras cuatro, la
-                      fila de encabezados quedaba desalineada y la primera
-                      tarjeta de esa columna arrancaba 18 px más abajo que las
-                      demás (medido el 13/8 con las columnas en 186 px). Alto
-                      fijo y el título recortado antes que partido; el rótulo
-                      entero queda en el `title`. */}
+                  {/* ONE LINE, ALWAYS THE SAME HEIGHT. With five columns and
+                      the window between ~1280 and ~1378 px, "Esperando
+                      aprobación" didn't fit and broke into two lines: that
+                      header measured 50 px against 32 for the other four, the
+                      header row ended up misaligned, and that column's first
+                      card started 18 px lower than the rest (measured on 8/13
+                      with the columns at 186 px). Fixed height, and the title
+                      gets truncated before it gets broken; the full label
+                      stays in the `title`. */}
                   <div className="flex h-8 items-center gap-1.5 px-2">
                     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${col.dot}`} />
-                    {/* `min-w-0` y nada de `flex-1`: el título se encoge sólo
-                        cuando hace falta y el número se queda pegado a él, como
-                        estaba, en vez de irse al borde derecho de la columna. */}
+                    {/* `min-w-0` and no `flex-1`: the title only shrinks when
+                        it needs to and the count stays stuck to it, as it
+                        was, instead of going to the column's right edge. */}
                     <h2
                       title={col.label}
                       className="min-w-0 truncate text-[12px] font-semibold tracking-tight text-ink"
@@ -714,17 +726,17 @@ export default function PipelinePage() {
                       {col.label}
                     </h2>
                     <span className="shrink-0 text-[12px] tabular-nums text-ink-soft">
-                      {porColumna[col.key].length}
+                      {byColumn[col.key].length}
                     </span>
                   </div>
-                  {porColumna[col.key].length === 0 ? (
+                  {byColumn[col.key].length === 0 ? (
                     <p className="px-2 py-3 text-center text-[12px] text-ink-soft">Sin tareas</p>
                   ) : (
                     <ul className="flex flex-col gap-1.5">
-                      {porColumna[col.key].map((t) => (
+                      {byColumn[col.key].map((t) => (
                         <li key={t.id}>
                           <button
-                            onClick={() => abrir(t.id)}
+                            onClick={() => openTask(t.id)}
                             aria-haspopup="dialog"
                             className="block w-full rounded-lg border border-black/[0.07] bg-white p-3 text-left transition hover:border-primary/40"
                           >
@@ -738,7 +750,7 @@ export default function PipelinePage() {
                               <RoleChip id={t.assignee} roles={roles} />
                               {t.tenant && <Chip tone="neutral">{t.tenant}</Chip>}
                               <span className="ml-auto text-[11px] text-ink-soft">
-                                {fmtRelativa(t.created_at)}
+                                {formatRelative(t.created_at)}
                               </span>
                             </div>
                           </button>
@@ -753,9 +765,9 @@ export default function PipelinePage() {
         </>
       )}
 
-      {/* ── Alta de ticket ─────────────────────────────────────────────── */}
-      {crearAbierto && (
-        <Modal onClose={() => !creando && cerrarCrear()}>
+      {/* ── Ticket creation ─────────────────────────────────────────────── */}
+      {createOpen && (
+        <Modal onClose={() => !creating && closeCreate()}>
           <div className="flex items-start justify-between gap-4 border-b border-black/[0.07] px-5 py-4">
             <div className="min-w-0">
               <h2 className="text-base font-bold leading-snug text-ink">Nueva tarea</h2>
@@ -763,30 +775,30 @@ export default function PipelinePage() {
                 Entra al tablero de tu agente como cualquier otro.
               </p>
             </div>
-            <IconBtn label="Cerrar" disabled={creando} onClick={cerrarCrear}>
+            <IconBtn label="Cerrar" disabled={creating} onClick={closeCreate}>
               <X className="h-4 w-4" />
             </IconBtn>
           </div>
 
           <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
             <label className="block">
-              <Etiqueta>Título</Etiqueta>
+              <Label>Título</Label>
               <input
                 autoFocus
-                value={nuevoTitulo}
-                onChange={(e) => setNuevoTitulo(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && crear()}
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && create()}
                 placeholder="Qué necesitás que haga"
                 className={inputCls}
               />
             </label>
 
             <label className="block">
-              <Etiqueta opcional>Descripción</Etiqueta>
+              <Label optional>Descripción</Label>
               <textarea
                 rows={5}
-                value={nuevoBody}
-                onChange={(e) => setNuevoBody(e.target.value)}
+                value={newBody}
+                onChange={(e) => setNewBody(e.target.value)}
                 placeholder="Contexto, links, criterios de listo…"
                 className={`${inputCls} resize-y`}
               />
@@ -794,17 +806,17 @@ export default function PipelinePage() {
             </label>
 
             <label className="block">
-              <Etiqueta opcional>Etiqueta</Etiqueta>
+              <Label optional>Etiqueta</Label>
               <input
                 list="pipeline-tenants"
-                value={nuevoTenant}
-                onChange={(e) => setNuevoTenant(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && crear()}
+                value={newTenant}
+                onChange={(e) => setNewTenant(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && create()}
                 placeholder="Un cliente, un área, un proyecto…"
                 className={inputCls}
               />
               <datalist id="pipeline-tenants">
-                {tenantsLibres.map((t) => (
+                {freeTenants.map((t) => (
                   <option key={t} value={t} />
                 ))}
               </datalist>
@@ -813,15 +825,15 @@ export default function PipelinePage() {
               </span>
             </label>
 
-            {crearError && <Aviso>No pude crear la tarea: {crearError}</Aviso>}
+            {createError && <Notice>No pude crear la tarea: {createError}</Notice>}
           </div>
 
           <div className="flex shrink-0 items-center justify-end gap-2 border-t border-black/[0.07] px-5 py-3">
-            <Btn kind="ghost" size="sm" disabled={creando} onClick={cerrarCrear}>
+            <Btn kind="ghost" size="sm" disabled={creating} onClick={closeCreate}>
               Cancelar
             </Btn>
-            <Btn kind="primary" size="sm" disabled={!nuevoTitulo.trim() || creando} onClick={crear}>
-              {creando ? (
+            <Btn kind="primary" size="sm" disabled={!newTitle.trim() || creating} onClick={create}>
+              {creating ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Creando…
@@ -834,30 +846,31 @@ export default function PipelinePage() {
         </Modal>
       )}
 
-      {/* ── Detalle ────────────────────────────────────────────────────── */}
-      {abiertoId && (
-        <Modal wide onClose={cerrar}>
+      {/* ── Detail ─────────────────────────────────────────────────────── */}
+      {openId && (
+        <Modal wide onClose={closeTask}>
           <div className="flex items-start justify-between gap-4 border-b border-black/[0.07] px-5 py-4">
             <div className="min-w-0">
-              {abierto ? (
+              {openTicket ? (
                 <>
-                  <h2 className="text-base font-bold leading-snug text-ink">{abierto.title}</h2>
+                  <h2 className="text-base font-bold leading-snug text-ink">{openTicket.title}</h2>
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    {/* El chip lo pone el mismo criterio que arma las columnas
-                        —incluidos los pedidos del cliente—, más lo que
-                        `estadoDeTarea` sabe de estados que no tienen columna:
-                        una archivada sale del tablero pero el link a su detalle
-                        sigue abriendo, y decía "En curso", que era mentira. */}
-                    <Chip tone={estadoDeTicket(abierto).tono}>
-                      {estadoDeTicket(abierto).label}
+                    {/* The chip is set by the same criteria that build the
+                        columns -- including the client's own requests --
+                        plus what `taskStatus` knows about statuses with no
+                        column: an archived one leaves the board but the link
+                        to its detail still opens, and it used to say "En
+                        curso" [In progress], which was a lie. */}
+                    <Chip tone={statusOf(openTicket).tone}>
+                      {statusOf(openTicket).label}
                     </Chip>
-                    {abierto.tenant && <Chip tone="neutral">{abierto.tenant}</Chip>}
+                    {openTicket.tenant && <Chip tone="neutral">{openTicket.tenant}</Chip>}
                     <span className="text-[11px] text-ink-soft">
-                      {fmtRelativa(abierto.created_at)}
+                      {formatRelative(openTicket.created_at)}
                     </span>
                   </div>
                 </>
-              ) : detalleError ? (
+              ) : detailError ? (
                 <h2 className="text-base font-bold leading-snug text-ink">
                   No encontré esa tarea
                 </h2>
@@ -866,101 +879,103 @@ export default function PipelinePage() {
               )}
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
-              <CopiarLink titulo="Copiar el link de esta tarea" />
-              <IconBtn label="Cerrar" onClick={cerrar}>
+              <CopyLink label="Copiar el link de esta tarea" />
+              <IconBtn label="Cerrar" onClick={closeTask}>
                 <X className="h-4 w-4" />
               </IconBtn>
             </div>
           </div>
 
-          {/* min-w-0: sin esto una tabla o un bloque de código ancho estira el
-              modal en vez de scrollear dentro de su propio contenedor. */}
+          {/* min-w-0: without this a table or a wide code block stretches
+              the modal instead of scrolling inside its own container. */}
           <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-            {/* El link se puso viejo: la tarea se archivó o se borró. Antes el
-                modal se quedaba en "Abriendo la tarea…" para siempre. */}
-            {!abierto && detalleError && (
+            {/* The link went stale: the task got archived or deleted. This
+                modal used to get stuck on "Abriendo la tarea…" forever. */}
+            {!openTicket && detailError && (
               <p className="text-sm leading-relaxed text-ink-soft">
                 Esa tarea ya no está en el tablero — puede que la hayan archivado o que el
                 link sea viejo. Cerrá esta ventana y vas a ver todo lo que hay hoy.
               </p>
             )}
-            {abierto?.body?.trim() ? (
-              <Markdown>{abierto.body}</Markdown>
-            ) : abierto ? (
+            {openTicket?.body?.trim() ? (
+              <Markdown>{openTicket.body}</Markdown>
+            ) : openTicket ? (
               <p className="text-sm text-ink-soft">Esta tarea no tiene descripción.</p>
             ) : null}
 
-            {/* Por qué el ticket quedó así. Sale del evento de cierre, no de
-                que el agente se haya acordado de comentar: un ticket cerrado
-                sin explicación es un ticket que el cliente no puede auditar. */}
-            {detalle?.outcome && abierto && (
-              <Resultado outcome={detalle.outcome} cfg={cfg} status={abierto.status} />
+            {/* Why the ticket ended up this way. Comes from the closing
+                event, not from the agent having remembered to comment: a
+                ticket closed with no explanation is a ticket the client can't
+                audit. */}
+            {detail?.outcome && openTicket && (
+              <Outcome outcome={detail.outcome} cfg={cfg} status={openTicket.status} />
             )}
 
             <h3 className="mb-2 mt-6 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
               Comentarios
             </h3>
-            {detalleCargando && !detalle ? (
+            {detailLoading && !detail ? (
               <Spinner />
-            ) : detalleError && !detalle ? (
+            ) : detailError && !detail ? (
               <p className="text-sm text-ink-soft">No pude cargar los comentarios.</p>
-            ) : comentarios.length > 0 ? (
+            ) : comments.length > 0 ? (
               <ul className="flex flex-col gap-3">
-                {comentarios.map((c, i) => {
-                  const propio = esPropio(c.author);
-                  const pendiente = c.local != null;
-                  // Firmado `cliente` no quiere decir que lo haya escrito él.
-                  // Rechazar y aprobar-con-corrección dejan en el ticket una
-                  // instrucción para la máquina ("RECHAZADO POR TU CLIENTE. No
-                  // hagas lo que pediste aprobar…") firmada como suya: acá se
-                  // veía en el globo violeta, arriba de "Vos". Se muestra qué
-                  // fue y las palabras del cliente, no el prompt.
+                {comments.map((c, i) => {
+                  const own = isOwn(c.author);
+                  const isPending = c.local != null;
+                  // Signed `cliente` doesn't mean the client wrote it.
+                  // Rejecting and approve-with-correction leave an
+                  // instruction for the machine in the ticket ("RECHAZADO POR
+                  // TU CLIENTE. No hagas lo que pediste aprobar…") signed as
+                  // theirs: this used to show up in the violet bubble, above
+                  // "Vos". What's shown is what it was and the client's own
+                  // words, not the prompt.
                   //
-                  // EL AUTOR VA SÍ O SÍ: sin él, el mismo filtro se le aplica a
-                  // los comentarios del AGENTE, y como de un rechazo sólo se
-                  // muestra el bloque del motivo —que un comentario del agente
-                  // no tiene—, cualquier cosa que él escriba arrancando con
-                  // "RECHAZADO POR TU CLIENTE." desaparecía entera de la
-                  // pantalla. Ver `leerComentario`.
-                  const { texto, rotulo } = leerComentario(c.body ?? "", c.author);
+                  // THE AUTHOR IS ALWAYS SHOWN: without it, the same filter
+                  // gets applied to the AGENT's comments, and since a
+                  // rejection only shows the reason block -- which an agent
+                  // comment doesn't have -- anything the agent writes that
+                  // starts with "RECHAZADO POR TU CLIENTE." disappeared
+                  // entirely from the screen. See `readComment`.
+                  const { text, label } = readComment(c.body ?? "", c.author);
                   return (
                     <li
                       key={c.local != null ? `l${c.local}` : `s${i}`}
-                      className={`flex min-w-0 items-start gap-2 ${propio ? "justify-end" : "justify-start"}`}
+                      className={`flex min-w-0 items-start gap-2 ${own ? "justify-end" : "justify-start"}`}
                     >
-                      {/* La carita del agente junto a SUS comentarios: el
-                          mismo sello estático del chat (Rive por comentario
-                          sería costo real en hilos largos). */}
-                      {!propio && !esElSistema(c.author) && (
-                        <AgentitoAvatar look={lookAgente} className="mt-0.5 h-7 w-7 shrink-0" />
+                      {/* The agent's face next to ITS OWN comments: the same
+                          static stamp as the chat (Rive per comment would be
+                          a real cost on long threads). */}
+                      {!own && !isTheSystem(c.author) && (
+                        <AgentitoAvatar look={agentLook} className="mt-0.5 h-7 w-7 shrink-0" />
                       )}
                       <div
                         className={`min-w-0 max-w-[85%] rounded-lg border px-3 py-2 ${
-                          propio
+                          own
                             ? "border-c-violet bg-c-violet/50"
                             : "border-black/[0.07] bg-black/[0.02]"
-                        } ${pendiente ? "opacity-60" : ""}`}
+                        } ${isPending ? "opacity-60" : ""}`}
                       >
                         <div className="flex items-baseline gap-2">
                           <span
                             className={`text-[12px] font-semibold ${
-                              propio ? "text-c-violet-ink" : "text-ink"
+                              own ? "text-c-violet-ink" : "text-ink"
                             }`}
                           >
-                            {rotuloDe(c.author)}
+                            {labelFor(c.author)}
                           </span>
-                          {rotulo && (
-                            <span className="text-[11px] font-medium text-ink-soft">{rotulo}</span>
+                          {label && (
+                            <span className="text-[11px] font-medium text-ink-soft">{label}</span>
                           )}
                           <span className="text-[11px] text-ink-soft">
-                            {pendiente ? "enviando…" : fmtRelativa(c.created_at)}
+                            {isPending ? "enviando…" : formatRelative(c.created_at)}
                           </span>
                         </div>
-                        {texto ? (
+                        {text ? (
                           <div className="mt-1 [&>div]:text-[13px]">
-                            <Markdown>{texto}</Markdown>
+                            <Markdown>{text}</Markdown>
                           </div>
-                        ) : rotulo ? null : (
+                        ) : label ? null : (
                           <p className="mt-1 text-sm text-ink-soft">(sin texto)</p>
                         )}
                       </div>
@@ -972,19 +987,19 @@ export default function PipelinePage() {
               <p className="text-sm text-ink-soft">Sin comentarios todavía.</p>
             )}
 
-            {/* Comentar: el agente lo lee como cualquier otro comentario del ticket. */}
+            {/* Comment: the agent reads it like any other comment on the ticket. */}
             <div className="mt-3">
               <textarea
                 rows={3}
-                value={borrador}
-                onChange={(e) => setBorrador(e.target.value)}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") comentar();
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submitComment();
                 }}
                 placeholder="Escribile algo a tu agente sobre esta tarea…"
                 className={`${inputCls} resize-y`}
               />
-              {comentarError && <div className="mt-2"><Aviso>{comentarError}</Aviso></div>}
+              {commentError && <div className="mt-2"><Notice>{commentError}</Notice></div>}
               <div className="mt-2 flex items-center justify-between gap-2">
                 <span className="text-[11px] text-ink-soft">
                   Podés usar markdown. Ctrl + Enter para enviar.
@@ -992,10 +1007,10 @@ export default function PipelinePage() {
                 <Btn
                   kind="primary"
                   size="sm"
-                  disabled={!borrador.trim() || comentando}
-                  onClick={comentar}
+                  disabled={!draft.trim() || commenting}
+                  onClick={submitComment}
                 >
-                  {comentando ? (
+                  {commenting ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Enviando…
@@ -1007,41 +1022,42 @@ export default function PipelinePage() {
               </div>
             </div>
 
-            {eventos.length > 0 && (
+            {events.length > 0 && (
               <>
                 <h3 className="mb-2 mt-6 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
                   Historial
                 </h3>
                 <ul className="flex flex-col gap-1">
-                  {(verMaquina ? eventos : eventos.filter((e) => !esEventoDeMaquina(e.kind)))
+                  {(showMachine ? events : events.filter((e) => !isMachineEvent(e.kind)))
                     .map((e, i) => (
                       <li key={i} className="flex items-baseline gap-2 text-[12px] text-ink-soft">
-                        <span className="font-medium">{rotuloEventoTicket(e.kind)}</span>
-                        <span>{fmtRelativa(e.created_at)}</span>
+                        <span className="font-medium">{ticketEventLabel(e.kind)}</span>
+                        <span>{formatRelative(e.created_at)}</span>
                       </li>
                     ))}
                 </ul>
-                {/* La maquinaria del motor (latidos, arranques, esperas) no le
-                    dice nada al cliente y en fila parece un cuelgue. Queda
-                    detrás de un interruptor, igual que en Archivos. */}
-                {eventos.some((e) => esEventoDeMaquina(e.kind)) && (
+                {/* The engine's machinery (heartbeats, startups, waits)
+                    doesn't tell the client anything and in a list it looks
+                    like it's hung. It stays behind a toggle, same as in
+                    Files. */}
+                {events.some((e) => isMachineEvent(e.kind)) && (
                   <button
-                    onClick={() => setVerMaquina((v) => !v)}
+                    onClick={() => setShowMachine((v) => !v)}
                     className="mt-1.5 text-[12px] text-ink-soft transition hover:text-ink"
                   >
-                    {verMaquina
+                    {showMachine
                       ? "Ocultar los pasos técnicos"
-                      : `Ver los pasos técnicos (${eventos.filter((e) => esEventoDeMaquina(e.kind)).length})`}
+                      : `Ver los pasos técnicos (${events.filter((e) => isMachineEvent(e.kind)).length})`}
                   </button>
                 )}
               </>
             )}
           </div>
 
-          {abierto && (
+          {openTicket && (
             <div className="shrink-0 border-t border-black/[0.07] px-5 py-3">
-              {accionError && <div className="mb-2"><Aviso>{accionError}</Aviso></div>}
-              {confirmarArchivo ? (
+              {actionError && <div className="mb-2"><Notice>{actionError}</Notice></div>}
+              {confirmArchive ? (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[13px] text-ink">
                     ¿Archivar la tarea? Sale del tablero.
@@ -1050,18 +1066,18 @@ export default function PipelinePage() {
                     <Btn
                       kind="ghost"
                       size="sm"
-                      disabled={accionEnCurso !== null}
-                      onClick={() => setConfirmarArchivo(false)}
+                      disabled={actionInProgress !== null}
+                      onClick={() => setConfirmArchive(false)}
                     >
                       Cancelar
                     </Btn>
                     <Btn
                       kind="danger"
                       size="sm"
-                      disabled={accionEnCurso !== null}
-                      onClick={() => cambiarEstado("archived")}
+                      disabled={actionInProgress !== null}
+                      onClick={() => changeStatus("archived")}
                     >
-                      {accionEnCurso === "archived" ? (
+                      {actionInProgress === "archived" ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin" />
                           Archivando…
@@ -1074,17 +1090,18 @@ export default function PipelinePage() {
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  {/* Sin botón de aprobar, la tarea no puede quedar sin salida:
-                      se dice quién la destraba y —cuando hay algo que hacer—
-                      dónde está el botón que sí sirve. */}
-                  {sinAprobacion(abierto) && (
+                  {/* With no approve button, the task can't be left with no
+                      way out: it says who unblocks it and -- when there's
+                      something to do -- where the button that actually works
+                      is. */}
+                  {noApproval(openTicket) && (
                     <p className="mr-auto max-w-[26rem] text-[12px] leading-snug text-ink-soft">
-                      {esPedidoDelCliente(abierto.body)
+                      {isClientRequest(openTicket.body)
                         ? "Esto lo pediste vos y lo estamos viendo nosotros: no hay nada que aprobar acá. Te escribimos cuando esté."
                         : "Está frenada hasta que se conecte lo que le falta. "}
-                      {!esPedidoDelCliente(abierto.body) && (
+                      {!isClientRequest(openTicket.body) && (
                         <Link
-                          href={`/app/aprobaciones?pedido=${encodeURIComponent(abierto.id)}`}
+                          href={`/app/approvals?request=${encodeURIComponent(openTicket.id)}`}
                           className="font-semibold text-primary transition hover:text-primary-dark"
                         >
                           Verlo en Aprobaciones
@@ -1095,24 +1112,24 @@ export default function PipelinePage() {
                   <Btn
                     kind="ghost"
                     size="sm"
-                    disabled={accionEnCurso !== null}
-                    onClick={() => setConfirmarArchivo(true)}
+                    disabled={actionInProgress !== null}
+                    onClick={() => setConfirmArchive(true)}
                   >
                     <Archive className="h-4 w-4" />
                     Archivar
                   </Btn>
-                  {transicionesDe(abierto).map((t) => (
+                  {transitionsFor(openTicket).map((t) => (
                     <Btn
                       key={t.status}
                       kind={t.status === "done" ? "primary" : "secondary"}
                       size="sm"
-                      disabled={accionEnCurso !== null}
-                      onClick={() => cambiarEstado(t.status)}
+                      disabled={actionInProgress !== null}
+                      onClick={() => changeStatus(t.status)}
                     >
-                      {accionEnCurso === t.status ? (
+                      {actionInProgress === t.status ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          {t.enCurso}
+                          {t.inProgress}
                         </>
                       ) : (
                         <>

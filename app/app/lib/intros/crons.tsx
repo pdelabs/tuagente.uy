@@ -1,70 +1,69 @@
 "use client";
 
-// Bienvenida de Tareas.
+// Tasks' welcome screen.
 //
-// La idea a transmitir es "tu agente también trabaja cuando vos no estás
-// mirando". Por eso la ilustración es un DÍA: una franja de 24 horas con tres
-// tareas y sus corridas marcadas — las que ya pasaron llenas, las que faltan
-// huecas, y la marca de "ahora" cruzando las tres pistas. De un vistazo se ve
-// la cadencia, lo que ya corrió y lo que viene.
+// The idea to get across is "your agent also works when you're not watching".
+// That's why the illustration is a DAY: a 24-hour strip with three tasks and
+// their runs marked -- the ones that already happened filled in, the ones
+// still to come hollow, and a "now" marker crossing all three lanes. At a
+// glance you see the cadence, what already ran and what's coming.
 //
-// Abajo, la lista de lo que se puede hacer sobre cada tarea (correr ahora,
-// pausar, reanudar), sin prometer lo que el portal no hace (crear o editar).
+// Below, the list of what you can do to a task (run it now, pause, resume),
+// without promising what the portal doesn't do (create or edit).
 //
-// El día dibujado va adentro de `Maqueta`: tres tareas con nombre, una
-// "Pausada" y una que "falló" hace 24 minutos son tres afirmaciones sobre el
-// agente del cliente. Y los tres controles de abajo dejaron de tener forma de
-// pastilla: son los nombres de los botones de verdad de esa pestaña, y
-// dibujados como botones invitaban a apretarlos acá.
+// The drawn day sits inside `Mockup`: three named tasks, one "Pausada" and one
+// that "failed" 24 minutes ago are three claims about the client's own agent.
+// And the three controls below stopped being pill-shaped: they're the names
+// of that tab's real buttons, and drawn as buttons they invited a tap right here.
 //
-// (Hoy esta bienvenida no se llega a ver: "Tareas" salió del nav cuando Flujos
-// la reemplazó, así que ningún módulo de `MODULES` la reclama. Se arregla igual
-// — la ruta sigue viva y el registro sigue apuntando acá.)
+// (Today this welcome screen never actually gets seen: "Tareas" left the nav
+// when Flujos replaced it, so no module in `MODULES` claims it. Fixed anyway
+// -- the route is still alive and the registry still points here.)
 
 import type { ReactNode } from "react";
 import {
   CheckCircle2, Clock, Pause, Play, SlidersHorizontal, Zap,
 } from "lucide-react";
-import { Eyebrow, IntroPage, Lead, Maqueta, Paso, Point, Title, type IntroProps } from "./shell";
+import { Eyebrow, IntroPage, Lead, Mockup, Step, Point, Title, type IntroProps } from "./shell";
 
-// Hora del día (0–24) en la que está parada la maqueta.
-const AHORA = 15.4;
+// Hour of the day (0-24) the mockup is frozen at.
+const NOW = 15.4;
 
-// Las marcas se mapean al 3%–97% de la pista para que ni la de las 00:00 ni la
-// de las 23:00 queden cortadas contra el borde.
+// Marks are mapped to 3%-97% of the lane so neither 00:00's nor 23:00's ends
+// up cut off against the edge.
 const pos = (h: number) => `${3 + (h / 24) * 94}%`;
 
-type Tarea = {
-  nombre: string;
-  cadencia: string;
-  estado: "activa" | "pausada";
-  ultima: string;
-  fallo?: boolean;
-  horas: number[];
+type Task = {
+  name: string;
+  cadence: string;
+  status: "active" | "paused";
+  last: string;
+  failed?: boolean;
+  hours: number[];
 };
 
-const TAREAS: Tarea[] = [
+const TASKS: Task[] = [
   {
-    nombre: "Resumen de la mañana",
-    cadencia: "Todos los días a las 08:00",
-    estado: "activa",
-    ultima: "hoy 08:00",
-    horas: [8],
+    name: "Resumen de la mañana",
+    cadence: "Todos los días a las 08:00",
+    status: "active",
+    last: "hoy 08:00",
+    hours: [8],
   },
   {
-    nombre: "Chequeo de novedades",
-    cadencia: "Cada 3 horas",
-    estado: "activa",
-    ultima: "hace 24 min",
-    fallo: true,
-    horas: [0, 3, 6, 9, 12, 15, 18, 21],
+    name: "Chequeo de novedades",
+    cadence: "Cada 3 horas",
+    status: "active",
+    last: "hace 24 min",
+    failed: true,
+    hours: [0, 3, 6, 9, 12, 15, 18, 21],
   },
   {
-    nombre: "Reporte semanal",
-    cadencia: "Los lunes a las 09:00",
-    estado: "pausada",
-    ultima: "el lunes",
-    horas: [9],
+    name: "Reporte semanal",
+    cadence: "Los lunes a las 09:00",
+    status: "paused",
+    last: "el lunes",
+    hours: [9],
   },
 ];
 
@@ -84,29 +83,29 @@ function Chip({ tone, children }: {
   );
 }
 
-/** Una pista de 24 h con las corridas de una tarea. */
-function Pista({ horas, pausada }: { horas: number[]; pausada: boolean }) {
+/** A 24h lane with a task's runs. */
+function Track({ hours, paused }: { hours: number[]; paused: boolean }) {
   return (
     <div className="relative mt-2 h-5">
-      {/* riel completo del día */}
+      {/* the day's full rail */}
       <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-black/[0.09]" />
-      {/* tramo ya transcurrido */}
-      {!pausada && (
+      {/* the stretch already elapsed */}
+      {!paused && (
         <div
           className="absolute left-0 top-1/2 h-px -translate-y-1/2 bg-primary/30"
-          style={{ width: pos(AHORA) }}
+          style={{ width: pos(NOW) }}
         />
       )}
-      {/* marca de "ahora", cruzando la pista */}
+      {/* "now" marker, crossing the lane */}
       <div
         className="tga-cron-now absolute top-0 h-full w-px bg-primary/45"
-        style={{ left: pos(AHORA) }}
+        style={{ left: pos(NOW) }}
       />
-      {horas.map((h) => {
-        const corrida = h <= AHORA;
-        const cls = pausada
+      {hours.map((h) => {
+        const ran = h <= NOW;
+        const cls = paused
           ? "border-black/[0.12] bg-black/[0.05]"
-          : corrida
+          : ran
             ? "border-primary bg-primary"
             : "border-primary/35 bg-white";
         return (
@@ -142,46 +141,46 @@ export default function CronsIntro({ onOk }: IntroProps) {
         podés hacer si querés intervenir.
       </Lead>
 
-      {/* ── Un día cualquiera ─────────────────────────────────────────────── */}
-      <Maqueta
+      {/* ── Just another day ────────────────────────────────────────────── */}
+      <Mockup
         className="mt-6 overflow-hidden bg-gradient-to-br from-c-violet/60 via-surface to-white"
-        nota="Tareas inventadas: no son las de tu agente."
+        note="Tareas inventadas: no son las de tu agente."
       >
         <p className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">
           Un día cualquiera
         </p>
-        {/* La marca de "ahora" vive a lo ancho de la tarjeta, alineada con las pistas. */}
+        {/* The "now" marker spans the card's width, aligned with the lanes. */}
         <div className="relative mt-1 h-4">
           <span
             className="tga-cron-now absolute -translate-x-1/2 text-[10px] font-bold text-primary"
-            style={{ left: pos(AHORA) }}
+            style={{ left: pos(NOW) }}
           >
             ahora
           </span>
         </div>
 
         <div className="divide-y divide-black/[0.06]">
-          {TAREAS.map((t) => (
-            <div key={t.nombre} className="py-3 first:pt-2 last:pb-1">
+          {TASKS.map((t) => (
+            <div key={t.name} className="py-3 first:pt-2 last:pb-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <p className="text-[13px] font-semibold text-ink">{t.nombre}</p>
-                {t.estado === "activa" ? (
+                <p className="text-[13px] font-semibold text-ink">{t.name}</p>
+                {t.status === "active" ? (
                   <Chip tone="green">Activa</Chip>
                 ) : (
                   <Chip tone="amber">Pausada</Chip>
                 )}
                 <span className="ml-auto flex items-center gap-1.5 text-[11px] text-ink-soft">
-                  <span>Última: {t.ultima}{t.fallo ? "" : " · ok"}</span>
-                  {t.fallo && <Chip tone="coral">falló</Chip>}
+                  <span>Última: {t.last}{t.failed ? "" : " · ok"}</span>
+                  {t.failed && <Chip tone="coral">falló</Chip>}
                 </span>
               </div>
-              <p className="mt-0.5 text-[12px] text-ink-soft">{t.cadencia}</p>
-              <Pista horas={t.horas} pausada={t.estado === "pausada"} />
+              <p className="mt-0.5 text-[12px] text-ink-soft">{t.cadence}</p>
+              <Track hours={t.hours} paused={t.status === "paused"} />
             </div>
           ))}
         </div>
 
-        {/* Eje del día, alineado con las pistas */}
+        {/* Day axis, aligned with the lanes */}
         <div className="relative mt-1 h-4">
           {[0, 6, 12, 18].map((h) => (
             <span
@@ -193,14 +192,14 @@ export default function CronsIntro({ onOk }: IntroProps) {
             </span>
           ))}
         </div>
-      </Maqueta>
+      </Mockup>
 
-      {/* ── Lo que se puede hacer sobre cada tarea, ADENTRO ────────────────── */}
+      {/* ── What you can do to each task, INSIDE ───────────────────────── */}
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-black/[0.07] bg-white px-4 py-3">
         <p className="text-[12px] font-semibold text-ink-soft">Sobre cada tarea podés:</p>
-        <Paso icon={Zap}>Correr ahora</Paso>
-        <Paso icon={Pause}>Pausar</Paso>
-        <Paso icon={Play}>Reanudar</Paso>
+        <Step icon={Zap}>Correr ahora</Step>
+        <Step icon={Pause}>Pausar</Step>
+        <Step icon={Play}>Reanudar</Step>
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
