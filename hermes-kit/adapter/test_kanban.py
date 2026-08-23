@@ -31,7 +31,7 @@ class KanbanStoreTests(unittest.TestCase):
             "INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 ("t_blocked", "Blocked", "First line", "blocked", None, "marketing", 20, "needs_input", 1),
-                ("t_triage", "Escalated", "Needs a decision", "triage", None, "soporte", 10, "needs_input", 2),
+                ("t_triage", "Escalated", "Needs a decision", "triage", None, "support", 10, "needs_input", 2),
                 ("t_other", "Other", "Not an approval", "triage", None, None, 30, "dependency", 0),
             ],
         )
@@ -56,7 +56,7 @@ class KanbanStoreTests(unittest.TestCase):
     def test_approvals_include_escalated_permission_requests_only(self):
         approvals = self.store.approvals()
         self.assertEqual([approval["id"] for approval in approvals], ["t_blocked", "t_triage"])
-        self.assertEqual(approvals[1]["estado"], "triage")
+        self.assertEqual(approvals[1]["status"], "triage")
         self.assertEqual(self.store.pending_count(), 2)
 
     def test_ticket_detail_exposes_event_outcome(self):
@@ -69,8 +69,8 @@ class KanbanStoreTests(unittest.TestCase):
         self.assertEqual(self.store.block_recurrences("t_triage"), 2)
 
     def test_pending_count_degrades_to_zero_when_the_database_cannot_be_opened(self):
-        """`manifest()` llama a esto: una base ilegible tiene que costar el
-        contador, no el manifiesto entero."""
+        """`manifest()` calls this: an unreadable database must cost the
+        counter, not the whole manifest."""
         unreadable = Path(self.temporary_directory.name) / "no-existe" / "kanban.db"
         self.assertEqual(self.store.pending_count(unreadable), 0)
 
@@ -82,7 +82,7 @@ class KanbanStoreTests(unittest.TestCase):
         """
         by_id = {ticket["id"]: ticket for ticket in self.store.tickets()}
         self.assertEqual(by_id["t_blocked"]["assignee"], "marketing")
-        self.assertEqual(by_id["t_triage"]["assignee"], "soporte")
+        self.assertEqual(by_id["t_triage"]["assignee"], "support")
         self.assertIsNone(by_id["t_other"]["assignee"])
         self.assertEqual(
             self.store.ticket_detail("t_blocked")["ticket"]["assignee"], "marketing"

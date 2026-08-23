@@ -1,6 +1,6 @@
 """Customer flow read models exposed through the portal adapter.
 
-A flow is declarative metadata in ``flujos/<slug>/FLUJO.md``. This module
+A flow is declarative metadata in ``flows/<slug>/FLOW.md``. This module
 derives its portal state from that file, available connections, execution data,
 and workspace results without trusting any flow-controlled path to escape the
 workspace.
@@ -62,7 +62,7 @@ class FlowStore:
                 ).fetchone()
             finally:
                 connection.close()
-            return {"cuando": row[0], "status": row[1]} if row else None
+            return {"at": row[0], "status": row[1]} if row else None
         except sqlite3.Error:
             return None
 
@@ -77,7 +77,7 @@ class FlowStore:
         return candidate if candidate.is_dir() else None
 
     def _results(self, fields, slug):
-        directory = self.results_directory(fields.get("resultados"), slug)
+        directory = self.results_directory(fields.get("results"), slug)
         if directory is None:
             return []
         try:
@@ -91,62 +91,62 @@ class FlowStore:
 
     def list(self, result_limit=20):
         if not self.flows_directory.is_dir():
-            return {"disponible": False, "flujos": []}
+            return {"available": False, "flows": []}
         connected = self.connected_connections()
         flows = []
         for directory in sorted(self.flows_directory.iterdir()):
-            definition = directory / "FLUJO.md"
+            definition = directory / "FLOW.md"
             if not directory.is_dir() or not definition.is_file() or not FLOW_SLUG_RE.match(directory.name):
                 continue
             fields = self.frontmatter(definition)
-            required = self.connection_ids(fields.get("conexiones"))
+            required = self.connection_ids(fields.get("connections"))
             missing = [] if connected is None else [item for item in required if item not in connected]
-            state = fields.get("estado", "activo")
-            if state == "activo" and missing:
-                state = "incompleto"
+            status = fields.get("status", "active")
+            if status == "active" and missing:
+                status = "incomplete"
             results = self._results(fields, directory.name)
             flows.append({
                 "slug": directory.name,
-                "nombre": fields.get("nombre") or directory.name,
-                "para_cliente": fields.get("para_cliente", ""),
-                "gatillo_tipo": fields.get("gatillo_tipo", "pedido"),
-                "gatillo": fields.get("gatillo_detalle", ""),
-                "estado": state,
-                "conexiones_faltan": missing,
-                "ultima_corrida": self.latest_run(fields.get("gatillo_job")),
-                "resultados": [
+                "name": fields.get("name") or directory.name,
+                "client_summary": fields.get("client_summary", ""),
+                "trigger_type": fields.get("trigger_type", "request"),
+                "trigger": fields.get("trigger_detail", ""),
+                "status": status,
+                "missing_connections": missing,
+                "last_run": self.latest_run(fields.get("trigger_job")),
+                "results": [
                     {"path": str(path.relative_to(self.workspace)), "mtime": path.stat().st_mtime}
                     for path in results[:result_limit]
                 ],
-                "resultados_total": len(results),
+                "results_total": len(results),
             })
         flows.sort(key=lambda flow: (
-            flow["estado"] != "incompleto", flow["estado"] != "activo", flow["nombre"],
+            flow["status"] != "incomplete", flow["status"] != "active", flow["name"],
         ))
-        return {"disponible": True, "flujos": flows}
+        return {"available": True, "flows": flows}
 
     def detail(self, slug):
         if not slug or not FLOW_SLUG_RE.match(slug):
             return None
-        flow = next((item for item in self.list(result_limit=500)["flujos"] if item["slug"] == slug), None)
+        flow = next((item for item in self.list(result_limit=500)["flows"] if item["slug"] == slug), None)
         if flow is None:
             return None
         try:
-            text = (self.flows_directory / slug / "FLUJO.md").read_text(encoding="utf-8")
+            text = (self.flows_directory / slug / "FLOW.md").read_text(encoding="utf-8")
             parts = text.split("---", 2)
             instructions = parts[2].strip() if len(parts) >= 3 else ""
         except OSError:
             instructions = ""
         instructions = re.split(r"\n##\s+Notas?\s+t[eé]cnicas?\b", instructions, flags=re.IGNORECASE)[0]
         instructions = re.sub(r"<!--.*?-->", "", instructions, flags=re.DOTALL)
-        flow["como"] = instructions.strip()
+        flow["how"] = instructions.strip()
         return flow
 
     def required_connection_ids(self):
         ids = set()
-        for flow in self.list(result_limit=0)["flujos"]:
-            if flow.get("estado") == "pausado":
+        for flow in self.list(result_limit=0)["flows"]:
+            if flow.get("status") == "paused":
                 continue
-            definition = self.flows_directory / flow["slug"] / "FLUJO.md"
-            ids.update(self.connection_ids(self.frontmatter(definition).get("conexiones")))
+            definition = self.flows_directory / flow["slug"] / "FLOW.md"
+            ids.update(self.connection_ids(self.frontmatter(definition).get("connections")))
         return ids

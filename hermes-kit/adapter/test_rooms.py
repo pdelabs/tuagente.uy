@@ -12,7 +12,7 @@ from rooms import RoomStore
 class RoomStoreTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
-        self.store = RoomStore(Path(self.temporary_directory.name) / "salas")
+        self.store = RoomStore(Path(self.temporary_directory.name) / "rooms")
 
     def tearDown(self):
         self.temporary_directory.cleanup()
@@ -22,13 +22,13 @@ class RoomStoreTests(unittest.TestCase):
         self.store.append("sala1", "user", "armame un posteo")
         self.store.append("sala1", "assistant", "listo, va", "marketing")
         self.store.append("sala1", "user", "y el whatsapp?")
-        self.store.append("sala1", "assistant", "lo contesto", "soporte")
+        self.store.append("sala1", "assistant", "lo contesto", "support")
 
         turns = self.store.read("sala1")
         self.assertEqual([t["role"] for t in turns],
                          ["user", "assistant", "user", "assistant"])
         self.assertEqual(turns[1]["by"], "marketing")
-        self.assertEqual(turns[3]["by"], "soporte")
+        self.assertEqual(turns[3]["by"], "support")
         # The client's own turns carry no author: they are the client.
         self.assertNotIn("by", turns[0])
 

@@ -30,22 +30,22 @@ from pathlib import Path
 
 from litellm.integrations.custom_logger import CustomLogger
 
-# Vive en data/, que es el unico volumen que comparten litellm y el adapter.
-DESTINO = Path(os.environ.get("COSTO_LOG", "/opt/data/costos.jsonl"))
+# Lives in data/, the only volume litellm and the adapter share.
+COST_LOG = Path(os.environ.get("COST_LOG", "/opt/data/costs.jsonl"))
 MAX_BYTES = 8 * 1024 * 1024
 
 _lock = threading.Lock()
 
 
-def _numero(valor):
+def _number(value):
     try:
-        return float(valor)
+        return float(value)
     except (TypeError, ValueError):
         return None
 
 
-def _uso(response):
-    """usage del response, venga como objeto o como dict."""
+def _usage(response):
+    """The response's usage, whether it comes as an object or a dict."""
     usage = getattr(response, "usage", None)
     if usage is None and isinstance(response, dict):
         usage = response.get("usage")
@@ -59,54 +59,55 @@ def _uso(response):
         return {k: getattr(usage, k) for k in dir(usage) if not k.startswith("_")}
 
 
-class RegistroDeCosto(CustomLogger):
+class CostLogger(CustomLogger):
     def log_success_event(self, kwargs, response_obj, start_time, end_time):
         try:
-            self._anotar(kwargs, response_obj, start_time, end_time)
+            self._log(kwargs, response_obj, start_time, end_time)
         except Exception:
             pass
 
     async def async_log_success_event(self, kwargs, response_obj, start_time, end_time):
         try:
-            self._anotar(kwargs, response_obj, start_time, end_time)
+            self._log(kwargs, response_obj, start_time, end_time)
         except Exception:
             pass
 
-    def _anotar(self, kwargs, response_obj, start_time, end_time):
-        usage = _uso(response_obj)
+    def _log(self, kwargs, response_obj, start_time, end_time):
+        usage = _usage(response_obj)
 
-        # El costo REAL que cobro el proveedor. litellm lo pasa tal cual desde
-        # OpenRouter; si algun dia no viniera, cae a lo que calcule litellm.
-        costo = _numero(usage.get("cost"))
-        origen = "upstream"
-        if costo is None:
-            costo = _numero((kwargs.get("standard_logging_object") or {}).get("response_cost"))
-            origen = "litellm"
-        if costo is None:
-            costo = _numero(kwargs.get("response_cost"))
-            origen = "litellm"
-        if costo is None:
-            return  # sin numero no se inventa: mejor nada que un cero falso
+        # The REAL cost the provider charged. litellm passes it through as-is
+        # from OpenRouter; if it were ever absent, fall back to what litellm
+        # itself computes.
+        cost = _number(usage.get("cost"))
+        source = "upstream"
+        if cost is None:
+            cost = _number((kwargs.get("standard_logging_object") or {}).get("response_cost"))
+            source = "litellm"
+        if cost is None:
+            cost = _number(kwargs.get("response_cost"))
+            source = "litellm"
+        if cost is None:
+            return  # no number: better nothing than a false zero
 
-        fila = {
+        row = {
             "ts": time.time(),
-            "modelo": kwargs.get("model") or getattr(response_obj, "model", "") or "",
-            "entrada": usage.get("prompt_tokens") or 0,
-            "salida": usage.get("completion_tokens") or 0,
-            "costo_usd": costo,
-            "origen": origen,
+            "model": kwargs.get("model") or getattr(response_obj, "model", "") or "",
+            "input_tokens": usage.get("prompt_tokens") or 0,
+            "output_tokens": usage.get("completion_tokens") or 0,
+            "cost_usd": cost,
+            "source": source,
         }
 
         with _lock:
-            # Rotacion simple: esto crece para siempre y nadie lo mira hasta que
-            # llena el disco del cliente.
+            # Simple rotation: this grows forever and nobody looks at it until
+            # it fills up the client's disk.
             try:
-                if DESTINO.exists() and DESTINO.stat().st_size > MAX_BYTES:
-                    DESTINO.replace(DESTINO.with_suffix(".jsonl.1"))
+                if COST_LOG.exists() and COST_LOG.stat().st_size > MAX_BYTES:
+                    COST_LOG.replace(COST_LOG.with_suffix(".jsonl.1"))
             except OSError:
                 pass
-            with open(DESTINO, "a", encoding="utf-8") as f:
-                f.write(json.dumps(fila, ensure_ascii=False) + "\n")
+            with open(COST_LOG, "a", encoding="utf-8") as f:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-registro_de_costo = RegistroDeCosto()
+cost_logger = CostLogger()

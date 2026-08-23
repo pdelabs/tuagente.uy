@@ -100,19 +100,20 @@ class KanbanStore:
                 "summary": self._summary(row["body"], row["title"]),
                 "body": row["body"],
                 "created_at": row["created_at"],
-                "estado": row["status"],
+                "status": row["status"],
             } for row in rows]
         finally:
             connection.close()
 
     def pending_count(self, database=None):
-        """Cuenta los pedidos sin resolver, y ante CUALQUIER falla de sqlite
-        devuelve 0 en vez de reventar.
+        """Counts unresolved requests, and on ANY sqlite failure returns 0
+        instead of blowing up.
 
-        El abrir la base va adentro del try a proposito: enciende la pestaña
-        Aprobaciones desde `manifest()`, y si una base que existe no se puede
-        abrir —permisos, WAL trabado, disco— el manifiesto entero se cae y el
-        cliente se queda sin portal, no sin un numerito.
+        Opening the database goes inside the try on purpose: it turns on the
+        Approvals tab from `manifest()`, and if a database that exists cannot
+        be opened -- permissions, a stuck WAL, disk -- the whole manifest
+        would go down and the client is left with no portal, not just a
+        missing number.
         """
         try:
             connection = self.connect(database or self.default_database)

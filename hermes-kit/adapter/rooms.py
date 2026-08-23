@@ -10,11 +10,11 @@ room landed as two unrelated sessions in two different profiles.
 So the transcript lives here. That is also the honest place for it: the room is
 the CLIENT'S, not any one role's.
 
-WHERE IT IS WRITTEN. Under `politica/`, which the agent's container mounts :ro
+WHERE IT IS WRITTEN. Under `policy/`, which the agent's container mounts :ro
 and the adapter's mounts rw. Same property, and the same precedent, as
-`capacidades/pedidos.jsonl`: a record about the client that the agent must not
-be able to rewrite. An agent that could edit its client's conversation could
-edit what it was asked to do.
+`capabilities/requests.jsonl`: a record about the client that the agent must
+not be able to rewrite. An agent that could edit its client's conversation
+could edit what it was asked to do.
 
 APPEND-ONLY, one JSONL per room. No rewrite path on purpose -- an edited history
 is a history nobody can trust, and the client already has "new conversation".

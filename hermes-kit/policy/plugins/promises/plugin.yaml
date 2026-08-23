@@ -1,0 +1,9 @@
+name: promises
+version: 1.0.0
+description: >
+  Before the response goes out, checks what the agent claims it left running
+  on its own against the disk. If there is no live flow backing it up, it
+  appends a correction to the message with what actually exists.
+author: tuagente.uy
+hooks:
+  - transform_llm_output

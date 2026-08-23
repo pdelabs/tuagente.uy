@@ -41,35 +41,35 @@ class FlowStoreTests(unittest.TestCase):
         directory = self.flows / slug
         directory.mkdir()
         lines = "\n".join(f"{key}: {value}" for key, value in frontmatter.items())
-        (directory / "FLUJO.md").write_text(f"---\n{lines}\n---\n\n{body}", encoding="utf-8")
+        (directory / "FLOW.md").write_text(f"---\n{lines}\n---\n\n{body}", encoding="utf-8")
 
     def test_missing_connection_derives_incomplete_state_and_latest_failure(self):
         self.write_flow("weekly", {
-            "nombre": "Weekly report", "estado": "activo", "conexiones": "telegram, google-workspace",
-            "gatillo_job": "job-1",
+            "name": "Weekly report", "status": "active", "connections": "telegram, google-workspace",
+            "trigger_job": "job-1",
         })
 
-        flow = self.store.list()["flujos"][0]
-        self.assertEqual(flow["estado"], "incompleto")
-        self.assertEqual(flow["conexiones_faltan"], ["google-workspace"])
-        self.assertEqual(flow["ultima_corrida"]["status"], "failed")
+        flow = self.store.list()["flows"][0]
+        self.assertEqual(flow["status"], "incomplete")
+        self.assertEqual(flow["missing_connections"], ["google-workspace"])
+        self.assertEqual(flow["last_run"]["status"], "failed")
 
     def test_none_connection_sentinel_does_not_make_a_flow_incomplete(self):
-        self.write_flow("manual", {"estado": "activo", "conexiones": "ninguna"})
-        self.assertEqual(self.store.list()["flujos"][0]["estado"], "activo")
+        self.write_flow("manual", {"status": "active", "connections": "ninguna"})
+        self.assertEqual(self.store.list()["flows"][0]["status"], "active")
 
     def test_result_paths_cannot_escape_workspace(self):
-        self.write_flow("unsafe", {"estado": "activo", "resultados": "../flows"})
-        flow = self.store.list()["flujos"][0]
-        self.assertEqual(flow["resultados"], [])
-        self.assertEqual(flow["resultados_total"], 0)
+        self.write_flow("unsafe", {"status": "active", "results": "../flows"})
+        flow = self.store.list()["flows"][0]
+        self.assertEqual(flow["results"], [])
+        self.assertEqual(flow["results_total"], 0)
 
     def test_detail_hides_technical_notes_and_html_comments(self):
         self.write_flow(
-            "visible", {"estado": "activo"},
+            "visible", {"status": "active"},
             "Step for the customer\n\n<!-- private -->\n\n## Notas técnicas\nInternal flags",
         )
-        self.assertEqual(self.store.detail("visible")["como"], "Step for the customer")
+        self.assertEqual(self.store.detail("visible")["how"], "Step for the customer")
 
 
 if __name__ == "__main__":

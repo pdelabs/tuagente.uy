@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Chequeo de conformidad: ¿este agente Hermes está listo para el portal?
+"""Conformance check: is this Hermes agent ready for the portal?
 
-Se corre contra un agente ya desplegado y verifica el contrato completo, sin
-escribir nada. Sirve para dar de alta un cliente nuevo sin sorpresas.
+Runs against an already-deployed agent and verifies the whole contract,
+without writing anything. Used to onboard a new client with no surprises.
 
     python3 tools/portal-check.py --key <API_SERVER_KEY> \
         [--adapter http://localhost:8643] [--endpoint http://localhost:8642] \
-        [--origin http://localhost:8090] [--intentos 3]
+        [--origin http://localhost:8090] [--attempts 3]
 
-CADA CHEQUEO SE CORRE VARIAS VECES, y no es paranoia: el 12/8/2026, en el lab,
-`GET /api/sessions` se puso a devolver 500 de forma intermitente —14 de 20
-pedidos— y este chequeo, que pegaba UNA sola vez, daba verde 3 de cada 10
-corridas. Un chequeo que es verde el 30% del tiempo es peor que no tenerlo:
-certifica justo lo que no miró. Ahora un endpoint que falla aunque sea un
-intento es FALLA, y el mensaje dice la tasa.
+EVERY CHECK RUNS SEVERAL TIMES, and it is not paranoia: on 12/8/2026, in the
+lab, `GET /api/sessions` started returning 500 intermittently -- 14 out of 20
+requests -- and this check, which hit it once, came back green 3 out of every
+10 runs. A check that is green 30% of the time is worse than not having one:
+it certifies exactly what it did not look at. Now an endpoint that fails even
+once is a FAILURE, and the message states the rate.
 
-Exit 0 = cumple. Exit 1 = hay fallas (se listan al final).
+Exit 0 = compliant. Exit 1 = there are failures (listed at the end).
 """
 import argparse
 import json
@@ -23,44 +23,45 @@ import sys
 import urllib.error
 import urllib.request
 
-OK, FAIL, WARN = "OK  ", "FALLA", "aviso"
+OK, FAIL, WARN = "OK  ", "FAIL ", "warn "
 results = []
-INTENTOS = 3
+ATTEMPTS = 3
 
 
 def check(name, fn, required=True):
-    """Corre una verificación N veces y registra el resultado.
+    """Runs one check N times and records the result.
 
-    N veces y no una: ver la nota de arriba. La regla es tajante a propósito —
-    un endpoint que anda 2 de cada 3 veces NO está listo para el portal, porque
-    en la tercera el cliente ve "No pude hablar con tu agente" y manda a buscar
-    el bug al portal, que no tiene nada que ver.
+    N times and not once: see the note above. The rule is strict on purpose --
+    an endpoint that works 2 out of 3 times is NOT ready for the portal,
+    because on the third the client sees "Could not reach your agent" and goes
+    looking for the bug in the portal, which has nothing to do with it.
 
-    Los intentos van seguidos y sin espera: el modo de falla que buscamos
-    aparece bajo pedidos consecutivos, no después de una pausa. Con el agente
-    caído esto no se vuelve eterno: el chequeo del manifiesto es el primero y,
-    si no responde, main() corta ahí.
+    The attempts run back to back with no wait: the failure mode we are
+    looking for shows up under consecutive requests, not after a pause. With
+    the agent down this does not run forever: the manifest check is first,
+    and if it does not answer, main() cuts it short right there.
     """
-    detalle, fallos = "", []
-    for _ in range(INTENTOS):
+    detail, failures = "", []
+    for _ in range(ATTEMPTS):
         try:
-            detalle = fn() or detalle
-        except Exception as exc:  # noqa: BLE001 — queremos reportar cualquier falla
-            # 300 y no 120: el corte se comía justo la parte útil —el comando
-            # para arreglarlo va al final del mensaje—, y una falla que dice el
-            # síntoma sin decir qué hacer manda a adivinar.
-            fallos.append(str(exc)[:300])
-    if not fallos:
-        results.append((OK, name, detalle))
+            detail = fn() or detail
+        except Exception as exc:  # noqa: BLE001 — we want to report any failure
+            # 300 and not 120: cutting it shorter used to eat exactly the
+            # useful part -- the command to fix it goes at the end of the
+            # message -- and a failure that states the symptom without saying
+            # what to do sends you guessing.
+            failures.append(str(exc)[:300])
+    if not failures:
+        results.append((OK, name, detail))
         return True
-    if len(fallos) < INTENTOS:
-        # Lo peor que puede pasar es que esto pase por un tropiezo y quede en
-        # verde: se dice la tasa y el primer error, que es lo que hace falta
-        # para saber si es la red o es el agente.
-        tasa = f"INTERMITENTE — falló {len(fallos)} de {INTENTOS} intentos"
+    if len(failures) < ATTEMPTS:
+        # The worst thing that can happen is this passing as a stumble and
+        # coming back green: the rate and the first error are stated, which is
+        # what's needed to tell whether it's the network or the agent.
+        rate = f"INTERMITTENT — failed {len(failures)} of {ATTEMPTS} attempts"
     else:
-        tasa = f"falló los {INTENTOS} intentos"
-    results.append((FAIL if required else WARN, name, f"{tasa}: {fallos[0]}"))
+        rate = f"failed all {ATTEMPTS} attempts"
+    results.append((FAIL if required else WARN, name, f"{rate}: {failures[0]}"))
     return False
 
 
@@ -76,7 +77,7 @@ def http(url, key=None, origin=None, method="GET", expect=200):
     except urllib.error.HTTPError as exc:
         body, status, hdrs = exc.read(), exc.code, dict(exc.headers)
     if status != expect:
-        raise AssertionError(f"esperaba {expect}, respondió {status}")
+        raise AssertionError(f"expected {expect}, got {status}")
     return body, hdrs
 
 
@@ -86,25 +87,25 @@ def jget(url, key, origin=None):
 
 
 def main():
-    global INTENTOS
+    global ATTEMPTS
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", required=True)
     ap.add_argument("--adapter", default="http://localhost:8643")
     ap.add_argument("--endpoint", default="http://localhost:8642")
     ap.add_argument("--origin", default="http://localhost:8090")
     ap.add_argument(
-        "--entrega", action="store_true",
-        help="además del contrato, exige que el agente esté EN CERO: es el "
-             "chequeo del último paso de un alta, antes de mandar el link")
+        "--delivery", action="store_true",
+        help="on top of the contract, requires the agent to be AT ZERO: the "
+             "check for the last step of an onboarding, before sending the link")
     ap.add_argument(
-        "--intentos", type=int, default=INTENTOS, metavar="N",
-        help=f"veces que se corre CADA chequeo (por defecto {INTENTOS}). Subilo "
-             "cuando sospeches algo intermitente: con 10 se ve la tasa real "
-             "sin adivinar")
+        "--attempts", type=int, default=ATTEMPTS, metavar="N",
+        help=f"how many times EACH check runs (default {ATTEMPTS}). Raise it "
+             "when you suspect something intermittent: with 10 you see the "
+             "real rate without guessing")
     args = ap.parse_args()
-    if args.intentos < 1:
-        ap.error("--intentos tiene que ser 1 o más")
-    INTENTOS = args.intentos
+    if args.attempts < 1:
+        ap.error("--attempts has to be 1 or more")
+    ATTEMPTS = args.attempts
     A, E, K, O = args.adapter.rstrip("/"), args.endpoint.rstrip("/"), args.key, args.origin
 
     manifest = {}
@@ -112,114 +113,107 @@ def main():
     def _manifest():
         nonlocal manifest
         manifest, _ = jget(f"{A}/portal/manifest", K)
-        faltan = [k for k in ("agent", "portal_plugin", "modules") if k not in manifest]
-        if faltan:
-            raise AssertionError(f"al manifiesto le faltan claves: {faltan}")
+        missing = [k for k in ("agent", "portal_plugin", "modules") if k not in manifest]
+        if missing:
+            raise AssertionError(f"manifest is missing keys: {missing}")
         if not str(manifest["agent"]).strip():
-            raise AssertionError("el agente no tiene nombre (AGENT_NAME)")
+            raise AssertionError("the agent has no name (AGENT_NAME)")
         return f"{manifest['agent']} · {manifest['portal_plugin']}"
 
-    check("Manifiesto", _manifest)
+    check("Manifest", _manifest)
     if not manifest:
-        print("No pude leer el manifiesto: sin eso el portal no arranca.")
+        print("Could not read the manifest: without it, the portal will not start.")
         return 1
     mods = manifest.get("modules", {})
 
-    # El alias en español de la misma ruta. Es un aviso y no una falla: un
-    # agente instalado antes del adapter 0.37 cumple el contrato igual —el
-    # portal pide `/portal/manifest`—, pero quien depure a mano contra ese
-    # agente se va a comer el `404 {"error":"not found"}` de `/portal/manifiesto`
-    # y va a creer que el manifiesto no existe.
-    check("Alias /portal/manifiesto", lambda: (
-        jget(f"{A}/portal/manifiesto", K)[0].get("agent") == manifest.get("agent")
-        or (_ for _ in ()).throw(AssertionError("responde otra cosa que /portal/manifest")),
-        "el alias en español devuelve lo mismo")[1], required=False)
-
-    # Auth y CORS: un portal sin esto no funciona en el browser aunque curl ande.
-    check("Rechaza sin credenciales", lambda: (
+    # Auth and CORS: a portal without this does not work in the browser even
+    # if curl behaves fine.
+    check("Rejects without credentials", lambda: (
         http(f"{A}/portal/manifest", None, expect=401), "401")[1])
-    check("CORS del adapter", lambda: (
+    check("Adapter CORS", lambda: (
         jget(f"{A}/portal/manifest", K, O)[1].get("Access-Control-Allow-Origin") == O
-        or (_ for _ in ()).throw(AssertionError(f"no refleja el origen {O}")),
-        "refleja el origen")[1])
-    check("CORS del gateway", lambda: (
+        or (_ for _ in ()).throw(AssertionError(f"does not reflect origin {O}")),
+        "reflects the origin")[1])
+    check("Gateway CORS", lambda: (
         http(f"{E}/api/jobs?include_disabled=true", K, O)[1].get("Access-Control-Allow-Origin") == O
-        or (_ for _ in ()).throw(AssertionError(f"no refleja el origen {O}")),
-        "refleja el origen")[1])
+        or (_ for _ in ()).throw(AssertionError(f"does not reflect origin {O}")),
+        "reflects the origin")[1])
 
-    # LAS DOS ESCRITURAS DEL LOOPBACK. Para el browser `http://localhost:8090` y
-    # `http://127.0.0.1:8090` son orígenes DISTINTOS: si la lista trae uno solo,
-    # este chequeo pasa con el que le pasaste y el cliente ve "No pude hablar con
-    # tu agente" al abrir el otro. curl no lo agarra nunca —no manda `Origin`—,
-    # así que es el "anda por curl y no anda en el navegador" clásico.
-    # Solo aplica si el origen es loopback: contra un portal de verdad
-    # (app.tuagente.uy) no hay gemelo que mirar y el chequeo no corre.
-    gemelo = None
+    # THE TWO LOOPBACK SPELLINGS. To the browser `http://localhost:8090` and
+    # `http://127.0.0.1:8090` are DIFFERENT origins: if the list only carries
+    # one, this check passes with whichever you gave it and the client sees
+    # "Could not reach your agent" opening the other one. curl never catches
+    # this -- it never sends `Origin` -- so it's the classic "works via curl,
+    # doesn't work in the browser."
+    # Only applies when the origin is loopback: against a real portal
+    # (app.tuagente.uy) there is no twin to check and this does not run.
+    twin = None
     if "//localhost:" in O:
-        gemelo = O.replace("//localhost:", "//127.0.0.1:")
+        twin = O.replace("//localhost:", "//127.0.0.1:")
     elif "//127.0.0.1:" in O:
-        gemelo = O.replace("//127.0.0.1:", "//localhost:")
-    if gemelo:
-        def _gemelo(url, quien):
+        twin = O.replace("//127.0.0.1:", "//localhost:")
+    if twin:
+        def _twin(url, who):
             def fn():
-                got = http(url, K, gemelo)[1].get("Access-Control-Allow-Origin")
-                if got != gemelo:
+                got = http(url, K, twin)[1].get("Access-Control-Allow-Origin")
+                if got != twin:
                     raise AssertionError(
-                        f"acepta {O} pero no {gemelo} — agregá los DOS a "
-                        f"{quien} en el compose y reiniciá")
-                return f"también refleja {gemelo}"
+                        f"accepts {O} but not {twin} — add BOTH to "
+                        f"{who} in the compose and restart")
+                return f"also reflects {twin}"
             return fn
-        check("CORS del adapter (la otra escritura del loopback)",
-              _gemelo(f"{A}/portal/manifest", "PORTAL_CORS_ORIGINS"))
-        check("CORS del gateway (la otra escritura del loopback)",
-              _gemelo(f"{E}/api/jobs?include_disabled=true", "API_SERVER_CORS_ORIGINS"))
+        check("Adapter CORS (the other loopback spelling)",
+              _twin(f"{A}/portal/manifest", "PORTAL_CORS_ORIGINS"))
+        check("Gateway CORS (the other loopback spelling)",
+              _twin(f"{E}/api/jobs?include_disabled=true", "API_SERVER_CORS_ORIGINS"))
 
-    # Cada módulo declarado tiene que responder de verdad.
-    def modcheck(nombre, url, valida):
-        if not mods.get(nombre):
-            results.append((WARN, f"Módulo {nombre}", "no declarado — la pestaña no se muestra"))
+    # Every declared module has to actually answer.
+    def modcheck(name, url, validate):
+        if not mods.get(name):
+            results.append((WARN, f"Module {name}", "not declared — the tab does not show"))
             return
-        check(f"Módulo {nombre}", lambda: valida(*jget(url, K)))
+        check(f"Module {name}", lambda: validate(*jget(url, K)))
 
     modcheck("kanban", f"{A}/portal/tickets",
              lambda d, h: f"{len(d['tickets'])} tickets")
     modcheck("approvals", f"{A}/portal/approvals",
-             lambda d, h: f"{len(d['approvals'])} pendientes")
+             lambda d, h: f"{len(d['approvals'])} pending")
     modcheck("artifacts", f"{A}/portal/artifacts",
-             lambda d, h: f"{len(d['artifacts'])} artefactos")
+             lambda d, h: f"{len(d['artifacts'])} artifacts")
     def _roles_ok(d, h):
         # The team is the product now: a declared roles module must serve the
         # offer, and every hired role must be reachable through the multiplex
         # with its own key -- which only the adapter can verify, so here we at
         # least assert the roster's shape and that hired roles carry identity.
         if not d.get("available"):
-            raise AssertionError("declarado pero available=false")
+            raise AssertionError("declared but available=false")
         roles = d.get("roles") or []
         if not roles:
-            raise AssertionError("el catálogo de la oferta está vacío")
-        contratados = [r for r in roles if r.get("contratado") or r.get("hired")]
-        sin_cara = [r["id"] for r in roles if not (r.get("name") and r.get("look"))]
-        if sin_cara:
-            raise AssertionError(f"roles sin identidad (name/look): {sin_cara}")
-        pendientes = [r["id"] for r in roles if r.get("pedido") and r not in contratados]
-        extra = f", {len(pendientes)} en camino" if pendientes else ""
-        return f"{len(roles)} en oferta, {len(contratados)} contratados{extra}"
+            raise AssertionError("the offer catalog is empty")
+        hired = [r for r in roles if r.get("hired")]
+        faceless = [r["id"] for r in roles if not (r.get("name") and r.get("look"))]
+        if faceless:
+            raise AssertionError(f"roles with no identity (name/look): {faceless}")
+        pending = [r["id"] for r in roles if r.get("request") and r not in hired]
+        extra = f", {len(pending)} requested" if pending else ""
+        return f"{len(roles)} on offer, {len(hired)} hired{extra}"
     modcheck("roles", f"{A}/portal/roles", _roles_ok)
     modcheck("activity", f"{A}/portal/activity",
-             lambda d, h: f"{len(d['events'])} eventos")
-    def _uso_ok(d, h):
-        # Declarado y roto NO es "anda": si el manifiesto promete el modulo, el
-        # numero tiene que venir. Y un total ausente se dice, no se inventa un 0.
-        if not d.get("disponible"):
-            raise AssertionError("declarado pero el proveedor no contesta: " + str(d.get("motivo")))
+             lambda d, h: f"{len(d['events'])} events")
+    def _usage_ok(d, h):
+        # Declared and broken is NOT "it works": if the manifest promises the
+        # module, the number has to show up. And a missing total is stated,
+        # not invented as a 0.
+        if not d.get("available"):
+            raise AssertionError("declared but the provider is not answering: " + str(d.get("reason")))
         total = d.get("total_usd")
-        return ("USD — (el proveedor no informo el total)" if total is None
-                else f"USD {total:.4f} cobrados a esta clave")
-    modcheck("usage", f"{A}/portal/uso", _uso_ok)
+        return ("USD — (the provider did not report the total)" if total is None
+                else f"USD {total:.4f} charged to this key")
+    modcheck("usage", f"{A}/portal/usage", _usage_ok)
     modcheck("crons", f"{E}/api/jobs?include_disabled=true",
-             lambda d, h: f"{len(d['jobs'])} tareas (incluye pausadas)")
+             lambda d, h: f"{len(d['jobs'])} jobs (includes paused)")
 
-    # Archivos: además del listado, el contenido NUNCA debe servirse como html.
+    # Files: on top of the listing, the content must NEVER be served as html.
     if mods.get("files"):
         def _files():
             data, _ = jget(f"{A}/portal/files", K)
@@ -228,102 +222,106 @@ def main():
                 _, hdrs = http(f"{A}/portal/files/{files[0]['path']}", K)
                 ctype = hdrs.get("Content-Type", "")
                 if "text/plain" not in ctype:
-                    raise AssertionError(f"sirve archivos como {ctype!r}, tiene que ser text/plain")
-            return f"{len(files)} archivos"
-        check("Módulo files", _files)
+                    raise AssertionError(f"serves files as {ctype!r}, has to be text/plain")
+            return f"{len(files)} files"
+        check("Module files", _files)
     else:
-        results.append((WARN, "Módulo files", "no declarado"))
+        results.append((WARN, "Module files", "not declared"))
 
-    # El chat es el corazón: si el stream de sesiones no pasa por el adapter,
-    # el browser lo descarta por CORS (el gateway no manda la cabecera).
-    check("Proxy de chat en el adapter", lambda: (
-        http(f"{A}/portal/sessions/no-existe/chat/stream", K, method="POST", expect=400),
-        "responde (valida el cuerpo)")[1], required=False)
-    check("Sesiones del agente", lambda: (
-        f"{len(jget(f'{E}/api/sessions', K)[0]['data'])} conversaciones"))
+    # Chat is the heart of it: if the session stream does not go through the
+    # adapter, the browser discards it over CORS (the gateway does not send
+    # the header).
+    check("Chat proxy on the adapter", lambda: (
+        http(f"{A}/portal/sessions/does-not-exist/chat/stream", K, method="POST", expect=400),
+        "responds (validates the body)")[1], required=False)
+    check("Agent sessions", lambda: (
+        f"{len(jget(f'{E}/api/sessions', K)[0]['data'])} conversations"))
 
-    # Convenciones del workspace que hacen usable la pestaña Archivos.
-    def _entregables():
-        """En un agente nuevo esto no es un sintoma: todavia no produjo nada.
+    # Workspace conventions that make the Files tab usable.
+    def _deliverables():
+        """On a brand-new agent this is not a symptom: it hasn't produced anything yet.
 
-        El listado devuelve archivos, no carpetas, asi que una carpeta vacia no
-        aparece. Antes esto avisaba "¿el agente tiene la skill entregable?" en
-        cada alta, que es una falsa alarma y entrena a ignorar los avisos.
+        The listing returns files, not folders, so an empty folder does not
+        show up. This used to warn "does the agent have the deliverable
+        skill?" on every onboarding, which is a false alarm and trains people
+        to ignore warnings.
         """
-        archivos = jget(f"{A}/portal/files", K)[0]["files"]
-        if any(f["path"].startswith("entregables/") for f in archivos):
-            return "entregables/ presente"
-        if not archivos:
-            return "agente nuevo: todavia no escribio nada (esperable)"
+        files = jget(f"{A}/portal/files", K)[0]["files"]
+        if any(f["path"].startswith("entregables/") for f in files):
+            return "entregables/ present"
+        if not files:
+            return "new agent: has not written anything yet (expected)"
         raise AssertionError(
-            "hay archivos pero ninguno en entregables/ — ¿el agente esta usando "
-            "la skill entregable o elige rutas por su cuenta?"
+            "there are files but none in entregables/ — is the agent using "
+            "the deliverable skill, or picking its own paths?"
         )
 
-    check("Convención de entregables", _entregables, required=False)
+    check("Deliverables convention", _deliverables, required=False)
 
-    # --- el agente que se entrega arranca en cero ---
+    # --- the agent being delivered starts at zero ---
     #
-    # No es cosmético: el primer día es cuando el cliente decide qué es esto.
-    # Si abre su portal y encuentra una conversación nuestra —la de la
-    # verificación—, lo primero que aprende es que su agente ya venía usado. Verificar ensucia por definición (el circuito
-    # que vende el producto es hablarle, pedirle un artefacto y aprobarle algo),
-    # así que lo que no puede depender de la memoria de nadie es LIMPIARLO
-    # después: esto es lo que se planta si no se hizo, con el comando al lado.
+    # This is not cosmetic: day one is when the client decides what this is.
+    # If they open their portal and find a conversation of ours -- the
+    # verification one -- the first thing they learn is that their agent
+    # already came used. Verifying necessarily dirties it (the loop that
+    # sells the product is talking to it, asking for an artifact, and
+    # approving something), so what cannot depend on anyone's memory is
+    # CLEANING IT UP afterward: this is what checks that it was done, with
+    # the command right next to it.
     #
-    # Solo con --entrega: contra un agente en producción, tener conversaciones
-    # es exactamente lo que se espera.
-    if args.entrega:
-        def _en_cero():
-            rastro = []
-            sesiones = len(jget(f"{E}/api/sessions", K)[0]["data"])
-            if sesiones:
-                rastro.append(f"{sesiones} conversación(es)")
+    # Only with --delivery: against a production agent, having conversations
+    # is exactly what's expected.
+    if args.delivery:
+        def _at_zero():
+            trace = []
+            sessions = len(jget(f"{E}/api/sessions", K)[0]["data"])
+            if sessions:
+                trace.append(f"{sessions} conversation(s)")
             if mods.get("kanban"):
                 n = len(jget(f"{A}/portal/tickets", K)[0]["tickets"])
                 if n:
-                    rastro.append(f"{n} ticket(s) en el tablero")
+                    trace.append(f"{n} ticket(s) on the board")
             if mods.get("artifacts"):
                 n = len(jget(f"{A}/portal/artifacts", K)[0]["artifacts"])
                 if n:
-                    rastro.append(f"{n} artefacto(s)")
+                    trace.append(f"{n} artifact(s)")
             if mods.get("files"):
                 n = len(jget(f"{A}/portal/files", K)[0]["files"])
                 if n:
-                    rastro.append(f"{n} archivo(s) en el workspace")
-            # El gasto SALIO de este chequeo, y no por descuido: desde que el
-            # número lo da OpenRouter (`/portal/uso`), es lo que lleva cobrado
-            # LA CLAVE desde que existe, y eso no se puede volver a cero. Un
-            # agente recién verificado quedaría marcado como "usado" para
-            # siempre y el chequeo sería imposible de pasar. Lo que sí queda en
-            # cero —conversaciones, tablero, artefactos, archivos— alcanza para
-            # lo que esto cuida: que el cliente no encuentre trabajo ajeno
-            # adentro de su portal el primer día.
-            if manifest.get("bautizado"):
-                rastro.append("ya está bautizado (el cliente no vería el onboarding)")
-            if rastro:
+                    trace.append(f"{n} file(s) in the workspace")
+            # Spend LEFT OUT of this check, and not by oversight: since the
+            # number comes from OpenRouter (`/portal/usage`), it is what the
+            # KEY has had charged since it existed, and that cannot be reset
+            # to zero. A just-verified agent would stay marked "used" forever
+            # and the check would be impossible to pass. What DOES stay at
+            # zero -- conversations, board, artifacts, files -- is enough for
+            # what this guards: that the client does not find someone else's
+            # work inside their portal on day one.
+            if manifest.get("named"):
+                trace.append("already named (the client would not see the onboarding)")
+            if trace:
                 raise AssertionError(
-                    "el agente llega con huella nuestra: " + " · ".join(rastro)
-                    + " — dejalo en cero con  tools/resetear-agente.sh --local "
-                      "<ruta> --entrega  (o --entrega por ssh) y volvé a correr esto")
-            return "sin conversaciones, sin tablero, sin archivos y sin bautizar"
+                    "the agent arrives with our fingerprint: " + " · ".join(trace)
+                    + " — reset it to zero with  tools/reset-agent.sh --local "
+                      "<path> --delivery  (or --delivery over ssh) and run this again")
+            return "no conversations, no board, no files, and not named"
 
-        check("Entrega: el agente está en cero", _en_cero)
+        check("Delivery: the agent is at zero", _at_zero)
 
-    print(f"\nAgente: {manifest.get('agent')} — {manifest.get('portal_plugin')}\n")
-    for estado, nombre, detalle in results:
-        print(f"  [{estado}] {nombre}" + (f" — {detalle}" if detalle else ""))
-    fallas = [r for r in results if r[0] == FAIL]
-    avisos = [r for r in results if r[0] == WARN]
-    veces = "1 vez" if INTENTOS == 1 else f"{INTENTOS} veces"
-    print(f"\n{len(results) - len(fallas) - len(avisos)} ok · {len(avisos)} avisos · "
-          f"{len(fallas)} fallas  (cada chequeo corrió {veces})")
-    if fallas:
-        print("\nNo está listo para el portal. Arreglar:")
-        for _, nombre, detalle in fallas:
-            print(f"  · {nombre}: {detalle}")
+    print(f"\nAgent: {manifest.get('agent')} — {manifest.get('portal_plugin')}\n")
+    for status, name, detail in results:
+        print(f"  [{status}] {name}" + (f" — {detail}" if detail else ""))
+    failures = [r for r in results if r[0] == FAIL]
+    warnings = [r for r in results if r[0] == WARN]
+    times = "1 time" if ATTEMPTS == 1 else f"{ATTEMPTS} times"
+    print(f"\n{len(results) - len(failures) - len(warnings)} ok · {len(warnings)} warnings · "
+          f"{len(failures)} failures  (each check ran {times})")
+    if failures:
+        print("\nNot ready for the portal. Fix:")
+        for _, name, detail in failures:
+            print(f"  · {name}: {detail}")
         return 1
-    print("\nCumple el contrato del portal.")
+    print("\nConforms to the portal contract.")
     return 0
 
 
