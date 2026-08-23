@@ -118,27 +118,23 @@ done
 # instead — the adapter imports it as a sibling in the container, exactly like it
 # imports flows and kanban (notes/plugin-system-plan.md, phase 3a).
 FILES+=("tools/plugin_registry.py:$KIT_ADAPTER/plugin_registry.py")
-# THE OLD PATH KEEPS GETTING INSTALLED WHILE THE COMPOSE STILL USES IT. If we
-# pulled `data/scripts/portal_adapter.py` out while the compose still pointed
-# there, the live process keeps running (it has the file open), but a
-# `docker restart` —without `compose up -d`— starts with the old entrypoint
-# over a file that no longer exists: the portal crash-loops, and the client is
-# left with no board and no approvals. While it's on the list it's also in
-# the manifest, so the cleaner doesn't see it as obsolete. Once the compose
-# points at the new place, it stops being installed, becomes obsolete, and
-# leaves on its own.
-AGENT_COMPOSE="$AGENT/docker-compose.yml"
-if [[ -f "$AGENT_COMPOSE" ]] && grep -q '/opt/data/scripts/portal_adapter.py' "$AGENT_COMPOSE"; then
-  # The modules go through the OLD path too: the import is relative to the
-  # file that gets run, so an unmigrated agent that only gets the big file
-  # ends up just as broken as a new one.
-  for m in "${ADAPTER_PY[@]}"; do
-    FILES+=("adapter/$m:$DATA/scripts/$m")
-  done
-  # And the validator with them, for the same reason: `plugins.py` imports it,
-  # so the old path without it is an adapter that dies on its first import.
-  FILES+=("tools/plugin_registry.py:$DATA/scripts/plugin_registry.py")
-fi
+# THE OLD PATH IS NOT INSTALLED ANY MORE, AND THAT IS THE MIGRATION, NOT A GAP.
+# There used to be a branch here that kept writing the adapter into
+# `data/scripts/` while an agent's compose still started it from there. It was
+# written when the adapter was ONE file, and it has been unreachable since the
+# split into workspace/kanban/flows/rooms: those modules' destinations are not
+# in `ALLOWED_PREFIXES` (which allows the exact `data/scripts/portal_adapter.py`
+# and nothing else), so the validation below aborted the install with "Installed
+# nothing" every single time the branch fired. A migration path that installs
+# nothing is not a migration path.
+#
+# What happens now on such an agent is what the HEADS UP at the bottom of this
+# script has been saying all along: the whole kit installs, the old
+# `data/scripts/portal_adapter.py` becomes obsolete —it is in the old manifest
+# and no longer shipped— and the cleaner removes it if it is still byte for byte
+# what we wrote. The compose has to be pointed at
+# `/opt/kit/adapter/portal_adapter.py` in the same visit, which is exactly what
+# that notice says, verbatim, with the lines to paste.
 
 # The hooks are BUILT from the directory, like the skills: the day there's a
 # second hook, a hand-written list leaves it out and the gate is left half

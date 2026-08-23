@@ -169,24 +169,19 @@ rm -rf "$STAGING/data/profiles"
 MANIFEST="$STAGING/.kit-installed"
 [[ -s "$MANIFEST" ]] || { echo "install.sh left no .kit-installed: I don't know what to upload" >&2; exit 1; }
 
-# THE ADAPTER MIGRATION WINDOW. If the container over there still starts the
-# adapter from `data/scripts/`, that file keeps getting uploaded and stays
-# noted in the manifest: taking it out now doesn't break the live process —it
-# has the file open— but a `docker restart` (without `compose up -d`) would
-# start with the old entrypoint over a file that's no longer there, and the
-# portal crash-loops. Once the container is already running from the new
-# place, the old path stops being uploaded, becomes obsolete, and the cleaner
-# takes it out on its own.
-if over_there "docker inspect --format '{{json .Config.Entrypoint}}' ${SLUG}-portal-adapter 2>/dev/null | grep -q '/opt/data/scripts'" 2>/dev/null; then
-  mkdir -p "$STAGING/data/scripts"
-  cp "$KIT/adapter/portal_adapter.py" "$STAGING/data/scripts/portal_adapter.py"
-  printf 'data/scripts/portal_adapter.py\t%s\n' \
-    "$(shasum -a 256 "$STAGING/data/scripts/portal_adapter.py" 2>/dev/null | cut -d' ' -f1 ||
-       sha256sum "$STAGING/data/scripts/portal_adapter.py" | cut -d' ' -f1)" >> "$MANIFEST"
-  sort -o "$MANIFEST" "$MANIFEST"
-  echo "   the adapter over there still starts from data/scripts/: leaving that copy"
-  echo "   (after 'docker compose up -d portal-adapter', the next deploy takes it out)"
-fi
+# THE ADAPTER MIGRATION WINDOW IS CLOSED, and it closed itself the day the
+# adapter stopped being one file. There used to be a copy here that kept
+# uploading `data/scripts/portal_adapter.py` while the container over there
+# still started from that path -- so that a `docker restart` would not find a
+# missing file. Since the split into workspace/kanban/flows/rooms/plugins, the
+# big file IMPORTS them, and this only ever uploaded the big file: what it
+# preserved was not a working adapter but a file that raises ImportError on the
+# first line. The same restart dies either way, and the local installer's twin
+# of this branch has been aborting outright (its destinations are not in
+# ALLOWED_PREFIXES). Both are gone: the path is obsolete, the cleaner removes it
+# with the sha check, and the compose gets pointed at
+# /opt/kit/adapter/portal_adapter.py in the same visit -- which is what
+# `install.sh` prints, verbatim, with the lines to paste.
 echo "   $(wc -l < "$MANIFEST" | tr -d ' ') kit files"
 
 # DRIFT CHECK. What gets uploaded is EXACTLY what install.sh says it
