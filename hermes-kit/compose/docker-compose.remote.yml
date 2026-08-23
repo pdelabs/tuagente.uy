@@ -173,6 +173,13 @@ services:
       # The adapter's code, READ ONLY: it's what this container runs, and it
       # can't live somewhere the agent can write to.
       - ./kit-adapter:/opt/kit/adapter:ro
+      # THE KIT'S PLUGIN REGISTRY, READ ONLY. `plugins/<id>/` is a whole plugin
+      # folder from the kit —manifest, skills, engine surface—, and this is the
+      # adapter's only way to know which ones this agent has: it scans
+      # /opt/plugins at boot and refuses to start on a broken set. Read only for
+      # the usual reason: what says which plugins are installed cannot be
+      # writable by what is installed.
+      - ./plugins:/opt/plugins:ro
       # The agent's config, READ ONLY: the adapter READS it (the default
       # model, the disabled skills, the preamble) and never writes it.
       # Without this line it had it rw through the ./data mount, and it was

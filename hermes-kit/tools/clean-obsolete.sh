@@ -77,6 +77,14 @@ ALLOWED_PREFIXES=(
   "policy/roles/catalog.json"
   "policy/hooks/"                     # the gate, in code
   "policy/plugins/"                   # the engine's plugins (the promises guard)
+  # THE KIT'S PLUGIN REGISTRY, mounted :ro at /opt/plugins. The whole folder is
+  # ours: nobody else writes into it and the adapter only reads it. It is a
+  # folder and not a list of files because a plugin that LEAVES this agent's
+  # set -- the role that declared it was let go -- has to be able to leave the
+  # disk with it, and that is exactly what the manifest does: those files were
+  # ours, they are no longer shipped, and only the ones still byte for byte
+  # what we wrote get deleted.
+  "plugins/"
   "policy/tools/"                     # each connection's permission, for the guard
   "policy/mcp/"                       # the MCP servers
   "kit-skills/"                       # the kit's skills (mounted :ro, nobody else writes)

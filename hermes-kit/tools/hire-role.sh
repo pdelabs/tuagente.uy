@@ -372,10 +372,13 @@ echo "Done. $ROLE hired on $SLUG${NAME:+, and its name is $NAME}."
 echo "The portal will show it under Equipo — no need to hand it any key:"
 echo "the adapter has the role's, and the client keeps using theirs."
 echo
-echo "If this is the agent's first role, run the installer once more:"
+echo "RUN THE INSTALLER ONCE MORE — not only after the first hire:"
 echo "  ./install.sh <agent>/data      (or ./deploy-remote.sh, if it's remote)"
-echo "Now that there's a roster, kit-skills/ keeps only the shared skills, and the"
-echo "craft ones stop getting charged to every role on every request."
+echo "Two things depend on it. With a roster, kit-skills/ keeps only the shared"
+echo "skills and the craft ones stop getting charged to every role on every"
+echo "request. And this role's plugins reach plugins/ (mounted at /opt/plugins)"
+echo "only from there: hiring installs the profile, the installer is what makes"
+echo "the agent SAY which plugins it now has."
 
 # WHAT THE CLIENT ASKED FOR AND THIS SCRIPT DID NOT SET UP. A role composed of
 # capabilities (today the assistant) arrives with the list the client checked

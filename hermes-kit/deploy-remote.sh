@@ -139,11 +139,32 @@ if over_there "[ -f $REMOTE/policy/roles/catalog.json ]" 2>/dev/null; then
   over_there "cat $REMOTE/policy/roles/catalog.json" > "$STAGING/policy/roles/catalog.json"
   echo "   this agent has a team: only the shared skills go"
 fi
+# AND SO DOES WHICH ROLES ARE HIRED OVER THERE, for the same reason and with
+# the same shape. `install.sh` ships a plugin folder for every plugin an
+# INSTALLED role declares, and it reads that off `data/profiles/<id>/` -- which
+# in a newborn staging is nobody. Without this the deploy would take
+# accounting's `invoices-to-data` off an agent that has accounting hired, and
+# the cleaner would do it silently, because from the staging's point of view it
+# was correct. The markers are empty directories and they are DELETED right
+# after the install: `data/profiles/` is the agent's, it is not in any manifest,
+# and uploading it would rewrite the ownership of a directory the engine owns.
+if over_there "[ -d $REMOTE/data/profiles ]" 2>/dev/null; then
+  while IFS= read -r role; do
+    [[ -n "$role" ]] || continue
+    mkdir -p "$STAGING/data/profiles/$role"
+  done < <(over_there "ls -1 $REMOTE/data/profiles 2>/dev/null" || true)
+  hired="$(ls -1 "$STAGING/data/profiles" 2>/dev/null | tr '\n' ' ')"
+  [[ -z "${hired// }" ]] || echo "   roles hired over there: ${hired% }"
+fi
 if ! "$KIT/install.sh" "$STAGING/data" > "$STAGING/install-output.txt" 2>&1; then
   echo "install.sh failed while building the staging; not uploading anything:" >&2
   sed 's/^/   /' "$STAGING/install-output.txt" >&2
   exit 1
 fi
+
+# The profile markers did their job during the install and do not travel: see
+# the note above.
+rm -rf "$STAGING/data/profiles"
 
 MANIFEST="$STAGING/.kit-installed"
 [[ -s "$MANIFEST" ]] || { echo "install.sh left no .kit-installed: I don't know what to upload" >&2; exit 1; }
@@ -202,7 +223,7 @@ fi
 # belongs to the agent, uid 10000; policy/ and kit-skills/ stay root's
 # because they're mounted :ro). A new root can't just slide through without
 # someone deciding whose it is.
-KNOWN="data policy kit-skills kit-adapter"
+KNOWN="data policy kit-skills kit-adapter plugins"
 while IFS= read -r root; do
   [[ " $KNOWN " == *" $root "* ]] && continue
   echo "DRIFT: install.sh created the folder '$root/', which this deploy doesn't" >&2

@@ -233,6 +233,40 @@ done
 # shipping it. Nobody runs them inside the agent and they only cost prompt
 # space and disk.
 
+# THE PLUGIN FOLDERS THEMSELVES, WHICH ARE NOT THE SAME THING AS THEIR SKILLS.
+# What went above is DELIVERY: a skill flattened into kit-skills/ so the engine
+# indexes it exactly where it always did. This is the REGISTRY: the whole folder
+# -- manifest, skills, engine surface -- copied to <agent>/plugins/, which the
+# compose mounts :ro at /opt/plugins. The adapter scans it at boot and refuses to
+# start on a broken set (adapter/plugins.py, phase 3a); the tab, adapter and
+# service surfaces that come next are read from there too. Two copies of a
+# plugin's skill therefore exist on an agent on purpose, and they are not
+# redundant: one is what the engine indexes, the other is what says the plugin
+# is installed (notes/plugin-system-plan.md, phase 3b).
+#
+# WHICH ONES IS COMPUTED, NEVER LISTED: tools/plugin_set.py resolves the system
+# plugins, the ones behind a base capability, and the ones each HIRED role
+# declares. A list by hand is how two skills once made it into the kit and never
+# into a new agent.
+PLUGIN_IDS=()
+while IFS= read -r p; do
+  [[ -n "$p" ]] && PLUGIN_IDS+=("$p")
+done < <(python3 "$KIT/tools/plugin_set.py" "$DATA")
+# The five system plugins are unconditional, so an empty set is not "this agent
+# has no plugins": it is plugin_set.py having failed to say. Same reasoning as
+# the skills split above -- stop before writing anything.
+[[ ${#PLUGIN_IDS[@]} -gt 0 ]] || {
+  echo "tools/plugin_set.py didn't say which plugins this agent has. Installed nothing." >&2
+  exit 1
+}
+for pid in "${PLUGIN_IDS[@]}"; do
+  while IFS= read -r f; do
+    rel="${f#"$KIT"/plugins/}"           # transcribe/plugin.json
+    FILES+=("plugins/$rel:$AGENT/plugins/$rel")
+  done < <(find "$KIT/plugins/$pid" -type f \
+             ! -path "*/evals/*" ! -path "*/__pycache__/*" ! -name "*.pyc" | sort)
+done
+
 shorten() { echo "${1#"$AGENT"/}"; }        # readable paths in the messages
 
 # The manifest of what got installed: <path relative to the agent><TAB><sha256>.
@@ -489,6 +523,21 @@ fi
   printf '%s\t%s\n' "data/skills/.kit_manifest" "$(sha "$DATA/skills/.kit_manifest")"
 } | sort > "$MANIFEST.new"
 
+# WHAT LEFT THIS AGENT'S PLUGIN SET, SAID OUT LOUD. The cleaner below removes
+# the files —it is the same manifest mechanism as everything else— but it
+# reports one line per FILE, and "plugins/invoices-to-data/skills/…/SKILL.md
+# removed" three times over is not the sentence anybody needs. The sentence is
+# which plugin this agent no longer has and why it is going: a role was let go
+# and its plugin goes with it.
+if [[ -f "$MANIFEST" ]]; then
+  while IFS= read -r gone; do
+    [[ -n "$gone" ]] || continue
+    echo "plugin '$gone' is no longer in this agent's set — removing plugins/$gone/"
+  done < <(comm -23 \
+    <(cut -f1 "$MANIFEST" | sed -n 's|^plugins/\([^/]*\)/.*|\1|p' | sort -u) \
+    <(printf '%s\n' "${PLUGIN_IDS[@]}" | sort))
+fi
+
 # (Paths were already validated against ALLOWED_PREFIXES before copying anything.)
 "$KIT/tools/clean-obsolete.sh" "$AGENT"
 
@@ -547,6 +596,26 @@ and to data/config.yaml (if it isn't there):
 
 and then: docker compose up -d hermes   (a \`restart\` isn't enough: it's a new
 mount). Checked by tools/agent-check.py.
+NOTICE
+fi
+
+# And the registry's mount, same story as the plugin above. The folder is in
+# <agent>/plugins/, but the adapter reads /opt/plugins: without the line it scans
+# nothing, `GET /portal/plugins` answers an empty list, and the agent looks like
+# a pre-3b one while the files are right there.
+if [[ -f "$COMPOSE" ]] && ! grep -q './plugins:/opt/plugins' "$COMPOSE"; then
+  cat <<NOTICE
+
+HEADS UP: $COMPOSE doesn't mount the kit's plugin registry. The folder is
+installed at plugins/ and the adapter looks for it at /opt/plugins, so without
+this line it comes up reporting no plugins at all. Add it to the
+portal-adapter service:
+
+    volumes:
+      - ./plugins:/opt/plugins:ro     ← add
+
+and then: docker compose up -d portal-adapter   (a \`restart\` isn't enough:
+it's a new mount). Checked by tools/agent-check.py.
 NOTICE
 fi
 
