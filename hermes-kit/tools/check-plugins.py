@@ -39,7 +39,8 @@ def describe(data: dict) -> str:
         if key == "skills":
             parts.append("skills:" + ",".join(value))
         elif key == "tab":
-            parts.append("tab:" + value["label"])
+            parts.append("tab:" + value["label"] if "label" in value
+                         else "tab:builtin/" + value["builtin"])
         else:
             parts.append(f"{key}:{value}")
     return " ".join(parts) or "no surfaces"

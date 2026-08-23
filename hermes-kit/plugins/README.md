@@ -45,6 +45,25 @@ before adding a surface this registry has never shipped.
 hard error, like everywhere else in the kit's closed catalogs. `_comment` (a
 string or a list of strings) is allowed and ignored.
 
+### The tab surface has two shapes
+
+```json
+"tab": { "label": "Scrapeos" }        a page the portal does not have yet
+"tab": { "builtin": "pipeline" }      a page app/app/ already has
+```
+
+Exactly one of the two, never both. `label` is client-facing copy: phase 5 draws
+the generic plugin page under that word. `builtin` names an existing portal
+page, which is the only honest shape for the system plugins — Pipeline,
+Approvals, Files, Artifacts and Flows were written long before anybody called
+them plugins, and a manifest that claimed a `label` would have the portal
+inventing a second Pipeline tab next to the real one.
+
+The check stops at the shape. It does not open `app/` to see whether the page
+exists: the kit validates manifests, the portal owns its routes, and a check
+that reached across that line would fail the kit's tests on a portal refactor
+that has nothing to do with plugins.
+
 ## Where the files actually land
 
 **Phase 1 — today — the plugin folder is repo-side packaging only.** Nothing

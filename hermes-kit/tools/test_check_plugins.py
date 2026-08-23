@@ -102,6 +102,15 @@ class ValidRegistry(unittest.TestCase):
                 code, out = check(tmp)
                 self.assertEqual(code, 0, out)
 
+    def test_a_tab_may_name_a_page_the_portal_already_has(self):
+        """The system plugins' shape: `builtin`, not a label to draw."""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "alpha", manifest(
+                "alpha", surfaces={"skills": ["alpha"], "tab": {"builtin": "pipeline"}}))
+            code, out = check(tmp)
+            self.assertEqual(code, 0, out)
+            self.assertIn("tab:builtin/pipeline", out)
+
     def test_an_empty_registry_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "plugins").mkdir()
@@ -177,6 +186,28 @@ class BrokenRegistry(unittest.TestCase):
                 "alpha", surfaces={"skills": ["alpha"], "adapter": "endpoints.py"}),
                 skills=["alpha"])
             self.fails_with(tmp, "surfaces.adapter points at 'endpoints.py'")
+
+    def test_a_tab_that_declares_both_shapes(self):
+        """A page the portal has AND a word to draw is two different tabs."""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "alpha", manifest("alpha", surfaces={
+                "skills": ["alpha"], "tab": {"builtin": "pipeline", "label": "Pipeline"}}))
+            self.fails_with(tmp, "surfaces.tab must be an object with exactly one of")
+
+    def test_a_tab_with_neither_shape(self):
+        for bad in ({}, {"page": "pipeline"}, "pipeline", ["pipeline"]):
+            with tempfile.TemporaryDirectory() as tmp:
+                write(tmp, "alpha",
+                      manifest("alpha", surfaces={"skills": ["alpha"], "tab": bad}))
+                self.fails_with(tmp, "surfaces.tab must be an object with exactly one of")
+
+    def test_a_tab_whose_one_key_is_empty(self):
+        for key in ("builtin", "label"):
+            for bad in ("", "   ", 7, None):
+                with tempfile.TemporaryDirectory() as tmp:
+                    write(tmp, "alpha", manifest(
+                        "alpha", surfaces={"skills": ["alpha"], "tab": {key: bad}}))
+                    self.fails_with(tmp, f"surfaces.tab.{key} must be a non-empty string")
 
     def test_malformed_json(self):
         with tempfile.TemporaryDirectory() as tmp:

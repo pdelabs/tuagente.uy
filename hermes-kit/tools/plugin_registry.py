@@ -135,11 +135,27 @@ def _check_surfaces(path: Path, data: dict, folder_dir: Path) -> None:
         if not (folder_dir / value).exists():
             fail(where, f"surfaces.{key} points at {value!r}, which does not exist in the plugin")
 
+    # TWO SHAPES, NEVER BOTH. `label` is a page the portal does not have yet:
+    # the client reads the word and phase 5 draws the generic plugin page under
+    # it. `builtin` names a page app/app/ ALREADY has, which is the only shape a
+    # system plugin can honestly declare -- its screens were written years before
+    # anybody called it a plugin, and inventing a second Pipeline tab next to the
+    # real one is worse than declaring nothing.
+    #
+    # THE CHECK STOPS AT THE SHAPE. It does not open app/ to see whether the page
+    # is there: the kit validates manifests and the portal owns its own routes,
+    # and a check that reached across that line would make the kit's tests fail
+    # on a portal refactor that has nothing to do with plugins.
     tab = surfaces.get("tab")
     if tab is None:
         return
-    if not isinstance(tab, dict) or sorted(tab) != ["label"] or not isinstance(tab["label"], str):
-        fail(where, "surfaces.tab must be an object with just a `label` the client reads")
+    if not isinstance(tab, dict) or sorted(tab) not in (["builtin"], ["label"]):
+        fail(where, "surfaces.tab must be an object with exactly one of `label` (the "
+                    "word the client reads, for a page the portal does not have yet) "
+                    "or `builtin` (the name of a portal page that already exists)")
+    key = "builtin" if "builtin" in tab else "label"
+    if not isinstance(tab[key], str) or not tab[key].strip():
+        fail(where, f"surfaces.tab.{key} must be a non-empty string")
 
 
 def _check_graph(plugins: dict[str, dict]) -> None:
