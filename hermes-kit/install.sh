@@ -600,7 +600,7 @@ fi
 if [[ -f "$COMPOSE" ]] && ! grep -q 'policy/plugins:/opt/data/plugins' "$COMPOSE"; then
   cat <<NOTICE
 
-HEADS UP: $COMPOSE doesn't mount the `promises` plugin. It's what stops the
+HEADS UP: $COMPOSE doesn't mount the \`promises\` plugin. It's what stops the
 agent from announcing a flow it didn't create, and without the mount it never
 loads. Add this to the hermes service:
 
