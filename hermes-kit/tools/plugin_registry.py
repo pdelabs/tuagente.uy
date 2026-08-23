@@ -16,12 +16,15 @@ runs it over `/opt` when an agent boots. That is the whole point of importing
 it rather than copying it. It also means `root` is not always the kit, and one
 rule reads differently when it is not — see `_check_skill_slots`.
 
-PACKAGING IS STILL FLAT. A plugin's skills flatten back into the container
-layout the agent already has (`/opt/kit/skills/<name>/` or the profile's
-`skills/<name>/`), so `skill_sources()` returns exactly what a caller would
-have found under `skills/<name>/` before the move. Shipping the plugin FOLDERS
-to `/opt/plugins/<id>/` is phase 3b; the loader can already read them, nothing
-writes them yet.
+TWO SHIPMENTS, AND THIS FILE RESOLVES BOTH. The DELIVERY is flat and always
+was: a plugin's skills flatten back into the container layout the agent already
+has (`/opt/kit/skills/<name>/` or the profile's `skills/<name>/`), so
+`skill_sources()` returns exactly what a caller would have found under
+`skills/<name>/` before the move, and that copy is the one the ENGINE indexes.
+The REGISTRY is the whole folder at `/opt/plugins/<id>/`, which `install.sh` has
+been writing since phase 3b and which is what says the plugin is INSTALLED --
+what `adapter/plugins.py` scans at boot and `/portal/plugins` publishes. Both
+copies are on the agent on purpose (`notes/plugin-system-plan.md`, phase 3b).
 """
 
 from __future__ import annotations
@@ -230,13 +233,17 @@ def _check_skill_slots(root: Path, plugins: dict[str, dict]) -> None:
     (`adapter/plugins.py`) always seeds this from an empty directory and catches
     two PLUGINS claiming one name, never a plugin colliding with a kit skill.
 
-    WRITTEN DOWN INSTEAD OF PAPERED OVER. Closing it means teaching this
-    function where an agent keeps its skills, which is a claim about the
-    container layout on the eve of the phase that moves that layout
-    (notes/plugin-system-plan.md, 3b) -- so 3b decides it, with the paths in
-    front of it. Until then the collision is refused where both halves are
-    real: `check-plugins.py` and `build_role.py`, over the repo, at build time,
-    before there is an agent to install it onto.
+    THE HALF THAT IS MISSING AT BOOT STAYS MISSING, AND 3b IS WHERE THAT WAS
+    DECIDED. It looked like a gap to close once the paths were in front of us;
+    it is not. An installed agent's `/opt/kit/skills/` is FULL of delivered
+    copies of plugin skills, put there by the installer on purpose, so a boot
+    check that read them would find `transcribe` under
+    `/opt/plugins/transcribe/skills/` AND under `/opt/kit/skills/` and refuse to
+    start -- on every correctly installed agent. The kit-vs-plugin half belongs
+    to build time, where both homes are real and there is no delivery to
+    confuse it with: `check-plugins.py` and `build_role.py`, over the repo,
+    before there is an agent to install it onto. Do not "fix" it from the boot
+    side (notes/plugin-system-plan.md, 3b).
     """
     seen: dict[str, str] = {}
     for path in sorted((root / "skills").glob("*/SKILL.md")):

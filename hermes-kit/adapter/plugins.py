@@ -20,8 +20,9 @@ exception is the duplicate-skill-source check, which seeds itself from
 agent's kit skills are at `/opt/kit/skills/`, one level down. At boot that check
 therefore refuses two PLUGINS claiming one skill name and never a plugin
 colliding with a kit skill. The build refuses that one, over the repo, where
-both halves are real; `_check_skill_slots` carries the reason the gap is phase
-3b's call and not a line to close quietly from this side.
+both halves are real; `_check_skill_slots` carries the reason it stays that way
+-- an installed agent legitimately holds DELIVERED copies of plugin skills, so a
+boot check that read them would refuse every correct install.
 
 WHY A BROKEN SET IS NOT A DEGRADED BOOT. A plugin's surfaces are load-bearing: a
 skill a role's SOUL promises, a tab the portal draws, an endpoint that tab calls.
@@ -64,11 +65,11 @@ ROOT = Path(os.environ.get("PLUGINS_ROOT", "/opt"))
 def load(root: Path = ROOT) -> dict:
     """Every plugin installed on this agent, validated, keyed by id.
 
-    NO `plugins/` IS NOT AN ERROR, IT IS THE NORMAL STATE. Every agent alive
-    today was installed before the folder started shipping and stays that way
-    until the layout flip lands (phase 3b). An empty set plus a line naming the
-    state is the honest answer; refusing to boot on it would take every live
-    client down to announce a feature none of them have yet.
+    NO `plugins/` IS NOT AN ERROR, IT IS THE NORMAL STATE. The folder ships as
+    of phase 3b and every agent alive today was installed before that, so it
+    stays this way until somebody runs the installer over it. An empty set plus
+    a line naming the state is the honest answer; refusing to boot on it would
+    take every live client down over a feature none of them have yet.
     """
     directory = root / "plugins"
     if not directory.is_dir():
