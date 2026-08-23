@@ -320,7 +320,17 @@ if [[ "$MODE" == "--diff" ]]; then
       echo "MISSING  $(shorten "$dest")"; different=$((different+1))
     elif ! diff -q "$source_path" "$dest" >/dev/null; then
       echo "DIFFERENT $(shorten "$dest")"
-      diff -u "$source_path" "$dest" | sed 's/^/    /' | head -20
+      # `|| true` IS LOAD-BEARING, and without it this whole report stopped at
+      # the FIRST changed file. `diff` exits 1 when the files differ —which is
+      # the only case that reaches this line— and under `set -euo pipefail` a
+      # pipeline ending 1 kills the script: rc=1, no MISSING lines, no OBSOLETE
+      # lines, no summary, and no hint that anything was cut short. Measured at
+      # 8f418ba over an agent with one edited file and one deleted: the deleted
+      # one was never reported. `head -20` adds the same failure by SIGPIPE on a
+      # diff longer than twenty lines. This report exists so nobody overwrites a
+      # fix somebody made inside an agent; one that stops early is worse than
+      # none, because it looks complete.
+      { diff -u "$source_path" "$dest" | sed 's/^/    /' | head -20; } || true
       different=$((different+1))
     fi
   done
