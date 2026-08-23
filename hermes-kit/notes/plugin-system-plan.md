@@ -6,7 +6,11 @@ Status: **Phase 0 DONE** (full-English translation, commits c0da1f4..f7ea931),
 a32b430 and b8e73bb from an independent revalidation — and **Phase 2 DONE**
 2026-08-23 (e601f78, 5e4d582, 2ac4295), and **Phase 3a DONE** 2026-08-23
 (c3345f0 the adapter's loader and `/portal/plugins`, 4af1df0 the
-`adapter_version` rename, plus this note). **Phase 3b is next.**
+`adapter_version` rename, plus this note), and **Phase 3b DONE** 2026-08-23
+(c0ae990 the registry ships and leaves with the role, a8dba51 the promises
+guard moves into `flow`, 70ed713 agent-check reads the registry, c62402d the
+dead `data/scripts` window removed, bd28caf and dcb01df two small fixes found
+on the way, plus this note). **Phase 4 is next.**
 Plan agreed with Luis on 2026-08-23; v2 only updates paths and ids to the
 translated tree — no decision changed.
 
@@ -26,7 +30,7 @@ mechanisms; the plugin is the package that unifies them.
 | # | Mechanism today (translated paths) | Becomes |
 |---|---|---|
 | 1 | Kit skills: `skills/<name>/SKILL.md` + scripts | **skills surface** — agent-facing instructions + code |
-| 2 | Hermes engine plugins: `policy/plugins/promises/` (`plugin.yaml`, hooks like `transform_llm_output`) | **engine surface** — the engine already HAS a plugin system; we ship one |
+| 2 | Hermes engine plugins: `plugins/flow/engine/promises/` (`plugin.yaml`, hooks like `transform_llm_output`; it was `policy/plugins/promises/` until 3b) | **engine surface** — the engine already HAS a plugin system; we ship one |
 | 3 | MCP gateway: `mcp-guard/guard.py` (hermes → guard → real server on the internal compose net, policy `:ro`, forbidden tools not even listed) | **mcp surface** — third-party MCP servers behind the guard |
 | 4 | Adapter endpoints: path-ifs in `adapter/portal_adapter.py` | **adapter surface** — routes mounted under `/plugin/<id>/…` |
 | 5 | Portal tabs: pages in `app/app/*` | **tab surface** — nav + a generic plugin page |
@@ -105,7 +109,8 @@ kanban           (root: Hermes ticket store /opt/data/kanban/… +
 ├── deliverable  (deliver script + /portal/files + tab)
 ├── artifact     (skill + /portal/artifacts + tab)
 └── flow         (flow creation + /portal/flows + tab;
-                  engine surface = policy/plugins/promises)
+                  engine surface = plugins/flow/engine/promises,
+                  installed to the agent's policy/plugins/promises)
 ```
 
 ## Placement decisions (agreed)
@@ -164,19 +169,59 @@ match plugin ids and stay as they are.
      nonzero on a broken set. `install.sh` gained exactly two entries, both
      shipping `tools/plugin_registry.py` to where the adapter runs
      (`kit-adapter/`, and `data/scripts/` while an agent's compose still starts
-     from there). Nothing else moved: the five roles' dists are byte for byte
+     from there — that second one turned out to sit inside a branch that had
+     been dead since the adapter split, and 3b removed both, c62402d). Nothing
+     else moved: the five roles' dists are byte for byte
      what they were at 1b1129b, and the file list install.sh writes on a solo
      and on a team agent is identical but for those two files plus
      `adapter/plugins.py`, which travels with the rest of the adapter because
      that list is built from the directory.
-   - **3b — the `/opt/plugins` layout flip.** Shipping the plugin FOLDERS to
-     `/opt/plugins/<id>/` instead of flattening their skills; moving
-     `policy/plugins/promises/` into `plugins/flow/engine/` (the compose mount
-     and `plugins.enabled` in config.yaml have to move with it);
-     `tools/hire-role.sh` and `tools/agent-check.py` made plugin-aware; and the
-     `SKILL.md` path rewrites that a skill leaving `/opt/kit/skills/<name>/`
-     forces. Until it lands the loader finds nothing on every live agent — by
-     design, and tested.
+   - **3b — `/opt/plugins` becomes the installed source of truth.** ~~Ship the
+     plugin FOLDERS; bring the engine surface home; make the installer and the
+     check plugin-aware.~~ **DONE 2026-08-23.**
+
+     REGISTRY AND DELIVERY ARE TWO SHIPMENTS, AND ONLY THE FIRST IS NEW. This is
+     the decision the phase rests on, and it is not the "layout flip" the
+     earlier draft of this bullet described:
+
+     * **The registry** is `/opt/plugins/<id>/` — the whole folder, manifest and
+       skills and engine surface, mounted `:ro` from `<agent>/plugins/`. It is
+       what says the plugin is INSTALLED: what the 3a loader scans, what
+       `/portal/plugins` publishes, and what the dependency, tab, adapter and
+       service surfaces are built on from phase 4 onward.
+     * **The delivery** does not change, on purpose. `build_role.py` still
+       flattens a plugin's skills into the distribution, `install.sh` still
+       writes the shared ones into `kit-skills/`, and those copies — derived
+       from the registry, through the one resolver — are still how the ENGINE
+       sees a skill. Engine skill discovery was never the problem this phase had
+       to solve: moving `/opt/kit/skills/<name>/` would have forced a `SKILL.md`
+       path rewrite across the kit to buy nothing.
+
+     So a plugin's skill is on an agent TWICE and both copies are load-bearing:
+     the delivered one is what the agent RUNS, the registry one is what says the
+     agent HAS it. `agent-check.py` compares them byte for byte, because the one
+     that runs is the one nothing described.
+
+     THE CONSEQUENCE, WHICH 3448728 WROTE DOWN AND THIS PHASE CONFIRMS: the boot
+     slot-check covers plugin-vs-plugin only, BY DESIGN. The installed kit tree
+     legitimately holds delivered copies of plugin skills, so a boot check that
+     scanned `/opt/kit/skills` would refuse every correctly installed agent.
+     Build time owns the kit-vs-plugin half — `check-plugins.py` and
+     `build_role.py`, over the repo, where both homes are real and before there
+     is an agent to install onto. Do not "fix" the boot check.
+
+     What else the phase settled: the set is COMPUTED (`tools/plugin_set.py` —
+     system plugins, the plugin behind a base capability, and what each HIRED
+     role declares, read off `data/profiles/`); an update removes the folder of
+     a plugin that left the set, through the manifest's own machinery and
+     nothing else; the engine surface moved to `plugins/flow/engine/promises/`
+     while its destination on the agent stayed byte for byte
+     `policy/plugins/promises/`; and `agent-check.py` reports a pre-plugin agent
+     as a pending WARNING, not a failure. Every agent alive today is one of
+     those until somebody runs the installer and adds
+     `./plugins:/opt/plugins:ro` to its compose — the folder installed without
+     the mount is a red line, because installed and unreadable is worse than
+     absent.
 4. **First new-surface plugins:** `webscraping` (service + skill) and one
    third-party MCP behind the guard.
 5. **Dynamic portal tab:** generic plugin page + manifest-driven nav.
@@ -190,6 +235,42 @@ match plugin ids and stay as they are.
   namespace) — phase 5.
 
 ## Resolved
+
+- **Which plugins an agent gets is COMPUTED, and a solo agent is not the whole
+  registry.** `tools/plugin_set.py` is the one answer, asked by `install.sh`
+  when it ships and by `agent-check.py` when it verifies: the system plugins
+  (unconditional, which is what lets anything depend on them), the plugin
+  behind a `level: base` capability (the catalog promises those as already
+  installed — `transcribe`, which no role declares), and what each HIRED role
+  declares in the kit's `role.json`, hired meaning `data/profiles/<id>/` exists
+  (the adapter's own test). A solo agent therefore comes out with SIX and not
+  with all seven, even though `install.sh` delivers every skill in the kit to
+  it. That is deliberate: a no-roster agent gets the whole skills catalog
+  because that is the pre-team product, not because it bought
+  `invoices-to-data`. The registry describes what the agent HAS; kit-skills/ on
+  a solo agent describes what the old installer always copied. If a client
+  plugin ever grows a tab or an adapter surface, the solo agent that carries
+  its skill will not draw it — and that is the honest answer, because nobody
+  sold it.
+
+- **A role's declaration is read from the KIT, never from the installed
+  profile.** The distribution's `role.json` is flattened (plugins folded into
+  `skills`, no `plugins` key) and non-semantic by decision. The agent's disk
+  says WHICH roles are hired; the kit says what a role is MADE OF. That split
+  is what lets a role change composition in a kit update and have the next
+  install move the plugin folders with it.
+
+- **The `data/scripts` migration window was dead code, and it aborted every
+  install it fired on** (c62402d). It kept writing the adapter into the agent's
+  own `data/scripts/` while a compose still started it from there, and it was
+  written when the adapter was one file: since the split, its destinations are
+  outside `ALLOWED_PREFIXES`, so `install.sh` exited with "Installed nothing"
+  before copying a byte. The remote twin uploaded the big file without the five
+  modules it imports, i.e. an adapter that raises ImportError instead of one
+  that is missing. Both gone; the old path is obsolete now, so the cleaner
+  removes it with its sha check and the script prints the compose change to
+  make in the same visit. The `ALLOWED_PREFIXES` line stays — it is what makes
+  that removal possible.
 
 - **`portal_plugin` is `adapter_version` (adapter 0.41.0, 4af1df0), and that
   was the THIRD meaning of the word.** The manifest field never held a

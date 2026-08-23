@@ -462,18 +462,21 @@ with more privilege.
   when filtering is needed, the original stays at `data/.env.unmigrated`
   instead of getting deleted.
 
-- **MISSING — the remote guard for the adapter migration fails OPEN.** In
-  `deploy-remote.sh`, to avoid deleting `data/scripts/portal_adapter.py`
-  while the container is still running it, it asks over ssh:
-  `docker inspect … | grep /opt/data/scripts`. Any error — docker not
-  responding, a container with a different name, ssh dropping — reads as
-  "already migrated" and the old path gets removed anyway: a later
-  `docker restart` leaves the portal in a crash loop. And nobody exercises
-  it: the comparator doesn't speak ssh, and the judge
-  (`tools/test-remote-deploy-ssh.sh`) has a fake `docker` that does
-  `exit 0`. Still need to distinguish "the container doesn't use the old
-  path" from "couldn't tell" — when in doubt, keep it — and cover it in the
-  judge with a fake `docker` that returns the old entrypoint.
+- **CLOSED (23/8) — the remote guard for the adapter migration failed OPEN,
+  and the guard is gone.** In `deploy-remote.sh`, to avoid deleting
+  `data/scripts/portal_adapter.py` while the container was still running it,
+  it asked over ssh `docker inspect … | grep /opt/data/scripts`; any error —
+  docker not responding, a container named differently, ssh dropping — read as
+  "already migrated". It was never fixed, it was REMOVED, because it had
+  stopped being able to do its job: since the adapter split into
+  workspace/kanban/flows/rooms/plugins, that branch uploaded the big file
+  alone, and the big file imports the other five. What it "preserved" was an
+  adapter that raises ImportError on the next restart — the same crash it
+  existed to prevent. The local installer's twin was worse: its destinations
+  are outside `ALLOWED_PREFIXES`, so it aborted the whole install with
+  "Installed nothing" every time it fired. Both are gone; the old path is
+  simply obsolete now, so the cleaner removes it with the sha check, and
+  `install.sh` prints the entrypoint/user/mount to change in the same run.
 
 ## The pattern behind the last three rounds, and what to build (8/12)
 

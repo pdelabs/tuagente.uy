@@ -16,6 +16,20 @@ old date isn't a problem; a row that says something no longer true is.
 | Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v12** (16/8/2026; already named by the portal, the `portal:identity` block exists) | `v2026.7.30` (verified with `docker ps`, not just the compose) | **16/8: SOUL v12 applied, `agent-check` OK on all six SOUL lines.** 14/8: business skills + `portal-check` 15 ok · 0 failures |
 | East Comunicación | `east` → `/opt/agentes/east` | TODO | TODO | TODO |
 
+> **Pending: the plugin registry (phase 3b, 23/8/2026).** `install.sh` now
+> installs `<agent>/plugins/<id>/` and the compose mounts it `:ro` at
+> `/opt/plugins`. NEITHER live agent has it: both still answer `[]` at
+> `/portal/plugins`, which is the pre-3b behaviour and not an outage.
+> `agent-check.py` reports it as a warning ("PRE-PLUGIN LAYOUT, UPDATE
+> PENDING") until the installer runs, and as a FAILURE if the folder is
+> installed and the compose does not mount it — installed and unreadable is
+> worse than absent. So the two steps go together, in one visit: run the
+> installer (or `deploy-remote.sh`) and add
+> `- ./plugins:/opt/plugins:ro` to the portal-adapter service, then
+> `docker compose up -d portal-adapter` (a `restart` is not enough: it is a new
+> mount). Not run against either agent yet — this line says what is pending,
+> not what was done.
+
 > **Pending after this translation pass.** This rename introduced new inline
 > chip syntax in the SOUL (`capability:<id>` etc., soul/VERSION → v13) and new
 > on-disk paths (`policy/`, `secrets.env`, …). Neither live agent has received
@@ -47,12 +61,14 @@ and the agent has no idea what to do with that**. Migrating it is one run of
 whatever was hand-written first. No local client agents today: anything
 created with `new-agent.sh` is born on v12.
 
-**And East is missing the promises guard** (`policy/plugins/promises/`, from
-13/8/2026), which is the only thing stopping an agent from saying *"queda
-definido: viernes a las 9:30"* without having created anything. It's three
-things and they go together: `install.sh` drops the plugin, the compose
-mounts it (`./policy/plugins:/opt/data/plugins:ro`), and the config turns it
-on (`plugins.enabled: [promises]`); then, `docker compose up -d hermes` — a
+**And East is missing the promises guard** (`policy/plugins/promises/` on the
+agent — in the kit it now lives at `plugins/flow/engine/promises/`, the `flow`
+plugin's engine surface, and the destination did not change), which is the only
+thing stopping an agent from saying *"queda definido: viernes a las 9:30"*
+without having created anything. It's three things and they go together:
+`install.sh` drops the plugin, the compose mounts it
+(`./policy/plugins:/opt/data/plugins:ro`), and the config turns it on
+(`plugins.enabled: [promises]`); then, `docker compose up -d hermes` — a
 `restart` isn't enough, it's a new mount. `agent-check.py` fails if any of
 the three is missing.
 

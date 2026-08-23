@@ -524,11 +524,16 @@ AG=/path/to/agent          # the agent's repo; data/ and kit-skills/ live inside
 
 # 2. The compose file: mount kit-skills on BOTH services (hermes and portal-adapter)
 #       - ./kit-skills:/opt/kit/skills:ro
-#    and, ONLY on hermes, the promises guard:
+#    ONLY on hermes, the promises guard:
 #       - ./policy/plugins:/opt/data/plugins:ro
-#    Both come in compose/docker-compose.example.yml and in the remote one; an
-#    existing agent needs them added by hand. The second one is a NEW mount:
-#    it needs `docker compose up -d hermes`, a plain `restart` won't pick it up.
+#    and ONLY on portal-adapter, the kit's plugin registry (phase 3b):
+#       - ./plugins:/opt/plugins:ro
+#    All three come in compose/docker-compose.example.yml and in the remote one;
+#    an existing agent needs them added by hand. They are NEW mounts: they need
+#    `docker compose up -d <service>`, a plain `restart` won't pick them up.
+#    The last one is not optional once step 1 has run: with the folder installed
+#    and unmounted the adapter reports no plugins at all, and agent-check.py
+#    calls that a failure — installed and unreadable is worse than absent.
 
 # 3. The agent's config. It's mounted :ro: open it, edit it, close it
 #    (tools/with-config-open.sh, or by hand on the host). ONE SINGLE COMMAND

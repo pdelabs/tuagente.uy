@@ -44,6 +44,14 @@ policy/         what the agent executes but CANNOT edit: the gate (`hooks/`),
                 root—, not by ownership.
 kit-skills/     the kit's skills, `:ro` in both services, so neither the agent
                 rewrites them nor the engine's curator archives them.
+plugins/        the kit's plugin registry: one whole folder per plugin this
+                agent has (manifest, skills, engine surface), `:ro` at
+                `/opt/plugins`. It is what SAYS which plugins are installed —
+                the adapter scans it at boot and serves it at
+                `/portal/plugins`. The skills inside are also delivered to
+                `kit-skills/` and to the profiles, which is what the engine
+                indexes: registry and delivery are two shipments
+                (`notes/plugin-system-plan.md`).
 kit-adapter/    the adapter's CODE, `:ro`. It used to live in `data/scripts/`
                 and that was a privilege escalation: the agent could rewrite
                 the file and the adapter's container would execute it **as
