@@ -9,8 +9,10 @@ a32b430 and b8e73bb from an independent revalidation — and **Phase 2 DONE**
 `adapter_version` rename, plus this note), and **Phase 3b DONE** 2026-08-23
 (c0ae990 the registry ships and leaves with the role, a8dba51 the promises
 guard moves into `flow`, 70ed713 agent-check reads the registry, c62402d the
-dead `data/scripts` window removed, bd28caf and dcb01df two small fixes found
-on the way, plus this note). **Phase 4 is next.**
+dead `data/scripts` window removed, bd28caf, dcb01df and d86fe86 three small
+fixes found on the way — the last one is worth knowing about: `install.sh
+--diff` was stopping at the first changed file, so a drifted plugin folder
+could be hidden by an edited skill above it in the list). **Phase 4 is next.**
 Plan agreed with Luis on 2026-08-23; v2 only updates paths and ids to the
 translated tree — no decision changed.
 
