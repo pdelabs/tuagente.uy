@@ -164,6 +164,21 @@ class RefusesToBoot(unittest.TestCase):
                   skills=["shared"])
             self.refuses(tmp, "beta/plugin.json", "'shared'", "a skill name has one")
 
+    def test_something_that_is_not_a_directory_in_the_registry_s_place(self):
+        """A file or a dead symlink where `plugins/` goes is a broken install.
+
+        Not the pre-plugin layout: that one is the path being ABSENT. Reporting
+        a present path as missing is the one wrong sentence this branch can say.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "plugins").write_text("not a directory", encoding="utf-8")
+            out = self.refuses(tmp, "is not a directory")
+            self.assertNotIn("pre-plugin layout", out)
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "plugins").symlink_to(Path(tmp) / "nowhere")
+            out = self.refuses(tmp, "is not a directory")
+            self.assertNotIn("pre-plugin layout", out)
+
     def test_an_id_that_is_not_its_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
             write(tmp, "alpha", manifest("beta"), skills=["beta"])

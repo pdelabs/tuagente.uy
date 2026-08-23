@@ -64,6 +64,17 @@ def load(root: Path = ROOT) -> dict:
     """
     directory = root / "plugins"
     if not directory.is_dir():
+        # OCCUPIED IS NOT ABSENT, AND ONLY ONE OF THE TWO IS NORMAL. A regular
+        # file or a dead symlink standing where the registry goes -- a bad
+        # mount, a half-finished rsync -- is a broken install, and answering it
+        # with "no <path>" is a sentence that is not true: the path is right
+        # there. It sent whoever read it looking for a folder that had never
+        # been missing. The absent case stays a log line and an empty set; the
+        # occupied one gets the same refusal a broken manifest gets.
+        if directory.exists() or directory.is_symlink():
+            raise SystemExit(
+                f"plugins: refusing to boot -- {directory} is not a directory; "
+                "the plugin registry is a folder of `<id>/plugin.json`")
         print(f"plugins: pre-plugin layout, no {directory}", file=sys.stderr)
         return {}
     try:
