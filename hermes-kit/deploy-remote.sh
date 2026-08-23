@@ -387,8 +387,17 @@ fi
 # -a` implies `-o -g` and applied the sender's owner, meaning they ended up
 # `501:staff` on the VPS — a Mac's uid, which is nobody on the server.
 #
-#   kit-skills/ and kit-adapter/  → root. Nobody ever writes to them: both
-#                                   services mount them :ro.
+#   kit-skills/, kit-adapter/     → root. Nobody ever writes to them: both
+#   and plugins/                    services mount them :ro. `plugins/` joined
+#                                   this list in phase 3b and the chown is not
+#                                   cosmetic: `rsync -a` would leave the whole
+#                                   registry owned by the Mac's 501:staff, and
+#                                   the adapter (uid 10000) can then only read
+#                                   it for as long as the sender's mode bits
+#                                   happen to be world-readable. A registry the
+#                                   adapter cannot read is an agent reporting
+#                                   no plugins at all — the pre-3b answer from
+#                                   an agent that is not.
 #   policy/                       → the ADAPTER's (uid 10000), and on
 #                                   purpose: that's where it writes
 #                                   `policy.json` (the client's permissions)
@@ -408,9 +417,9 @@ fi
 if [[ -n "$LOCAL" ]]; then
   echo "→ permissions: (local simulation: chown needs root, skipping it)"
 else
-  echo "→ permissions: data/ and policy/ owned by the agent (uid 10000); kit-skills/ and kit-adapter/ by root"
+  echo "→ permissions: data/ and policy/ owned by the agent (uid 10000); kit-skills/, kit-adapter/ and plugins/ by root"
   ssh "$SERVER" "chown -R 10000:10000 $REMOTE/data $REMOTE/policy && \
-                   chown -R root:root $REMOTE/kit-skills $REMOTE/kit-adapter && \
+                   chown -R root:root $REMOTE/kit-skills $REMOTE/kit-adapter $REMOTE/plugins && \
                    chown root:root $REMOTE/.kit-installed $REMOTE/secrets.env && \
                    chmod 600 $REMOTE/.kit-installed $REMOTE/secrets.env"
 fi

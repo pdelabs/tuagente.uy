@@ -138,13 +138,19 @@ for d in data/workspace/entregables data/workspace/artifacts data/workspace/entr
 done
 echo "   owners and modes:"
 PATH="$BENCH/bin:$PATH" ssh root@127.0.0.1 \
-  "stat -c '     %U:%G %a %n' $R/data $R/policy $R/kit-skills $R/kit-adapter $R/.kit-installed"
-# kit-skills/ and kit-adapter/ belong to root (nobody writes them: they go :ro
-# in both services). policy/ belongs to the adapter (uid 10000): that's where
-# it writes policy.json and requests.jsonl, and what protects it from the
-# agent is the :ro mount, not the owner.
-owners="$(PATH="$BENCH/bin:$PATH" ssh root@127.0.0.1 "stat -c '%U:%G' $R/kit-skills $R/kit-adapter" | sort -u)"
-[[ "$owners" == "root:root" ]] || { echo "   FAILURE kit-skills/ or kit-adapter/ didn't end up owned by root"; failures=$((failures+1)); }
+  "stat -c '     %U:%G %a %n' $R/data $R/policy $R/kit-skills $R/kit-adapter $R/plugins $R/.kit-installed"
+# kit-skills/, kit-adapter/ and plugins/ belong to root (nobody writes them:
+# they go :ro). policy/ belongs to the adapter (uid 10000): that's where it
+# writes policy.json and requests.jsonl, and what protects it from the agent is
+# the :ro mount, not the owner.
+#
+# plugins/ IS ASKED ABOUT HERE BECAUSE NOTHING ELSE WOULD. It arrived as a new
+# root in phase 3b, `deploy-remote.sh` learned its name in the KNOWN drift
+# check — which exists to force somebody to decide whose a new folder is — and
+# the deciding half was missed, so the registry shipped owned by the sender's
+# uid. The drift check cannot catch that; this can.
+owners="$(PATH="$BENCH/bin:$PATH" ssh root@127.0.0.1 "stat -c '%U:%G' $R/kit-skills $R/kit-adapter $R/plugins" | sort -u)"
+[[ "$owners" == "root:root" ]] || { echo "   FAILURE kit-skills/, kit-adapter/ or plugins/ didn't end up owned by root"; failures=$((failures+1)); }
 policy_owner="$(PATH="$BENCH/bin:$PATH" ssh root@127.0.0.1 "stat -c '%u' $R/policy")"
 [[ "$policy_owner" == "10000" ]] || { echo "   FAILURE policy/ didn't end up owned by the adapter (uid 10000): it's $policy_owner"; failures=$((failures+1)); }
 
