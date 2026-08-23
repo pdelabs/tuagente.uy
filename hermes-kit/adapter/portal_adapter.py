@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+import plugins
 from flows import FlowStore
 from kanban import KanbanStore
 from rooms import RoomStore
@@ -109,6 +110,17 @@ def ro(db):
     conn.execute("PRAGMA query_only = ON")
     conn.row_factory = sqlite3.Row
     return conn
+
+
+# ---------- plugins (the kit's registry, as it landed on this agent) ----------
+# READ BEFORE ANYTHING ELSE SERVES A REQUEST. `plugins.load()` either returns a
+# whole, validated plugin set or raises SystemExit, and at module level that
+# means the process never reaches `serve_forever` -- which is the point: an
+# adapter that half-booted over a broken install is a portal that offers tabs
+# that 404. On every agent alive today `/opt/plugins` does not exist yet and
+# this is an empty dict and one line on stderr (notes/plugin-system-plan.md,
+# phase 3a).
+PLUGINS = plugins.load()
 
 
 # ---------- manifest ----------
@@ -2692,6 +2704,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, manifest())
             if path == "/portal/inventory":
                 return self._send(200, inventory())
+            if path == "/portal/plugins":
+                return self._send(200, {"plugins": plugins.summary(PLUGINS)})
             m = re.match(r"^/portal/skills/([^/]+)$", path)
             if m:
                 target = _skill_editable(m.group(1))

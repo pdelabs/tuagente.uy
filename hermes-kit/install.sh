@@ -109,6 +109,15 @@ FILES=(
 for m in "${ADAPTER_PY[@]}"; do
   FILES+=("adapter/$m:$KIT_ADAPTER/$m")
 done
+# THE PLUGIN VALIDATOR TRAVELS WITH THE ADAPTER, and it is the ONE file in the
+# kit that installs to two different folders from one source. `adapter/plugins.py`
+# scans /opt/plugins at boot and refuses to start on a broken set; the rules it
+# checks live in `tools/plugin_registry.py`, which is also what `check-plugins.py`
+# and `build_role.py` use at build time. Copying the rules into the adapter would
+# give the build and the boot two answers to the same question, so the file ships
+# instead — the adapter imports it as a sibling in the container, exactly like it
+# imports flows and kanban (notes/plugin-system-plan.md, phase 3a).
+FILES+=("tools/plugin_registry.py:$KIT_ADAPTER/plugin_registry.py")
 # THE OLD PATH KEEPS GETTING INSTALLED WHILE THE COMPOSE STILL USES IT. If we
 # pulled `data/scripts/portal_adapter.py` out while the compose still pointed
 # there, the live process keeps running (it has the file open), but a
@@ -126,6 +135,9 @@ if [[ -f "$AGENT_COMPOSE" ]] && grep -q '/opt/data/scripts/portal_adapter.py' "$
   for m in "${ADAPTER_PY[@]}"; do
     FILES+=("adapter/$m:$DATA/scripts/$m")
   done
+  # And the validator with them, for the same reason: `plugins.py` imports it,
+  # so the old path without it is an adapter that dies on its first import.
+  FILES+=("tools/plugin_registry.py:$DATA/scripts/plugin_registry.py")
 fi
 
 # The hooks are BUILT from the directory, like the skills: the day there's a
