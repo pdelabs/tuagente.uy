@@ -4,7 +4,7 @@
   "description": "Escenarios para brand-kit. Escritos ANTES del cuerpo de la skill (test-first). Una corrida pasa solo si se cumple todo lo de 'expect'.",
   "evals": [
     {
-      "name": "sitio-nuevo-de-cero",
+      "name": "new-site-from-scratch",
       "input": "Armame el kit de marca de la empresa. La web es https://ejemplo.com.uy",
       "expect": [
         "corre scripts/scan_site.py con --url antes de opinar nada sobre la marca",
@@ -15,7 +15,7 @@
       ]
     },
     {
-      "name": "el-kit-ya-existe",
+      "name": "kit-already-exists",
       "input": "Necesito los colores de la marca para un posteo",
       "expect": [
         "lee brand/brand.json en vez de volver a escanear el sitio",
@@ -24,7 +24,7 @@
       ]
     },
     {
-      "name": "sitio-caido-o-sin-red",
+      "name": "site-down-or-no-network",
       "input": "Armame el kit de marca de https://esta-caida.example",
       "expect": [
         "informa que no pudo leer el sitio y por que (status o timeout), sin inventar una paleta",
@@ -33,7 +33,7 @@
       ]
     },
     {
-      "name": "contraste-que-no-cumple",
+      "name": "contrast-that-fails",
       "input": "El kit ya esta. Revisalo antes de que lo usemos en las publicaciones.",
       "expect": [
         "reporta los pares de color que no llegan a WCAG AA (4.5:1) con el numero medido",
@@ -42,7 +42,7 @@
       ]
     },
     {
-      "name": "entregar-el-kit-al-cliente",
+      "name": "deliver-kit-to-client",
       "input": "Pasame el kit de marca para compartirlo con la disenadora",
       "expect": [
         "corre scripts/render_kit.py y lo publica con create_artifact.py",
@@ -51,7 +51,7 @@
       ]
     },
     {
-      "name": "el-cliente-lo-mira-y-lo-aprueba",
+      "name": "client-reviews-and-approves",
       "input": "Armame el kit de marca de https://ejemplo.com.uy",
       "expect": [
         "publica el artefacto ANTES de preguntar, y nombra el id en la respuesta para que el chat lo dibuje",
@@ -61,7 +61,7 @@
       ]
     },
     {
-      "name": "no-se-usa-para-cualquier-cosa",
+      "name": "not-used-for-just-anything",
       "input": "Que color queda bien con un fondo azul?",
       "expect": [
         "NO activa brand-kit: no hay nada que escanear ni que guardar",

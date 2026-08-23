@@ -1,6 +1,6 @@
 ---
-titulo: Piezas para redes
-para_cliente: "Genera las imágenes de tus posteos con tu identidad y con el estilo de las referencias que le pasaste."
+title: Piezas para redes
+client_summary: "Genera las imágenes de tus posteos con tu identidad y con el estilo de las referencias que le pasaste."
 name: post-image
 description: "Genera la imagen de un posteo de Instagram con IA, usando el kit de marca y las referencias de estilo del cliente. Arma el brief con build_prompt.py, genera con image_gen y VERIFICA la imagen mirandola antes de mostrarla. Usala cuando el posteo necesite una pieza visual: feed, carrusel, historia o portada de reel."
 version: 2.0.0
@@ -15,15 +15,15 @@ Tres pasos y ninguno es opcional. El tercero es el que evita publicar un error.
 
 ```bash
 python3 /opt/kit/skills/post-image/scripts/build_prompt.py \
-  --formato historia \
-  --titulo "Tu agente contesta a las 23:40" \
-  --bajada "Con tus precios, no con inventos." \
+  --format story \
+  --title "Tu agente contesta a las 23:40" \
+  --subhead "Con tus precios, no con inventos." \
   --cta "Agendá una demo" \
   --idea "corte diagonal: arriba de día, abajo de noche con alguien durmiendo"
 ```
 
 Devuelve el `prompt` con los colores y la tipografía **exactos** del kit, la
-lista de `referencias` de estilo, y la lista de `verificar`.
+lista de `references` de estilo, y la lista de `checklist`.
 
 El brief lo arma el script y no vos, por una razón: si escribís los hex de
 memoria, cada tanto se te escapa uno y el feed deja de parecer de una sola
@@ -31,9 +31,9 @@ marca. **Usá el prompt tal como sale.**
 
 Sin `brand.json` corta y te da la pregunta para ofrecerle armar el kit.
 
-### Si vuelve `sin_referencias: true`, pedilas antes de generar
+### Si vuelve `no_references: true`, pedilas antes de generar
 
-El campo `pedir_referencias` trae el pedido ya escrito. **Mandáselo y esperá.**
+El campo `ask_for_references` trae el pedido ya escrito. **Mandáselo y esperá.**
 
 No es un trámite: las referencias son lo que más mueve el resultado. Sin
 ninguna, cada pieza sale correcta y **desconocida de la anterior** — el feed
@@ -50,7 +50,7 @@ pase en `brand/referencias/`.
 image_generate(
   prompt               = el `prompt` que devolvió build_prompt.py, tal cual
   aspect_ratio         = el `aspect_ratio` que devolvió build_prompt.py
-  reference_image_urls = las `referencias`, si hay
+  reference_image_urls = las `references`, si hay
 )
 ```
 
@@ -86,7 +86,7 @@ porque una falló deja a tu cliente con nada, que es peor que con dos.
 ## 4. MIRÁ lo que salió. Siempre.
 
 **No muestres una imagen que no miraste.** Abrila y recorré la lista de
-`verificar` que devolvió el script:
+`checklist` que devolvió el script:
 
 - ¿Cada texto está **completo y sin una letra cambiada**?
 - ¿Hay algún texto **de más**? Fechas, dominios inventados, subtítulos en inglés,
@@ -99,7 +99,7 @@ Si algo falla, **regenerá**. Hasta dos veces. Si a la tercera sigue mal, mostra
 al cliente lo que tenés y decile qué no pudiste resolver — no lo entregues como
 si estuviera bien.
 
-El detalle de qué mirar está en `references/verificar.md`.
+El detalle de qué mirar está en `references/verify.md`.
 
 ## Por qué el paso de mirar existe
 

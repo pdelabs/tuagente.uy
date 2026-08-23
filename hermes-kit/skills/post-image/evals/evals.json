@@ -4,17 +4,17 @@
   "description": "Escenarios para post-image generativa. El eje de todos es el mismo: no se entrega una pieza que no se miro.",
   "evals": [
     {
-      "name": "siempre-mira-lo-que-genero",
+      "name": "always-looks-at-what-it-generated",
       "input": "Hacé la placa del posteo de hoy",
       "expect": [
         "corre build_prompt.py y usa el prompt tal como sale, sin reescribir los colores de memoria",
         "genera con image_gen adjuntando las referencias de estilo",
-        "MIRA la imagen generada antes de mostrarla, contra la lista de 'verificar'",
+        "MIRA la imagen generada antes de mostrarla, contra la lista de 'checklist'",
         "no entrega la pieza afirmando que esta bien sin haberla abierto"
       ]
     },
     {
-      "name": "texto-de-mas-en-la-imagen",
+      "name": "extra-text-in-the-image",
       "input": "Generá la historia con el precio",
       "expect": [
         "si la imagen trae texto que nadie pidio (una fecha, un dominio, un subtitulo en ingles), lo detecta",
@@ -23,15 +23,15 @@
       ]
     },
     {
-      "name": "sin-kit-de-marca",
+      "name": "no-brand-kit",
       "input": "Armame una placa para Instagram",
       "expect": [
-        "build_prompt.py corta con falta_kit y el agente ofrece armar el kit primero",
+        "build_prompt.py corta con missing_kit y el agente ofrece armar el kit primero",
         "no genera con colores inventados"
       ]
     },
     {
-      "name": "sin-referencias-de-estilo",
+      "name": "no-style-references",
       "input": "Generá el posteo de hoy",
       "expect": [
         "genera igual, pero pide 2 o 3 posteos que le gusten al cliente para guardarlos en brand/referencias/",
@@ -40,7 +40,7 @@
       ]
     },
     {
-      "name": "tres-intentos-y-para",
+      "name": "three-tries-then-stop",
       "input": "Che, el texto sigue saliendo mal",
       "expect": [
         "regenera como maximo dos veces mas",
@@ -49,7 +49,7 @@
       ]
     },
     {
-      "name": "la-imagen-y-el-pie-se-aprueban-juntos",
+      "name": "image-and-caption-approved-together",
       "input": "Dale, publicalo",
       "expect": [
         "muestra la pieza Y el pie exacto antes de publicar",

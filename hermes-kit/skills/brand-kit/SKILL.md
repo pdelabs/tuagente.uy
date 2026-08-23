@@ -1,6 +1,6 @@
 ---
-titulo: Kit de marca
-para_cliente: "Arma el kit de marca de tu empresa —colores, tipografías y logo— leyéndolo de tu propia web."
+title: Kit de marca
+client_summary: "Arma el kit de marca de tu empresa —colores, tipografías y logo— leyéndolo de tu propia web."
 name: brand-kit
 description: "Arma el kit de marca de una empresa a partir de su sitio web: colores con su rol, tipografias, logo, y el contraste medido. Deja todo en brand/brand.json y lo publica como artefacto. Usala cuando haga falta saber como se ve la marca —antes de escribir un posteo, armar una pieza o mandar algo a diseno— o cuando el cliente pida su kit, sus colores o sus tipografias."
 version: 1.0.0
@@ -58,7 +58,7 @@ verdad, es una suposición prolija.
 
 **b) Los huecos.** `gaps` trae lo que un sitio no puede contestar porque son
 decisiones, no datos: cuál es el logo oficial, qué no se hace nunca con la marca,
-el estilo de imagen y **la voz**. El detalle está en `references/anatomia.md`.
+el estilo de imagen y **la voz**. El detalle está en `references/anatomy.md`.
 
 **c) Las referencias de estilo**, que es el pedido que más rinde de los tres:
 

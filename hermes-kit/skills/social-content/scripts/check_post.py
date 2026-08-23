@@ -19,11 +19,11 @@ from pathlib import Path
 
 CAPTION_MAX = 2200
 HASHTAGS_MAX = 5
-CUTOFF = {"feed": 125, "carrusel": 125, "reel": 58, "historia": None}
+CUTOFF = {"feed": 125, "carousel": 125, "reel": 58, "story": None}
 
 HASHTAG_RE = re.compile(r"(?<!\w)#\w+", re.UNICODE)
 
-# Aperturas que queman la unica linea que se ve.
+# Openers that burn the one line that shows.
 OPENERS = [
     (re.compile(r"^\s*[¡!]*\s*(hola|buenas|buen d[ií]a|buenos d[ií]as|feliz \w+)", re.I),
      "arranca saludando: gasta la primera linea, que es lo unico que se ve"),
@@ -35,22 +35,22 @@ OPENERS = [
      "carraspea antes de decir algo"),
 ]
 
-MAX_WORDS_PER_SENTENCE = 30      # duro: arriba de esto no se escanea
-SOFT_WORDS_PER_SENTENCE = 22     # blando: promedio recomendable
+MAX_WORDS_PER_SENTENCE = 30      # hard: above this it doesn't scan
+SOFT_WORDS_PER_SENTENCE = 22     # soft: recommended average
 
-# Beneficio = que gana el que lee. Caracteristica = que es el producto. Se
-# detecta por como le habla al lector, que en rioplatense es bastante marcado.
+# Benefit = what the reader gains. Feature = what the product is. Detected by
+# how it talks to the reader, which in rioplatense Spanish is fairly marked.
 BENEFIT_RE = re.compile(
     r"\b(ahorr[aá]\w*|te ahorra|dej[aá]s de|ya no ten[eé]s|sin tener que|para que (?:no )?\w+|"
     r"vas a \w+|pod[eé]s \w+|en \d+ (?:minutos|horas|d[ií]as)|te (?:queda|sale|contesta|evita)|"
     r"sin (?:pagar|esperar|complicarte|planillas?))\b", re.I)
 
-# Una razon para actuar hoy. Su ausencia no es un error: es una pregunta.
+# A reason to act today. Its absence is not an error: it is a question.
 URGENCY_RE = re.compile(
     r"\b(hasta el \d|hasta ma[ñn]ana|quedan \d|[uú]ltimo[s]? (?:d[ií]a|lugar|cupo)|cupos?|"
     r"desde el \d|solo por|esta semana|vence|cierra el|arranca el|nuevo|reci[eé]n)\b", re.I)
 
-# Formas de gancho que abren un hueco. De references/oficio.md.
+# Hook shapes that open a gap. From references/craft.md.
 HOOK_SHAPES = {
     "pregunta": r"^[¿?]|\?\s*$",
     "numero": r"\b\d+\s*%|\b(tres|cuatro|cinco|\d+)\s+(cosas|razones|errores|formas|motivos)\b",
@@ -59,7 +59,7 @@ HOOK_SHAPES = {
     "escena": r"\b(son las \d|es lunes|acab[aá]s de|te acord[aá]s)\b",
 }
 
-# Un pedido por posteo. Dos se parten la accion y no funciona ninguno.
+# One ask per post. Two split the action and neither one works.
 CTA_PATTERNS = {
     "guardar": r"\bguard[aá](lo|te|en)?\b|\bguardate\b",
     "comentar": r"\bcoment[aá]\w*\b|\bdejanos\b.*\bcomentario\b|\bescrib[ií]\w* .*coment",
@@ -88,9 +88,9 @@ def banned_words(brand_dir):
 
 def main():
     parser = argparse.ArgumentParser(description="Validate an Instagram caption.")
-    parser.add_argument("--formato", required=True, choices=sorted(CUTOFF))
+    parser.add_argument("--format", required=True, choices=sorted(CUTOFF))
     parser.add_argument("--slides", type=int, default=0)
-    parser.add_argument("--por-api", action="store_true")
+    parser.add_argument("--via-api", action="store_true")
     parser.add_argument("--brand-dir", default=os.environ.get("BRAND_DIR", "/opt/data/workspace/brand"))
     args = parser.parse_args()
 
@@ -99,13 +99,13 @@ def main():
     problems, review, notes = [], [], []
 
     if not stripped:
-        print(json.dumps({"ok": False, "problemas": ["el pie vino vacio"]}, ensure_ascii=False))
+        print(json.dumps({"ok": False, "problems": ["el pie vino vacio"]}, ensure_ascii=False))
         return 1
 
     if len(caption) > CAPTION_MAX:
         problems.append(f"el pie tiene {len(caption)} caracteres y el techo es {CAPTION_MAX}")
 
-    cutoff = CUTOFF[args.formato]
+    cutoff = CUTOFF[args.format]
     first_line = stripped.splitlines()[0].strip()
     if cutoff:
         if len(first_line) > cutoff:
@@ -134,7 +134,7 @@ def main():
     elif not found_ctas:
         notes.append("no se detecto ningun pedido; si es a proposito, esta bien")
 
-    # ── Escaneabilidad: medible, asi que es problema y no sugerencia ──────────
+    # ── Scannability: measurable, so it's a problem and not a suggestion ──────
     body = HASHTAG_RE.sub("", caption)
     sentences = [s.strip() for s in re.split(r"(?<=[.!?…])\s+", body) if s.strip()]
     lengths = [len(s.split()) for s in sentences]
@@ -152,13 +152,13 @@ def main():
     if len(body.strip()) > 400 and len(paragraphs) < 2:
         problems.append("es un bloque de texto sin respiro: cortalo en parrafos")
 
-    # ── Oficio: heuristico. Va a `revisar`, nunca a `problemas` ───────────────
+    # ── Craft: heuristic. Goes to `review`, never to `problems` ──────────────
     shapes = [name for name, pattern in HOOK_SHAPES.items() if re.search(pattern, first_line, re.I)]
     if shapes:
         notes.append(f"gancho: {', '.join(shapes)}")
     else:
         review.append("la primera linea no abre ningun hueco reconocible "
-                      "(pregunta, numero, contracorriente, riesgo o escena): ver references/oficio.md")
+                      "(pregunta, numero, contracorriente, riesgo o escena): ver references/craft.md")
 
     if not BENEFIT_RE.search(body):
         review.append("no se detecta un beneficio para el que lee, solo descripcion: "
@@ -172,8 +172,8 @@ def main():
     if hits:
         problems.append(f"usa palabras que la marca dijo no usar: {', '.join(hits)}")
 
-    if args.formato == "carrusel" and args.slides:
-        ceiling = 10 if args.por_api else 20
+    if args.format == "carousel" and args.slides:
+        ceiling = 10 if args.via_api else 20
         if args.slides > ceiling:
             problems.append(f"{args.slides} slides y el techo es {ceiling}")
         if args.slides < 2:
@@ -181,15 +181,15 @@ def main():
 
     print(json.dumps({
         "ok": not problems,
-        "problemas": problems,
-        "revisar": review,
-        "datos": {
-            "caracteres": len(caption),
-            "primera_linea": len(first_line),
+        "problems": problems,
+        "review": review,
+        "data": {
+            "characters": len(caption),
+            "first_line": len(first_line),
             "hashtags": len(hashtags),
-            "pedidos": found_ctas,
+            "ctas": found_ctas,
         },
-        "notas": notes,
+        "notes": notes,
     }, ensure_ascii=False, indent=2))
     return 1 if problems else 0
 

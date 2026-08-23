@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Crea un artefacto HTML visualizable en el portal de tuagente.
+"""Create an HTML artifact viewable in the tuagente portal.
 
-El script es DUENO DEL FORMATO: recibe solo el contenido (el <body>) y se
-encarga del shell, el CSS de marca, el id, la ruta y los metadatos. Asi todos
-los artefactos de todos los agentes se ven igual y el portal los encuentra.
+The script OWNS THE FORMAT: it receives only the content (the <body>) and
+takes care of the shell, the brand CSS, the id, the path and the metadata.
+That way every artifact of every agent looks the same and the portal finds
+them.
 
-Uso:
+Usage:
     python3 create_artifact.py --title "Leads por mes" [--kind chart]
                                [--summary "una linea"] [--id art_xxx]
                                < cuerpo.html
 
-Imprime un JSON con el id y la referencia para citar en el chat.
+Prints a JSON with the id and the reference to cite in the chat.
 """
 import argparse
 import json
@@ -25,8 +26,8 @@ ARTIFACTS = Path(os.environ.get("ARTIFACTS_DIR", "/opt/data/workspace/artifacts"
 KINDS = ("chart", "table", "report", "dashboard", "diagram", "other")
 MAX_BYTES = 2 * 1024 * 1024
 
-# Recursos externos: el portal dibuja los artefactos en un iframe aislado y sin
-# red garantizada, asi que un <script src=cdn> queda en blanco. Avisamos.
+# External resources: the portal draws artifacts inside an isolated iframe
+# with no guaranteed network, so a <script src=cdn> renders blank. We warn.
 EXTERNAL_RE = re.compile(
     r"""<(?:script|link|img|iframe)[^>]+(?:src|href)\s*=\s*["']https?://""",
     re.I,
@@ -83,7 +84,7 @@ SHELL = """<!doctype html>
 def slugify(text):
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     text = re.sub(r"[^\w\s-]", "", text).strip().lower()
-    return re.sub(r"[\s_-]+", "-", text)[:48] or "artefacto"
+    return re.sub(r"[\s_-]+", "-", text)[:48] or "artifact"
 
 
 def main():
@@ -98,23 +99,23 @@ def main():
     body = Path(args.body_file).read_text("utf-8") if args.body_file else sys.stdin.read()
     body = body.strip()
     if not body:
-        print(json.dumps({"ok": False, "error": "el cuerpo del artefacto vino vacio"}))
+        print(json.dumps({"ok": False, "error": "the artifact body came in empty"}))
         return 2
     if len(body.encode()) > MAX_BYTES:
-        print(json.dumps({"ok": False, "error": "el artefacto supera 2MB"}))
+        print(json.dumps({"ok": False, "error": "the artifact is over 2MB"}))
         return 2
 
     warnings = []
     if EXTERNAL_RE.search(body):
         warnings.append(
-            "hay recursos externos (http) que probablemente no carguen: "
-            "usa SVG/CSS inline y datos embebidos"
+            "there are external (http) resources that will probably not load: "
+            "use inline SVG/CSS and embedded data instead"
         )
 
     now = int(time.time())
     art_id = args.id or f"art_{now}_{slugify(args.title)}"
     if not re.fullmatch(r"[\w.-]+", art_id):
-        print(json.dumps({"ok": False, "error": "id invalido"}))
+        print(json.dumps({"ok": False, "error": "invalid id"}))
         return 2
 
     agent = os.environ.get("AGENT_NAME", "tu agente")
@@ -140,7 +141,7 @@ def main():
         "ok": True,
         "id": art_id,
         "path": str(folder / "index.html"),
-        "referencia": art_id,
+        "reference": art_id,
         "warnings": warnings,
     }, ensure_ascii=False))
     return 0

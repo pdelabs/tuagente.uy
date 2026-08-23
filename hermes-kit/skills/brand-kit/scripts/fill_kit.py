@@ -36,21 +36,21 @@ def drop_gap(gaps, dotted):
 def main():
     parser = argparse.ArgumentParser(description="Fill blanks and record sign-off on brand.json.")
     parser.add_argument("--brand-dir", default="/opt/data/workspace/brand")
-    parser.add_argument("--set", action="append", default=[], metavar="RUTA=VALOR",
-                        help="por ejemplo: voz.tono='de vos, cercano y sin marketines'")
-    parser.add_argument("--approve", action="store_true", help="el cliente dijo que esta bien")
-    parser.add_argument("--reject", action="store_true", help="el cliente pidio cambios")
-    parser.add_argument("--by", default="", help="quien contesto")
-    parser.add_argument("--note", default="", help="que dijo, en sus palabras")
+    parser.add_argument("--set", action="append", default=[], metavar="PATH=VALUE",
+                        help="e.g.: voz.tono='de vos, cercano y sin marketines'")
+    parser.add_argument("--approve", action="store_true", help="the client said it's fine")
+    parser.add_argument("--reject", action="store_true", help="the client asked for changes")
+    parser.add_argument("--by", default="", help="who answered")
+    parser.add_argument("--note", default="", help="what they said, in their own words")
     args = parser.parse_args()
 
     source = Path(args.brand_dir) / "brand.json"
     if not source.is_file():
-        print(json.dumps({"ok": False, "error": f"no existe {source}; correr scan_site.py primero"},
+        print(json.dumps({"ok": False, "error": f"{source} does not exist; run scan_site.py first"},
                          ensure_ascii=False))
         return 1
     if args.approve and args.reject:
-        print(json.dumps({"ok": False, "error": "--approve y --reject son excluyentes"},
+        print(json.dumps({"ok": False, "error": "--approve and --reject are mutually exclusive"},
                          ensure_ascii=False))
         return 1
 
@@ -60,7 +60,7 @@ def main():
 
     for pair in args.set:
         if "=" not in pair:
-            print(json.dumps({"ok": False, "error": f"esperaba ruta=valor, vino: {pair}"},
+            print(json.dumps({"ok": False, "error": f"expected path=value, got: {pair}"},
                              ensure_ascii=False))
             return 1
         dotted, value = pair.split("=", 1)
@@ -68,7 +68,7 @@ def main():
         if not value:
             print(json.dumps({
                 "ok": False,
-                "error": f"'{dotted}' vino vacio. Un hueco sin respuesta se queda como hueco.",
+                "error": f"'{dotted}' came in empty. A gap with no answer stays a gap.",
             }, ensure_ascii=False))
             return 1
         set_path(kit, dotted, value)
@@ -77,9 +77,9 @@ def main():
 
     if args.approve or args.reject:
         kit["signoff"] = {
-            "status": "aprobado" if args.approve else "con cambios pedidos",
+            "status": "approved" if args.approve else "changes requested",
             "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            "by": args.by or "el cliente",
+            "by": args.by or "the client",
             "note": args.note,
         }
 
@@ -87,7 +87,7 @@ def main():
     print(json.dumps({
         "ok": True,
         "filled": filled,
-        "signoff": kit.get("signoff", {}).get("status", "sin responder"),
+        "signoff": kit.get("signoff", {}).get("status", "no answer yet"),
         "gaps_left": kit["gaps"],
     }, ensure_ascii=False))
     return 0

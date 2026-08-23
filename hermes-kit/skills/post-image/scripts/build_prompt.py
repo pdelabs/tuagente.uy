@@ -19,23 +19,25 @@ import json
 import os
 from pathlib import Path
 
-# El tercer valor es lo que espera `image_generate`: la tool NO toma "9:16",
-# toma un nombre semantico. Pasarle el ratio crudo no falla: cae al default y
-# devuelve una imagen HORIZONTAL, que en una historia es inservible. Medido.
-# EL FEED NO PUEDE SER 4:5 Y NO HAY QUE PEDIRLO. `image_generate` solo entiende
-# tres aspectos —square (1:1), landscape (16:9), portrait (9:16)—, asi que 4:5
-# no existe por este camino. Pedir "portrait" para el feed devolvia una pieza
-# 9:16: el agente la reviso, vio que no era el formato pedido y se nego a
-# entregarla, con razon. 1:1 es un formato valido de feed y es el que si se
-# puede cumplir; prometer 4:5 en el brief era prometer algo que no llega.
+# The third value is what `image_generate` expects: the tool does NOT take
+# "9:16", it takes a semantic name. Passing the raw ratio does not fail: it
+# falls back to the default and returns a HORIZONTAL image, which is useless
+# in a story. Measured.
+# THE FEED CANNOT BE 4:5 AND SHOULD NOT BE REQUESTED AS ONE. `image_generate`
+# only understands three aspects -- square (1:1), landscape (16:9), portrait
+# (9:16) -- so 4:5 does not exist through this path. Asking for "portrait" on
+# a feed post returned a 9:16 piece: the agent checked it, saw it was not the
+# requested format and rightly refused to deliver it. 1:1 is a valid feed
+# format and the one that CAN be honoured; promising 4:5 in the brief was
+# promising something that never arrives.
 CANVAS = {
     "feed": ("1080x1080", "1:1 cuadrado", "square"),
-    "carrusel": ("1080x1080", "1:1 cuadrado", "square"),
-    "historia": ("1080x1920", "9:16 vertical", "portrait"),
+    "carousel": ("1080x1080", "1:1 cuadrado", "square"),
+    "story": ("1080x1920", "9:16 vertical", "portrait"),
     "reel": ("1080x1920", "9:16 vertical", "portrait"),
 }
 
-FALTA_KIT = (
+MISSING_KIT = (
     "Para que esto salga con tu identidad necesito tu kit de marca: colores, "
     "tipografias y como le hablas a tu cliente. Lo armo leyendo tu web en un par "
     "de minutos. Lo hacemos?"
@@ -45,18 +47,18 @@ FALTA_KIT = (
 def rules(exact_texts, canvas_note, is_story):
     """Hard rules for the generator. Each one has a scar behind it."""
     items = [
-        # gpt-image-2 escribe bien, pero AGREGA texto que nadie pidio: fechas,
-        # dominios de relleno, subtitulos en ingles. Enumerar lo que va y
-        # prohibir el resto es lo unico que lo contiene.
+        # gpt-image-2 writes text well, but it ADDS text nobody asked for:
+        # dates, filler domains, English subtitles. Enumerating what goes in
+        # and forbidding the rest is the only thing that contains it.
         "El UNICO texto que puede aparecer en la imagen es, palabra por palabra: "
         + " | ".join(f'"{t}"' for t in exact_texts),
         "No agregues NINGUN otro texto: ni fechas, ni etiquetas, ni subtitulos, "
         "ni marcas de agua, ni texto decorativo de relleno.",
-        # Visto: una pieza salio con WWW.REALLYGREATSITE.COM, el placeholder de
-        # la herramienta, en el lugar del dominio del cliente.
+        # Seen: a piece came out with WWW.REALLYGREATSITE.COM, the tool's own
+        # placeholder, where the client's domain should have gone.
         "Nunca inventes un dominio, un telefono, un precio ni un dato. Si no esta "
         "en la lista de arriba, no va.",
-        # Visto: los codigos hex del brief salieron PINTADOS adentro del dibujo.
+        # Seen: the palette's own hex codes came out PAINTED inside the artwork.
         "Los codigos de color de la paleta son para que PINTES con ellos, no para "
         "dibujarlos: no escribas ningun codigo hexadecimal adentro de la imagen.",
         "Todo el texto va en espaniol rioplatense, con sus tildes. Nada en ingles.",
@@ -71,9 +73,9 @@ def rules(exact_texts, canvas_note, is_story):
 
 def main():
     parser = argparse.ArgumentParser(description="Build the generation brief for one piece.")
-    parser.add_argument("--formato", required=True, choices=sorted(CANVAS))
-    parser.add_argument("--titulo", required=True)
-    parser.add_argument("--bajada", default="")
+    parser.add_argument("--format", required=True, choices=sorted(CANVAS))
+    parser.add_argument("--title", required=True)
+    parser.add_argument("--subhead", default="")
     parser.add_argument("--cta", default="")
     parser.add_argument("--extra", default="", help="texto adicional que SI va en la pieza")
     parser.add_argument("--idea", default="", help="la idea visual, en una linea")
@@ -82,7 +84,7 @@ def main():
 
     source = Path(args.brand_dir) / "brand.json"
     if not source.is_file():
-        print(json.dumps({"ok": False, "falta_kit": True, "pregunta": FALTA_KIT}, ensure_ascii=False))
+        print(json.dumps({"ok": False, "missing_kit": True, "question": MISSING_KIT}, ensure_ascii=False))
         return 2
     brand = json.loads(source.read_text("utf-8"))
 
@@ -91,18 +93,18 @@ def main():
     identity = brand.get("identity") or {}
     voz = brand.get("voz") or {}
 
-    # Las referencias son la parte que mas mueve el resultado: el estilo se
-    # muestra, no se describe. Van como imagenes de entrada, no como texto.
+    # References are what moves the result the most: the style is shown, not
+    # described. They travel as input images, not as text.
     ref_dir = Path(args.brand_dir) / "referencias"
-    referencias = sorted(str(p) for p in ref_dir.glob("*")
-                         if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")) if ref_dir.is_dir() else []
+    references = sorted(str(p) for p in ref_dir.glob("*")
+                        if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")) if ref_dir.is_dir() else []
 
-    exact = [t for t in (args.titulo, args.bajada, args.cta, args.extra) if t.strip()]
-    size, canvas_note, aspecto = CANVAS[args.formato]
-    is_story = args.formato in ("historia", "reel")
+    exact = [t for t in (args.title, args.subhead, args.cta, args.extra) if t.strip()]
+    size, canvas_note, aspect = CANVAS[args.format]
+    is_story = args.format in ("story", "reel")
 
-    paleta = ", ".join(f"{k} {v}" for k, v in roles.items() if v)
-    tipografia = faces[0]["family"] if faces else ""
+    palette = ", ".join(f"{k} {v}" for k, v in roles.items() if v)
+    typography = faces[0]["family"] if faces else ""
 
     brief = [
         f"Pieza de Instagram para {identity.get('name') or 'la marca'}"
@@ -114,22 +116,23 @@ def main():
     brief.append("TEXTO EXACTO QUE VA EN LA PIEZA:")
     for t in exact:
         brief.append(f'  · "{t}"')
-    if paleta:
-        brief.append(f"Paleta de la marca (usar estos colores, no aproximarlos): {paleta}.")
-    if tipografia:
-        brief.append(f"Tipografia de la marca: {tipografia}, o una sans-serif geometrica muy parecida.")
+    if palette:
+        brief.append(f"Paleta de la marca (usar estos colores, no aproximarlos): {palette}.")
+    if typography:
+        brief.append(f"Tipografia de la marca: {typography}, o una sans-serif geometrica muy parecida.")
     if voz.get("tono"):
         brief.append(f"Tono de la marca: {voz['tono']}.")
-    # OJO CON LO QUE ENTRA AL BRIEF: todo lo que se agregue a `brief` termina
-    # adentro del prompt que lee el GENERADOR DE IMAGENES. El aviso de que
-    # faltan referencias es una instruccion para el AGENTE —"pedile al cliente
-    # posteos que le gusten"— y estaba aca adentro: viajaba en el prompt, o sea
-    # que el unico que lo leia era el modelo de imagen, que no puede pedirle
-    # nada a nadie. Ahora sale por `pedir_referencias`, que si lee el agente.
-    if referencias:
-        cuantas = "la imagen" if len(referencias) == 1 else f"las {len(referencias)} imagenes"
-        brief.append(f"Segui el estilo visual de {cuantas} de referencia adjunta"
-                     f"{'' if len(referencias) == 1 else 's'}: "
+    # WATCH WHAT GOES INTO THE BRIEF: everything added to `brief` ends up
+    # inside the prompt read by the IMAGE GENERATOR. The notice that
+    # references are missing is an instruction for the AGENT -- "ask the
+    # client for posts they like" -- and it used to live in here: it travelled
+    # in the prompt, i.e. the only one reading it was the image model, which
+    # cannot ask anyone anything. It now comes out through
+    # `ask_for_references`, which the agent does read.
+    if references:
+        how_many = "la imagen" if len(references) == 1 else f"las {len(references)} imagenes"
+        brief.append(f"Segui el estilo visual de {how_many} de referencia adjunta"
+                     f"{'' if len(references) == 1 else 's'}: "
                      "composicion, densidad, uso del color y tipo de ilustracion.")
     brief.append("")
     brief.append("REGLAS:")
@@ -138,26 +141,27 @@ def main():
     print(json.dumps({
         "ok": True,
         "prompt": "\n".join(brief),
-        "referencias": referencias,
-        "medidas": size,
-        "aspect_ratio": aspecto,
-        "textos_exactos": exact,
-        "verificar": [
-            "cada texto de 'textos_exactos' aparece completo, sin una letra cambiada",
+        "references": references,
+        "dimensions": size,
+        "aspect_ratio": aspect,
+        "exact_texts": exact,
+        "checklist": [
+            "cada texto de 'exact_texts' aparece completo, sin una letra cambiada",
             "no hay NINGUN texto de mas en la imagen",
             "no hay palabras con letras rotas o inventadas",
             "los colores se parecen a la paleta de la marca",
             "si es historia: nada importante en el 13% de arriba ni en el de abajo",
             "la imagen salio VERTICAL, no horizontal ni cuadrada",
         ],
-        "sin_referencias": not referencias,
-        # El pedido, ya redactado y en el idioma del cliente. Va como campo y no
-        # en el prompt: es trabajo del agente, no del generador.
-        "pedir_referencias": (
+        "no_references": not references,
+        # The ask, already written out and in the client's language. It goes
+        # as a field and not in the prompt: it is the agent's job, not the
+        # generator's.
+        "ask_for_references": (
             "Antes de seguir con las piezas: pasame dos o tres posteos que te gusten "
             "—de quien sea, no tienen que ser de tu rubro— y de ahi saco el estilo. "
             "Describir un estilo con palabras no funciona; mostrarlo si."
-        ) if not referencias else None,
+        ) if not references else None,
     }, ensure_ascii=False, indent=2))
     return 0
 

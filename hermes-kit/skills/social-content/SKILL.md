@@ -1,6 +1,6 @@
 ---
-titulo: Contenido para redes
-para_cliente: "Escribe tus posteos de Instagram con tu voz y con las medidas de hoy: feed, carrusel, reel o historia."
+title: Contenido para redes
+client_summary: "Escribe tus posteos de Instagram con tu voz y con las medidas de hoy: feed, carrusel, reel o historia."
 name: social-content
 description: "Escribe posteos de Instagram con la voz de la marca. Elegis formato (feed, carrusel, reel, historia) y tipo de posteo, el esqueleto sale con los limites de hoy y el borrador se valida antes de mostrarlo. Usala cuando el cliente pida un posteo, un carrusel, un reel, una historia, un pie de foto o contenido para redes. Necesita el kit de marca: si no esta, ofrecele armarlo."
 version: 1.0.0
@@ -14,10 +14,10 @@ license: MIT
 Lo primero, siempre:
 
 ```bash
-python3 /opt/kit/skills/social-content/scripts/new_post.py --formato feed --tipo oferta
+python3 /opt/kit/skills/social-content/scripts/new_post.py --format feed --type offer
 ```
 
-Si no hay `brand/brand.json`, corta con `falta_kit` y te da la pregunta ya
+Si no hay `brand/brand.json`, corta con `missing_kit` y te da la pregunta ya
 escrita. **Hacésela y esperá.** Un posteo sin la voz de la clienta suena igual al
 de cualquier otra empresa, que es exactamente lo que ella no quiere pagar.
 
@@ -28,13 +28,14 @@ genérico. Es su decisión, no tuya.
 
 Son dos cosas distintas y las dos importan:
 
-- **Formato** = el envase: `feed`, `carrusel`, `reel`, `historia`. Decide
+- **Formato** = el envase: `feed`, `carousel`, `reel`, `story`. Decide
   cuántos caracteres, cuántas slides y **dónde se corta**.
-- **Tipo** = el argumento: `educativo`, `prueba`, `oferta`, `detras`, `opinion`,
-  `anuncio`, `faq`. Decide en qué orden van las ideas.
+- **Tipo** = el argumento: `educational`, `social-proof`, `offer`,
+  `behind-the-scenes`, `opinion`, `announcement`, `faq`. Decide en qué orden
+  van las ideas.
 
 Cómo se elige cada uno, y qué tipo entra en qué formato, está en
-`references/tipos.md`. Los números de cada formato, en `references/formatos.md`.
+`references/types.md`. Los números de cada formato, en `references/formats.md`.
 
 El script devuelve el esqueleto: los golpes en orden, los límites y las reglas
 duras. **Seguilo.** No inventes la cantidad de slides ni "redondeés" un límite.
@@ -42,22 +43,22 @@ duras. **Seguilo.** No inventes la cantidad de slides ni "redondeés" un límite
 ## Escribí, y después validá
 
 ```bash
-echo "$PIE" | python3 /opt/kit/skills/social-content/scripts/check_post.py --formato carrusel
+echo "$PIE" | python3 /opt/kit/skills/social-content/scripts/check_post.py --format carousel
 ```
 
 Devuelve dos listas distintas y no hay que confundirlas:
 
-- **`problemas`** — medible y objetivo: largo, dónde corta, hashtags, una oración
+- **`problems`** — medible y objetivo: largo, dónde corta, hashtags, una oración
   de 40 palabras, dos pedidos, palabras vetadas. **Se arreglan antes de mostrar
   nada.** Sale con código 1 para que no sigas de largo.
-- **`revisar`** — heurístico: no encuentro gancho, no encuentro beneficio, no hay
+- **`review`** — heurístico: no encuentro gancho, no encuentro beneficio, no hay
   razón para actuar hoy. **No son errores**, son preguntas. Contestalas leyendo,
   y si el posteo está bien así, seguí.
 
 ## Que el posteo valga la pena, no sólo que entre
 
 Que entre en los límites no lo hace bueno. Las diez cosas que sí, en
-`references/oficio.md`. Las tres que más se olvidan:
+`references/craft.md`. Las tres que más se olvidan:
 
 **Beneficio, no característica.** "Ahorrá 20 minutos cada mañana" le gana a
 "llegó nuestra app de productividad". La prueba: después de cada frase,

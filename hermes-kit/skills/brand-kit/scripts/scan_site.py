@@ -380,7 +380,7 @@ def dedupe_faces(faces):
 
 
 def build_gaps(kit):
-    """What a scan structurally cannot know. See references/anatomia.md."""
+    """What a scan structurally cannot know. See references/anatomy.md."""
     gaps = []
     if len(kit["logo"]["files"]) != 1:
         gaps.append("logo.principal — cual de los archivos es el logo oficial, y si hay version para fondo oscuro")
@@ -413,8 +413,8 @@ def main():
     except (urllib.error.URLError, ValueError, OSError, TimeoutError) as error:
         print(json.dumps({
             "ok": False,
-            "error": f"no se pudo leer {url}: {error}",
-            "hint": "verifica la direccion, o arma el kit a mano con lo que te pase el cliente",
+            "error": f"could not read {url}: {error}",
+            "hint": "check the address, or build the kit by hand with what the client sends you",
         }, ensure_ascii=False))
         return 1
 

@@ -1,0 +1,40 @@
+---
+title: Entrada por Google Drive
+client_summary: "Revisa tus carpetas de Drive y trae los videos y audios nuevos para trabajarlos."
+name: drive-inbox
+description: "Revisa las carpetas de Google Drive del cliente y baja los videos/audios nuevos al workspace. Usala cuando una tarea programada te pida revisar si llego material nuevo (entrevistas, grabaciones); el script te dice que bajo y donde quedo."
+version: 1.0.0
+license: MIT
+---
+
+# drive-inbox — traer lo nuevo de las carpetas del cliente
+
+Corre normalmente desde una tarea programada. El script hace todo lo mecánico;
+vos solo mirás el resultado y seguís el flujo del cliente con lo que llegó.
+
+## Uso
+
+```bash
+python3 /opt/kit/skills/drive-inbox/watch.py \
+  --folder ID_DE_CARPETA [--folder OTRA]
+```
+
+Los IDs de carpeta están en la configuración del cliente (los dejó el alta —
+no los inventes ni los pidas por chat).
+
+Devuelve `new`: por cada archivo nuevo, `name` y `file` (la ruta local
+donde quedó, en `workspace/entrada/`). Si `new` está vacío, **no hay nada
+que hacer**: terminá sin más vueltas.
+
+## Qué resuelve el script (no lo hagas vos)
+
+- Recuerda qué archivos ya se procesaron: no vuelve a bajar lo mismo.
+- Solo trae videos y audios; ignora el resto de la carpeta.
+- Refresca el token de Google solo. Si dice que falta la conexión, el cliente
+  tiene que conectar Google (pestaña Conexiones) — no intentes autenticarte
+  vos.
+
+## Después de bajar
+
+Lo que sigue depende del flujo del cliente (está en tu SOUL). El caso típico:
+`transcribe` el archivo y seguir con la skill de redacción del cliente.

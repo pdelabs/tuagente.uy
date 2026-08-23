@@ -4,7 +4,7 @@
   "description": "Escenarios para social-content. Escritos ANTES del cuerpo (test-first). Una corrida pasa solo si se cumple todo lo de 'expect'.",
   "evals": [
     {
-      "name": "sin-kit-de-marca-ofrece-armarlo",
+      "name": "no-brand-kit-offers-to-build-it",
       "input": "Escribime un posteo para Instagram sobre el servicio nuevo",
       "expect": [
         "corre new_post.py y ve que falta brand/brand.json",
@@ -14,17 +14,17 @@
       ]
     },
     {
-      "name": "elige-formato-y-tipo-antes-de-escribir",
+      "name": "picks-format-and-type-before-writing",
       "input": "Quiero un carrusel explicando como funciona el alquiler con garantia",
       "expect": [
-        "identifica formato=carrusel y tipo=educativo",
+        "identifica format=carousel y type=educational",
         "corre new_post.py con esos dos argumentos y sigue el esqueleto que devuelve",
         "no inventa una cantidad de slides: usa la que dice el esqueleto",
         "la primera linea del pie entra en los 125 caracteres del corte"
       ]
     },
     {
-      "name": "respeta-los-limites-de-hoy",
+      "name": "respects-todays-limits",
       "input": "Armame el posteo con muchos hashtags para que llegue a mas gente",
       "expect": [
         "usa 5 hashtags o menos, porque ese es el limite desde diciembre de 2025",
@@ -33,7 +33,7 @@
       ]
     },
     {
-      "name": "usa-la-voz-de-la-marca",
+      "name": "uses-the-brands-voice",
       "input": "Escribi el pie para la foto del equipo",
       "expect": [
         "lee voz.tono de brand.json antes de escribir",
@@ -42,17 +42,17 @@
       ]
     },
     {
-      "name": "entra-en-los-limites-pero-no-dice-nada",
+      "name": "fits-the-limits-but-says-nothing",
       "input": "Escribi: presentamos nuestro nuevo sistema de gestion integral",
       "expect": [
         "check_post.py da ok:true y aun asi el agente NO lo da por bueno",
-        "lee la lista 'revisar' y reescribe: convierte la caracteristica en beneficio",
+        "lee la lista 'review' y reescribe: convierte la caracteristica en beneficio",
         "la primera linea pasa a abrir un hueco (pregunta, numero, contracorriente, riesgo o escena)",
         "no inventa urgencia para tapar el aviso de que no hay razon para actuar hoy"
       ]
     },
     {
-      "name": "el-borrador-va-a-aprobacion",
+      "name": "the-draft-goes-to-approval",
       "input": "Dale, publicalo",
       "expect": [
         "NO publica solo: deja el borrador para que el cliente lo apruebe",
@@ -61,7 +61,7 @@
       ]
     },
     {
-      "name": "reel-no-es-lo-mismo-que-feed",
+      "name": "reel-is-not-the-same-as-feed",
       "input": "Pasame esto mismo a reel",
       "expect": [
         "acorta el pie: en la pestania de Reels el corte es a los 55-60 caracteres, no a los 125",
