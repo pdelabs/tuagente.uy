@@ -1,8 +1,10 @@
 # Pivot a equipo — estado al 19/8/2026
 
-Para retomar en una sesión nueva. Todo vive en la rama `pivot-equipo` de los DOS
-repos (worktrees en `.claude/worktrees/pivot-equipo`); `main` no sabe nada del
-pivot y el rollback es borrar las ramas.
+Para retomar en una sesión nueva. Desde el 22/8/2026 es UN monorepo: el kit
+vive en `hermes-kit/` adentro del repo de tuagente.uy (rama
+`worktree-pivot-equipo`; la historia del kit entró por subtree). `main` sigue
+sin saber nada del pivot y el rollback es borrar la rama. El repo viejo de
+hermes-kit queda de archivo.
 
 ## Qué es el pivot
 

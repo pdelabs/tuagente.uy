@@ -1,0 +1,3 @@
+# The Next app (landing + portal) is the only thing Vercel builds. The kit is
+# what gets installed INSIDE each client's agent: it never ships to Vercel.
+hermes-kit/

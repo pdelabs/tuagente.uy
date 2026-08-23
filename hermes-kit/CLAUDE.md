@@ -1,15 +1,15 @@
-# hermes-kit — contexto para una sesión nueva
+# hermes-kit — contexto para trabajar en el kit
 
-Este repo es **el producto que se instala en el agente de cada cliente** de
-tuagente.uy: el adapter del portal, las tres skills del contrato, los bloques de
-SOUL y el chequeo de conformidad. Leé `README.md` para el uso.
+Este directorio del monorepo es **el producto que se instala en el agente de
+cada cliente** de tuagente.uy: el adapter del portal, las skills, los roles,
+los bloques de SOUL y el chequeo de conformidad. Leé `README.md` para el uso.
+El resto del monorepo (la landing y el portal) tiene su contexto en el
+`CLAUDE.md` de la raíz. Regla de la casa que aplica acá también: **código y
+comentarios en inglés, siempre**; en español solo el texto que lee el cliente
+o el agente para el cliente.
 
-## Los dos repos y qué hace cada uno
-
-| Repo | Qué es |
-|---|---|
-| `hermes-kit` (este) | lo que se despliega en cada cliente |
-| `tuagente.uy` | la landing pública + el portal (`app/app/`) + `docs/` |
+Hasta el 22/8/2026 esto era un repo aparte (`github.com/luisgurmendez/
+hermes-kit`, hoy archivo); las rutas internas no cambiaron.
 
 Hubo un tercero, `agente-pdelabs` —La Mano, el cliente 0 y el fixture de pruebas
 de casi todo lo que está medido en `notas/`—, **dado de baja el 12/8/2026**: el
