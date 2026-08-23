@@ -202,6 +202,54 @@ def kit_skills_dir(data):
     return os.path.join(os.path.dirname(data), "kit-skills")
 
 
+def plugins_dir(data):
+    """Where the kit leaves its plugin registry: <agent>/plugins, sibling of data/.
+
+    The compose mounts it :ro at /opt/plugins and the adapter scans it at boot
+    (adapter/plugins.py). An agent installed before the layout flip does not
+    have it, which is a state and not a failure — until somebody runs the
+    installer, which is what the check says.
+    """
+    return os.path.join(os.path.dirname(data), "plugins")
+
+
+def kit_tools():
+    """This script's own directory: plugin_registry.py and plugin_set.py live here."""
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def installed_registry(data):
+    """The agent's own `/opt/plugins`, read through THE validator.
+
+    `plugin_registry.registry()` is what `check-plugins.py` runs over the repo
+    and what the adapter runs over `/opt` at boot: one implementation, so this
+    check cannot pass a set the adapter would refuse to boot on. Its root is the
+    directory that CONTAINS `plugins/`, which here is the agent's own root.
+
+    IT RAISES `SystemExit`, WHICH IS NOT AN `Exception` and would fly straight
+    past `check()`'s handler and take the whole run with it -- the same trap
+    `shared_split()` documents. Translated here, where it is one red line.
+    """
+    sys.path.insert(0, kit_tools())
+    import plugin_registry
+    from pathlib import Path
+    try:
+        return plugin_registry.registry(Path(os.path.dirname(data)))
+    except SystemExit as broken:
+        raise AssertionError(str(broken))
+
+
+def expected_plugins(data):
+    """The set this agent should have, computed the way install.sh computes it."""
+    sys.path.insert(0, kit_tools())
+    import plugin_set
+    from pathlib import Path
+    try:
+        return plugin_set.plugin_set(Path(data))
+    except SystemExit as broken:
+        raise AssertionError(str(broken))
+
+
 def skills_on_disk(data):
     """Every folder with a SKILL.md: data/'s and the kit's, mounted outside.
 
@@ -1787,6 +1835,160 @@ def main():
         return (f"plugin mounted :ro and turned on · 3 cases tested · "
                 f"{len(live)} live flow(s) today")
 
+    def _plugins_installed():
+        """Is the registry there at all? Every agent from before 3b: no.
+
+        A WARNING AND NOT A FAILURE, and not an ok either. The folder ships as
+        of phase 3b (notes/plugin-system-plan.md); an agent installed before
+        that is correct as it stands — the adapter says `pre-plugin layout` on
+        stderr and serves an empty list — and failing it would paint every live
+        client red for a feature none of them have yet. What it must not be is
+        SILENT: nothing below can compare a set that is not there, and "no
+        finding" would read as "nothing pending".
+        """
+        directory = plugins_dir(data)
+        if os.path.exists(directory) and not os.path.isdir(directory):
+            # OCCUPIED IS NOT ABSENT, and only one of the two is normal — the
+            # same sentence the adapter's loader had to learn (8f418ba). Saying
+            # "there is no <path>" about a path that is right there sends
+            # whoever reads it looking for a folder that was never missing. The
+            # set check calls this a failure; here it is just not the pending
+            # line.
+            return "something that is not a directory stands at plugins/ (see «plugins: the agent's set»)"
+        if not os.path.isdir(directory):
+            raise AssertionError(
+                "PRE-PLUGIN LAYOUT, UPDATE PENDING: there is no " + directory
+                + " — this agent predates the /opt/plugins registry, so the "
+                "adapter reports no plugins at all. install.sh ships it (and the "
+                "compose needs `./plugins:/opt/plugins:ro` on portal-adapter)"
+            )
+        found = sorted(d for d in os.listdir(directory)
+                       if os.path.isfile(os.path.join(directory, d, "plugin.json")))
+        return f"{len(found)} plugin(s) at plugins/: " + ", ".join(found)
+
+    def _plugin_set():
+        """The set that is installed against the set this agent should have.
+
+        THREE THINGS AT ONCE, because they are one question. That every manifest
+        is valid and the graph closed is `plugin_registry`'s answer, the same one
+        the adapter gets at boot — a set that fails here is an adapter that
+        refuses to start. That the SET is this agent's comes from
+        `tools/plugin_set.py`, the same computation install.sh makes: an extra
+        plugin is one whose role was let go and whose folder never left, and a
+        missing one is a hire that never got the installer run after it. And the
+        versions, because a registry frozen at an old version is how the portal
+        ends up drawing a tab whose endpoint the installed code does not serve.
+
+        WHAT IS NOT CHECKED HERE: the delivered skill copies under kit-skills/,
+        which are a different question with its own check right below.
+        """
+        directory = plugins_dir(data)
+        if not os.path.exists(directory):
+            return "pre-plugin layout: nothing to compare (see «plugins: registry installed»)"
+        if not os.path.isdir(directory):
+            raise AssertionError(
+                f"{directory} is not a directory — the adapter refuses to boot on "
+                "that (a file or a dead symlink where the registry goes is a broken "
+                "mount, not an empty set)")
+        installed = installed_registry(data)
+        expected = expected_plugins(data)
+        extra = sorted(set(installed) - set(expected))
+        missing = sorted(set(expected) - set(installed))
+        if missing:
+            raise AssertionError(
+                "missing from plugins/: " + ", ".join(
+                    f"{pid} ({', '.join(expected[pid])})" for pid in missing)
+                + " — run install.sh; after hiring a role it is what brings the "
+                "plugins that role declares")
+        if extra:
+            raise AssertionError(
+                "plugins/ carries " + ", ".join(extra) + ", which this agent's set "
+                "does not include — a role was let go and its plugin stayed, or "
+                "somebody copied a folder in by hand. install.sh removes what it "
+                "installed; anything else has to go by hand")
+        drifted = []
+        for pid, manifest in sorted(installed.items()):
+            ours = os.path.join(kit_tools(), "..", "plugins", pid, "plugin.json")
+            with open(ours, encoding="utf-8") as fh:
+                version = json.load(fh)["version"]
+            if manifest["version"] != version:
+                drifted.append(f"{pid} {manifest['version']} vs {version} in the kit")
+        if drifted:
+            raise AssertionError(
+                "installed at a version this kit no longer ships: " + " · ".join(drifted)
+                + " — run install.sh")
+        # AND THAT THE ADAPTER CAN SEE IT, which is the same lesson the promises
+        # guard left: installed and unreachable is worse than not installed,
+        # because from then on the fleet table says the agent has it. Without the
+        # mount the boot scan finds nothing and `GET /portal/plugins` answers an
+        # empty list — the pre-plugin answer, from an agent that is not.
+        compose = os.path.join(os.path.dirname(data), "docker-compose.yml")
+        if os.path.isfile(compose):
+            with open(compose, encoding="utf-8", errors="replace") as fh:
+                yml = fh.read()
+            if "./plugins:/opt/plugins" not in yml:
+                raise AssertionError(
+                    "the compose does not mount plugins/ at /opt/plugins — the "
+                    "registry is installed and the adapter cannot read it, so it "
+                    "reports no plugins at all. Add `- ./plugins:/opt/plugins:ro` to "
+                    "the portal-adapter service and `docker compose up -d "
+                    "portal-adapter` (a restart is not enough: it is a new mount)")
+        return f"{len(installed)} plugin(s), the set this agent computes, closure valid"
+
+    def _plugin_skills_delivered():
+        """The delivered copy of a plugin's skill still matches the registry's.
+
+        A PLUGIN'S SKILL IS ON THE AGENT TWICE, ON PURPOSE. `plugins/<id>/skills/
+        <name>/` is the registry — what says the plugin is installed — and
+        `kit-skills/<name>/` is the delivery, which is what the engine indexes
+        (`skills.external_dirs`). Two copies that disagree is the whole reason
+        this check exists: the one the client's agent RUNS is the delivered one,
+        so a stale copy there is a skill running old code while the manifest
+        swears it is current. install.sh writes both in the same run; a
+        difference means one of them was touched afterwards.
+
+        THE PROFILE COPIES ARE NOT COMPARED, and that is not an oversight: a
+        craft skill packed into a role's profile goes through build_role.py,
+        which REWRITES `/opt/kit/skills/<name>/` into the profile's own path.
+        Those copies are supposed to differ, byte for byte, from the registry's.
+        """
+        directory = plugins_dir(data)
+        if not os.path.isdir(directory):
+            return "pre-plugin layout: no registry to compare against"
+        external = kit_skills_dir(data)
+        checked, wrong = 0, []
+        for pid in sorted(os.listdir(directory)):
+            manifest_file = os.path.join(directory, pid, "plugin.json")
+            if not os.path.isfile(manifest_file):
+                continue
+            with open(manifest_file, encoding="utf-8") as fh:
+                names = json.load(fh).get("surfaces", {}).get("skills") or []
+            for name in names:
+                source = os.path.join(directory, pid, "skills", name)
+                delivered = os.path.join(external, name)
+                if not os.path.isdir(delivered):
+                    continue          # role-only: it travels inside the profile
+                for base, _, files in os.walk(source):
+                    if "evals" in os.path.relpath(base, source).split(os.sep):
+                        continue
+                    for f in files:
+                        if not f.endswith((".md", ".py")):
+                            continue
+                        rel = os.path.relpath(os.path.join(base, f), source)
+                        there = os.path.join(delivered, rel)
+                        checked += 1
+                        if not os.path.isfile(there):
+                            wrong.append(f"{name}/{rel} (not delivered)")
+                        elif open(there, "rb").read() != open(
+                                os.path.join(base, f), "rb").read():
+                            wrong.append(f"{name}/{rel} (differs)")
+        if wrong:
+            raise AssertionError(
+                "the delivered copy does not match the plugin's: " + ", ".join(wrong[:6])
+                + " — kit-skills/ is what the engine indexes, so THAT is what the "
+                "agent is running; run install.sh")
+        return f"{checked} file(s) delivered from the registry, all matching"
+
     def _pairing_patch():
         """The pairing-message patch, which gets mounted as a cont-init.
 
@@ -1911,6 +2113,9 @@ def main():
     # running on its own without it existing, and nobody finds out until the
     # client goes and looks.
     check("the promises guard", _promises, required=True)
+    check("plugins: registry installed", _plugins_installed, required=False)
+    check("plugins: the agent's set", _plugin_set)
+    check("plugins: skills delivered from the registry", _plugin_skills_delivered)
     check("policy: pairing patch", _pairing_patch)
     check("capabilities: catalog in sync", _capabilities)
     check("config: browser out, web in", _browser_out)
