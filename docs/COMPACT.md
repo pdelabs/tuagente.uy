@@ -150,7 +150,18 @@ the agent's key; this is `/portal/uso` under its new English name,
 `/portal/uso` back then; the current endpoint is that same `uso`
 implementation, just renamed, not the old broken one coming back) ·
 `files` (+`/{path}`, always `text/plain`) · `crons/{id}` · `capabilities` ·
-`boards` · `POST upload` · `POST sessions/{id}/chat/stream` (proxy).
+`boards` · `POST upload` · `POST sessions/{id}/chat/stream` (proxy) ·
+`plugins` (adapter 0.41+: the kit plugins installed at `/opt/plugins`, id,
+version, description, system, requires, which surfaces are present and the
+tab object verbatim, sorted by id. Verified over a socket by the adapter's
+test suite, not yet against a live agent, because `/opt/plugins` does not
+ship until the layout flip — until then every real agent answers `[]`, which
+is the tested behaviour and not an outage).
+
+The manifest's `portal_plugin` is `adapter_version` as of adapter 0.41.0 —
+same `adapter-<semver>` value, a name that is not the third thing here called
+a plugin. `portal-check.py` requires it, so update an agent's adapter before
+running the check against it.
 
 ## Hard lessons (do NOT repeat)
 

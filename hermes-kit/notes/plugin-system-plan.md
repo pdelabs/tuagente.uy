@@ -4,7 +4,9 @@ Status: **Phase 0 DONE** (full-English translation, commits c0da1f4..f7ea931),
 **Phase 1 DONE** — 925a933 (registry, manifest schema, check-plugins), 469d595
 (transcribe and invoices-to-data migrated, build_role resolving plugins), plus
 a32b430 and b8e73bb from an independent revalidation — and **Phase 2 DONE**
-2026-08-23 (e601f78, 5e4d582, 2ac4295, plus this note). **Phase 3 is next.**
+2026-08-23 (e601f78, 5e4d582, 2ac4295), and **Phase 3a DONE** 2026-08-23
+(c3345f0 the adapter's loader and `/portal/plugins`, 4af1df0 the
+`adapter_version` rename, plus this note). **Phase 3b is next.**
 Plan agreed with Luis on 2026-08-23; v2 only updates paths and ids to the
 translated tree — no decision changed.
 
@@ -74,9 +76,15 @@ and nothing else. `id` is English kebab-case and equals the folder name.
    surface files exist, system plugins depend only on system plugins) and
    `build_role.py` resolves each agent's plugin set: a missing dependency
    FAILS the build.
-2. **Boot time (phase 3).** The adapter scans `/opt/plugins/*/plugin.json`
-   at startup and REFUSES TO BOOT on a broken closure. No degraded half-boot
-   — house rule: break hard.
+2. **Boot time (phase 3a, DONE).** `adapter/plugins.py` scans
+   `/opt/plugins/*/plugin.json` at startup and REFUSES TO BOOT on a broken
+   closure. No degraded half-boot — house rule: break hard. It IMPORTS
+   `tools/plugin_registry.py` rather than restating its rules, and
+   `install.sh` ships that file next to the adapter in the container: one
+   validator, so the build and the boot can never disagree about a manifest.
+   Three states, one of them an error: no `/opt/plugins` is an empty set and
+   a log line (every agent alive today), a valid registry loads into memory,
+   anything broken exits nonzero naming the manifest and the rule.
 
 Constraints start minimal: a bare id means "any version present"; add
 `id>=N` only when a real incompatibility exists. Registry version is truth:
@@ -146,9 +154,29 @@ match plugin ids and stay as they are.
    ad3fb87 except the `skills` array in the five role.json files (same set,
    now sorted — see Resolved), and install.sh writes the identical file list on
    a solo and on a team agent.
-3. **Agent-side loader:** adapter boot-scan of `/opt/plugins`,
-   `/portal/plugins` endpoint, fail-loud boot check; hire/update/check
-   tooling plugin-aware.
+3. **Agent-side loader**, split in two because only the second half changes
+   what is inside a container:
+   - **3a — the loader itself.** ~~Adapter boot-scan, `/portal/plugins`,
+     fail-loud boot check.~~ **DONE 2026-08-23** (c3345f0, 4af1df0): the
+     adapter boot-scans `/opt/plugins` through the one validator, serves
+     `GET /portal/plugins` (id, version, description, system, requires, which
+     surfaces are present and the tab object verbatim, sorted by id), and exits
+     nonzero on a broken set. `install.sh` gained exactly two entries, both
+     shipping `tools/plugin_registry.py` to where the adapter runs
+     (`kit-adapter/`, and `data/scripts/` while an agent's compose still starts
+     from there). Nothing else moved: the five roles' dists are byte for byte
+     what they were at 1b1129b, and the file list install.sh writes on a solo
+     and on a team agent is identical but for those two files plus
+     `adapter/plugins.py`, which travels with the rest of the adapter because
+     that list is built from the directory.
+   - **3b — the `/opt/plugins` layout flip.** Shipping the plugin FOLDERS to
+     `/opt/plugins/<id>/` instead of flattening their skills; moving
+     `policy/plugins/promises/` into `plugins/flow/engine/` (the compose mount
+     and `plugins.enabled` in config.yaml have to move with it);
+     `tools/hire-role.sh` and `tools/agent-check.py` made plugin-aware; and the
+     `SKILL.md` path rewrites that a skill leaving `/opt/kit/skills/<name>/`
+     forces. Until it lands the loader finds nothing on every live agent — by
+     design, and tested.
 4. **First new-surface plugins:** `webscraping` (service + skill) and one
    third-party MCP behind the guard.
 5. **Dynamic portal tab:** generic plugin page + manifest-driven nav.
@@ -163,13 +191,44 @@ match plugin ids and stay as they are.
 
 ## Resolved
 
+- **`portal_plugin` is `adapter_version` (adapter 0.41.0, 4af1df0), and that
+  was the THIRD meaning of the word.** The manifest field never held a
+  plugin of any kind: it dates from when this sidecar was going to ship as a
+  Hermes plugin, and its value has always been `adapter-<semver>`. With the
+  engine's plugins renamed in phase 2 and `/portal/plugins` now serving the
+  kit's registry, this was the last thing making one word mean three, so it
+  is named after what it holds. Every consumer moved with it
+  (`app/app/lib/agent.ts`, `tools/portal-check.py` in three places). NOTE
+  FOR THE FLEET: the field is in portal-check's required-keys list, so
+  running it against an agent still on 0.40.0 or older FAILS on the manifest
+  check. That is intended — accepting both spellings would be a guard
+  against our own rename — and it means the adapter gets updated before the
+  check gets run.
+
+- **A profile's `role.json` is permanently non-semantic, and the loader is
+  what makes it permanent.** `adapter/plugins.py` reads MANIFESTS and
+  DIRECTORIES: `/opt/plugins/<id>/plugin.json`, and the skill directories a
+  plugin declares. It never opens a `role.json`, and nothing in phases 3b–5
+  gives it a reason to — the plugin set installed on an agent is a fact about
+  the filesystem, not a claim in a profile. What the distribution's
+  `role.json` carries is `identity` (the name and face the portal draws) and
+  a flattened `skills` list nobody compares against anything: the engine
+  indexes the `skills/` DIRECTORY, and the adapter's `_role_identity`,
+  `agent-check.py` and `skills_split.py` read `identity` or compare sets.
+  THE CONSEQUENCE WORTH WRITING DOWN: the skill-id gap in
+  `tools/migrate-agent-to-english.sh` — it renames directories on a live
+  agent without rewriting the ids inside a `role.json` — is permanently
+  harmless, not harmless-for-now. Nothing reads those ids, and after this
+  phase nothing is going to start.
+
 - **`/portal/plugins` belongs to the kit.** The adapter's `/portal/inventory`
   used to return a field called `plugins` meaning the ENGINE's plugins
   (`hermes plugins list`). As of phase 2 that field is `engine_plugins`
   (adapter 0.40.0, e601f78), renamed through `app/app/lib/agent.ts` and every
   consumer. The bare word now means a kit plugin everywhere on the portal API,
-  and `/portal/plugins` is free for the registry endpoint phase 3 adds. The
-  ENGINE's own JSON key stays `plugins` — that one is theirs.
+  and `/portal/plugins` was free for the registry endpoint, which phase 3a
+  went on to add (c3345f0). The ENGINE's own JSON key stays `plugins` — that
+  one is theirs.
 
 - **`skills_split.py` needs no per-plugin override** (the phase-2 open
   question). `system: true` ships the plugin FOLDER to every agent so anything

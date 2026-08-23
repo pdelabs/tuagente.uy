@@ -84,27 +84,56 @@ that has nothing to do with plugins.
 
 ## Where the files actually land
 
-**Through phase 2 the plugin folder is repo-side packaging only.** Nothing
-changed inside the container: at dist-assembly time a plugin's skills are
-flattened back into the layout the agent has always had, so
+**The plugin folder is still repo-side packaging only.** Nothing has changed
+inside the container: at dist-assembly time a plugin's skills are flattened
+back into the layout the agent has always had, so
 `plugins/transcribe/skills/transcribe/` installs at `/opt/kit/skills/transcribe/`
 exactly like `skills/transcribe/` used to, and every `SKILL.md` keeps the paths
-it already had. `/opt/plugins/<id>/` arrives in phase 3.
+it already had. `/opt/plugins/<id>/` arrives in phase 3b.
+
+**The agent already knows how to read it, though** (phase 3a). The adapter
+scans `/opt/plugins` at boot through this same validator — `install.sh` ships
+`tools/plugin_registry.py` next to it in the container, because two copies of
+these rules would be two answers — and publishes what it found at
+`GET /portal/plugins`. On every agent alive today that directory does not
+exist, which is a state and not a failure: the adapter says so on stderr and
+serves an empty list. A directory that IS there and does not validate stops
+the adapter from booting at all.
 
 That flattening is what `roles/build_role.py` and `install.sh` do, both through
 the one resolver in `tools/plugin_registry.py`. A skill name may exist in
 `skills/` **or** in one plugin's skills surface, never in two places: the
 flattened layout has one slot per name and the validator says so.
 
+## What the plugin set is NOT read from
+
+**A profile's `role.json` is non-semantic, permanently.** Everything that
+resolves plugins reads manifests and directories and nothing else: this
+registry in the repo, `/opt/plugins/<id>/plugin.json` on the agent, and the
+skill directories a manifest declares. Which plugins an agent has is a fact
+about its filesystem, never a claim in a profile, and no phase of this plan
+changes that.
+
+What the distribution's `role.json` carries is `identity` — the name and face
+the portal draws — plus a flattened `skills` list that nothing compares against
+anything: the engine indexes the `skills/` DIRECTORY, and the adapter's
+`_role_identity`, `agent-check.py` and `skills_split.py` read `identity` or
+compare sets. That is why `tools/migrate-agent-to-english.sh` rewriting a live
+agent's `role.json` id and look but NOT the skill ids inside it is harmless for
+good, and not just until something starts reading them.
+
 ## Verify
 
 ```bash
 python3 hermes-kit/tools/check-plugins.py
 python3 -m unittest discover -s hermes-kit/tools -p "test_*.py"
+# the boot half: the loader, its refusals, and /portal/plugins
+python3 -m unittest discover -s hermes-kit/adapter -p "test_*.py"
 ```
 
 A broken registry is not a warning. Duplicate ids, an id that is not its folder
 name, a version that is not semver, a dependency on a plugin that does not
 exist, a dependency cycle, a declared surface whose file is missing, a system
 plugin depending on a non-system one, malformed JSON: every one of those stops
-the check, the build and the install.
+the check, the build, the install — and, once the folder ships, the adapter's
+boot.
