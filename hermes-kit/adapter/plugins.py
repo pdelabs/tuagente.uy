@@ -39,7 +39,15 @@ _HERE = Path(__file__).resolve().parent
 if not (_HERE / "plugin_registry.py").is_file():
     # Repo layout: the validator lives in the kit's tools/. Inside a container
     # install.sh puts a copy next to us, and this line never runs.
-    sys.path.insert(0, str(_HERE.parent / "tools"))
+    #
+    # APPENDED, NOT PREPENDED, and the difference is which directory wins. The
+    # adapter imports its own siblings by bare name -- flows, kanban, rooms,
+    # workspace -- and tools/ is full of scripts. Putting that directory FIRST
+    # means the day somebody writes `tools/kanban.py` (a perfectly reasonable
+    # name for a kit script) the adapter starts importing it instead of
+    # `adapter/kanban.py`, in the repo only, where every test runs. Last is
+    # enough: nothing else on the path carries a plugin_registry.
+    sys.path.append(str(_HERE.parent / "tools"))
 import plugin_registry
 
 # The directory that CONTAINS `plugins/` -- `/opt` on an agent, so the registry
