@@ -94,6 +94,14 @@ class ValidRegistry(unittest.TestCase):
             self.assertIn("3 plugin(s)", out)
             self.assertIn("PASS", out)
 
+    def test_a_plugin_may_carry_no_skills_at_all(self):
+        """Every surface is optional: absent, `null` and `[]` all mean none."""
+        for none in ({}, {"skills": None}, {"skills": []}):
+            with tempfile.TemporaryDirectory() as tmp:
+                write(tmp, "alpha", manifest("alpha", surfaces=none), skills=[])
+                code, out = check(tmp)
+                self.assertEqual(code, 0, out)
+
     def test_an_empty_registry_passes(self):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "plugins").mkdir()
@@ -154,6 +162,14 @@ class BrokenRegistry(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             write(tmp, "alpha", manifest("alpha"), skills=[])
             self.fails_with(tmp, "there is no skills/alpha/SKILL.md")
+
+    def test_a_skills_surface_that_is_not_a_list(self):
+        """The falsy ones too: they used to pass as "this plugin has no skills"."""
+        for bad in (0, "", {}, False, "alpha", ["alpha", 7]):
+            with tempfile.TemporaryDirectory() as tmp:
+                write(tmp, "alpha", manifest("alpha", surfaces={"skills": bad}),
+                      skills=["alpha"])
+                self.fails_with(tmp, "surfaces.skills must be a list of skill names")
 
     def test_a_file_surface_that_is_not_there(self):
         with tempfile.TemporaryDirectory() as tmp:

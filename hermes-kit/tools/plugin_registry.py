@@ -111,9 +111,16 @@ def _check_surfaces(path: Path, data: dict, folder_dir: Path) -> None:
     where = str(path)
     surfaces = data["surfaces"]
 
-    skills = surfaces.get("skills") or []
+    # Absent and `null` are the same thing -- no skills surface -- and anything
+    # else has to be a list. `or []` also read `0`, `""`, `false` and `{}` as
+    # "no skills": a typo in the one key that says what a plugin carries,
+    # passing the check and installing a plugin with nothing in it. The four
+    # surfaces below already ask the question this way.
+    skills = surfaces.get("skills")
+    if skills is None:
+        skills = []
     if not isinstance(skills, list) or not all(isinstance(s, str) for s in skills):
-        fail(where, "surfaces.skills must be a list of skill names")
+        fail(where, f"surfaces.skills must be a list of skill names, not {skills!r}")
     for name in skills:
         if not (folder_dir / "skills" / name / "SKILL.md").is_file():
             fail(where, f"surfaces.skills declares {name!r} but there is no "
