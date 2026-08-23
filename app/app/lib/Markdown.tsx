@@ -224,9 +224,10 @@ function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
 // its own line, but it writes it in prose about half the time.
 //
 // The workspace's top-level folders also go with no prefix: the kit teaches it
-// to cite `workspace/entregables/…` (skills/deliverable/SKILL.md), but about
-// half the time it writes bare `entregables/…` and that line ended up with no
-// chip -- the same file, delivered twice, one clickable and the other not.
+// to cite `workspace/entregables/…` (the deliverable plugin's SKILL.md), but
+// about half the time it writes bare `entregables/…` and that line ended up
+// with no chip -- the same file, delivered twice, one clickable and the other
+// not.
 // These are the convention's three folders (the same ones the Files tab
 // separates), not just any relative path: a bare `informe.md` in a sentence
 // isn't a promise that the portal can open it.

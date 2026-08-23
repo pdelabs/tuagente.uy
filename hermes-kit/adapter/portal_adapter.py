@@ -57,8 +57,9 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 # Everything the client uploads lands here: one door, confined.
 INBOX = WORKSPACE / "entrada"
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-# Same alphabet skills/artifact/create_artifact.py generates. WATCH OUT: ".."
-# and "." also match, so the real confinement is done by artifact_directory().
+# Same alphabet plugins/artifact/skills/artifact/create_artifact.py generates.
+# WATCH OUT: ".." and "." also match, so the real confinement is done by
+# artifact_directory().
 
 # --- Authorship strings the adapter uses (one per path, and none of them the agent's own) ---
 # The agent signs its own comments with its profile (in this deploy: "default").

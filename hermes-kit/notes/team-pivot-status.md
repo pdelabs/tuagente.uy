@@ -291,7 +291,7 @@ copy).
 10. **`drive-inbox` doesn't reach any agent with a team.** It's the only one
     `skills_split.py --orphan` lists: no role declares it and it isn't a
     fallback note. And the canonical example in
-    `skills/flow/create_flow.py:21-24` — which does travel to everyone,
+    `plugins/flow/skills/flow/create_flow.py:21-24` — which does travel to everyone,
     because `flow` is shared — builds its sample flow with `--trigger drive`
     and `--skills drive-inbox,…`. Either we give it an owner (support? the
     "Assistant"?) or we drop the example: right now we're teaching every

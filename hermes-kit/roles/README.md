@@ -18,13 +18,18 @@ asking for its own approval separately.
       catalog.json            the roster: which role exists, what it does, what it costs
       build_role.py           builds a role's installable distribution
       <role>/
-        role.json             identity (name and face), skills, connections
+        role.json             identity (name and face), skills, plugins, connections
         identity.md           the role's own SOUL block
         flows/                the curated flows that ship with the role
 
-Skills **aren't copied here**. They live once in `skills/`, and each role
-declares which ones are its own in `role.json`. `build_role.py` pulls them
-together when it builds the distribution.
+Skills **aren't copied here**. They live once — in `skills/`, or inside a
+plugin's skills surface (`plugins/<id>/skills/<name>/`) — and a role claims
+them two ways in `role.json`: `skills` names a kit skill, `plugins` names a
+plugin and takes all of its skills. A plugin's skill is never named under
+`skills`; the build and the split both stop on it. `build_role.py` resolves
+both lists and flattens them into one `skills/` directory in the
+distribution, which is the only layout the agent has until phase 3
+(`../notes/plugin-system-plan.md`).
 
 ## The rule that can't be broken
 
