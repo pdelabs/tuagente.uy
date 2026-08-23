@@ -49,9 +49,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # The two pools. Never crossed: an identity and a SKILL.md share no prose.
+# A skill that ships inside a plugin is in the SAME pool as one under skills/:
+# they are the same kind of file and they install into the same directory, so
+# putting them in separate pools would let a clone hide by moving.
 POOLS = (
-    ("roles", "roles/*/identity.md"),
-    ("skills", "skills/*/SKILL.md"),
+    ("roles", ("roles/*/identity.md",)),
+    ("skills", ("skills/*/SKILL.md", "plugins/*/skills/*/SKILL.md")),
 )
 
 WINDOW = 8   # shingle length, in words
@@ -153,6 +156,11 @@ def entities(root):
     for skill in sorted((root / "skills").glob("*/SKILL.md")):
         terms.add(skill.parent.name)
 
+    for skill in sorted(root.glob("plugins/*/skills/*/SKILL.md")):
+        terms.add(skill.parent.name)
+    for manifest in sorted(root.glob("plugins/*/plugin.json")):
+        terms.add(manifest.parent.name)
+
     # Longest first: "Cargar facturas" must be replaced before "facturas".
     return sorted(terms, key=len, reverse=True)
 
@@ -227,11 +235,12 @@ def overlap(a, b):
     return 100.0 * len(a & b) / min(len(a), len(b))
 
 
-def corpus(root, pattern, entities_re):
+def corpus(root, patterns, entities_re):
     out = {}
-    for path in sorted(root.glob(pattern)):
-        text = path.read_text(encoding="utf-8", errors="replace")
-        out[path] = shingles(words(text, entities_re))
+    for pattern in patterns:
+        for path in sorted(root.glob(pattern)):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            out[path] = shingles(words(text, entities_re))
     return out
 
 
@@ -304,16 +313,17 @@ def corpus_mode(root, top):
     worst_overall = (0.0, None, None)
     empty = True
 
-    for name, pattern in POOLS:
-        files = corpus(root, pattern, entities_re)
+    for name, patterns in POOLS:
+        shown = " + ".join(patterns)
+        files = corpus(root, patterns, entities_re)
         if len(files) < 2:
-            print(f"{pattern} — {len(files)} file(s), nothing to compare\n")
+            print(f"{shown} — {len(files)} file(s), nothing to compare\n")
             continue
         empty = False
         scores = pairs(files)
         n = len(scores)
         median = scores[n // 2][0]
-        print(f"{pattern} — {len(files)} files, {n} pairs")
+        print(f"{shown} — {len(files)} files, {n} pairs")
         for pct, a, b in scores[:top]:
             print(f"  [{label(pct)}] {pct:5.1f}%  {rel(a, root)}  <->  {rel(b, root)}")
             if pct >= FAIL_THRESHOLD:

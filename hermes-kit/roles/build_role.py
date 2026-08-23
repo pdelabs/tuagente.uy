@@ -8,7 +8,8 @@ Produces a directory `hermes profile install` accepts:
     dist/marketing/
       distribution.yaml    manifest the engine reads (version, env, ownership)
       SOUL.md              kit:base block + the role's identity.md
-      skills/              only the skills this role owns
+      skills/              only the skills this role owns, whether they come
+                           from skills/ or from a plugin's skills surface
       cron/                nothing yet; flows land in flows/
       flows/               the curated flows shipped with the role
       role.json            identity (name + face) for the portal
@@ -29,6 +30,16 @@ time from the single source.
 The build FAILS, loudly, if a role's identity.md tries to restate a rule that
 belongs to the base block. A role that redefines approval is exactly the drift
 this design exists to prevent, and a warning would get skipped.
+
+PLUGINS FLATTEN HERE. A role.json may list `plugins` next to `skills`; each id
+is resolved against hermes-kit/plugins/ and its skills are copied into
+skills/<name>/ exactly where a kit skill of that name would have gone. That is
+the whole of phase 1 (notes/plugin-system-plan.md): the plugin folder is
+repo-side packaging and the container layout does not change, so the role.json
+that TRAVELS in the distribution is written flattened too -- plugins folded
+back into `skills`, no `plugins` key -- because nothing on the agent knows what
+a plugin is until phase 3. A plugin id that is not in the registry, or one
+whose own `requires.plugins` the role does not declare, fails the build.
 """
 
 from __future__ import annotations
@@ -43,6 +54,9 @@ from pathlib import Path
 
 KIT = Path(__file__).resolve().parent.parent
 ROLES = KIT / "roles"
+
+sys.path.insert(0, str(KIT / "tools"))
+import plugin_registry
 
 # A role's identity block says how it APPLIES the shared rules to its craft --
 # that is the whole point of it. What it must never do is restate the rules
@@ -116,17 +130,46 @@ def rewrite_kit_paths(dest: Path, role: str, packed: set[str]) -> None:
             path.write_text(nuevo, encoding="utf-8")
 
 
-def collect_skills(names: list[str], dest: Path, role: str) -> int:
+def skill_sources(cfg: dict, role: str) -> dict[str, Path]:
+    """Every skill this role ships -> where its files are in the repo.
+
+    The plugins first and the kit skills after, which is also the order the
+    distribution's role.json lists them in.
+    """
+    sources = plugin_registry.role_skills(cfg.get("plugins", []), role, KIT)
+    for name in cfg.get("skills", []):
+        sources[name] = KIT / "skills" / name
+    return sources
+
+
+def collect_skills(sources: dict[str, Path], dest: Path, role: str) -> int:
     dest.mkdir(parents=True, exist_ok=True)
-    for name in names:
-        source = KIT / "skills" / name
+    for name, source in sources.items():
         if not source.is_dir():
             raise SystemExit(f"{role}: skill '{name}' does not exist in skills/")
         # evals/ stay out of the distribution for the same reason install.sh
         # excludes them: they are our test material, not the client's agent.
         shutil.copytree(source, dest / name, ignore=shutil.ignore_patterns("evals", "__pycache__"))
-    rewrite_kit_paths(dest, role, set(names))
-    return len(names)
+    rewrite_kit_paths(dest, role, set(sources))
+    return len(sources)
+
+
+def write_role_json(role_dir: Path, dest: Path, sources: dict[str, Path]) -> None:
+    """role.json as the agent reads it: the plugins folded back into `skills`.
+
+    The distribution is today's container layout, and today's container has no
+    /opt/plugins. A role that declares no plugins is copied byte for byte, so
+    the transition cannot move a single distribution it does not have to.
+    """
+    source = role_dir / "role.json"
+    cfg = json.loads(source.read_text(encoding="utf-8"))
+    if "plugins" not in cfg:
+        shutil.copy2(source, dest / "role.json")
+        return
+    flat = {k: (list(sources) if k == "skills" else v)
+            for k, v in cfg.items() if k != "plugins"}
+    (dest / "role.json").write_text(
+        json.dumps(flat, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def write_manifest(role: str, cfg: dict, dest: Path) -> None:
@@ -186,7 +229,8 @@ def build(role: str, out_root: Path) -> Path:
     dest.mkdir(parents=True)
 
     (dest / "SOUL.md").write_text(build_base_soul() + "\n\n" + identity, encoding="utf-8")
-    count = collect_skills(cfg.get("skills", []), dest / "skills", role)
+    sources = skill_sources(cfg, role)
+    count = collect_skills(sources, dest / "skills", role)
 
     flows_src = role_dir / "flows"
     flows = 0
@@ -195,7 +239,7 @@ def build(role: str, out_root: Path) -> Path:
         flows = len(list((dest / "flows").iterdir()))
 
     (dest / "cron").mkdir(exist_ok=True)
-    shutil.copy2(role_dir / "role.json", dest / "role.json")
+    write_role_json(role_dir, dest, sources)
     write_manifest(role, cfg, dest)
 
     soul_bytes = (dest / "SOUL.md").stat().st_size

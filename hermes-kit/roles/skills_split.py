@@ -4,6 +4,7 @@
     python3 roles/skills_split.py --shared        one name per line
     python3 roles/skills_split.py --role-only
     python3 roles/skills_split.py --orphan
+    python3 roles/skills_split.py --dirs          name<TAB>its directory in the kit
 
 WHY THIS EXISTS. `install.sh` copies `skills/` into `<agent>/kit-skills/`, which
 the compose mounts read only for the WHOLE installation. Before the team pivot
@@ -44,6 +45,13 @@ A skill that no role claims and is not a fallback reaches NOBODY on a team
 agent: `--orphan` lists them so the installer can say so out loud instead of
 dropping them in silence.
 
+A SKILL LIVES IN ONE OF TWO PLACES and this file does not care which:
+`skills/<name>/`, or the skills surface of a plugin,
+`plugins/<id>/skills/<name>/`. They install into the same directory on the
+agent (phase 1 of notes/plugin-system-plan.md is repo-side packaging only), so
+the split is computed over both and `--dirs` is how `install.sh` finds the
+source of each one without knowing about plugins at all.
+
 THE TWO DECLARATIONS MUST AGREE. `roles/catalog.json` is what the client is
 sold; `roles/<id>/role.json` is what gets built into the profile. A difference
 between them is a role whose price does not match its contents, so this raises
@@ -65,6 +73,9 @@ CATALOG = KIT / "roles" / "catalog.json"
 CAPABILITIES = KIT / "capabilities" / "catalog.json"
 SKILLS = KIT / "skills"
 
+sys.path.insert(0, str(KIT / "tools"))
+import plugin_registry
+
 # THE ONLY STATE OF A ROLE SOMEBODY CAN HIRE. The roster's own vocabulary: an
 # entry is born `unwritten` -- the id, the label and the face exist, the SOUL and
 # the flows do not -- and turns `ready` when it can be sold. All four were
@@ -84,9 +95,21 @@ ITEM = re.compile(r"^\s+-\s+\S")
 FALLBACK_KEY = re.compile(r"^\s*fallback_for_tools:\s*(.*?)\s*$")
 
 
+def skill_dirs() -> dict[str, Path]:
+    """Every skill in the kit -> the directory its files live in.
+
+    Both homes at once: `skills/<name>/` and the skills surface of a plugin.
+    The registry is validated on the way in, so a name can only come from one
+    of the two.
+    """
+    out = {d.name: d for d in SKILLS.iterdir() if (d / "SKILL.md").is_file()}
+    out.update(plugin_registry.skill_sources(KIT))
+    return dict(sorted(out.items()))
+
+
 def all_skills() -> set[str]:
     """Every skill in the kit: a directory with a SKILL.md, like the engine sees it."""
-    return {d.name for d in SKILLS.iterdir() if (d / "SKILL.md").is_file()}
+    return set(skill_dirs())
 
 
 def is_fallback(name: str) -> bool:
@@ -108,7 +131,7 @@ def is_fallback(name: str) -> bool:
     block ends at the next key: an empty `fallback_for_tools:` still declares
     nothing, no matter what the key below it lists.
     """
-    lines = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8").splitlines()
+    lines = (skill_dirs()[name] / "SKILL.md").read_text(encoding="utf-8").splitlines()
     if not lines or lines[0].strip() != "---":
         return False
     frontmatter = lines[1:]
@@ -148,21 +171,27 @@ def declared_by_role() -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
     for role in roles:
         role_id = role["id"]
-        sold = set(role.get("skills") or [])
-        built = set(json.loads(
-            (KIT / "roles" / role_id / "role.json").read_text(encoding="utf-8")
-        ).get("skills") or [])
-        if sold != built:
-            raise SystemExit(
-                f"{role_id}: the roster and the role manifest declare different skills.\n"
-                f"    {'roles/catalog.json':<28}{sorted(sold)}\n"
-                f"    {f'roles/{role_id}/role.json':<28}{sorted(built)}\n"
-                "The catalog is what the client buys and role.json is what gets built: "
-                "fix whichever one is wrong before installing anything."
-            )
+        manifest = json.loads(
+            (KIT / "roles" / role_id / "role.json").read_text(encoding="utf-8"))
+        for key in ("skills", "plugins"):
+            sold = set(role.get(key) or [])
+            built = set(manifest.get(key) or [])
+            if sold != built:
+                raise SystemExit(
+                    f"{role_id}: the roster and the role manifest declare different {key}.\n"
+                    f"    {'roles/catalog.json':<28}{sorted(sold)}\n"
+                    f"    {f'roles/{role_id}/role.json':<28}{sorted(built)}\n"
+                    "The catalog is what the client buys and role.json is what gets built: "
+                    "fix whichever one is wrong before installing anything."
+                )
+        built = set(manifest.get("skills") or [])
         missing = sorted(built - existing)
         if missing:
             raise SystemExit(f"{role_id} declares skills that do not exist in skills/: {missing}")
+        # A plugin's skills count as the role's, because that is what reaches
+        # the agent: the plugin folder is packaging, the installed layout is
+        # the same one it always was.
+        built |= set(plugin_registry.role_skills(manifest.get("plugins") or [], role_id, KIT))
         if role.get("state") == ON_OFFER:
             out[role_id] = built
     if not out:
@@ -213,7 +242,14 @@ def main() -> int:
     group.add_argument("--shared", action="store_true", help="skills every agent gets")
     group.add_argument("--role-only", action="store_true", help="skills that ship with a role")
     group.add_argument("--orphan", action="store_true", help="skills no role claims")
+    group.add_argument("--dirs", action="store_true",
+                       help="every skill and the directory holding it, tab separated")
     args = parser.parse_args()
+
+    if args.dirs:
+        for name, directory in skill_dirs().items():
+            print(f"{name}\t{directory.relative_to(KIT)}")
+        return 0
 
     if args.shared:
         names = shared_skills()

@@ -1,0 +1,13 @@
+{
+  "id": "invoices-to-data",
+  "version": "1.0.0",
+  "description": "An invoice — photo, PDF or the CFE's XML — becomes one row of data; whatever could not be read comes back empty and flagged",
+  "client_copy": "Pasa la foto o el PDF de tus facturas a la planilla —fecha, proveedor, número y monto— y te muestra lo que no pudo leer antes de que cuente.",
+  "requires": {},
+  "surfaces": {
+    "skills": [
+      "invoices-to-data"
+    ]
+  },
+  "system": false
+}

@@ -20,6 +20,7 @@ CLAUDE.md and a production agent still had a skill without it — precisely the
 one that mails a lead. It got indexed with an empty description, so the agent
 could never discover it. A rule nobody checks is not a rule.
 """
+import glob
 import importlib.util
 import json
 import os
@@ -422,13 +423,19 @@ def allowed_skills():
 
 
 def kit_skills():
-    """The names of the skills this kit installs (the folders under skills/)."""
-    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "skills")
-    try:
-        return {d for d in os.listdir(root)
-                if os.path.isfile(os.path.join(root, d, "SKILL.md"))}
-    except OSError:
-        return set()
+    """The names of the skills this kit installs.
+
+    Two homes, one installed directory: `skills/<name>/` and the skills
+    surface of a plugin, `plugins/<id>/skills/<name>/`. Both land in
+    kit-skills/<name>/ (notes/plugin-system-plan.md, phase 1), so an agent
+    cannot tell them apart and neither does this list.
+    """
+    kit = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    names = set()
+    for parts in (("skills", "*"), ("plugins", "*", "skills", "*")):
+        for path in glob.glob(os.path.join(kit, *parts, "SKILL.md")):
+            names.add(os.path.basename(os.path.dirname(path)))
+    return names
 
 
 def has_team(data):

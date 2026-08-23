@@ -168,6 +168,16 @@ done < <(find "$KIT"/connections/*/mcp -type f ! -path "*/__pycache__/*" 2>/dev/
 # its skills inside). Who is shared and who is not is COMPUTED from the roles by
 # roles/skills_split.py, not written down here: a list by hand is how two skills
 # once made it into the kit and never into a new agent.
+#
+# WHERE EACH SKILL'S FILES ARE is no longer just `skills/<name>/`: a skill can
+# ship inside a plugin, at `plugins/<id>/skills/<name>/`. It installs into the
+# same `kit-skills/<name>/` either way -- in phase 1 the plugin folder is
+# packaging in this repo and the agent's layout does not change
+# (notes/plugin-system-plan.md) -- so the only thing that moves is where the
+# source is read from, and skills_split.py is the one that knows.
+SKILL_DIRS="$(python3 "$KIT/roles/skills_split.py" --dirs)"
+skill_dir() { printf '%s\n' "$SKILL_DIRS" | awk -F'\t' -v n="$1" '$1 == n { print $2; exit }'; }
+
 ROSTER="$POLICY/roles/catalog.json"
 SKILLS_TO_INSTALL=()
 if [[ -f "$ROSTER" ]]; then
@@ -189,16 +199,22 @@ if [[ -f "$ROSTER" ]]; then
   # of waiting for someone to copy a file by hand.
   FILES+=("roles/catalog.json:$ROSTER")
 else
-  while IFS= read -r d; do
-    SKILLS_TO_INSTALL+=("$(basename "$d")")
-  done < <(find "$KIT/skills" -mindepth 1 -maxdepth 1 -type d | sort)
+  while IFS=$'\t' read -r name _; do
+    SKILLS_TO_INSTALL+=("$name")
+  done < <(printf '%s\n' "$SKILL_DIRS")
 fi
 
 for s in "${SKILLS_TO_INSTALL[@]}"; do
+  rel_dir="$(skill_dir "$s")"              # skills/deliverable or plugins/x/skills/y
+  [[ -n "$rel_dir" ]] || {
+    echo "'$s' has to be installed and there is no such skill in the kit." >&2
+    exit 1
+  }
+  source_dir="$KIT/$rel_dir"
   while IFS= read -r f; do
-    rel="${f#"$KIT"/}"                     # skills/deliverable/SKILL.md
-    FILES+=("$rel:$KIT_SKILLS/${rel#skills/}")
-  done < <(find "$KIT/skills/$s" -type f \( -name "*.md" -o -name "*.py" \) \
+    inner="${f#"$source_dir"/}"            # SKILL.md, scripts/verify_rows.py
+    FILES+=("$rel_dir/$inner:$KIT_SKILLS/$s/$inner")
+  done < <(find "$source_dir" -type f \( -name "*.md" -o -name "*.py" \) \
     ! -path "*/evals/*" | sort)
 done
 # evals/ do NOT travel on purpose: they're ours, to test the skill before

@@ -14,6 +14,9 @@
     "              COMMERCIAL ARTIFACT: a weak one means the client pays for a",
     "              role that never receives work.",
     "  needs    -> connections it cannot start without",
+    "  plugins  -> reusable units from hermes-kit/plugins/ whose skills the role",
+    "              carries. From the agent's side it is the same thing as a name",
+    "              in `skills`; what changes is where the files live in this repo",
     "  flows    -> the curated ones shipped with the role, one click away",
     "  state    -> `ready` = on offer, hireable. `unwritten` = the id, the",
     "              label and the face exist and the SOUL does not. It is not",
@@ -156,12 +159,14 @@
       "routing": "Builds spreadsheets from financial records and flags what needs attention: income and expense sheets, reconciling what was charged against what was invoiced, and overdue invoice alerts. READ-ONLY: never files, pays or issues anything. Route here anything about numbers, invoices, spreadsheets or what is owed.",
       "needs": [],
       "skills": [
-        "invoices-to-data",
         "approval",
         "deliverable",
         "artifact",
         "flow",
         "capability"
+      ],
+      "plugins": [
+        "invoices-to-data"
       ],
       "flows": [
         "planilla-del-mes",

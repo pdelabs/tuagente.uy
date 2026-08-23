@@ -8,7 +8,7 @@ the command line the way an operator runs it, because the exit code and the
 message ARE the feature: `roles/build_role.py` and `install.sh` both stop on
 this and the person reading the output has to know which file to open.
 
-`RoleResolution` goes at the resolver directly (`plugin_registry`), which is
+The last two classes go at the resolver directly (`plugin_registry`), which is
 where a ROLE's plugin list is turned into skills — the registry can be perfect
 and the role still ask for a plugin that is not there.
 """
@@ -224,6 +224,34 @@ class RoleResolution(unittest.TestCase):
             write(tmp, "beta", manifest("beta", system=True))
             got = plugin_registry.role_skills(["alpha"], "accounting", Path(tmp))
             self.assertEqual(list(got), ["alpha"])
+
+
+class TheKitsOwnRegistry(unittest.TestCase):
+    """The pilots of phase 1, and the flattening the rest of the kit relies on."""
+
+    def test_the_two_pilots_are_there_with_a_skills_surface_only(self):
+        plugins = plugin_registry.registry(KIT)
+        self.assertEqual(sorted(plugins), ["invoices-to-data", "transcribe"])
+        for pid, data in plugins.items():
+            self.assertEqual(data["surfaces"], {"skills": [pid]})
+            self.assertFalse(data["system"])
+            self.assertEqual(data["requires"], {})
+
+    def test_their_skills_resolve_to_the_directory_that_holds_the_skill_md(self):
+        sources = plugin_registry.skill_sources(KIT)
+        self.assertEqual(sorted(sources), ["invoices-to-data", "transcribe"])
+        for name, where in sources.items():
+            self.assertEqual(where, KIT / "plugins" / name / "skills" / name)
+            self.assertTrue((where / "SKILL.md").is_file())
+
+    def test_the_flattened_layout_still_has_one_directory_per_skill(self):
+        """What install.sh and build_role.py copy: name -> one source, no plugins."""
+        sys.path.insert(0, str(KIT / "roles"))
+        import skills_split
+        dirs = skills_split.skill_dirs()
+        self.assertEqual(dirs["transcribe"], KIT / "plugins/transcribe/skills/transcribe")
+        self.assertEqual(dirs["approval"], KIT / "skills/approval")
+        self.assertEqual(len(dirs), len(set(dirs)))
 
 
 if __name__ == "__main__":
