@@ -1,11 +1,12 @@
 # Plugin system — the plan (v2, revalidated 2026-08-23 after the English translation)
 
-Status: **Phase 0 DONE** (full-English translation, commits c0da1f4..f7ea931)
-and **Phase 1 DONE** — 925a933 (registry, manifest schema, check-plugins),
-469d595 (transcribe and invoices-to-data migrated, build_role resolving
-plugins), plus a32b430 and b8e73bb from an independent revalidation. **Phase 2
-is next.** Plan agreed with Luis on 2026-08-23; v2 only updates paths and ids
-to the translated tree — no decision changed.
+Status: **Phase 0 DONE** (full-English translation, commits c0da1f4..f7ea931),
+**Phase 1 DONE** — 925a933 (registry, manifest schema, check-plugins), 469d595
+(transcribe and invoices-to-data migrated, build_role resolving plugins), plus
+a32b430 and b8e73bb from an independent revalidation — and **Phase 2 DONE**
+2026-08-23 (e601f78, 5e4d582, 2ac4295, plus this note). **Phase 3 is next.**
+Plan agreed with Luis on 2026-08-23; v2 only updates paths and ids to the
+translated tree — no decision changed.
 
 Language rule: everything is English — file names, plugin ids, JSON keys,
 comments, commits. The only Spanish is client-facing VALUES (e.g.
@@ -135,9 +136,16 @@ match plugin ids and stay as they are.
    dists and the file list install.sh writes on a team and on a solo agent are
    byte for byte what they were before the move, and a pre-pivot agent still
    reads as ours to `agent-check.py`.
-2. **Carve out the system plugins** ← current: as manifests OVER existing
-   code (no code moves): the dependency graph becomes explicit and
-   build-enforced.
+2. ~~Carve out the system plugins~~ **DONE 2026-08-23** (e601f78, 5e4d582,
+   2ac4295): `kanban`, `approval`, `deliverable`, `artifact` and `flow` are
+   manifests over the code that was already there, the graph above is enforced
+   by `check-plugins.py` and by the build, and the four skill directories moved
+   into their plugins with `git mv`. `surfaces.tab` gained a second shape,
+   `{"builtin": "<page>"}`, because those five pages exist already. The install
+   layout did not change: 99 dist files with the same names and bytes as
+   ad3fb87 except the `skills` array in the five role.json files (same set,
+   now sorted — see Resolved), and install.sh writes the identical file list on
+   a solo and on a team agent.
 3. **Agent-side loader:** adapter boot-scan of `/opt/plugins`,
    `/portal/plugins` endpoint, fail-loud boot check; hire/update/check
    tooling plugin-aware.
@@ -152,5 +160,28 @@ match plugin ids and stay as they are.
   (phase 4).
 - Generic-tab security model (what a plugin page may call beyond its own
   namespace) — phase 5.
-- Whether `skills_split.py` sharing rules need a per-plugin override — decide
-  with real cases in phase 2.
+
+## Resolved
+
+- **`/portal/plugins` belongs to the kit.** The adapter's `/portal/inventory`
+  used to return a field called `plugins` meaning the ENGINE's plugins
+  (`hermes plugins list`). As of phase 2 that field is `engine_plugins`
+  (adapter 0.40.0, e601f78), renamed through `app/app/lib/agent.ts` and every
+  consumer. The bare word now means a kit plugin everywhere on the portal API,
+  and `/portal/plugins` is free for the registry endpoint phase 3 adds. The
+  ENGINE's own JSON key stays `plugins` — that one is theirs.
+
+- **`skills_split.py` needs no per-plugin override** (the phase-2 open
+  question). `system: true` ships the plugin FOLDER to every agent so anything
+  may depend on it; which roles SEE a plugin's skills is still whatever the
+  role declares. `artifact` is the case that proves it is not uniform —
+  marketing, sales and accounting declare it, support and assistant do not —
+  and it stays a role-only skill. `--shared`, `--role-only` and `--orphan`
+  print exactly what they printed before the carve-out.
+
+- **The distribution's `skills` list is sorted** (build_role.py). Its order
+  used to be wherever each name happened to be written, so no two roles agreed
+  and any skill moving into a plugin re-ordered it. Nothing reads the order:
+  the engine indexes the `skills/` DIRECTORY, and every consumer of role.json
+  — the adapter's `_role_identity`, `agent-check.py`, `skills_split.py`,
+  `migrate-agent-to-english.sh` — reads `identity` or compares sets.

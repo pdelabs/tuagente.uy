@@ -8,8 +8,10 @@ client's agent. This turns it into a procedure.
 new-agent.sh                creates a new client's repo and installs the kit on it
 install.sh                  installs or diffs the kit against an existing agent
 adapter/portal_adapter.py   the sidecar the portal consumes (:8643)
-skills/                     artifact · deliverable · approval · capability · the shadow ones
-plugins/<id>/plugin.json    the plugin registry: reusable units of custom work (plugins/README.md)
+skills/                     capability · brand-kit · quotes · the shadow ones
+plugins/<id>/plugin.json    the registry: the five defaults (kanban · approval · deliverable
+                            · artifact · flow) and the reusable units of custom work
+                            (plugins/README.md)
 capabilities/catalog.json   which capabilities can be requested, and how they get installed
 policy/hooks/               the gate: what the agent CANNOT do, in code
 soul/                       the system-prompt blocks, with placeholders
