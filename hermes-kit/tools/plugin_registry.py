@@ -10,14 +10,18 @@ WHY IT VALIDATES ON EVERY READ. There is one registry and it is small; the
 alternative is a caller that half-reads a broken one and installs half a
 plugin. `registry()` either returns a whole, closed, acyclic graph or it
 raises `SystemExit` with the reason. The design (`notes/plugin-system-plan.md`)
-says fail loud twice — build time here, boot time in phase 3 — and this is the
-build-time half.
+says fail loud twice — and as of phase 3a BOTH halves are this file:
+`check-plugins.py` runs it over the repo at build time, `adapter/plugins.py`
+runs it over `/opt` when an agent boots. That is the whole point of importing
+it rather than copying it. It also means `root` is not always the kit, and one
+rule reads differently when it is not — see `_check_skill_slots`.
 
-PHASE 1: PACKAGING ONLY. A plugin's skills flatten back into the container
+PACKAGING IS STILL FLAT. A plugin's skills flatten back into the container
 layout the agent already has (`/opt/kit/skills/<name>/` or the profile's
 `skills/<name>/`), so `skill_sources()` returns exactly what a caller would
-have found under `skills/<name>/` before the move. `/opt/plugins/<id>/` is
-phase 3; nothing here knows about it yet.
+have found under `skills/<name>/` before the move. Shipping the plugin FOLDERS
+to `/opt/plugins/<id>/` is phase 3b; the loader can already read them, nothing
+writes them yet.
 """
 
 from __future__ import annotations
@@ -199,6 +203,23 @@ def _check_skill_slots(root: Path, plugins: dict[str, dict]) -> None:
     `skills/<name>/` and `plugins/<id>/skills/<name>/` install into the same
     directory on the agent, so two of them with the same name is not a merge:
     it is one of the two silently winning.
+
+    TWO HALVES, AND ONLY ONE OF THEM SURVIVES THE TRIP TO AN AGENT. The
+    plugin-vs-plugin half is read entirely out of `plugins/` and holds under any
+    root. The kit-skill half is seeded from `<root>/skills/` -- which is
+    `hermes-kit/skills/` when the root is the repo, and `/opt/skills` when it is
+    an agent, where nothing lives: an agent keeps its kit skills one level
+    further down, at `/opt/kit/skills/`. So the boot-time caller
+    (`adapter/plugins.py`) always seeds this from an empty directory and catches
+    two PLUGINS claiming one name, never a plugin colliding with a kit skill.
+
+    WRITTEN DOWN INSTEAD OF PAPERED OVER. Closing it means teaching this
+    function where an agent keeps its skills, which is a claim about the
+    container layout on the eve of the phase that moves that layout
+    (notes/plugin-system-plan.md, 3b) -- so 3b decides it, with the paths in
+    front of it. Until then the collision is refused where both halves are
+    real: `check-plugins.py` and `build_role.py`, over the repo, at build time,
+    before there is an agent to install it onto.
     """
     seen: dict[str, str] = {}
     for path in sorted((root / "skills").glob("*/SKILL.md")):

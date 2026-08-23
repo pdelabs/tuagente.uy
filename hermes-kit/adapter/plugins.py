@@ -13,6 +13,16 @@ whole design exists to prevent, only moved from the manifest to the checker.
 `install.sh` ships that file next to this one inside the container; in the repo
 it is still `tools/plugin_registry.py` and the import below finds it there.
 
+ONE VALIDATOR, AND ONE RULE THAT READS DIFFERENTLY UNDER THIS ROOT. Everything
+it says about a MANIFEST means the same thing here as in the repo. The one
+exception is the duplicate-skill-source check, which seeds itself from
+`<root>/skills/`: `hermes-kit/skills/` in the repo, `/opt/skills` here -- and an
+agent's kit skills are at `/opt/kit/skills/`, one level down. At boot that check
+therefore refuses two PLUGINS claiming one skill name and never a plugin
+colliding with a kit skill. The build refuses that one, over the repo, where
+both halves are real; `_check_skill_slots` carries the reason the gap is phase
+3b's call and not a line to close quietly from this side.
+
 WHY A BROKEN SET IS NOT A DEGRADED BOOT. A plugin's surfaces are load-bearing: a
 skill a role's SOUL promises, a tab the portal draws, an endpoint that tab calls.
 An adapter that came up with four plugins out of five would serve a portal that

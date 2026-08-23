@@ -105,6 +105,16 @@ the one resolver in `tools/plugin_registry.py`. A skill name may exist in
 `skills/` **or** in one plugin's skills surface, never in two places: the
 flattened layout has one slot per name and the validator says so.
 
+**That last rule is a build-time rule, and the boot check only gets half of
+it.** `_check_skill_slots` seeds the taken names from `<root>/skills/`, which is
+`hermes-kit/skills/` in the repo but `/opt/skills` on an agent — where nothing
+lives, because an agent's kit skills are at `/opt/kit/skills/`. So the adapter's
+boot scan refuses two plugins claiming one skill name, and cannot see a plugin
+colliding with a kit skill. Deliberate and deferred, not missed: teaching the
+validator an agent's skills path is a statement about the container layout, and
+phase 3b is the phase that moves it. The collision is refused at build time,
+which is before any agent has it.
+
 ## What the plugin set is NOT read from
 
 **A profile's `role.json` is non-semantic, permanently.** Everything that
