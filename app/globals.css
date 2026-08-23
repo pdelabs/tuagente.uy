@@ -19,8 +19,8 @@ body {
 
 /* ── Portal /app ──────────────────────────────────────────────────────── */
 
-/* Scrollbars finos y discretos en todo el portal (el default de macOS
-   queda pesado dentro de paneles). */
+/* Thin, subtle scrollbars across the whole portal (macOS's default looks
+   heavy inside panels). */
 .app-shell * {
   scrollbar-width: thin;
   scrollbar-color: rgba(20, 19, 31, 0.16) transparent;
@@ -95,7 +95,7 @@ body {
   }
 }
 
-/* ── Onboarding del portal: el agentito grande que se presenta ────────── */
+/* ── Portal onboarding: the big agentito that introduces itself ────────── */
 
 .onb-bob {
   animation: onbBob 3.4s ease-in-out infinite;
@@ -104,8 +104,8 @@ body {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-7px); }
 }
-/* Reusa el parpadeo del agentito de la landing; el origen es el centro de
-   los ojos en el viewBox 120 de la cara del onboarding. */
+/* Reuses the landing agentito's blink; the origin is the center of the
+   eyes in the onboarding face's viewBox 120. */
 .onb-eyes {
   animation: agentBlink 4.6s infinite;
   transform-origin: 60px 58px;
@@ -114,7 +114,7 @@ body {
   .onb-bob, .onb-eyes { animation: none !important; }
 }
 
-/* ── El agentito (embodied companion, metaball edition) ───────────────── */
+/* ── The agentito (embodied companion, metaball edition) ───────────────── */
 
 .agent-goo {
   filter: url(#agent-goo);

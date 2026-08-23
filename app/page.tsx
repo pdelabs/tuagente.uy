@@ -30,10 +30,10 @@ import CountUp from "./CountUp";
 const WHATSAPP = "https://wa.me/59899002835";
 const EMAIL = "mailto:hola@tuagente.uy";
 
-/** El precio, en un solo lugar: se repite en el hero, en los números, en la
- *  sección de precio, en el FAQ y en los datos estructurados. */
-const PRECIO_ROL = "$U 1.500";
-const PRECIO_DIAGNOSTICO = "USD 200";
+/** The price, in a single place: it repeats in the hero, in the numbers, in
+ *  the pricing section, the FAQ and the structured data. */
+const ROLE_PRICE = "$U 1.500";
+const DIAGNOSIS_PRICE = "USD 200";
 
 export default function Page() {
   return (
@@ -43,7 +43,7 @@ export default function Page() {
       <Cards />
       <Reveal><Stats /></Reveal>
       <Steps />
-      <Equipo />
+      <TeamSection />
       <Control />
       <Portal />
       <Integrations />
@@ -78,8 +78,8 @@ function Header() {
           ["Cómo funciona", "#como-funciona"],
           ["El equipo", "#equipo"],
           ["Tu portal", "#portal"],
-          // El id de la sección de precio sigue siendo #planes: hay un post del
-          // blog que linkea a /#planes y no se rompe por un cambio de nombre.
+          // The pricing section id stays #planes: a blog post links to
+          // /#planes and we don't want to break it by renaming the anchor.
           ["Precio", "#planes"],
           ["FAQ", "#faq"],
           ["Blog", "/blog"],
@@ -111,9 +111,10 @@ function Hero() {
   return (
     <section className="aurora relative">
       <div className="mx-auto max-w-5xl px-5 pb-16 pt-14 text-center sm:px-8 sm:pb-24 sm:pt-20">
-        {/* Un "#1 de LATAM" de una marca que el cliente no conoce no genera
-            confianza: la descuenta. Lo que sí es verificable y sí importa a
-            quien compra esto en Uruguay es dónde estamos y quién lo hace. */}
+        {/* A "#1 in LATAM" claim from a brand the client doesn't know does not
+            build trust — it discounts it. What's verifiable and what actually
+            matters to whoever buys this in Uruguay is where we are and who's
+            behind it. */}
         <span className="animate-fadeup inline-flex items-center gap-2 rounded-pill border border-primary/20 bg-white/70 px-4 py-1.5 text-sm font-bold text-primary backdrop-blur">
           <MapPin size={15} /> Hecho en Uruguay, para las empresas de acá
         </span>
@@ -132,7 +133,7 @@ function Hero() {
         >
           Contratás los roles que te faltan — marketing, soporte, ventas, contabilidad — y
           trabajan <strong className="text-ink">24/7</strong> adentro de tu empresa.{" "}
-          <strong className="text-ink">{PRECIO_ROL} por rol, por mes.</strong> Nada sale para
+          <strong className="text-ink">{ROLE_PRICE} por rol, por mes.</strong> Nada sale para
           afuera sin tu ok.
         </p>
 
@@ -226,10 +227,10 @@ function Cards() {
 
 /* ─────────────────────────────────────────── Hype stats */
 
-// Acá había cuatro números que no podíamos sostener (+150 agentes, 40+
-// empresas, 3× productividad). Un número inventado no se puede defender en la
-// primera reunión, y el cliente que compra esto pregunta. Van cuatro hechos
-// del producto, todos verificables contra lo que se entrega.
+// This used to be four numbers we couldn't back up (+150 agents, 40+
+// companies, 3x productivity). A made-up number can't be defended in the
+// first meeting, and the client buying this asks. What follows are four
+// product facts, all verifiable against what actually gets delivered.
 const STATS: {
   l: string;
   value?: number;
@@ -239,7 +240,7 @@ const STATS: {
   size?: string;
 }[] = [
   { static: "24/7", l: "tu equipo no para" },
-  { static: PRECIO_ROL, l: "por rol, por mes", size: "text-3xl sm:text-5xl" },
+  { static: ROLE_PRICE, l: "por rol, por mes", size: "text-3xl sm:text-5xl" },
   { static: "1 a 1", l: "un equipo por empresa, aislado" },
   { static: "Tu ok", l: "para todo lo que sale para afuera" },
 ];
@@ -275,7 +276,7 @@ const STEPS = [
   {
     Icon: PhoneCall,
     title: "Empezás por el diagnóstico",
-    body: `Una llamada y un informe: qué roles te sirven, cuánto te ahorra cada uno y qué sale ponerlos a trabajar. Son ${PRECIO_DIAGNOSTICO} y se descuentan del setup si seguís.`,
+    body: `Una llamada y un informe: qué roles te sirven, cuánto te ahorra cada uno y qué sale ponerlos a trabajar. Son ${DIAGNOSIS_PRICE} y se descuentan del setup si seguís.`,
   },
   {
     Icon: UserPlus,
@@ -321,57 +322,58 @@ function Steps() {
   );
 }
 
-/* ─────────────────────────────────────────── El equipo (los roles) */
+/* ─────────────────────────────────────────── The team (the roles) */
 
-// Los cinco que hoy están en el catálogo del kit (hermes-kit/roles/catalogo.json):
-// el "hace", el "nunca" Y el `look` salen de ahí, con las mismas palabras y la
-// misma cara que después ve el cliente adentro del portal. Si el catálogo
-// cambia, esto cambia — acá no se promete un rol que no esté escrito allá.
+// The five that are in the kit's catalog today (hermes-kit/roles/catalog.json):
+// the "does", the "never" and the `look` all come from there, with the same
+// words and the same face the client later sees inside the portal. If the
+// catalog changes, this changes — no role gets promised here that isn't
+// written there.
 const ROLES = [
   {
-    nombre: "Vera",
-    rol: "Marketing",
-    hace: "Escribe y planifica lo que publicás: posteos de Instagram, historias, textos y el kit de marca.",
-    nunca: "publica nada sin tu aprobación.",
-    look: { tono: 0, antena: 5, accesorio: 0, pupila: 1, boca: 1, piel: 1, traje: 0, cejas: 1, sombrero: 0 } as AgentitoLook,
+    name: "Vera",
+    role: "Marketing",
+    does: "Escribe y planifica lo que publicás: posteos de Instagram, historias, textos y el kit de marca.",
+    never: "publica nada sin tu aprobación.",
+    look: { tone: 0, antenna: 5, accessory: 0, pupil: 1, mouth: 1, skin: 1, suit: 0, brows: 1, hat: 0 } as AgentitoLook,
     bg: "bg-c-violet",
   },
   {
-    nombre: "Beto",
-    rol: "Soporte",
-    hace: "Contesta los mensajes de tus clientes: horarios, precios y estado de pedidos.",
-    nunca: "manda un mensaje a un cliente tuyo sin tu aprobación.",
-    look: { tono: 1, antena: 3, accesorio: 2, pupila: 0, boca: 1, piel: 0, traje: 0, cejas: 0, sombrero: 0 } as AgentitoLook,
+    name: "Beto",
+    role: "Soporte",
+    does: "Contesta los mensajes de tus clientes: horarios, precios y estado de pedidos.",
+    never: "manda un mensaje a un cliente tuyo sin tu aprobación.",
+    look: { tone: 1, antenna: 3, accessory: 2, pupil: 0, mouth: 1, skin: 0, suit: 0, brows: 0, hat: 0 } as AgentitoLook,
     bg: "bg-c-green",
   },
   {
-    nombre: "Nina",
-    rol: "Ventas",
-    hace: "Arma presupuestos y hace el seguimiento de los que no te contestaron.",
-    nunca: "cierra un precio ni promete una entrega sin tu aprobación.",
-    look: { tono: 5, antena: 4, accesorio: 2, pupila: 2, boca: 3, piel: 1, traje: 0, cejas: 2, sombrero: 0 } as AgentitoLook,
-    bg: "bg-c-rosa",
+    name: "Nina",
+    role: "Ventas",
+    does: "Arma presupuestos y hace el seguimiento de los que no te contestaron.",
+    never: "cierra un precio ni promete una entrega sin tu aprobación.",
+    look: { tone: 5, antenna: 4, accessory: 2, pupil: 2, mouth: 3, skin: 1, suit: 0, brows: 2, hat: 0 } as AgentitoLook,
+    bg: "bg-c-pink",
   },
   {
-    nombre: "Tino",
-    rol: "Contabilidad",
-    hace: "Te arma las planillas de lo que entra y lo que sale, y te avisa lo que vence.",
-    nunca: "factura, paga ni presenta nada. Solo mira, ordena y avisa.",
-    look: { tono: 4, antena: 2, accesorio: 1, pupila: 2, boca: 2, piel: 0, traje: 1, cejas: 1, sombrero: 0 } as AgentitoLook,
+    name: "Tino",
+    role: "Contabilidad",
+    does: "Te arma las planillas de lo que entra y lo que sale, y te avisa lo que vence.",
+    never: "factura, paga ni presenta nada. Solo mira, ordena y avisa.",
+    look: { tone: 4, antenna: 2, accessory: 1, pupil: 2, mouth: 2, skin: 0, suit: 1, brows: 1, hat: 0 } as AgentitoLook,
     bg: "bg-c-amber",
   },
   {
-    nombre: "Lola",
-    rol: "Asistente",
-    hace: "Hace los mandados del negocio: averigua lo que le pedís, lee lo que le mandás, escucha los audios y te deja la planilla o el documento armado.",
-    nunca:
+    name: "Lola",
+    role: "Asistente",
+    does: "Hace los mandados del negocio: averigua lo que le pedís, lee lo que le mandás, escucha los audios y te deja la planilla o el documento armado.",
+    never:
       "promete lo que no puede hacer. Si le falta una herramienta te lo dice y te ofrece la que lo resuelve.",
-    look: { tono: 2, antena: 0, accesorio: 3, pupila: 1, boca: 1, piel: 0, traje: 0, cejas: 0, sombrero: 0 } as AgentitoLook,
+    look: { tone: 2, antenna: 0, accessory: 3, pupil: 1, mouth: 1, skin: 0, suit: 0, brows: 0, hat: 0 } as AgentitoLook,
     bg: "bg-c-coral",
   },
 ];
 
-function Equipo() {
+function TeamSection() {
   return (
     <section id="equipo" className="mx-auto max-w-7xl px-5 py-6 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-2xl text-center">
@@ -392,33 +394,33 @@ function Equipo() {
 
       <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {ROLES.map((r, i) => (
-          <Reveal key={r.nombre} delay={(i % 3) * 90} className="h-full">
+          <Reveal key={r.name} delay={(i % 3) * 90} className="h-full">
             <article className="flex h-full flex-col rounded-card border border-ink/5 bg-white p-7 shadow-soft transition duration-300 hover:-translate-y-1">
               <div className="flex flex-wrap items-center gap-4">
                 <span className={`grid h-16 w-16 shrink-0 place-items-center rounded-2xl ${r.bg}`}>
                   <AgentitoAvatar look={r.look} className="h-14 w-14" />
                 </span>
                 <div className="min-w-0">
-                  <h3 className="text-2xl font-extrabold tracking-tight text-ink">{r.nombre}</h3>
-                  <p className="text-xs font-bold uppercase tracking-wider text-primary">{r.rol}</p>
+                  <h3 className="text-2xl font-extrabold tracking-tight text-ink">{r.name}</h3>
+                  <p className="text-xs font-bold uppercase tracking-wider text-primary">{r.role}</p>
                 </div>
               </div>
 
-              <p className="mt-5 flex-1 text-ink-soft">{r.hace}</p>
+              <p className="mt-5 flex-1 text-ink-soft">{r.does}</p>
 
               <div className="mt-5 flex items-start gap-2.5 rounded-2xl bg-ink/[0.04] p-4">
                 <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-c-coral text-c-coral-ink">
                   <Ban size={12} />
                 </span>
                 <p className="text-sm text-ink-soft">
-                  <strong className="font-extrabold text-ink">Nunca</strong> {r.nunca}
+                  <strong className="font-extrabold text-ink">Nunca</strong> {r.never}
                 </p>
               </div>
             </article>
           </Reveal>
         ))}
 
-        {/* El sexto lugar de la grilla es el rol que todavía no existe: el tuyo. */}
+        {/* The sixth spot in the grid is the role that doesn't exist yet: yours. */}
         <Reveal delay={180} className="h-full">
           <article className="flex h-full flex-col justify-center rounded-card border-2 border-dashed border-primary/25 bg-primary/[0.04] p-7">
             <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-white">
@@ -430,7 +432,7 @@ function Equipo() {
             <p className="mt-2 text-ink-soft">
               Contanos qué necesitás que haga y lo componemos con vos, capacidad por capacidad:
               leer facturas, buscar en internet, transcribir audios, armar planillas. Sale lo
-              mismo que cualquier otro rol: {PRECIO_ROL} por mes.
+              mismo que cualquier otro rol: {ROLE_PRICE} por mes.
             </p>
             <a
               href={WHATSAPP}
@@ -506,7 +508,7 @@ function Control() {
               </div>
             </div>
 
-            {/* Chat mock: el dueño le escribe al equipo, y contesta quien corresponde */}
+            {/* Chat mock: the owner writes to the team, and whoever's in charge answers */}
             <div className="mx-auto w-full max-w-md rounded-card bg-white p-5 shadow-lift sm:p-6">
               <div className="flex items-center gap-3 border-b border-ink/5 pb-4">
                 <span className="flex -space-x-3">
@@ -552,12 +554,13 @@ function Control() {
   );
 }
 
-/* ─────────────────────────────────────────── El portal */
+/* ─────────────────────────────────────────── The portal */
 
-// El portal no aparecía en ninguna parte del sitio, y es lo que hace creíble
-// todo lo demás: "cero cajas negras" dicho en prosa es una promesa; mostrado
-// es una prueba. Es además lo único que el cliente va a tocar todos los días.
-const PORTAL_PANTALLAS = [
+// The portal didn't appear anywhere on the site, and it's what makes
+// everything else credible: "zero black boxes" said in prose is a promise;
+// shown, it's proof. It's also the only thing the client is going to touch
+// every day.
+const PORTAL_SCREENS = [
   {
     Icon: Eye,
     title: "Qué hizo cada uno",
@@ -597,7 +600,7 @@ function Portal() {
       </div>
 
       <div className="mt-12 grid gap-5 sm:grid-cols-2">
-        {PORTAL_PANTALLAS.map(({ Icon, title, body }, i) => (
+        {PORTAL_SCREENS.map(({ Icon, title, body }, i) => (
           <Reveal key={title} delay={(i % 2) * 90} className="h-full">
             <article className="h-full rounded-card border border-ink/5 bg-white p-7 shadow-soft">
               <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
@@ -619,11 +622,12 @@ function Portal() {
 
 /* ─────────────────────────────────────────── Integrations */
 
-// Lo que HOY está en el catálogo curado que se instala en cada agente
-// (hermes-kit/connections/catalogo.json). La lista anterior prometía HubSpot,
-// Odoo, Mercado Libre, Notion, PostgreSQL y "+50 más" sin que existiera el
-// conector: eso se descubre en la primera reunión y quema la confianza justo
-// cuando más se necesita. Lo que no está, se escribe — y eso se dice aparte.
+// What's TODAY in the curated catalog that gets installed on every agent
+// (hermes-kit/connections/catalog.json). The previous list promised HubSpot,
+// Odoo, Mercado Libre, Notion, PostgreSQL and "+50 more" without the
+// connector existing: that gets found out in the first meeting and burns
+// trust right when it's needed most. What isn't there gets built — and
+// that's said separately.
 const INTEGRATIONS = [
   "Telegram",
   "Correo de la empresa",
@@ -666,11 +670,11 @@ function Integrations() {
 
 /* ─────────────────────────────────────────── Pricing */
 
-// Un solo precio por rol. Los tres planes (Starter / Pro / Flota) se fueron con
-// el pivot: cuando lo que se contrata es gente, el cliente no compra un
-// "paquete", compra el segundo empleado. El id de la sección sigue siendo
-// #planes porque hay un post del blog linkeando ahí.
-const INCLUYE = [
+// A single price per role. The three plans (Starter / Pro / Fleet) went away
+// with the pivot: when what's being hired is people, the client isn't buying
+// a "package", they're hiring their second employee. The section id stays
+// #planes because a blog post links there.
+const INCLUDES = [
   "El rol trabajando 24/7, adentro de tu empresa",
   "Su ficha en el portal: qué hace, qué tiene corriendo y qué entregó",
   "Aprobación tuya para todo lo que sale para afuera",
@@ -701,7 +705,7 @@ function Pricing() {
             </p>
             <div className="mt-4 flex flex-wrap items-baseline gap-x-3">
               <span className="text-5xl font-extrabold tracking-tight sm:text-6xl">
-                {PRECIO_ROL}
+                {ROLE_PRICE}
               </span>
               <span className="text-lg font-bold text-white/80">por mes</span>
             </div>
@@ -710,7 +714,7 @@ function Pricing() {
             </p>
 
             <ul className="mt-8 flex-1 space-y-3">
-              {INCLUYE.map((f) => (
+              {INCLUDES.map((f) => (
                 <li key={f} className="flex items-start gap-2.5">
                   <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/20">
                     <Check size={13} className="text-white" />
@@ -743,14 +747,14 @@ function Pricing() {
             <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">El diagnóstico</h3>
             <div className="mt-3 flex flex-wrap items-baseline gap-x-3">
               <span className="text-4xl font-extrabold tracking-tight text-ink">
-                {PRECIO_DIAGNOSTICO}
+                {DIAGNOSIS_PRICE}
               </span>
               <span className="text-sm font-bold text-ink-soft">una sola vez</span>
             </div>
             <p className="mt-4 flex-1 text-ink-soft">
               Una llamada y un informe escrito: dónde un equipo de agentes te ahorra plata y
               tiempo, qué roles te sirven, en qué orden conviene arrancar y qué sale el setup. Si
-              seguís, los {PRECIO_DIAGNOSTICO} se descuentan del setup.
+              seguís, los {DIAGNOSIS_PRICE} se descuentan del setup.
             </p>
             <p className="mt-4 rounded-2xl bg-ink/[0.04] p-4 text-sm font-medium text-ink-soft">
               El setup se cotiza ahí, con tu caso a la vista: depende de qué haya que conectar.
@@ -789,7 +793,7 @@ const FAQS = [
   },
   {
     q: "¿Cuánto cuesta?",
-    a: `${PRECIO_ROL} por rol, por mes, en pesos uruguayos. Contratás los que necesites y pagás solo esos. Antes va el diagnóstico, ${PRECIO_DIAGNOSTICO}: una llamada y un informe con dónde te ahorra plata cada rol y cuánto sale el setup. Si seguís, esos ${PRECIO_DIAGNOSTICO} se descuentan del setup.`,
+    a: `${ROLE_PRICE} por rol, por mes, en pesos uruguayos. Contratás los que necesites y pagás solo esos. Antes va el diagnóstico, ${DIAGNOSIS_PRICE}: una llamada y un informe con dónde te ahorra plata cada rol y cuánto sale el setup. Si seguís, esos ${DIAGNOSIS_PRICE} se descuentan del setup.`,
   },
   {
     q: "¿Puedo contratar un solo rol?",
@@ -961,7 +965,7 @@ function FinalCta() {
           ¿Listo para tener tu equipo trabajando?
         </h2>
         <p className="relative mx-auto mt-5 max-w-xl text-lg text-white/80">
-          Arrancá por el diagnóstico: {PRECIO_DIAGNOSTICO}, una llamada y un informe con lo que te
+          Arrancá por el diagnóstico: {DIAGNOSIS_PRICE}, una llamada y un informe con lo que te
           ahorra cada rol. Si seguís, se descuentan del setup. Escribinos y lo agendamos.
         </p>
         <a

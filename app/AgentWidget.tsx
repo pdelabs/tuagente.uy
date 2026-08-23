@@ -3,15 +3,15 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Bot, Send, Sparkles, X } from "lucide-react";
 
 type Action =
-  | { type: "goto"; seccion: string }
+  | { type: "goto"; section: string }
   | { type: "blog"; slug: string }
-  | { type: "html"; titulo: string; html: string }
-  | { type: "whatsapp"; mensaje: string };
+  | { type: "html"; title: string; html: string }
+  | { type: "whatsapp"; message: string };
 
 type Msg = {
   role: "user" | "assistant";
   content: string;
-  html?: { titulo: string; html: string };
+  html?: { title: string; html: string };
   whatsapp?: string;
   did?: string[];
 };
@@ -57,22 +57,22 @@ export default function AgentWidget() {
     const did: string[] = [];
     for (const a of actions) {
       if (a.type === "goto") {
-        const el = document.getElementById(a.seccion);
+        const el = document.getElementById(a.section);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "start" });
           el.animate(
             [{ boxShadow: "0 0 0 5px rgba(91,75,232,0.55)" }, { boxShadow: "0 0 0 5px rgba(91,75,232,0)" }],
             { duration: 1800, easing: "ease-out" }
           );
-          did.push(`→ Te llevé a ${SECTION_LABEL[a.seccion] ?? a.seccion}`);
+          did.push(`→ Te llevé a ${SECTION_LABEL[a.section] ?? a.section}`);
         }
       }
       if (a.type === "blog") {
         window.open(`/blog/${a.slug}`, "_blank", "noopener");
         did.push("→ Te abrí el artículo en otra pestaña");
       }
-      if (a.type === "html") target.html = { titulo: a.titulo, html: a.html };
-      if (a.type === "whatsapp") target.whatsapp = a.mensaje;
+      if (a.type === "html") target.html = { title: a.title, html: a.html };
+      if (a.type === "whatsapp") target.whatsapp = a.message;
     }
     target.did = did;
   }
@@ -162,13 +162,13 @@ export default function AgentWidget() {
                     {m.html && (
                       <div className="overflow-hidden rounded-2xl border border-ink/10">
                         <p className="flex items-center gap-1.5 bg-c-violet px-3 py-2 text-xs font-extrabold text-c-violet-ink">
-                          <Sparkles size={12} /> {m.html.titulo} — armado en vivo
+                          <Sparkles size={12} /> {m.html.title} — armado en vivo
                         </p>
                         <iframe
                           sandbox=""
                           srcDoc={m.html.html}
                           className="h-72 w-full bg-white"
-                          title={m.html.titulo}
+                          title={m.html.title}
                         />
                       </div>
                     )}

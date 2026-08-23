@@ -19,22 +19,22 @@ const BLOG_SLUGS = [
 
 const TOOLS = [
   {
-    name: "ir_a_seccion",
+    name: "goto_section",
     description:
       "Desplazá la página del visitante hasta una sección de la landing y resaltala. Usala cuando lo que pide está explicado en una sección.",
     input_schema: {
       type: "object",
       properties: {
-        seccion: {
+        section: {
           type: "string",
           enum: ["casos", "como-funciona", "control", "planes", "faq", "contacto"],
         },
       },
-      required: ["seccion"],
+      required: ["section"],
     },
   },
   {
-    name: "abrir_articulo",
+    name: "open_article",
     description: "Abrí un artículo del blog de tuagente en otra pestaña para que el visitante lo lea.",
     input_schema: {
       type: "object",
@@ -43,26 +43,26 @@ const TOOLS = [
     },
   },
   {
-    name: "mostrar_html",
+    name: "show_html",
     description:
       "Mostrá una mini-página HTML creada por vos dentro del chat. Usala para armar algo a medida de lo que contó el visitante: una propuesta con el agente que le conviene, sus 3 tareas principales y el plan sugerido; o una comparación, o lo que pida. REGLAS: solo HTML con estilos inline, sin <script>, sin recursos externos, máx ~150 líneas, colores de marca #5B4BE8 (violeta), #14131F (tinta), fondos suaves #EAE6FF #CFF3E4 #FBEECB, bordes redondeados 16px, tipografía sans-serif.",
     input_schema: {
       type: "object",
       properties: {
-        titulo: { type: "string", description: "Título corto de lo que armaste" },
+        title: { type: "string", description: "Título corto de lo que armaste" },
         html: { type: "string" },
       },
-      required: ["titulo", "html"],
+      required: ["title", "html"],
     },
   },
   {
-    name: "preparar_whatsapp",
+    name: "prepare_whatsapp",
     description:
       "Prepará un botón de WhatsApp con un mensaje ya redactado en primera persona del visitante, resumiendo su caso para que el equipo de tuagente lo reciba con contexto. Usala después de armar una propuesta o cuando el visitante muestre interés real.",
     input_schema: {
       type: "object",
-      properties: { mensaje: { type: "string" } },
-      required: ["mensaje"],
+      properties: { message: { type: "string" } },
+      required: ["message"],
     },
   },
 ];
@@ -74,9 +74,9 @@ Tu objetivo: que el visitante sienta en 30 segundos lo que es dirigir a un agent
 Reglas:
 - Hablá en rioplatense (vos, tenés, mirá). Cálido, canchero pero profesional. Respuestas CORTAS: 1-3 oraciones por mensaje, la acción es la protagonista.
 - SIEMPRE que puedas, usá una herramienta. Actuá primero, explicá corto después.
-- Si te cuentan de su negocio o su problema: armá con mostrar_html una mini-propuesta a medida (qué agente le conviene, 3 tareas concretas que haría, plan sugerido con precio) y después ofrecé preparar_whatsapp con su caso resumido.
-- Si preguntan precios: ir_a_seccion planes + resumen en una línea.
-- Si preguntan qué es un agente, cómo funciona, Hermes o costos en detalle: abrir_articulo del blog que corresponda.
+- Si te cuentan de su negocio o su problema: armá con show_html una mini-propuesta a medida (qué agente le conviene, 3 tareas concretas que haría, plan sugerido con precio) y después ofrecé prepare_whatsapp con su caso resumido.
+- Si preguntan precios: goto_section planes + resumen en una línea.
+- Si preguntan qué es un agente, cómo funciona, Hermes o costos en detalle: open_article del blog que corresponda.
 - Si preguntan qué podés hacer: contá que podés llevarlos por la página, armarles una propuesta a medida en HTML en vivo, y dejarles el WhatsApp pronto — y demostralo con una acción.
 - Precios reales (no inventes otros): Starter USD 990 setup + desde 190/mes. Pro USD 2.900 + desde 490/mes. Flota a medida. Demo gratis siempre.
 - No inventes capacidades de tuagente que no estén acá. Hermes es un runtime open-source de Nous Research que usamos como base (no es nuestro).
@@ -84,10 +84,10 @@ Reglas:
 - Sos una demo acotada: si piden algo que un agente real haría con sistemas de la empresa (mandar mails, tocar un CRM), explicá que en la demo no tenés esas herramientas conectadas — pero que instalado en su empresa, sí las tendría, escritas a medida. Esa es justamente la diferencia.`;
 
 type Action =
-  | { type: "goto"; seccion: string }
+  | { type: "goto"; section: string }
   | { type: "blog"; slug: string }
-  | { type: "html"; titulo: string; html: string }
-  | { type: "whatsapp"; mensaje: string };
+  | { type: "html"; title: string; html: string }
+  | { type: "whatsapp"; message: string };
 
 function sanitizeHtml(html: string): string {
   return html
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       reply:
         "El agente de demo está durmiendo la siesta 😴 (nos falta conectar la API key). Escribinos por WhatsApp y te lo mostramos en vivo.",
-      actions: [{ type: "whatsapp", mensaje: "Hola! Quería probar el agente de demo de tuagente.uy" }],
+      actions: [{ type: "whatsapp", message: "Hola! Quería probar el agente de demo de tuagente.uy" }],
     });
   }
 
@@ -154,13 +154,13 @@ export async function POST(req: NextRequest) {
         if (block.type === "text") reply += (reply ? "\n" : "") + block.text.trim();
         if (block.type === "tool_use") {
           const inp = block.input ?? {};
-          if (block.name === "ir_a_seccion" && inp.seccion) actions.push({ type: "goto", seccion: inp.seccion });
-          if (block.name === "abrir_articulo" && BLOG_SLUGS.includes(inp.slug)) actions.push({ type: "blog", slug: inp.slug });
-          if (block.name === "mostrar_html" && inp.html)
-            actions.push({ type: "html", titulo: String(inp.titulo ?? "A medida"), html: sanitizeHtml(String(inp.html)) });
-          if (block.name === "preparar_whatsapp" && inp.mensaje)
-            actions.push({ type: "whatsapp", mensaje: String(inp.mensaje).slice(0, 500) });
-          toolResults.push({ type: "tool_result", tool_use_id: block.id, content: "hecho ✅" });
+          if (block.name === "goto_section" && inp.section) actions.push({ type: "goto", section: inp.section });
+          if (block.name === "open_article" && BLOG_SLUGS.includes(inp.slug)) actions.push({ type: "blog", slug: inp.slug });
+          if (block.name === "show_html" && inp.html)
+            actions.push({ type: "html", title: String(inp.title ?? "A medida"), html: sanitizeHtml(String(inp.html)) });
+          if (block.name === "prepare_whatsapp" && inp.message)
+            actions.push({ type: "whatsapp", message: String(inp.message).slice(0, 500) });
+          toolResults.push({ type: "tool_result", tool_use_id: block.id, content: "done ✅" });
         }
       }
 

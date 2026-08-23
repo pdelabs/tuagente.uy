@@ -20,7 +20,7 @@ const config: Config = {
         "c-green": "#CFF3E4",
         "c-green-ink": "#0B3B2C",
         "c-coral": "#FFDFD6",
-        "c-rosa": "#FBE0F0",
+        "c-pink": "#FBE0F0",
         "c-coral-ink": "#4A1405",
         "c-amber": "#FBEECB",
         "c-amber-ink": "#4A3608",

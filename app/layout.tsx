@@ -55,32 +55,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <noscript>
           <style>{`.reveal{opacity:1 !important;transform:none !important}.animate-fadeup{opacity:1 !important;animation:none !important}`}</style>
         </noscript>
-        {/* Rescate de deploy. Cuando redeployamos, la pestaña que el cliente ya
-            tenía abierta sigue pidiendo los chunks del build viejo: 404 y
-            pantalla en blanco SIN sidebar, que ni recargando se arregla. Le
-            pasó a un cliente de prueba el 8/8 y su conclusión fue "compré algo
-            y no anda". Va INLINE en el HTML a propósito: es lo único que
-            sobrevive cuando justamente lo que falla es cargar un chunk.
-            Una sola recarga, marcada en sessionStorage, para que un error
-            permanente no se vuelva un loop de recargas. */}
+        {/* Deploy rescue. When we redeploy, a tab the client already had open
+            keeps requesting chunks from the old build: a 404 and a blank
+            screen with NO sidebar, which reloading alone doesn't fix. It
+            happened to a test client on 8/8 and their takeaway was "I bought
+            something and it doesn't work". This runs INLINE in the HTML on
+            purpose: it's the only thing that survives when the very thing
+            that's failing is loading a chunk. A single reload, flagged in
+            sessionStorage, so a permanent error doesn't turn into a reload
+            loop. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var K="tuagente_chunk_reload",VENTANA=30000;
-function esChunk(e){var m=(e&&(e.message||String(e)))||"";return /ChunkLoadError|Loading chunk|Importing a module script failed|error loading dynamically imported module/i.test(m)}
-function rescatar(e){if(!esChunk(e))return;var ahora=Date.now(),ultima=0;
-try{ultima=parseInt(sessionStorage.getItem(K)||"0",10)||0}catch(_){}
-if(ahora-ultima<VENTANA)return;
-try{sessionStorage.setItem(K,String(ahora))}catch(_){}
+            __html: `(function(){var KEY="tuagente_chunk_reload",WINDOW_MS=30000;
+function isChunkError(e){var m=(e&&(e.message||String(e)))||"";return /ChunkLoadError|Loading chunk|Importing a module script failed|error loading dynamically imported module/i.test(m)}
+function rescue(e){if(!isChunkError(e))return;var now=Date.now(),last=0;
+try{last=parseInt(sessionStorage.getItem(KEY)||"0",10)||0}catch(_){}
+if(now-last<WINDOW_MS)return;
+try{sessionStorage.setItem(KEY,String(now))}catch(_){}
 location.reload()}
-addEventListener("error",function(e){rescatar(e.error||e)});
-addEventListener("unhandledrejection",function(e){rescatar(e.reason)})})()`,
+addEventListener("error",function(e){rescue(e.error||e)});
+addEventListener("unhandledrejection",function(e){rescue(e.reason)})})()`,
           }}
         />
         {children}
-        {/* Analítica de Vercel. Va en el layout raíz, así que cubre la landing,
-            el blog y el portal. No usa cookies ni identifica al visitante, que
-            es lo que nos deja tenerla sin banner de consentimiento. En local no
-            manda nada: el script solo se inyecta en los deploys de Vercel. */}
+        {/* Vercel analytics. Lives in the root layout, so it covers the
+            landing, the blog and the portal. It doesn't use cookies or
+            identify the visitor, which is what lets us run it without a
+            consent banner. Locally it sends nothing: the script only
+            injects itself on Vercel deploys. */}
         <Analytics />
       </body>
     </html>
