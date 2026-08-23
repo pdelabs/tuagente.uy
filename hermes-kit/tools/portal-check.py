@@ -115,6 +115,19 @@ def main():
         manifest, _ = jget(f"{A}/portal/manifest", K)
         missing = [k for k in ("agent", "adapter_version", "modules") if k not in manifest]
         if missing:
+            # THE RENAME HAS ONE EXPECTED VICTIM AND IT GETS TOLD WHAT TO DO.
+            # `adapter_version` was `portal_plugin` up to adapter 0.40.0, so an
+            # agent that has not been updated fails right here -- intended, and
+            # accepting both spellings would be a guard against our own rename.
+            # But "missing keys: ['adapter_version']" on its own sends whoever
+            # ran this hunting through the adapter for a field that was only
+            # renamed, which is exactly what the rule in `check` above exists to
+            # prevent. It stays a failure; it just names the cause and the cure.
+            if "adapter_version" in missing and "portal_plugin" in manifest:
+                raise AssertionError(
+                    f"this agent answers `portal_plugin` ({manifest['portal_plugin']}), the "
+                    "name the field had up to adapter 0.40.0; it is `adapter_version` from "
+                    "0.41.0 on. Update the agent's adapter (hermes-kit/install.sh) and rerun")
             raise AssertionError(f"manifest is missing keys: {missing}")
         if not str(manifest["agent"]).strip():
             raise AssertionError("the agent has no name (AGENT_NAME)")
