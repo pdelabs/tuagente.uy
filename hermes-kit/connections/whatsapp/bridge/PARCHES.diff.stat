@@ -1,0 +1,4 @@
+ whatsapp-bridge/go.mod  |  38 +++++++-----
+ whatsapp-bridge/go.sum  |  94 +++++++++++++++--------------
+ whatsapp-bridge/main.go | 156 +++++++++++++++++++++++++++++++++++-------------
+ 3 files changed, 186 insertions(+), 102 deletions(-)

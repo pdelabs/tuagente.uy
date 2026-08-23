@@ -1,0 +1,22 @@
+{
+  "conexion": "whatsapp",
+  "servidor": "whatsapp-mcp",
+  "fuente": "https://github.com/lharries/whatsapp-mcp",
+  "auditado": "2026-08-09",
+  "nota": "Bridge Go (whatsmeow) + servidor MCP en Python, con SQLite propio. El historial de mensajes del cliente vive en ese SQLite: va SIEMPRE dentro de su volumen y nunca sale de ahi.",
+  "tools": {
+    "search_contacts":           { "clase": "lee",   "que_hace": "Busca contactos por nombre o numero." },
+    "list_messages":             { "clase": "lee",   "que_hace": "Lista mensajes con filtros y contexto." },
+    "list_chats":                { "clase": "lee",   "que_hace": "Lista los chats con sus datos." },
+    "get_chat":                  { "clase": "lee",   "que_hace": "Abre un chat concreto." },
+    "get_direct_chat_by_contact":{ "clase": "lee",   "que_hace": "Encuentra el chat directo con un contacto." },
+    "get_contact_chats":         { "clase": "lee",   "que_hace": "Lista los chats de un contacto." },
+    "get_last_interaction":      { "clase": "lee",   "que_hace": "El ultimo mensaje con alguien." },
+    "get_message_context":       { "clase": "lee",   "que_hace": "El contexto alrededor de un mensaje." },
+    "download_media":            { "clase": "actua", "que_hace": "Baja un archivo recibido al disco del agente.",
+                                   "por_que_actua": "Lee de WhatsApp pero ESCRIBE en disco, y baja lo que le manden: un adjunto hostil entra por aca. Va del lado de las que actuan aunque el nombre diga 'download'." },
+    "send_message":              { "clase": "actua", "que_hace": "Manda un mensaje a una persona o grupo." },
+    "send_file":                 { "clase": "actua", "que_hace": "Manda un archivo (imagen, video, documento)." },
+    "send_audio_message":        { "clase": "actua", "que_hace": "Manda un audio como nota de voz." }
+  }
+}

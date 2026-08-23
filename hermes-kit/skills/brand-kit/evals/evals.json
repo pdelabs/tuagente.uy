@@ -1,0 +1,72 @@
+{
+  "skill": "brand-kit",
+  "version": "1.0.0",
+  "description": "Escenarios para brand-kit. Escritos ANTES del cuerpo de la skill (test-first). Una corrida pasa solo si se cumple todo lo de 'expect'.",
+  "evals": [
+    {
+      "name": "sitio-nuevo-de-cero",
+      "input": "Armame el kit de marca de la empresa. La web es https://ejemplo.com.uy",
+      "expect": [
+        "corre scripts/scan_site.py con --url antes de opinar nada sobre la marca",
+        "NO inventa colores ni tipografias: todo lo que afirma sale de brand.json",
+        "deja brand.json, logos/ y fonts/ dentro de la carpeta brand/ del workspace",
+        "le muestra al cliente los huecos (gaps) que el escaneo no pudo llenar",
+        "pregunta por los huecos de criterio (voz, tono, uso indebido) en UNA sola tanda, no de a uno"
+      ]
+    },
+    {
+      "name": "el-kit-ya-existe",
+      "input": "Necesito los colores de la marca para un posteo",
+      "expect": [
+        "lee brand/brand.json en vez de volver a escanear el sitio",
+        "no vuelve a preguntar lo que ya esta contestado en el archivo",
+        "responde con los roles (primario, acento, texto) y no con una lista cruda de hex"
+      ]
+    },
+    {
+      "name": "sitio-caido-o-sin-red",
+      "input": "Armame el kit de marca de https://esta-caida.example",
+      "expect": [
+        "informa que no pudo leer el sitio y por que (status o timeout), sin inventar una paleta",
+        "ofrece armar el kit a mano con lo que el cliente le pase (logo, colores)",
+        "no deja un brand.json a medias que despues se lea como si fuera cierto"
+      ]
+    },
+    {
+      "name": "contraste-que-no-cumple",
+      "input": "El kit ya esta. Revisalo antes de que lo usemos en las publicaciones.",
+      "expect": [
+        "reporta los pares de color que no llegan a WCAG AA (4.5:1) con el numero medido",
+        "propone un ajuste concreto en vez de solo avisar",
+        "no cambia brand.json por su cuenta: lo deja como pedido de aprobacion"
+      ]
+    },
+    {
+      "name": "entregar-el-kit-al-cliente",
+      "input": "Pasame el kit de marca para compartirlo con la disenadora",
+      "expect": [
+        "corre scripts/render_kit.py y lo publica con create_artifact.py",
+        "le dice al cliente el id del artefacto para que el portal lo haga chip clicable",
+        "el HTML es autocontenido: sin <link> ni <script> a dominios externos"
+      ]
+    },
+    {
+      "name": "el-cliente-lo-mira-y-lo-aprueba",
+      "input": "Armame el kit de marca de https://ejemplo.com.uy",
+      "expect": [
+        "publica el artefacto ANTES de preguntar, y nombra el id en la respuesta para que el chat lo dibuje",
+        "en el mismo mensaje pregunta si esta bien Y los huecos, no en mensajes separados",
+        "cuando el cliente contesta, corre fill_kit.py con --set y --approve en vez de editar brand.json a mano",
+        "un hueco que el cliente no contesto sigue en gaps"
+      ]
+    },
+    {
+      "name": "no-se-usa-para-cualquier-cosa",
+      "input": "Que color queda bien con un fondo azul?",
+      "expect": [
+        "NO activa brand-kit: no hay nada que escanear ni que guardar",
+        "contesta con criterio de diseno comun"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+# La única puerta de la caja. Caddy saca y renueva los certificados solo.
+#
+# Dos hostnames en la misma IP porque el portal necesita DOS bases distintas
+# (endpoint y adapter) y montar servicios bajo un prefijo de path es pedirle a
+# Hermes algo que no prometió. Dos registros A a la misma IP y listo.
+{
+	email {$EMAIL_TLS}
+}
+
+# ── El gateway de Hermes: chat, sesiones, jobs ────────────────────────────
+{$DOMINIO_API} {
+	reverse_proxy hermes:8642 {
+		# EL CHAT ES SSE. Si el proxy junta bytes en un buffer, el cliente ve
+		# la respuesta entera de golpe al final, o no la ve. -1 = mandar cada
+		# escritura apenas pasa.
+		# Caddy lo detecta solo cuando el Content-Type es text/event-stream,
+		# pero acá va explícito: ya nos comimos dos bugs de streaming en el
+		# portal y no vale la pena depender de una heurística.
+		flush_interval -1
+
+		# Un job largo puede tardar. Sin esto, el proxy corta a los 30 s y el
+		# cliente ve un error donde en realidad el agente seguía trabajando.
+		transport http {
+			read_timeout 30m
+			write_timeout 30m
+		}
+	}
+
+	# CORS lo maneja Hermes con API_SERVER_CORS_ORIGINS. Si lo agregáramos acá
+	# también, el browser recibe el header DUPLICADO y rechaza todo — que se
+	# lee igual que "el server está caído".
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	log {
+		output file /data/acceso-api.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}
+
+# ── El adapter: tickets, aprobaciones, entregas, archivos, conexiones ──────
+{$DOMINIO_PORTAL} {
+	reverse_proxy portal-adapter:8643 {
+		flush_interval -1
+		transport http {
+			read_timeout 30m
+			write_timeout 30m
+		}
+	}
+
+	# El cliente sube archivos por acá.
+	request_body {
+		max_size 100MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	log {
+		output file /data/acceso-portal.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}

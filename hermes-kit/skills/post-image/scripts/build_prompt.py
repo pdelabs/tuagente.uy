@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+"""Assemble the image-generation brief from the brand kit.
+
+The pixels are the model's job now. THE BRIEF IS NOT: the exact hexes, the font
+name, the voice and the client's own style references have to arrive complete on
+every single request, and an agent writing them from memory drops one every few
+posts -- which is how a feed slowly stops looking like one brand.
+
+So this is the deterministic half of a generative skill: it reads brand.json,
+lists the reference images the client picked, and prints one brief plus the
+checklist the result must be verified against.
+
+Every rule in RULES was learned by watching a generator break it. Read the
+comments before deleting one.
+"""
+
+import argparse
+import json
+import os
+from pathlib import Path
+
+# El tercer valor es lo que espera `image_generate`: la tool NO toma "9:16",
+# toma un nombre semantico. Pasarle el ratio crudo no falla: cae al default y
+# devuelve una imagen HORIZONTAL, que en una historia es inservible. Medido.
+# EL FEED NO PUEDE SER 4:5 Y NO HAY QUE PEDIRLO. `image_generate` solo entiende
+# tres aspectos —square (1:1), landscape (16:9), portrait (9:16)—, asi que 4:5
+# no existe por este camino. Pedir "portrait" para el feed devolvia una pieza
+# 9:16: el agente la reviso, vio que no era el formato pedido y se nego a
+# entregarla, con razon. 1:1 es un formato valido de feed y es el que si se
+# puede cumplir; prometer 4:5 en el brief era prometer algo que no llega.
+CANVAS = {
+    "feed": ("1080x1080", "1:1 cuadrado", "square"),
+    "carrusel": ("1080x1080", "1:1 cuadrado", "square"),
+    "historia": ("1080x1920", "9:16 vertical", "portrait"),
+    "reel": ("1080x1920", "9:16 vertical", "portrait"),
+}
+
+FALTA_KIT = (
+    "Para que esto salga con tu identidad necesito tu kit de marca: colores, "
+    "tipografias y como le hablas a tu cliente. Lo armo leyendo tu web en un par "
+    "de minutos. Lo hacemos?"
+)
+
+
+def rules(exact_texts, canvas_note, is_story):
+    """Hard rules for the generator. Each one has a scar behind it."""
+    items = [
+        # gpt-image-2 escribe bien, pero AGREGA texto que nadie pidio: fechas,
+        # dominios de relleno, subtitulos en ingles. Enumerar lo que va y
+        # prohibir el resto es lo unico que lo contiene.
+        "El UNICO texto que puede aparecer en la imagen es, palabra por palabra: "
+        + " | ".join(f'"{t}"' for t in exact_texts),
+        "No agregues NINGUN otro texto: ni fechas, ni etiquetas, ni subtitulos, "
+        "ni marcas de agua, ni texto decorativo de relleno.",
+        # Visto: una pieza salio con WWW.REALLYGREATSITE.COM, el placeholder de
+        # la herramienta, en el lugar del dominio del cliente.
+        "Nunca inventes un dominio, un telefono, un precio ni un dato. Si no esta "
+        "en la lista de arriba, no va.",
+        # Visto: los codigos hex del brief salieron PINTADOS adentro del dibujo.
+        "Los codigos de color de la paleta son para que PINTES con ellos, no para "
+        "dibujarlos: no escribas ningun codigo hexadecimal adentro de la imagen.",
+        "Todo el texto va en espaniol rioplatense, con sus tildes. Nada en ingles.",
+        f"Lienzo {canvas_note}.",
+    ]
+    if is_story:
+        items.append(
+            "Deja libre el 13% de arriba y el 13% de abajo: ahi Instagram dibuja "
+            "sus propios botones y tapa lo que pongas.")
+    return items
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Build the generation brief for one piece.")
+    parser.add_argument("--formato", required=True, choices=sorted(CANVAS))
+    parser.add_argument("--titulo", required=True)
+    parser.add_argument("--bajada", default="")
+    parser.add_argument("--cta", default="")
+    parser.add_argument("--extra", default="", help="texto adicional que SI va en la pieza")
+    parser.add_argument("--idea", default="", help="la idea visual, en una linea")
+    parser.add_argument("--brand-dir", default=os.environ.get("BRAND_DIR", "/opt/data/workspace/brand"))
+    args = parser.parse_args()
+
+    source = Path(args.brand_dir) / "brand.json"
+    if not source.is_file():
+        print(json.dumps({"ok": False, "falta_kit": True, "pregunta": FALTA_KIT}, ensure_ascii=False))
+        return 2
+    brand = json.loads(source.read_text("utf-8"))
+
+    roles = (brand.get("colors") or {}).get("roles", {})
+    faces = (brand.get("typography") or {}).get("faces", [])
+    identity = brand.get("identity") or {}
+    voz = brand.get("voz") or {}
+
+    # Las referencias son la parte que mas mueve el resultado: el estilo se
+    # muestra, no se describe. Van como imagenes de entrada, no como texto.
+    ref_dir = Path(args.brand_dir) / "referencias"
+    referencias = sorted(str(p) for p in ref_dir.glob("*")
+                         if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")) if ref_dir.is_dir() else []
+
+    exact = [t for t in (args.titulo, args.bajada, args.cta, args.extra) if t.strip()]
+    size, canvas_note, aspecto = CANVAS[args.formato]
+    is_story = args.formato in ("historia", "reel")
+
+    paleta = ", ".join(f"{k} {v}" for k, v in roles.items() if v)
+    tipografia = faces[0]["family"] if faces else ""
+
+    brief = [
+        f"Pieza de Instagram para {identity.get('name') or 'la marca'}"
+        + (f" ({identity.get('tagline')})" if identity.get("tagline") else "") + ".",
+        f"Formato: {canvas_note}, {size} px.",
+    ]
+    if args.idea:
+        brief.append(f"Idea visual: {args.idea}")
+    brief.append("TEXTO EXACTO QUE VA EN LA PIEZA:")
+    for t in exact:
+        brief.append(f'  · "{t}"')
+    if paleta:
+        brief.append(f"Paleta de la marca (usar estos colores, no aproximarlos): {paleta}.")
+    if tipografia:
+        brief.append(f"Tipografia de la marca: {tipografia}, o una sans-serif geometrica muy parecida.")
+    if voz.get("tono"):
+        brief.append(f"Tono de la marca: {voz['tono']}.")
+    # OJO CON LO QUE ENTRA AL BRIEF: todo lo que se agregue a `brief` termina
+    # adentro del prompt que lee el GENERADOR DE IMAGENES. El aviso de que
+    # faltan referencias es una instruccion para el AGENTE —"pedile al cliente
+    # posteos que le gusten"— y estaba aca adentro: viajaba en el prompt, o sea
+    # que el unico que lo leia era el modelo de imagen, que no puede pedirle
+    # nada a nadie. Ahora sale por `pedir_referencias`, que si lee el agente.
+    if referencias:
+        cuantas = "la imagen" if len(referencias) == 1 else f"las {len(referencias)} imagenes"
+        brief.append(f"Segui el estilo visual de {cuantas} de referencia adjunta"
+                     f"{'' if len(referencias) == 1 else 's'}: "
+                     "composicion, densidad, uso del color y tipo de ilustracion.")
+    brief.append("")
+    brief.append("REGLAS:")
+    brief.extend(f"  {i + 1}. {r}" for i, r in enumerate(rules(exact, canvas_note, is_story)))
+
+    print(json.dumps({
+        "ok": True,
+        "prompt": "\n".join(brief),
+        "referencias": referencias,
+        "medidas": size,
+        "aspect_ratio": aspecto,
+        "textos_exactos": exact,
+        "verificar": [
+            "cada texto de 'textos_exactos' aparece completo, sin una letra cambiada",
+            "no hay NINGUN texto de mas en la imagen",
+            "no hay palabras con letras rotas o inventadas",
+            "los colores se parecen a la paleta de la marca",
+            "si es historia: nada importante en el 13% de arriba ni en el de abajo",
+            "la imagen salio VERTICAL, no horizontal ni cuadrada",
+        ],
+        "sin_referencias": not referencias,
+        # El pedido, ya redactado y en el idioma del cliente. Va como campo y no
+        # en el prompt: es trabajo del agente, no del generador.
+        "pedir_referencias": (
+            "Antes de seguir con las piezas: pasame dos o tres posteos que te gusten "
+            "—de quien sea, no tienen que ser de tu rubro— y de ahi saco el estilo. "
+            "Describir un estilo con palabras no funciona; mostrarlo si."
+        ) if not referencias else None,
+    }, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

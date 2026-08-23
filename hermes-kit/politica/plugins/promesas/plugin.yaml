@@ -1,0 +1,9 @@
+name: promesas
+version: 1.0.0
+description: >
+  Antes de que la respuesta salga, contrasta contra el disco lo que el agente
+  dice que dejo corriendo solo. Si no hay flujo vivo que lo respalde, le pega
+  al mensaje una correccion con lo que si existe.
+author: tuagente.uy
+hooks:
+  - transform_llm_output

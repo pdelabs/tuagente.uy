@@ -1,0 +1,73 @@
+{
+  "skill": "social-content",
+  "version": "1.0.0",
+  "description": "Escenarios para social-content. Escritos ANTES del cuerpo (test-first). Una corrida pasa solo si se cumple todo lo de 'expect'.",
+  "evals": [
+    {
+      "name": "sin-kit-de-marca-ofrece-armarlo",
+      "input": "Escribime un posteo para Instagram sobre el servicio nuevo",
+      "expect": [
+        "corre new_post.py y ve que falta brand/brand.json",
+        "NO escribe el posteo igual con un tono inventado",
+        "ofrece armar el kit de marca primero, en espaniol y en una linea, sin explicar la arquitectura",
+        "si el cliente dice que no, escribe igual pero avisa que va a sonar generico"
+      ]
+    },
+    {
+      "name": "elige-formato-y-tipo-antes-de-escribir",
+      "input": "Quiero un carrusel explicando como funciona el alquiler con garantia",
+      "expect": [
+        "identifica formato=carrusel y tipo=educativo",
+        "corre new_post.py con esos dos argumentos y sigue el esqueleto que devuelve",
+        "no inventa una cantidad de slides: usa la que dice el esqueleto",
+        "la primera linea del pie entra en los 125 caracteres del corte"
+      ]
+    },
+    {
+      "name": "respeta-los-limites-de-hoy",
+      "input": "Armame el posteo con muchos hashtags para que llegue a mas gente",
+      "expect": [
+        "usa 5 hashtags o menos, porque ese es el limite desde diciembre de 2025",
+        "le explica al cliente que mas hashtags ya no ayudan, sin ponerse tecnico",
+        "corre check_post.py sobre el borrador antes de darlo por bueno"
+      ]
+    },
+    {
+      "name": "usa-la-voz-de-la-marca",
+      "input": "Escribi el pie para la foto del equipo",
+      "expect": [
+        "lee voz.tono de brand.json antes de escribir",
+        "no usa ninguna de las palabras vetadas en brand.json",
+        "check_post.py no reporta ninguna palabra vetada"
+      ]
+    },
+    {
+      "name": "entra-en-los-limites-pero-no-dice-nada",
+      "input": "Escribi: presentamos nuestro nuevo sistema de gestion integral",
+      "expect": [
+        "check_post.py da ok:true y aun asi el agente NO lo da por bueno",
+        "lee la lista 'revisar' y reescribe: convierte la caracteristica en beneficio",
+        "la primera linea pasa a abrir un hueco (pregunta, numero, contracorriente, riesgo o escena)",
+        "no inventa urgencia para tapar el aviso de que no hay razon para actuar hoy"
+      ]
+    },
+    {
+      "name": "el-borrador-va-a-aprobacion",
+      "input": "Dale, publicalo",
+      "expect": [
+        "NO publica solo: deja el borrador para que el cliente lo apruebe",
+        "muestra el texto exacto que se va a publicar, no un resumen",
+        "si el cliente no tiene conexion de Instagram, lo dice en vez de fallar en silencio"
+      ]
+    },
+    {
+      "name": "reel-no-es-lo-mismo-que-feed",
+      "input": "Pasame esto mismo a reel",
+      "expect": [
+        "acorta el pie: en la pestania de Reels el corte es a los 55-60 caracteres, no a los 125",
+        "entrega guion con tiempos, no solo el pie",
+        "no repite el mismo texto del feed tal cual"
+      ]
+    }
+  ]
+}
