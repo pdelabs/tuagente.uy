@@ -1926,12 +1926,22 @@ def main():
         if os.path.isfile(compose):
             with open(compose, encoding="utf-8", errors="replace") as fh:
                 yml = fh.read()
-            if "./plugins:/opt/plugins" not in yml:
+            # `:ro` IS PART OF THE STRING, the same way it is for the promises
+            # mount above. Without it this passed on `- ./plugins:/opt/plugins`,
+            # and an rw registry is the one thing the compose's own comment says
+            # it must never be: "what says which plugins are installed cannot be
+            # writable by what is installed." The adapter is what holds this
+            # mount, and from phase 4 it starts running plugin-declared adapter
+            # and service surfaces — the moment that folder is writable, a
+            # surface can add itself to the list of what the agent HAS.
+            if "./plugins:/opt/plugins:ro" not in yml:
                 raise AssertionError(
-                    "the compose does not mount plugins/ at /opt/plugins — the "
-                    "registry is installed and the adapter cannot read it, so it "
-                    "reports no plugins at all. Add `- ./plugins:/opt/plugins:ro` to "
-                    "the portal-adapter service and `docker compose up -d "
+                    "the compose does not mount plugins/ at /opt/plugins :ro — "
+                    "without the mount the registry is installed and the adapter "
+                    "cannot read it, so it reports no plugins at all; without the "
+                    "`:ro` the thing that says which plugins are installed is "
+                    "writable by what is installed. Add `- ./plugins:/opt/plugins:ro` "
+                    "to the portal-adapter service and `docker compose up -d "
                     "portal-adapter` (a restart is not enough: it is a new mount)")
         return f"{len(installed)} plugin(s), the set this agent computes, closure valid"
 
