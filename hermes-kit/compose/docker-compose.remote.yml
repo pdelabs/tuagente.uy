@@ -1,0 +1,223 @@
+# Same as docker-compose.example.yml but for a VPS, with TLS.
+#
+# THE DIFFERENCE THAT MATTERS: here the agent's services publish NO port on
+# the host. Not 8642, not 8643. Caddy reaches them over compose's internal
+# network (by service name), and it's the ONLY thing listening on the public
+# interface. If someone scans the IP tomorrow, they see 443 and nothing else.
+#
+# It's on purpose: `docker publish` opens the port BYPASSING ufw/iptables —
+# believing the firewall covers you while 8642 is open to the world is a
+# classic. Without `ports:` there's nothing to bypass.
+#
+# One VPS per client. Sharing a box between clients breaks exactly what we
+# sell: Hermes RUNS CODE, and a container is not a hard boundary against an
+# agent that got instructions injected into it. At USD 4.59, isolation is
+# almost free.
+#
+# THE VERSION IS PINNED, never `latest` (see docker-compose.example.yml).
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: ${CLIENT}-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"     # only for the Let's Encrypt challenge and the redirect to 443
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # the certificates: IF LOST, they get re-issued and
+      - caddy_config:/config  # Let's Encrypt has a weekly cap. Do not delete.
+    environment:
+      - API_DOMAIN=${API_DOMAIN}
+      - PORTAL_DOMAIN=${PORTAL_DOMAIN}
+      - EMAIL_TLS=${EMAIL_TLS}
+    depends_on:
+      - hermes
+      - portal-adapter
+
+  hermes:
+    image: nousresearch/hermes-agent:v2026.7.30
+    container_name: ${CLIENT}-hermes
+    restart: unless-stopped
+    command: gateway run
+    # NO `ports:` — see the note above. The dashboard (9119) stays inside and
+    # nothing from outside can reach it, which is where it belongs.
+    expose:
+      - "8642"
+    volumes:
+      - ./data:/opt/data
+      # READ ONLY, and that's the whole point: this is where what the agent
+      # can do with each connection lives. If it were inside ./data it could
+      # be edited with write_file or from a terminal, and a guardrail the
+      # agent's own save can change is not a guardrail.
+      - ./policy:/opt/policy:ro
+      # The kit's skills, READ ONLY and outside ./data. The engine indexes
+      # them all the same (skills.external_dirs in config.yaml), but the agent
+      # can't rewrite them with skill_manage or from a terminal, and the
+      # curator —which archives after 90 days unused whatever it takes for
+      # "created by the agent"— never touches them: an external skill is
+      # never eligible.
+      - ./kit-skills:/opt/kit/skills:ro
+      # s6 runs this before the gateway, on every start. Today it translates
+      # to Spanish Telegram's pairing message, which comes hardcoded in run.py
+      # and asks the client to run a terminal command — contradicting the
+      # portal, which tells them "paste the code here".
+      - ./policy/cont-init-patches.sh:/etc/cont-init.d/03-patches:ro
+      # SAME IDEA, AND WE WERE MISSING IT. config.yaml lives inside ./data and
+      # is OWNED BY THE AGENT (-rw-r----- hermes hermes): verified on
+      # 9/8/2026, the agent does write it. And inside it are
+      # `disabled_toolsets` —where we deliberately turn off `cronjob`— and
+      # where MCPs get registered. Meaning cronjob could get itself turned
+      # back on and register an MCP that skips the guard; it just had to wait
+      # for a restart.
+      #
+      # THE ORDER: it used to be believed that the FIRST start had to happen
+      # WITHOUT this line, because Hermes writes and migrates the config on
+      # its own. With v2026.7.30 that's not needed — verified on 12/8/2026
+      # against an agent created from scratch, which started fine with the
+      # file :ro from the very first boot.
+      # When UPGRADING the engine's version, the caution still holds: if the
+      # new one migrates the config, take it out, start once, and put it
+      # back.
+      #
+      # Verified: with the file :ro the gateway comes up in 18 s and
+      # portal-check gives 14 ok / 0 failures.
+      - ./data/config.yaml:/opt/data/config.yaml:ro
+      # THE `promises` PLUGIN, READ ONLY. The engine looks for user plugins
+      # under HERMES_HOME/plugins (`hermes_cli/plugins.py:1369`), i.e. inside
+      # ./data, which belongs to the agent: without this mount on top, the
+      # agent can `rm` away the guard that stops it from announcing a flow it
+      # never created. It's the same reason policy/ lives outside.
+      # It's turned on with `plugins.enabled` in the config, also :ro.
+      - ./policy/plugins:/opt/data/plugins:ro
+    environment:
+      - TZ=America/Montevideo
+      # DASHBOARD OFF, and it's not to save resources: with HERMES_DASHBOARD=1
+      # the dashboard would bind 0.0.0.0 with no authentication, Hermes
+      # refuses —good on its part— and s6 restarts it in a loop.
+      #
+      # WATCH OUT, this used to say "on the Mac it's not noticeable because
+      # it's behind 127.0.0.1 anyway," and that's FALSE: that 127.0.0.1 is the
+      # HOST mapping; inside the container the dashboard still tries 0.0.0.0
+      # and the loop is the same. Measured on 12/8/2026 on a local agent: 27
+      # restarts and 216 log lines per minute, with `docker compose logs`
+      # useless. The wrong hypothesis cost three months of a broken
+      # onboarding template — the =0 lived here and never made it into
+      # docker-compose.example.yml, which is the one `new-agent.sh` copies.
+      #
+      # It was never meant for the client: if it's ever needed, turn it on
+      # and go in through an SSH tunnel, never by publishing it.
+      - HERMES_DASHBOARD=0
+      # Hook consent goes HERE and not in data/'s allowlist: that one lives in
+      # the agent's volume, which it can delete — and a hook without consent
+      # doesn't run, meaning the gate would stay open with no noise.
+      - HERMES_ACCEPT_HOOKS=1
+      # THE PORTAL LIVES AT tuagente.uy/app, NOT app.tuagente.uy — that host
+      # returns 404 and nobody uses it. If the wrong origin goes here, the
+      # browser discards EVERY response and the client sees "Couldn't connect
+      # to your agent," which reads as the agent being down. Verified on
+      # 10/8/2026 with East: both services answered 200 over curl and the
+      # portal wouldn't start. The old one is left in in case a stray link
+      # still points at it.
+      - API_SERVER_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy
+    # SECRETS DO NOT LIVE IN data/, and it's an escalation chain, not a
+    # preference: `data/` belongs to the agent, this file is the env_file for
+    # BOTH services, and with a variable like PYTHONPATH the agent runs its
+    # own code inside this container —measured— and from there reaches
+    # policy/ and the cont-init that s6 runs as root. It lives outside,
+    # root:root 600, with no mount that exposes it to the agent.
+    env_file:
+      - ./secrets.env
+    deploy:
+      resources:
+        limits:
+          memory: 3G      # measured: an agent sits around 1.1 GB. 3G leaves headroom and
+          cpus: "2.0"     # Caddy still fits on a 4 GB box.
+
+  portal-adapter:
+    image: nousresearch/hermes-agent:v2026.7.30
+    container_name: ${CLIENT}-portal-adapter
+    restart: unless-stopped
+    # THE ADAPTER'S CODE DOES NOT COME OUT OF data/. `data/` belongs to the
+    # agent (it has it rw and inside its container it runs as root), so it
+    # could rewrite the file this service runs. Now it comes from
+    # kit-adapter/, mounted :ro.
+    #
+    # WHAT THIS CLOSES AND WHAT IT DOESN'T, so nobody reads too much into it:
+    # it closes the path where the agent DIRECTLY picks the adapter's code,
+    # and where that code runs as root (see `user:`). It did NOT close, on its
+    # own, the env_file path: while secrets lived in `data/.env` —the agent's—
+    # a `PYTHONPATH=/opt/data/...` made it run its own code INSIDE this
+    # container all the same, and from there it reached `policy/`: the gate
+    # and the `cont-init` that s6 runs as root on hermes. Measured against the
+    # real image. That's why secrets moved out of data/ (see `env_file`):
+    # BOTH things are needed, and neither one works alone.
+    entrypoint: ["python3", "/opt/kit/adapter/portal_adapter.py"]
+    # AND IT DOES NOT RUN AS ROOT. Verified in the lab with the real adapter:
+    # portal-check 14/14, and it still writes policy.json and
+    # capabilities/requests.jsonl fine (uid 10000 owns data/ and policy/).
+    # As a side effect it stops seeding root-owned files inside data/, which
+    # is what broke the first deployment.
+    user: "10000:10000"
+    expose:
+      - "8643"
+    volumes:
+      - ./data:/opt/data
+      # The adapter DOES write: it's the one that receives the client's click
+      # in the portal.
+      - ./policy:/opt/policy
+      # The same kit skills: the adapter lists them in the portal's skills
+      # tab, and without this mount they'd disappear from there.
+      - ./kit-skills:/opt/kit/skills:ro
+      # The adapter's code, READ ONLY: it's what this container runs, and it
+      # can't live somewhere the agent can write to.
+      - ./kit-adapter:/opt/kit/adapter:ro
+      # The agent's config, READ ONLY: the adapter READS it (the default
+      # model, the disabled skills, the preamble) and never writes it.
+      # Without this line it had it rw through the ./data mount, and it was
+      # the second path to touch something the engine reads with more
+      # privilege.
+      - ./data/config.yaml:/opt/data/config.yaml:ro
+    environment:
+      - TZ=America/Montevideo
+      - PORTAL_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy
+      # The name the client sees in their portal. If missing, it says "Agente".
+      - AGENT_NAME=${AGENT_NAME}
+      # The adapter talks to the gateway over the internal network, not
+      # localhost: in this topology they don't share a host. The variable is
+      # called AGENT_API_BASE: until 12/8/2026 this said `HERMES_ENDPOINT`,
+      # which NOBODY reads —not the adapter, not the engine—. It worked by
+      # accident, because the adapter's default is this same value; the day
+      # someone pointed it elsewhere, the line would have done nothing and
+      # the adapter would have kept talking to `hermes:8642` without a word.
+      - AGENT_API_BASE=http://hermes:8642
+    # SECRETS DO NOT LIVE IN data/, and it's an escalation chain, not a
+    # preference: `data/` belongs to the agent, this file is the env_file for
+    # BOTH services, and with a variable like PYTHONPATH the agent runs its
+    # own code inside this container —measured— and from there reaches
+    # policy/ and the cont-init that s6 runs as root. It lives outside,
+    # root:root 600, with no mount that exposes it to the agent.
+    env_file:
+      - ./secrets.env
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+# .env next to this file (NEVER committed):
+#   CLIENT=east
+#   AGENT_NAME=Washi
+#   API_DOMAIN=east.agentes.tuagente.uy
+#   PORTAL_DOMAIN=east-portal.agentes.tuagente.uy
+#   EMAIL_TLS=soporte@tuagente.uy      for Let's Encrypt notices
+#
+# secrets.env, at the agent's root (also never committed, root:root 600):
+#   API_SERVER_KEY=          openssl rand -hex 32, unique per client
+#   OPENROUTER_API_KEY=
+#   TELEGRAM_BOT_TOKEN=
+#   TELEGRAM_ALLOWED_USERS=

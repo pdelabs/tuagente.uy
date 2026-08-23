@@ -2,14 +2,14 @@ __pycache__/
 *.pyc
 .DS_Store
 
-# Copias del SOUL viejo que deja instalar-soul.sh --reemplazar: son datos de
-# un cliente (su identidad, su bloque del bautizo), no del kit.
-respaldos-soul/
+# Copies of the old SOUL that install-soul.sh --replace leaves behind: they
+# are a client's data (their identity, their naming block), not the kit's.
+soul-backups/
 
-# Copias del config.yaml previo que deja perilla-skills.py --aplicar: son de
-# un agente concreto, no del kit.
-respaldos-config/
+# Copies of the previous config.yaml that skills-knob.py --apply leaves
+# behind: they belong to a specific agent, not the kit.
+config-backups/
 dist/
 
-# Deps of the drawing CLI (tools/dibujar-agentito.mjs); npm install brings them.
+# Deps of the drawing CLI (tools/draw-agentito.mjs); npm install brings them.
 tools/node_modules/

@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
-"""Sube la foto de perfil de un bot de Telegram (el agentito que eligio el cliente).
+"""Uploads a Telegram bot's profile photo (the agentito face the client picked).
 
-La Bot API NO permite que un bot cambie su propia foto (solo BotFather a mano).
-La salida es MTProto: Telethon logueado COMO EL BOT (con su token) puede llamar
-photos.UploadProfilePhotoRequest. Requiere las credenciales de API de tuagente
-(api_id + api_hash de https://my.telegram.org — tramite unico, gratis).
+The Bot API does NOT let a bot change its own photo (only BotFather, by hand).
+The way out is MTProto: Telethon logged in AS THE BOT (with its token) can call
+photos.UploadProfilePhotoRequest. Requires tuagente's own API credentials
+(api_id + api_hash from https://my.telegram.org — a one-time, free
+procedure).
 
-Corre en el HOST (no en el agente): telethon no viene en la imagen de Hermes y
-la foto se cambia una vez por bautizo, no vale una dependencia permanente.
+Runs on the HOST (not inside the agent): telethon doesn't ship in Hermes's
+image and the photo only changes once per naming, not worth a permanent
+dependency.
 
-Preparacion (una vez):
+Setup (once):
     python3 -m venv ~/.tuagente-tools && ~/.tuagente-tools/bin/pip install telethon
-    # y guardar {"api_id": ..., "api_hash": "..."} en
+    # and save {"api_id": ..., "api_hash": "..."} to
     # tuagente.uy/.secrets/telegram_api.json
-    # para dibujar solo (sin --png): cd hermes-kit/tools && npm install
+    # to draw on its own (without --png): cd hermes-kit/tools && npm install
 
-Uso — con un PNG ya capturado (el del portal):
+Usage — with a PNG already captured (the portal's):
     ~/.tuagente-tools/bin/python3 avatar-bot.py \
-        --png /ruta/agente/data/bot_avatar.png \
-        --env /ruta/agente/data/.env      # de aca sale TELEGRAM_BOT_TOKEN
+        --png /path/agent/data/bot_avatar.png \
+        --env /path/agent/data/.env      # this is where TELEGRAM_BOT_TOKEN comes from
 
-Uso — dibujando solo, sin portal ni browser (dibujar-agentito.mjs):
+Usage — drawing it on its own, with no portal or browser (draw-agentito.mjs):
     ~/.tuagente-tools/bin/python3 avatar-bot.py \
-        --rol asistente --agente /ruta/agente \
-        --env /ruta/agente/data/.env
-    # --rol solo: la cara del catalogo. --agente ademas: el bautizo del cliente.
+        --role assistant --agent /path/agent \
+        --env /path/agent/data/.env
+    # --role alone: the catalog's face. --agent too: the client's naming.
 """
 import argparse
 import asyncio
@@ -37,42 +39,45 @@ from pathlib import Path
 
 SECRETS = Path.home() / "Desktop/Luis/Projects/tuagente.uy/.secrets"
 API_JSON = SECRETS / "telegram_api.json"
-DIBUJAR = Path(__file__).resolve().parent / "dibujar-agentito.mjs"
+DRAW = Path(__file__).resolve().parent / "draw-agentito.mjs"
 
 
-def token_de_env(ruta):
-    m = re.search(r"^TELEGRAM_BOT_TOKEN=(.+)$", Path(ruta).read_text(), re.M)
+def token_from_env(path):
+    m = re.search(r"^TELEGRAM_BOT_TOKEN=(.+)$", Path(path).read_text(), re.M)
     if not m:
-        sys.exit("ese .env no tiene TELEGRAM_BOT_TOKEN")
+        sys.exit("that .env has no TELEGRAM_BOT_TOKEN")
     return m.group(1).strip()
 
 
-async def subir(api_id, api_hash, token, png):
+async def upload(api_id, api_hash, token, png):
     from telethon import TelegramClient
     from telethon.tl.functions.photos import UploadProfilePhotoRequest
-    # Una sesion por bot, en .secrets: no pide telefono (login de bot).
-    sesion = SECRETS / f"bot-{token.split(':')[0]}"
-    client = TelegramClient(str(sesion), api_id, api_hash)
+    # One session per bot, in .secrets: doesn't ask for a phone number (bot login).
+    session = SECRETS / f"bot-{token.split(':')[0]}"
+    client = TelegramClient(str(session), api_id, api_hash)
     await client.start(bot_token=token)
     await client(UploadProfilePhotoRequest(file=await client.upload_file(png)))
-    yo = await client.get_me()
-    print(f"Foto subida a @{yo.username}")
+    me = await client.get_me()
+    print(f"Photo uploaded to @{me.username}")
     await client.disconnect()
 
 
-def _tiene_alfa(png: Path) -> bool:
-    """True si el PNG tiene pixeles REALMENTE transparentes.
+def _has_alpha(png: Path) -> bool:
+    """True if the PNG has pixels that are REALLY transparent.
 
-    Telegram no soporta alfa en las fotos de perfil: la aplasta contra NEGRO.
-    Una carita clara recortada sobre un cuadrado negro se descubre mirando el
-    telefono, no el log — y ahi ya la vio el cliente.
+    Telegram doesn't support alpha in profile photos: it flattens it against
+    BLACK. A light face cut out over a black square gets discovered by
+    looking at the phone, not the log — and by then the client has already
+    seen it.
 
-    OJO CON EL ATAJO: mirar el color type del IHDR NO sirve. Un canvas de
-    browser SIEMPRE exporta RGBA, tenga o no transparencia, asi que ese
-    chequeo grita en todas las fotos —incluidas las correctas— y un aviso que
-    grita siempre se ignora. Hay que mirar los pixeles.
+    WATCH OUT FOR THE SHORTCUT: looking at the IHDR's color type doesn't
+    work. A browser canvas ALWAYS exports RGBA, whether it has transparency
+    or not, so that check screams on every photo —including the correct
+    ones— and a warning that always screams gets ignored. You have to look at
+    the pixels.
 
-    Sin Pillow no se avisa nada: mejor callado que dando alarmas falsas.
+    Without Pillow, nothing gets reported: better silent than raising false
+    alarms.
     """
     try:
         from PIL import Image
@@ -82,53 +87,53 @@ def _tiene_alfa(png: Path) -> bool:
         with Image.open(png) as im:
             if im.mode not in ("RGBA", "LA", "PA"):
                 return False
-            alfa = im.convert("RGBA").getchannel("A")
-            return (alfa.getextrema() or (255, 255))[0] < 250
+            alpha = im.convert("RGBA").getchannel("A")
+            return (alpha.getextrema() or (255, 255))[0] < 250
     except Exception:
         return False
 
 
-def dibujar(rol, agente, destino):
+def draw(role, agent, dest):
     """Draw the face with the headless tool: the telegram preset already lands
     on 512px with a solid background, so the alpha warning below never fires."""
-    cmd = ["node", str(DIBUJAR), "--para", "telegram", "--png", str(destino)]
-    if rol:
-        cmd += ["--rol", rol]
-    if agente:
-        cmd += ["--agente", agente]
+    cmd = ["node", str(DRAW), "--for", "telegram", "--png", str(dest)]
+    if role:
+        cmd += ["--role", role]
+    if agent:
+        cmd += ["--agent", agent]
     subprocess.run(cmd, check=True)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--png", help="PNG ya listo (el capturado por el portal)")
-    ap.add_argument("--rol", help="dibuja la cara de ese rol con dibujar-agentito.mjs")
-    ap.add_argument("--agente", help="ruta del agente: usa el bautizo de politica/roles/identidades.json")
-    ap.add_argument("--env", required=True, help=".env del agente (para el token)")
+    ap.add_argument("--png", help="PNG already ready (the one the portal captured)")
+    ap.add_argument("--role", help="draws that role's face with draw-agentito.mjs")
+    ap.add_argument("--agent", help="agent path: uses the naming from policy/roles/identities.json")
+    ap.add_argument("--env", required=True, help="the agent's .env (for the token)")
     args = ap.parse_args()
 
     if not API_JSON.is_file():
-        sys.exit(f"faltan las credenciales de my.telegram.org en {API_JSON} "
-                 '(formato: {"api_id": 123, "api_hash": "..."})')
+        sys.exit(f"missing the my.telegram.org credentials at {API_JSON} "
+                 '(format: {"api_id": 123, "api_hash": "..."})')
     creds = json.loads(API_JSON.read_text())
 
     if args.png:
         png = Path(args.png)
-    elif args.rol or args.agente:
+    elif args.role or args.agent:
         png = Path(tempfile.mkdtemp()) / "agentito.png"
-        dibujar(args.rol, args.agente, png)
+        draw(args.role, args.agent, png)
     else:
-        sys.exit("falta la cara: --png <archivo>, o --rol/--agente para dibujarla solo")
+        sys.exit("missing the face: --png <file>, or --role/--agent to draw it on its own")
 
-    if _tiene_alfa(png):
-        print("AVISO: el PNG tiene transparencia. Telegram la aplasta contra "
-              "NEGRO en las fotos de perfil — la cara va a quedar recortada "
-              "sobre un cuadrado negro. Componela sobre un fondo opaco antes.",
+    if _has_alpha(png):
+        print("WARNING: the PNG has transparency. Telegram flattens it against "
+              "BLACK on profile photos — the face is going to end up cut out "
+              "over a black square. Composite it over an opaque background first.",
               file=sys.stderr)
     if not png.is_file() or not png.read_bytes().startswith(b"\x89PNG"):
-        sys.exit("el PNG no existe o no es un PNG")
-    asyncio.run(subir(creds["api_id"], creds["api_hash"],
-                      token_de_env(args.env), str(png)))
+        sys.exit("the PNG doesn't exist or isn't a PNG")
+    asyncio.run(upload(creds["api_id"], creds["api_hash"],
+                      token_from_env(args.env), str(png)))
 
 
 if __name__ == "__main__":

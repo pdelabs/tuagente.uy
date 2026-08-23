@@ -1,0 +1,90 @@
+# OPTIONAL observability: see every prompt, response, token and cost.
+#
+# Added to the regular compose with -f and turned on with
+# tools/observability.sh. Does NOT go on a client by default — see the
+# warnings below.
+#
+#   Hermes --(model.base_url)--> litellm --> OpenRouter
+#                                   |
+#                                   +-- OTLP --> phoenix (UI)
+#
+# WHY A PROXY IS NEEDED: Hermes's native `monitoring` exports OTLP but it's
+# "content-free by construction — no prompts, messages, tool args/results".
+# The one thing we want to see is exactly what it doesn't export.
+#
+# THREE THINGS TO KNOW BEFORE TURNING THIS ON FOR A CLIENT:
+#
+# 1. It's a new point of failure. If litellm goes down, the agent stops
+#    thinking. On a dev box that's tolerable; on a client's it's trading their
+#    uptime for our convenience.
+# 2. Phoenix STORES THE PROMPTS, and the prompts are the client's data. They
+#    don't leave their machine, but we'd be the ones reading them. With a real
+#    client that gets disclosed or it doesn't happen.
+# 3. Adds ~600 MB of RAM between the two.
+#
+# Phoenix listens ONLY on loopback on purpose: it's viewed over an SSH tunnel
+#   ssh -L 6006:localhost:6006 <host>   ->   http://localhost:6006
+# Publishing it would leave a client's entire conversation on the internet
+# behind a UI with no password.
+
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: ${CLIENT}-phoenix
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6006:6006"   # UI + OTLP HTTP. NEVER 0.0.0.0.
+    environment:
+      - PHOENIX_WORKING_DIR=/data
+    volumes:
+      - phoenix_data:/data
+
+  # Between litellm and phoenix: drops duplicate spans and adds the
+  # attributes Phoenix needs to render the call and open the playground.
+  # See otel-collector.yaml for the detail of what it fixes and why.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: ${CLIENT}-otel
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    expose:
+      - "4318"
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      # litellm doesn't send the model on the useful span, so it's injected
+      # here. An agent uses just one, defined in its config.yaml.
+      - MODEL=${AGENT_MODEL:-unknown}
+    depends_on:
+      - phoenix
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: ${CLIENT}-litellm
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    expose:
+      - "4000"
+    volumes:
+      - ./litellm.yaml:/app/config.yaml:ro
+      # The cost callback, and data/ so it can write costs.jsonl: it's the
+      # only volume this proxy shares with the adapter, which is what reads it.
+      - ./litellm-cost.py:/app/litellm-cost.py:ro
+      - ./data:/opt/data
+    environment:
+      # WATCH OUT: the key does NOT go here. `environment` OVERRIDES
+      # `env_file`, and since ${OPENROUTER_API_KEY} gets interpolated from the
+      # compose's .env (which doesn't have it), the proxy was getting handed
+      # an EMPTY key. It comes in on its own through env_file. To the
+      # collector, not straight to Phoenix: it gets cleaned up in between.
+      - PHOENIX_COLLECTOR_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
+    env_file:
+      # Keys live outside data/ (see the main compose): data/ belongs to the
+      # agent and this file comes in as the environment of a process of ours.
+      - ./secrets.env
+    depends_on:
+      - otel-collector
+
+volumes:
+  phoenix_data:

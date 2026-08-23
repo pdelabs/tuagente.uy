@@ -1,20 +1,21 @@
-# Colector entre litellm y Phoenix. Existe por dos cosas que litellm hace mal
-# para este uso y que no se pueden configurar de su lado:
+# Collector between litellm and Phoenix. It exists because of two things
+# litellm gets wrong for this use case that can't be configured on its side:
 #
-# 1. MANDA TRES SPANS POR LLAMADA. `litellm_proxy_request` y `litellm_request`
-#    traen los MISMOS atributos: uno de los dos sobra.
-#    El tercero, `raw_gen_ai_request`, parecia vacio porque usa
-#    `llm.openrouter.*` y Phoenix no lo entiende — pero es EL UNICO que trae el
-#    PAYLOAD COMPLETO, system prompt incluido. Y eso importa: la libreria de
-#    litellm NO registra el mensaje system en `llm.input_messages`, asi que en
-#    el span "lindo" el SOUL no aparece por ningun lado. Verificado el 11/8:
-#    36.746 caracteres de system, con el SOUL entero, invisibles ahi.
-#    Por eso NO se tira: se renombra y se le pone el payload donde se lea.
-# 2. NO PONE `openinference.span.kind`. Sin ese atributo Phoenix marca el span
-#    como UNKNOWN y no renderiza los mensajes ni habilita el playground,
-#    aunque el contenido esté todo ahí.
+# 1. IT SENDS THREE SPANS PER CALL. `litellm_proxy_request` and
+#    `litellm_request` carry the SAME attributes: one of the two is
+#    redundant. The third, `raw_gen_ai_request`, looked empty because it uses
+#    `llm.openrouter.*` and Phoenix doesn't understand it — but it's the ONLY
+#    one that carries the FULL PAYLOAD, system prompt included. And that
+#    matters: litellm's library does NOT record the system message in
+#    `llm.input_messages`, so in the "nice" span the SOUL is nowhere to be
+#    found. Verified on 11/8: 36,746 characters of system prompt, the whole
+#    SOUL, invisible there. That's why it doesn't get dropped: it gets
+#    renamed and given the payload where it can be read.
+# 2. IT DOESN'T SET `openinference.span.kind`. Without that attribute Phoenix
+#    marks the span UNKNOWN and doesn't render the messages or enable the
+#    playground, even though the content is all there.
 #
-# Acá se tira el ruido y se agrega lo que falta.
+# Here is where the noise gets dropped and what's missing gets added.
 
 receivers:
   otlp:
@@ -25,31 +26,31 @@ receivers:
         endpoint: 0.0.0.0:4317
 
 processors:
-  # Fuera el ruido: los duplicados y los spans de plomería del proxy.
-  filter/ruido:
+  # Out with the noise: the duplicates and the proxy's plumbing spans.
+  filter/noise:
     error_mode: ignore
     traces:
       span:
         - 'name == "litellm_proxy_request"'
         - 'IsMatch(name, "^(auth|POST|GET) ")'
 
-  # Lo que convierte un span opaco en algo que Phoenix sabe mostrar.
+  # What turns an opaque span into something Phoenix knows how to show.
   transform/openinference:
     error_mode: ignore
     trace_statements:
       - context: span
         statements:
           - set(attributes["openinference.span.kind"], "LLM")
-          - set(attributes["llm.model_name"], "${env:MODELO}") where attributes["llm.model_name"] == nil
+          - set(attributes["llm.model_name"], "${env:MODEL}") where attributes["llm.model_name"] == nil
           - set(attributes["llm.provider"], "openrouter") where attributes["llm.provider"] == nil
-          # El nombre por defecto (`litellm_request`) no dice nada en una lista
-          # de cien. Con el modelo adelante se lee de un vistazo.
-          - set(name, Concat(["chat ", "${env:MODELO}"], "")) where name == "litellm_request"
-          # El crudo: lo que REALMENTE viaja, con el system adentro. Se le
-          # copia a input.value para que Phoenix lo muestre como texto.
+          # The default name (`litellm_request`) says nothing in a list of a
+          # hundred. With the model up front it reads at a glance.
+          - set(name, Concat(["chat ", "${env:MODEL}"], "")) where name == "litellm_request"
+          # The raw one: what ACTUALLY travels, system prompt included. Copied
+          # to input.value so Phoenix shows it as text.
           - set(attributes["input.value"], attributes["llm.openrouter.messages"]) where name == "raw_gen_ai_request"
           - set(attributes["output.value"], attributes["llm.openrouter.stringified_raw_response"]) where name == "raw_gen_ai_request"
-          - set(name, "payload completo (con el system)") where name == "raw_gen_ai_request"
+          - set(name, "full payload (with the system prompt)") where name == "raw_gen_ai_request"
 
   batch:
     timeout: 2s
@@ -64,5 +65,5 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [filter/ruido, transform/openinference, batch]
+      processors: [filter/noise, transform/openinference, batch]
       exporters: [otlphttp/phoenix]

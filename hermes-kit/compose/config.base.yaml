@@ -9,95 +9,98 @@ api_server:
   port: 8642
   key: ${API_SERVER_KEY}
 
-# Herramientas nativas de kanban. Hacen falta LAS DOS claves de abajo y no es
-# adivinable: `toolsets` abre la compuerta (check_fn), y `platform_toolsets`
-# pasa el filtro por plataforma. Con una sola, el agente no ve ninguna tool de
-# kanban y termina improvisando por terminal. Verificado el 4/8/2026.
+# Native kanban tools. BOTH keys below are needed, and it's not guessable:
+# `toolsets` opens the gate (check_fn), and `platform_toolsets` runs the
+# per-platform filter. With only one, the agent sees no kanban tool at all and
+# ends up improvising from a terminal. Verified on 4/8/2026.
 toolsets:
   - kanban
 
-# Herramientas que un agente de cliente no usa nunca y cuyo esquema se paga en
-# CADA llamada al modelo. Medido con `hermes prompt-size` sobre un agente
-# recien creado: los esquemas pesan 67,6 KB (casi el doble del system prompt
-# entero), y sacando estas dos bajan a 60,0 KB sin perder nada.
-#   tts        1,8 KB  hablar en voz alta
-#   delegation 5,8 KB  crear sub-agentes
-# Si un cliente llega a necesitarlas, se sacan de esta lista y se reinicia.
+# Tools a client agent never uses and whose schema gets paid for on EVERY call
+# to the model. Measured with `hermes prompt-size` on a freshly created agent:
+# the schemas weigh 67.6 KB (almost double the entire system prompt), and
+# dropping these two brings it down to 60.0 KB with nothing lost.
+#   tts        1.8 KB  speak out loud
+#   delegation 5.8 KB  create sub-agents
+# If a client ever needs them, take them off this list and restart.
 # One gateway serving EVERY profile. Without this the inbound gateway handles
 # only the active profile: a hired role installs fine, `hermes profile list`
-# shows it, and /p/<rol>/ never answers -- contratar-rol.sh hangs forever on
-# its "esperando" loop. Found the hard way on the first from-scratch team
+# shows it, and /p/<rol>/ never answers -- hire-role.sh hangs forever on
+# its "waiting" loop. Found the hard way on the first from-scratch team
 # agent (2026-08-19); the lab only worked because the spike set it by hand.
 gateway:
   multiplex_profiles: true
 
 agent:
-  # Effort al maximo. Probado el 5/8 sobre el mismo agente, mismos datos y
-  # mismas consignas: con el default del proveedor dejaba 3 de 18 clientes
-  # afuera de una hoja de ruta diciendo que eran 18, mezclaba meses en un
-  # ranking y erraba una bonificacion en cascada. Con `max` las tres salieron
-  # bien de primera. Costo: ruido (USD 0,18 por 13 sesiones completas).
-  # OJO: no arregla la complacencia — con max igual se auto-acuso de inventar
-  # a alguien que estaba en su propio SOUL.
+  # Effort at max. Tested on 5/8 against the same agent, same data and same
+  # prompts: with the provider's default it left 3 out of 18 clients off a
+  # roadmap while saying there were 18, mixed up months in a ranking, and got
+  # a cascading bonus wrong. With `max` all three came out right the first
+  # time. Cost: noise (USD 0.18 for 13 full sessions).
+  # WATCH OUT: it doesn't fix complacency — even with max it still accused
+  # itself of inventing someone who was right there in its own SOUL.
   reasoning_effort: max
   disabled_toolsets:
     - tts
     - delegation
-    # OJO: el browser NO se apaga desde aca. Va por `platform_toolsets`, mas
-    # abajo, y el porque esta explicado ahi: ponerlo en esta lista se lleva
-    # puesto `web_search`.
-    # cronjob apagado A PROPOSITO, y no para ahorrar contexto: es lo que
-    # empuja al agente a la skill `flujo` en vez de improvisar un cron suelto.
-    # Verificado el 8/8: un cliente pidio "quiero saber regularmente sobre la
-    # competencia", el agente MIRO la skill flujo (skill_view) y aun asi llamo
-    # a `cronjob` directo. Salio un cron invisible —sin carpeta, sin FLUJO.md,
-    # sin pestaña Flujos— y encima con `deliver=origin`, que entrega a la
-    # sesion del portal: iba a correr todos los lunes y no iba a llegar nunca
-    # nada, sin ningun aviso. Con el toolset apagado el unico camino comodo es
-    # `crear_flujo.py`, que crea el cron con --deliver=local y deja el flujo a
-    # la vista. No es una pared: por terminal se puede igual, y de eso se
-    # encarga el SOUL. Es sacar la puerta facil que daba al lugar equivocado.
+    # WATCH OUT: the browser does NOT get turned off from here. That goes
+    # through `platform_toolsets`, below, and the why is explained there:
+    # putting it on this list also takes down `web_search`.
+    # cronjob turned off ON PURPOSE, and not to save context: it's what pushes
+    # the agent toward the `flow` skill instead of improvising a loose cron.
+    # Verified on 8/8: a client asked "I want regular updates on the
+    # competition," the agent LOOKED at the flow skill (skill_view) and still
+    # called `cronjob` directly. Out came an invisible cron —no folder, no
+    # FLOW.md, no Flujos tab— and on top of that with `deliver=origin`, which
+    # delivers to the portal session: it was going to run every Monday and
+    # never deliver anything to anyone, with no notice at all. With the
+    # toolset off the only easy path is `create_flow.py`, which creates the
+    # cron with --deliver=local and leaves the flow visible. It's not a wall:
+    # it can still be done from a terminal, and that's the SOUL's job. It's
+    # removing the easy door that opened onto the wrong place.
     - cronjob
 
-# EL BROWSER SE SACA POR INCLUSION, NO POR `disabled_toolsets`. La diferencia no
-# es de estilo: `disabled_toolsets` resta el CATALOGO ESTATICO del toolset al
-# final de todo (model_tools.py:410-441, "even if a composite toolset is enabled,
-# any tools belonging to a disabled toolset are strictly stripped out"), y el
-# catalogo de `browser` incluye `web_search` (toolsets.py:199-207). O sea que
-# apagar browser por ahi tambien apaga la busqueda web, aunque `web_search` sea
-# del toolset `web`. Medido con el interprete de la imagen, como llama el motor
-# de verdad (agent/agent_init.py:1390, con enabled Y disabled), las tres filas en
-# UNA sola corrida y con una credencial de busqueda presente para que
-# `check_web_api_key` no tape el resultado:
+# THE BROWSER IS REMOVED BY INCLUSION, NOT BY `disabled_toolsets`. The
+# difference isn't stylistic: `disabled_toolsets` subtracts the toolset's
+# STATIC CATALOG at the very end (model_tools.py:410-441, "even if a composite
+# toolset is enabled, any tools belonging to a disabled toolset are strictly
+# stripped out"), and `browser`'s catalog includes `web_search`
+# (toolsets.py:199-207). So turning off browser that way also turns off web
+# search, even though `web_search` belongs to the `web` toolset. Measured with
+# the image's own interpreter, the way the engine actually calls it
+# (agent/agent_init.py:1390, with enabled AND disabled), all three rows in ONE
+# single run and with a search credential present so `check_web_api_key`
+# doesn't mask the result:
 #
-#   bundle (browser adentro)             → 36 tools · browser 9 · web_search SI
-#   bundle + disabled_toolsets:[browser] → 26 tools · browser 0 · web_search NO
-#   lista explicita sin browser          → 27 tools · browser 0 · web_search SI
+#   bundle (browser included)             → 36 tools · browser 9 · web_search YES
+#   bundle + disabled_toolsets:[browser]  → 26 tools · browser 0 · web_search NO
+#   explicit list without browser         → 27 tools · browser 0 · web_search YES
 #
-# Por nombre, que es lo que no se desarma: (bundle − explicita) = las 9
-# browser_*, y (explicita − bundle) = nada; (explicita − disabled) = web_search.
+# By name, which is what doesn't come apart: (bundle − explicit) = the 9
+# browser_*, and (explicit − bundle) = nothing; (explicit − disabled) =
+# web_search.
 #
-# Queremos `web_search`: el cliente hace monitoreo de competencia y es probable
-# que suba una key de busqueda.
+# We want `web_search`: the client does competitor monitoring and is likely to
+# add a search key.
 #
-# LAS TRES PLATAFORMAS LLEVAN LA MISMA LISTA. El mismo agente atiende el portal,
-# Telegram y los flujos del cron: un browser que devuelve paginas en blanco falla
-# igual en los tres, y en el cron encima sin nadie mirando. Ademas las
-# declaraciones viejas de telegram y cron NO HACIAN NADA: una lista que solo
-# nombra bundles y `kanban` no menciona ningun toolset configurable, asi que el
-# motor no entra en modo explicito y cae al default —todo prendido, con browser,
-# `clarify` y `computer_use`—. Verificado: sacar esas claves daba exactamente el
-# mismo resultado que dejarlas.
+# ALL THREE PLATFORMS CARRY THE SAME LIST. The same agent handles the portal,
+# Telegram and the cron flows: a browser that returns blank pages fails the
+# same way on all three, and on the cron on top of that with nobody watching.
+# Also, the old telegram and cron declarations DID NOTHING AT ALL: a list that
+# only names bundles and `kanban` doesn't mention any configurable toolset, so
+# the engine never enters explicit mode and falls back to the default —
+# everything on, including browser, `clarify` and `computer_use`. Verified:
+# removing those keys gave exactly the same result as leaving them.
 #
-# Diferencias deliberadas contra ese default: se van tambien `clarify`
-# (preguntar por una UI — el portal nunca lo tuvo, el cron lo apaga solo, y el
-# agente pregunta escribiendo) y `computer_use` (manejar una computadora, cuya
-# skill ya apagamos).
+# Deliberate differences from that default: `clarify` is also removed (asking
+# through a UI — the portal never had one, the cron turns it off on its own,
+# and the agent asks by writing) and `computer_use` (operating a computer,
+# whose skill we already turn off).
 #
-# ESTA LISTA SE GENERA, no se escribe de memoria — al subir de tag el motor
-# puede sumar o renombrar toolsets y esto queda viejo en silencio:
-#   python3 tools/perilla-skills.py --toolsets --imagen <tag>
-# `agente-check.py` compara las tres contra esta y falla si difieren.
+# THIS LIST IS GENERATED, never written from memory — bumping the engine's tag
+# can add or rename toolsets and this goes stale silently:
+#   python3 tools/skills-knob.py --toolsets --image <tag>
+# `agent-check.py` compares all three against this and fails if they differ.
 platform_toolsets:
   api_server:
     - bfl
@@ -139,94 +142,99 @@ platform_toolsets:
     - vision
     - web
 
-# EL VERIFICADOR DE MUTACIONES, APAGADO. Cuando un write_file o un patch falla
-# y no se repite bien, el motor le PEGA a la respuesta del agente una linea como
+# THE MUTATION VERIFIER, OFF. When a write_file or a patch fails and doesn't
+# retry cleanly, the engine STAPLES a line onto the agent's response like
 #   "⚠️ File-mutation verifier: 1 file(s) were NOT modified this turn…
 #    /tmp/design-kit-instagram.md — Write denied… outside HERMES_WRITE_SAFE_ROOT"
-# Eso lo lee el cliente en su portal: vocabulario de maquina, una ruta del host y
-# el nombre de una variable de entorno. Es exactamente lo que el SOUL le prohibe
-# al agente ("hablas del trabajo, no de la maquina") y que el motor hace igual,
-# por arriba, sin que el agente pueda evitarlo. Visto con Mr.Wobble el 12/8.
-# Que el intento fallara esta bien y hay que arreglarlo; contarselo asi al
-# cliente, no. Perilla: hermes_cli/config_defaults.py:1051, leida en
-# run_agent.py:3300.
+# The client reads that in their portal: machine vocabulary, a host path and
+# the name of an environment variable. It's exactly what the SOUL forbids the
+# agent from doing ("talk about the work, not the machine"), and the engine
+# does it anyway, on top, with no way for the agent to prevent it. Seen with
+# Mr.Wobble on 12/8. The attempt failing is fine and needs fixing; telling the
+# client about it like that is not. Knob: hermes_cli/config_defaults.py:1051,
+# read in run_agent.py:3300.
 display:
   file_mutation_verifier: false
 
-# LA PUERTA, EN CODIGO Y NO EN PROSA. El motor corre estos scripts ANTES de la
-# tool y, si contestan {"action":"block"}, no la ejecuta y le devuelve el
-# mensaje al modelo (agent/shell_hooks.py; registro en gateway/run.py:10499).
-# Cubre las tres cosas que el QA vio o dejo abiertas: instalar software en el
-# volumen del cliente, firmar un comentario como `portal` (o sea falsificar una
-# aprobacion) y desbloquearse el propio ticket.
+# THE GATE, IN CODE AND NOT IN PROSE. The engine runs these scripts BEFORE the
+# tool and, if they answer {"action":"block"}, doesn't run it and hands the
+# message back to the model (agent/shell_hooks.py; registered in
+# gateway/run.py:10499). Covers the three things QA saw or left open:
+# installing software on the client's volume, signing a comment as `portal`
+# (i.e. forging an approval), and unblocking its own ticket.
 #
-# El consentimiento va ACA y en el compose (HERMES_ACCEPT_HOOKS=1), NUNCA por el
-# allowlist de data/: ese vive en el volumen y el agente lo puede borrar, y un
-# hook sin consentimiento FALLA ABIERTO.
+# Consent goes HERE and in the compose (HERMES_ACCEPT_HOOKS=1), NEVER through
+# data/'s allowlist: that one lives in the volume and the agent can delete it,
+# and a hook with no consent FAILS OPEN.
 #
-# OJO: el hook falla abierto por diseño (si el script revienta o vence el
-# timeout, la tool corre igual con un logger.warning que nadie mira). Por eso
-# `agente-check.py` chequea que este declarado, que el script exista, que sea
-# ejecutable y que de verdad bloquee.
+# WATCH OUT: the hook fails open by design (if the script crashes or the
+# timeout expires, the tool runs anyway with a logger.warning nobody watches).
+# That's why `agent-check.py` checks that it's declared, that the script
+# exists, that it's executable, and that it actually blocks.
 #
-# Y NO ES TEORICO: el 13/8/2026, con la maquina cargada, se midio
+# AND IT'S NOT THEORETICAL: on 13/8/2026, with the machine under load, this
+# was measured:
 #   WARNING agent.shell_hooks: shell hook timed out after 25.54s
-#           (event=pre_tool_call command=/opt/politica/hooks/puerta.py)
-# con `timeout: 10` declarado. `agent/shell_hooks.py:509-515` devuelve None y la
-# tool corre. O sea: bajo carga la puerta deja de ser puerta, en silencio.
-# Por eso `puerta.py` no importa nada caro ni toca la red — cuanto mas rapido
-# sale, menos ventanas de estas hay. El arreglo de verdad es upstream.
+#           (event=pre_tool_call command=/opt/policy/hooks/gate.py)
+# with `timeout: 10` declared. `agent/shell_hooks.py:509-515` returns None and
+# the tool runs. In other words: under load the gate stops being a gate,
+# silently. That's why `gate.py` imports nothing expensive and never touches
+# the network — the faster it returns, the fewer windows like this there are.
+# The real fix is upstream.
 hooks_auto_accept: true
 hooks:
   pre_tool_call:
     - matcher: "terminal"
-      command: "/opt/politica/hooks/puerta.py"
+      command: "/opt/policy/hooks/gate.py"
       timeout: 10
-    # execute_code NO estaba, y por ahi entro el borrado que la clienta habia
-    # rechazado: el agente no uso la terminal, uso este. Es el mismo poder con
-    # otro nombre (corre Python adentro del volumen), asi que va la misma puerta.
+    # execute_code was NOT covered, and that's how the deletion the client had
+    # rejected got through: the agent didn't use the terminal, it used this
+    # one. Same power under a different name (runs Python inside the volume),
+    # so it gets the same gate.
     - matcher: "execute_code"
-      command: "/opt/politica/hooks/puerta.py"
+      command: "/opt/policy/hooks/gate.py"
       timeout: 10
     - matcher: "kanban_unblock"
-      command: "/opt/politica/hooks/puerta.py"
+      command: "/opt/policy/hooks/gate.py"
       timeout: 10
 
-# LA GUARDIA DE LAS PROMESAS. Un hook de shell NO alcanzaba: `shell_hooks.py`
-# solo sabe devolver `block`, `continue` o `context` — ninguno puede tocar el
-# texto de la respuesta— y `pre_verify`, que seria el lugar para hacerlo
-# reintentar, se dispara solo si el turno edito archivos
-# (conversation_loop.py:6808-6815). El turno del bug no escribio nada: miro dos
-# skills y contesto "Queda definido: viernes a las 9:30" sin crear ningun
-# flujo. `transform_llm_output` es el unico punto que ve la respuesta final
-# ANTES de guardarla y mandarla (turn_finalizer.py:485-505), y es de plugin.
+# THE PROMISES GUARD. A shell hook was NOT enough: `shell_hooks.py` can only
+# return `block`, `continue` or `context` — none of which can touch the
+# response's text — and `pre_verify`, which would be the place to make it
+# retry, only fires if the turn edited files
+# (conversation_loop.py:6808-6815). The turn with the bug wrote nothing: it
+# looked at two skills and answered "Queda definido: viernes a las 9:30"
+# without creating any flow. `transform_llm_output` is the only point that
+# sees the final response BEFORE it gets saved and sent
+# (turn_finalizer.py:485-505), and it's plugin-based.
 #
-# Los plugins de usuario son opt-in: sin esta lista el motor los descubre y no
-# los carga (plugins.py:1471-1487). El codigo vive en politica/plugins/,
-# montado :ro sobre /opt/data/plugins.
+# User plugins are opt-in: without this list the engine discovers it and
+# doesn't load it (plugins.py:1471-1487). The code lives in policy/plugins/,
+# mounted :ro over /opt/data/plugins.
 plugins:
   enabled:
-    - promesas
+    - promises
 
-# AUTO-MEJORA: cada 25 turnos, no cada 10. El fork que escribe skills se dispara
-# por VOLUMEN de trabajo, no por calidad (turn_finalizer.py:633-637), asi que
-# cuanto mas sufre el agente por no tener la herramienta correcta, mas probable
-# es que canonice el sufrimiento — es la causa mecanica de la skill que fijaba
-# "dibujar el SVG a mano" como metodo. No se apaga: es la unica fuente que
-# tenemos de que le falta a un agente en produccion. Se acota y se cosecha.
-# La clave no tiene default declarado en config_defaults.py: vive como el
-# .get(..., 10) de agent_init.py:1706-1710, asi que un bump puede cambiar el
-# numero sin que nada falle.
-# EL PREAMBULO DEL PORTAL. Sin esto, el motor le mete al agente —en cada sesion
-# del api_server, 200 lineas DESPUES del SOUL— un parrafo que dice "the
-# rendering layer is unknown, assume plain text, no markdown formatting" y que
-# le explica las etiquetas MEDIA: con rutas absolutas del host
-# (hermes:agent/prompt_builder.py:912-923). Las dos cosas son falsas en nuestro
-# portal, que renderiza markdown completo con Markdown.tsx y convierte rutas e
-# ids en chips clicables. `replace` lo reemplaza entero; `append` lo dejaria y
-# sumaria al lado (hermes:agent/system_prompt.py:73-119).
+# SELF-IMPROVEMENT: every 25 turns, not every 10. The fork that writes skills
+# fires on work VOLUME, not quality (turn_finalizer.py:633-637), so the more
+# an agent suffers from not having the right tool, the more likely it is to
+# canonize the suffering — that's the mechanical cause behind the skill that
+# fixed "draw the SVG by hand" as a method. It doesn't get turned off: it's
+# the only signal we have that a production agent is missing something. It
+# gets bounded and harvested instead.
+# The key has no default declared in config_defaults.py: it lives as the
+# .get(..., 10) in agent_init.py:1706-1710, so a version bump can change the
+# number without anything failing.
+# THE PORTAL'S PREAMBLE. Without this, the engine stuffs into the agent —on
+# every api_server session, 200 lines AFTER the SOUL— a paragraph saying "the
+# rendering layer is unknown, assume plain text, no markdown formatting" and
+# explaining the MEDIA tags, with absolute host paths
+# (hermes:agent/prompt_builder.py:912-923). Both things are false in our
+# portal, which renders full markdown with Markdown.tsx and turns paths and
+# ids into clickable chips. `replace` swaps it out entirely; `append` would
+# leave it and add this alongside it (hermes:agent/system_prompt.py:73-119).
 #
-# El texto lo lee el modelo: se escribe con el mismo cuidado que el SOUL.
+# The model reads this text: written with the same care as the SOUL.
 platform_hints:
   api_server:
     replace: |
@@ -244,25 +252,26 @@ platform_hints:
       renderizan, y una ruta absoluta muestra las tripas del servidor sin
       ayudar a nadie: la ruta desde workspace/ ya alcanza.
 
-# Sin `platforms.telegram.enabled` el adapter de Telegram bootea a medias:
-# loguea "Connecting" pero el polling nunca arranca y los mensajes no llegan
-# (descubierto el 7/8/2026 con East: /start sin respuesta, cero errores).
-# El home_channel arranca apuntando a soporte; se cambia al chat del cliente
-# cuando se empareja.
-# EL DESPEDAZADOR AUTOMATICO, APAGADO. Corrompio una aprobacion en el QA y la
-# cadena esta medida de punta a punta: la clienta aprobo CON CORRECCION ("20, no
-# 8, y para el jueves"), el segundo rebloqueo por la misma causa mando el ticket
-# a `triage` (BLOCK_RECURRENCE_LIMIT = 2, hardcodeado), el dispatcher barre
-# triage en cada tick y llama al decomposer, y el decomposer arma su prompt con
-# TITULO Y CUERPO SOLAMENTE (kanban_decompose.py:306-312). Los comentarios no
-# viajan — y la correccion de la clienta vive en un comentario, porque el cuerpo
-# de un ticket bloqueado no se puede reescribir desde afuera. Salieron dos
-# tareas hijas pidiendo las 8 viejas y el portal pidiendo aprobar por tercera
-# vez el numero equivocado. Con el correo conectado, al proveedor le llegaban 8.
+# Without `platforms.telegram.enabled` the Telegram adapter boots halfway:
+# it logs "Connecting" but polling never starts and messages never arrive
+# (discovered on 7/8/2026 with East: /start with no reply, zero errors).
+# home_channel starts out pointed at support; it gets switched to the
+# client's chat once pairing happens.
+# THE AUTOMATIC DECOMPOSER, OFF. It corrupted an approval in QA and the chain
+# is measured end to end: the client approved WITH A CORRECTION ("20, not 8,
+# and for Thursday"), the second re-block for the same reason sent the ticket
+# to `triage` (BLOCK_RECURRENCE_LIMIT = 2, hardcoded), the dispatcher sweeps
+# triage on every tick and calls the decomposer, and the decomposer builds its
+# prompt from TITLE AND BODY ONLY (kanban_decompose.py:306-312). Comments
+# don't travel — and the client's correction lives in a comment, because a
+# blocked ticket's body can't be rewritten from outside. Out came two child
+# tasks asking for the old 8, and the portal asking to approve the wrong
+# number a third time. With email connected, the supplier would have received
+# 8.
 #
-# Ninguna skill ni script del kit usa `decompose`, y el motor relee la perilla
-# en cada tick: no hace falta reiniciar. Probado en el lab: con esto apagado, un
-# ticket que cae en triage ya no se parte (0 hijas contra 2).
+# No skill or script in the kit uses `decompose`, and the engine re-reads the
+# knob on every tick: no restart needed. Tested in the lab: with this off, a
+# ticket that lands in triage no longer splits (0 children against 2).
 kanban:
   auto_decompose: false
 
@@ -271,14 +280,14 @@ platforms:
     enabled: true
     home_channel:
       platform: telegram
-      chat_id: 'COMPLETAR_CHAT_ID'
-      name: COMPLETAR_NOMBRE
-      user_id: 'COMPLETAR_CHAT_ID'
+      chat_id: 'FILL_IN_CHAT_ID'
+      name: FILL_IN_NAME
+      user_id: 'FILL_IN_CHAT_ID'
 
 # THE CURATOR IS OFF, and on a team agent that is not tidiness. It runs by
 # itself every 7 days, marks a skill stale at 30 days without use and ARCHIVES
-# it at 90 -- it moves the directory into skills/.archive/ (notas/
-# perillas-motor.md:370-388, VERIFIED against the engine's own defaults).
+# it at 90 -- it moves the directory into skills/.archive/ (notes/
+# engine-knobs.md:370-388, VERIFIED against the engine's own defaults).
 #
 # The kit's own skills are already out of reach: they are mounted read only
 # through `skills.external_dirs`, and an external path is never curation
@@ -289,7 +298,7 @@ platforms:
 # then has a quiet quarter would find the craft gone from the index, archived,
 # with no error anywhere: exactly what the client is paying for.
 #
-# The same notas lists `hermes curator pin <skill>` as the other way to close
+# The same notes lists `hermes curator pin <skill>` as the other way to close
 # it; a pin is per skill and per agent, so it has to be repeated on every hire
 # and nothing checks it was. The switch is one line and holds for every role
 # hired from here on. What we lose is the stale/archive housekeeping of the
@@ -298,22 +307,23 @@ platforms:
 curator:
   enabled: false
 
-# <<< generado por tools/perilla-skills.py — no editar a mano
-#   fuente: las skills que el motor trae instaladas
-#   apagadas: 66 · prendidas: docx, ocr-and-documents, pdf, xlsx
+# <<< generated by tools/skills-knob.py — do not hand-edit
+#   source: the skills the engine ships installed
+#   disabled: 66 · enabled: docx, ocr-and-documents, pdf, xlsx
 #
-# Regenerar al subir de tag el motor:
-#   python3 tools/perilla-skills.py --imagen <tag> --aplicar compose/config.base.yaml
+# Regenerate when bumping the engine's tag:
+#   python3 tools/skills-knob.py --image <tag> --apply compose/config.base.yaml
 #
-# Un agente de empresa no manda mails por su cuenta (himalaya), no postea
-# (xurl), no maneja la casa de nadie ni sabe operar su propio motor
-# (hermes-agent, computer-use, claude-code). Cada una de esas es superficie
-# que no pedimos, que no pasa por la guardia, y que ademas se paga en cada
-# llamada al modelo: el indice de skills son ~9 KB del prompt.
+# A business agent doesn't send mail on its own (himalaya), doesn't post
+# (xurl), doesn't run anyone's smart home, and doesn't know how to operate its
+# own engine (hermes-agent, computer-use, claude-code). Each of those is
+# surface we didn't ask for, that doesn't go through the guard, and that also
+# gets paid for on every call to the model: the skills index is ~9 KB of the
+# prompt.
 #
-# Prender una para un cliente: sacarla de esta lista, anotar por que en el
-# repo de ESE agente, y agregarla a compose/skills-permitidas.txt SOLO si
-# la decision vale para todos.
+# To turn one on for a client: take it off this list, note why in THAT
+# agent's repo, and add it to compose/skills-allowed.txt ONLY if the decision
+# holds for everyone.
 skills:
   disabled:
     - airtable
@@ -382,17 +392,17 @@ skills:
     - weights-and-biases
     - xurl
     - youtube-content
-  # AUTO-MEJORA cada 25 turnos, no cada 10. El fork que escribe skills se
-  # dispara por VOLUMEN de trabajo, no por calidad (turn_finalizer.py:633),
-  # asi que cuanto mas sufre el agente sin la herramienta correcta, mas
-  # probable es que canonice el sufrimiento. No se apaga —es la unica
-  # senal de que le falta algo a un agente en produccion—: se acota y se
-  # cosecha. Sin default declarado en config_defaults.py: vive como el
-  # .get(..., 10) de agent_init.py:1706-1710.
+  # SELF-IMPROVEMENT every 25 turns, not every 10. The fork that writes
+  # skills fires on work VOLUME, not quality (turn_finalizer.py:633), so the
+  # more an agent suffers without the right tool, the more likely it is to
+  # canonize the suffering. It doesn't get turned off —it's the only signal
+  # that a production agent is missing something—: it gets bounded and
+  # harvested instead. No default declared in config_defaults.py: it lives
+  # as the .get(..., 10) in agent_init.py:1706-1710.
   creation_nudge_interval: 25
-  # Las skills del kit, montadas de solo lectura desde el compose. Viven
-  # afuera de data/skills/ para que el agente no pueda reescribirlas y para
-  # que el curator no las archive a los 90 dias sin uso.
+  # The kit's skills, mounted read-only from the compose. They live outside
+  # data/skills/ so the agent can't rewrite them and so the curator doesn't
+  # archive them after 90 days unused.
   external_dirs:
     - /opt/kit/skills
-# >>> fin del bloque generado
+# >>> end of the generated block

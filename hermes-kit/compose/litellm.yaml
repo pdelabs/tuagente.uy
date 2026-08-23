@@ -1,47 +1,51 @@
-# Proxy OpenAI-compatible que Hermes usa como `model.base_url` cuando la
-# observabilidad esta prendida. Reenvia todo a OpenRouter y manda las trazas a
+# OpenAI-compatible proxy Hermes uses as `model.base_url` when observability
+# is turned on. Forwards everything to OpenRouter and sends the traces to
 # Phoenix.
 
 model_list:
-  # Comodin: Hermes manda el modelo que tenga configurado (por ejemplo
-  # `openai/gpt-5.6-luna`) y esto lo enruta tal cual a OpenRouter, sin tener
-  # que enumerar modelos ni tocar esto cada vez que cambie el default.
+  # Wildcard: Hermes sends whatever model it has configured (e.g.
+  # `openai/gpt-5.6-luna`) and this routes it straight to OpenRouter as-is,
+  # with no need to enumerate models or touch this every time the default
+  # changes.
   - model_name: "*"
     litellm_params:
       model: openrouter/*
       api_key: os.environ/OPENROUTER_API_KEY
 
 litellm_settings:
-  # EL AGENTE NO CONTESTABA NADA SIN ESTO. Hermes manda `reasoning_effort` en
-  # cada request; litellm valida los parametros contra lo que declara el
-  # proveedor y devuelve HTTP 400 en vez de sacar el que sobra:
+  # THE AGENT ANSWERED NOTHING WITHOUT THIS. Hermes sends `reasoning_effort`
+  # on every request; litellm validates parameters against what the provider
+  # declares and returns HTTP 400 instead of dropping the one that doesn't
+  # fit:
   #
   #   litellm.UnsupportedParamsError: openrouter does not support parameters:
   #   ['reasoning_effort'], for model=hermes-agent
   #
-  # No es un error del cliente ni del modelo: es el proxy plantandose en el
-  # medio. Y no falla de a ratos, falla SIEMPRE — el chat entero queda mudo.
-  # Medido el 16/8 reseteando Mr.Wobble, con el primer "hola" despues del alta.
+  # It's not a bug in the client or the model: it's the proxy planting itself
+  # in the middle. And it doesn't fail sometimes, it fails ALWAYS — the whole
+  # chat goes mute. Measured on 16/8 while resetting Mr.Wobble, on the first
+  # "hola" after the reset.
   #
-  # `drop_params` hace que el parametro que el proveedor no entiende se caiga y
-  # la llamada siga. Es la misma regla que la de abajo: la observabilidad se
-  # metio en el camino de la inferencia, asi que nunca puede ser ella la que
-  # corta. Un agente que responde un poco distinto es un problema; uno que
-  # devuelve 400 a todo no es un agente.
+  # `drop_params` makes the parameter the provider doesn't understand get
+  # dropped and the call go through anyway. Same rule as the one below:
+  # observability got in the way of inference, so it can never be the thing
+  # that cuts it off. An agent that answers a bit differently is a problem;
+  # one that returns 400 to everything is not an agent.
   drop_params: true
-  # Manda prompts, respuestas, tokens y costo a Phoenix por OTLP.
-  # Phoenix para las trazas, y el nuestro para el COSTO. El segundo existe
-  # porque meter este proxy en el medio obligo a `provider: custom` en Hermes,
-  # y esa ruta esta cableada a "no se el precio": la pestania de Uso quedo en
-  # $0. litellm si sabe el numero real, asi que lo anota y el adapter lo lee.
-  callbacks: ["arize_phoenix", "litellm-costo.registro_de_costo"]
-  # Si el callback falla, la llamada al modelo SIGUE: la observabilidad nunca
-  # puede voltear al agente. Es la diferencia entre una herramienta nuestra y
-  # un punto de falla del cliente.
+  # Sends prompts, responses, tokens and cost to Phoenix over OTLP.
+  # Phoenix for the traces, and ours for the COST. The second one exists
+  # because putting this proxy in the middle forced `provider: custom` in
+  # Hermes, and that path is wired to "I don't know the price": the Usage tab
+  # went to $0. litellm does know the real number, so it logs it and the
+  # adapter reads it.
+  callbacks: ["arize_phoenix", "litellm-cost.cost_logger"]
+  # If the callback fails, the call to the model STILL GOES THROUGH:
+  # observability can never take the agent down. That's the difference
+  # between a tool of ours and a point of failure for the client.
   turn_off_message_logging: false
 
 general_settings:
-  # Sin master_key a proposito: solo escucha en la red interna del compose,
-  # sin puerto publicado. Agregar una clave aca seria una credencial mas para
-  # rotar sin cerrar ninguna puerta que no este ya cerrada.
+  # No master_key on purpose: it only listens on compose's internal network,
+  # with no port published. Adding a key here would just be one more
+  # credential to rotate without closing any door that isn't already closed.
   telemetry: false

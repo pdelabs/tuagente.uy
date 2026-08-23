@@ -82,13 +82,13 @@ index d1e0270..ffa5dcf 100644
 -		// Already logged in, just connect
 -		err = client.Connect()
 -		if err != nil {
-+	// PARCHE tuagente: el pareo NO arranca solo.
++	// tuagente PATCH: pairing does NOT start on its own.
 +	//
-+	// Antes, un bridge sin sesion se quedaba pidiendo un QR que nadie miraba,
-+	// timeout a los 3 minutos, reinicio, y otra vez — quemando sesiones de
-+	// pareo para siempre. El pareo ahora lo dispara el cliente cuando aprieta
-+	// "Conectar" en el portal (POST /pair/start), que es cuando de verdad tiene
-+	// el telefono en la mano.
++	// Before, a bridge with no session would sit there asking for a QR that
++	// nobody looked at, timeout at 3 minutes, restart, and again — burning
++	// pairing sessions forever. Pairing is now triggered by the client when
++	// they press "Connect" in the portal (POST /pair/start), which is when
++	// they actually have the phone in hand.
 +	if client.Store.ID != nil {
 +		if err := client.Connect(); err != nil {
  			logger.Errorf("Failed to connect: %v", err)
@@ -96,7 +96,7 @@ index d1e0270..ffa5dcf 100644
  		}
  		connected <- true
 +	} else {
-+		logger.Infof("sin sesion: esperando que el cliente pida el pareo (POST /pair/start)")
++		logger.Infof("no session: waiting for the client to request pairing (POST /pair/start)")
  	}
  
  	// Wait a moment for connection to stabilize
@@ -114,9 +114,9 @@ index d1e0270..ffa5dcf 100644
 +	}
  
 -	// Start REST API server
-+	// Start REST API server — SIEMPRE, con o sin sesion.
++	// Start REST API server — ALWAYS, with or without a session.
  	startRESTServer(client, messageStore, 8080)
-+	registrarPareo(client, logger)
++	registerPairing(client, logger)
  
  	// Create a channel to keep the main goroutine alive
  	exitChan := make(chan os.Signal, 1)
@@ -143,49 +143,49 @@ index d1e0270..ffa5dcf 100644
  	return waveform
  }
 +
-+// ── PARCHE tuagente: pareo a demanda ────────────────────────────────────────
++// ── tuagente PATCH: pairing on demand ────────────────────────────────
 +//
-+// Tres endpoints para que el portal pueda hacer el pareo con sus propios pasos,
-+// sin que nadie mire un log ni entre a una terminal:
++// Three endpoints so the portal can drive pairing through its own steps,
++// with nobody watching a log or opening a terminal:
 +//
-+//   POST /pair/start   arranca el pedido de QR (solo si no hay sesion)
++//   POST /pair/start   starts the QR request (only if there is no session)
 +//   GET  /pair/status  {paired, pairing, has_qr}
-+//   GET  /pair/qr.png  el QR, que se renueva sobre el mismo archivo
++//   GET  /pair/qr.png  the QR, refreshed over the same file
 +//
-+// Nada de esto habla con el modelo: es plomeria del portal. Las herramientas
-+// del agente siguen pasando por la guardia.
++// None of this talks to the model: it is portal plumbing. The agent's
++// tools still go through the guard.
 +
-+var pareando bool
-+var pareoMu sync.Mutex
++var pairing bool
++var pairingMu sync.Mutex
 +
-+func registrarPareo(client *whatsmeow.Client, logger waLog.Logger) {
++func registerPairing(client *whatsmeow.Client, logger waLog.Logger) {
 +	http.HandleFunc("/pair/status", func(w http.ResponseWriter, r *http.Request) {
-+		pareoMu.Lock()
-+		enCurso := pareando
-+		pareoMu.Unlock()
++		pairingMu.Lock()
++		inProgress := pairing
++		pairingMu.Unlock()
 +		_, err := os.Stat("store/qr.png")
 +		w.Header().Set("Content-Type", "application/json")
 +		json.NewEncoder(w).Encode(map[string]bool{
 +			"paired":  client.Store.ID != nil,
-+			"pairing": enCurso,
++			"pairing": inProgress,
 +			"has_qr":  err == nil,
 +		})
 +	})
 +
 +	http.HandleFunc("/pair/qr.png", func(w http.ResponseWriter, r *http.Request) {
-+		datos, err := os.ReadFile("store/qr.png")
++		qrBytes, err := os.ReadFile("store/qr.png")
 +		if err != nil {
-+			http.Error(w, "todavia no hay QR", http.StatusNotFound)
++			http.Error(w, "no QR yet", http.StatusNotFound)
 +			return
 +		}
 +		w.Header().Set("Content-Type", "image/png")
-+		w.Header().Set("Cache-Control", "no-store")   // se renueva cada segundos
-+		w.Write(datos)
++		w.Header().Set("Cache-Control", "no-store")   // refreshed every few seconds
++		w.Write(qrBytes)
 +	})
 +
 +	http.HandleFunc("/pair/start", func(w http.ResponseWriter, r *http.Request) {
 +		if r.Method != http.MethodPost {
-+			http.Error(w, "usa POST", http.StatusMethodNotAllowed)
++			http.Error(w, "use POST", http.StatusMethodNotAllowed)
 +			return
 +		}
 +		if client.Store.ID != nil {
@@ -193,36 +193,36 @@ index d1e0270..ffa5dcf 100644
 +			json.NewEncoder(w).Encode(map[string]any{"ok": true, "paired": true})
 +			return
 +		}
-+		pareoMu.Lock()
-+		if pareando {
-+			pareoMu.Unlock()
++		pairingMu.Lock()
++		if pairing {
++			pairingMu.Unlock()
 +			w.Header().Set("Content-Type", "application/json")
 +			json.NewEncoder(w).Encode(map[string]any{"ok": true, "pairing": true})
 +			return
 +		}
-+		pareando = true
-+		pareoMu.Unlock()
++		pairing = true
++		pairingMu.Unlock()
 +
 +		go func() {
-+			defer func() { pareoMu.Lock(); pareando = false; pareoMu.Unlock() }()
++			defer func() { pairingMu.Lock(); pairing = false; pairingMu.Unlock() }()
 +			qrChan, _ := client.GetQRChannel(context.Background())
 +			if err := client.Connect(); err != nil {
-+				logger.Errorf("pareo: no pude conectar: %v", err)
++				logger.Errorf("pairing: could not connect: %v", err)
 +				return
 +			}
 +			for evt := range qrChan {
 +				switch evt.Event {
 +				case "code":
 +					if err := qrcode.WriteFile(evt.Code, qrcode.Medium, 512, "store/qr.png"); err != nil {
-+						logger.Warnf("pareo: no pude escribir el QR: %v", err)
++						logger.Warnf("pairing: could not write the QR: %v", err)
 +					}
 +				case "success":
 +					os.Remove("store/qr.png")
-+					logger.Infof("pareo: listo, sesion establecida")
++					logger.Infof("pairing: done, session established")
 +					return
 +				case "timeout":
 +					os.Remove("store/qr.png")
-+					logger.Warnf("pareo: se vencio sin que nadie lo escaneara")
++					logger.Warnf("pairing: expired with nobody scanning it")
 +					return
 +				}
 +			}

@@ -1,12 +1,12 @@
-# Bridge de whatsapp-mcp. Se compila acá y no en el contenedor del cliente:
-# bajar y compilar en vivo adentro del agente es justo lo que el roadmap marca
-# como riesgoso.
+# whatsapp-mcp bridge. Built here, not inside the client's container:
+# pulling and building live inside the agent is exactly what the roadmap
+# flags as risky.
 FROM golang:1.25-bookworm AS build
 WORKDIR /src
 COPY whatsapp-bridge/go.mod whatsapp-bridge/go.sum ./
 RUN go mod download
 COPY whatsapp-bridge/ ./
-# CGO prendido: go-sqlite3 lo necesita.
+# CGO on: go-sqlite3 needs it.
 RUN CGO_ENABLED=1 go build -o /bridge .
 
 FROM debian:bookworm-slim
@@ -14,6 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /bridge /app/bridge
-# El QR y la sesión viven en /app/store, que es el volumen del cliente.
+# The QR and the session live in /app/store, the client's volume.
 EXPOSE 8080
 CMD ["/app/bridge"]

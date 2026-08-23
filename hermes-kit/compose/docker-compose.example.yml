@@ -1,123 +1,126 @@
-# Plantilla para el agente de un cliente. Un agente por cliente: su propio
-# volumen, su propia clave. Nunca compartir nada entre clientes.
+# Template for a client's agent. One agent per client: its own volume, its
+# own key. Never share anything between clients.
 #
-# LA VERSION VA FIJA, no `latest`. Con `latest`, un push de Nous le cambia el
-# motor a TODOS los clientes de un dia para el otro, sin que nadie apriete
-# nada, y nos enteramos por un ticket que empieza a fallar. Verificado el
-# 5/8/2026: los agentes corrian v2026.7.30 mientras `latest` ya iba dos
-# versiones adelante.
+# THE VERSION IS PINNED, never `latest`. With `latest`, a Nous push changes
+# the engine for EVERY client overnight, with nobody pressing a button, and we
+# find out from a ticket that starts failing. Verified on 5/8/2026: agents
+# were running v2026.7.30 while `latest` was already two versions ahead.
 #
-# Para subir de version: cambiar el tag, `docker compose pull && up -d`, y
-# correr los dos chequeos (agente-check.py y portal-check.py) ANTES de darlo
-# por bueno. Si algo cambio, se vuelve al tag anterior y listo.
+# To upgrade: change the tag, `docker compose pull && up -d`, and run both
+# checks (agent-check.py and portal-check.py) BEFORE calling it good. If
+# something broke, roll back to the previous tag and that's it.
 services:
   hermes:
-    image: nousresearch/hermes-agent:v2026.7.30   # ver nota de arriba antes de subirla
-    container_name: ${CLIENTE}-hermes
+    image: nousresearch/hermes-agent:v2026.7.30   # see the note above before bumping this
+    container_name: ${CLIENT}-hermes
     restart: unless-stopped
     command: gateway run
     ports:
-      # Solo loopback: el portal llega por el adapter o por un túnel, nunca
-      # exponiendo el gateway a internet.
+      # Loopback only: the portal reaches it through the adapter or a tunnel,
+      # never by exposing the gateway to the internet.
       #
-      # EL PUERTO DEL HOST LO RESUELVE `nuevo-agente.sh` (cuarto argumento, por
-      # defecto 8642); adentro del contenedor SIEMPRE es 8642, que es lo que
-      # dice `api_server.port` del config y lo que el adapter busca en
-      # `http://hermes:8642`. Antes esto era literal en los dos lados y el
-      # segundo agente del mismo host nacía pidiendo un puerto tomado: como los
-      # nombres de contenedor sí se distinguen, el choque recién aparecía en el
-      # `up -d`, con el SOUL ya escrito y las claves ya cargadas.
-      - "127.0.0.1:${PUERTO_GATEWAY}:8642"   # API server
-      # El dashboard (9119) NO se publica: va apagado (ver HERMES_DASHBOARD más
-      # abajo). Si alguna vez hace falta mirarlo, se prende, se publica esta
-      # línea y se entra por un túnel SSH — nunca es para el cliente.
+      # THE HOST PORT IS RESOLVED BY `new-agent.sh` (fourth argument, default
+      # 8642); inside the container it is ALWAYS 8642, which is what the
+      # config's `api_server.port` says and what the adapter looks up at
+      # `http://hermes:8642`. This used to be a literal on both sides, and the
+      # second agent on the same host was born asking for a taken port: since
+      # container names DO distinguish themselves, the clash only showed up at
+      # `up -d`, with the SOUL already written and the keys already loaded.
+      - "127.0.0.1:${GATEWAY_PORT}:8642"   # API server
+      # The dashboard (9119) is NOT published: it ships off (see
+      # HERMES_DASHBOARD below). If it's ever needed, turn it on, publish this
+      # line and go in through an SSH tunnel — never for the client.
       # - "127.0.0.1:9119:9119"
     volumes:
       - ./data:/opt/data
-      # SOLO LECTURA, y es el punto entero: acá vive qué puede hacer el agente
-      # con cada conexión. Si estuviera dentro de ./data podría editarlo con
-      # write_file o por terminal, y un guardrail que el guardado puede
-      # cambiar no es un guardrail.
-      - ./politica:/opt/politica:ro
-      # Las skills del kit, de SOLO LECTURA y fuera de ./data. El motor las
-      # indexa igual (skills.external_dirs en config.yaml), pero el agente no
-      # puede reescribirlas con skill_manage ni por terminal, y el curator
-      # —que archiva a los 90 dias sin uso lo que toma por "creado por el
-      # agente"— no las toca: una skill externa nunca es elegible.
+      # READ ONLY, and that's the whole point: this is where what the agent
+      # can do with each connection lives. If it were inside ./data it could
+      # be edited with write_file or from a terminal, and a guardrail the
+      # agent's own save can change is not a guardrail.
+      - ./policy:/opt/policy:ro
+      # The kit's skills, READ ONLY and outside ./data. The engine indexes
+      # them all the same (skills.external_dirs in config.yaml), but the agent
+      # can't rewrite them with skill_manage or from a terminal, and the
+      # curator —which archives after 90 days unused whatever it takes for
+      # "created by the agent"— never touches them: an external skill is
+      # never eligible.
       - ./kit-skills:/opt/kit/skills:ro
-      # s6 corre esto antes del gateway, en cada arranque. Hoy traduce al
-      # español el mensaje de pairing de Telegram, que viene hardcodeado en
-      # run.py y le pide al cliente que corra un comando de terminal —
-      # contradiciendo al portal, que le dice "pegá el código acá".
+      # s6 runs this before the gateway, on every start. Today it translates
+      # to Spanish Telegram's pairing message, which comes hardcoded in run.py
+      # and asks the client to run a terminal command — contradicting the
+      # portal, which tells them "paste the code here".
       #
-      # EL ARCHIVO TIENE QUE EXISTIR ANTES DEL PRIMER `up`: Docker, al montar
-      # algo que no está, crea un DIRECTORIO con ese nombre, y un directorio en
-      # /etc/cont-init.d/ hace que s6 no levante nada. Lo pone `install.sh`, que
-      # corre antes — esta línea y esa copia van juntas o no van.
+      # THE FILE HAS TO EXIST BEFORE THE FIRST `up`: when Docker mounts
+      # something that isn't there, it creates a DIRECTORY with that name, and
+      # a directory at /etc/cont-init.d/ makes s6 not start anything at all.
+      # `install.sh` puts it there, and it runs first — this line and that copy
+      # travel together or not at all.
       #
-      # Al ACTUALIZARLO en un agente que ya corre: `install.sh` lo copia con
-      # `cp`, que conserva el inodo, así que el contenedor ve el archivo nuevo y
-      # alcanza con reiniciarlo. Si lo pasás con rsync o con mv —que reemplazan
-      # el archivo— el montaje se queda con el viejo: ahí hace falta
-      # `docker compose up -d --force-recreate`.
-      - ./politica/cont-init-parches.sh:/etc/cont-init.d/03-parches:ro
-      # La misma idea, y nos faltaba: config.yaml vive dentro de ./data y es
-      # PROPIEDAD del agente. Verificado el 9/8/2026 — lo escribe. Ahí están
-      # `disabled_toolsets` (donde apagamos cronjob a propósito) y el registro
-      # de MCP: podía devolverse cronjob y saltearse la guardia esperando un
-      # reinicio.
-      # Se creía que en el PRIMER arranque había que levantar SIN esta línea
-      # (Hermes escribe y migra el config) y agregarla después. Con v2026.7.30
-      # no hace falta: verificado el 12/8/2026 sobre un agente creado de cero,
-      # que arrancó bien con el archivo :ro desde el primer arranque. Al SUBIR
-      # DE VERSIÓN del motor la precaución sigue valiendo: si la nueva migra el
-      # config, se saca la línea, se arranca una vez y se vuelve a poner.
+      # When UPDATING it on an agent that's already running: `install.sh`
+      # copies it with `cp`, which preserves the inode, so the container sees
+      # the new file and a restart is enough. If you move it over with rsync
+      # or mv —which replace the file— the mount is left with the old one:
+      # that's when `docker compose up -d --force-recreate` is needed.
+      - ./policy/cont-init-patches.sh:/etc/cont-init.d/03-patches:ro
+      # Same idea, and we were missing it: config.yaml lives inside ./data and
+      # is OWNED by the agent. Verified on 9/8/2026 — it does write it. That's
+      # where `disabled_toolsets` lives (where we deliberately turn off
+      # cronjob) and the MCP registry: cronjob could get itself turned back on
+      # and skip the guard by waiting for a restart.
+      # It used to be believed that the FIRST start had to happen WITHOUT this
+      # line (Hermes writes and migrates the config) and add it afterward.
+      # With v2026.7.30 that's not needed: verified on 12/8/2026 against an
+      # agent created from scratch, which started fine with the file :ro from
+      # the very first boot. When UPGRADING the engine's version, the caution
+      # still holds: if the new one migrates the config, take the line out,
+      # start once, and put it back.
       - ./data/config.yaml:/opt/data/config.yaml:ro
-      # EL PLUGIN `promesas`, DE SOLO LECTURA. El motor busca los plugins del
-      # usuario en HERMES_HOME/plugins (`hermes_cli/plugins.py:1369`), o sea
-      # adentro de ./data, que es del agente: sin este montaje encima, el
-      # agente puede borrar de un `rm` la guardia que le impide anunciar un
-      # flujo que no creó. Es la misma razón por la que politica/ está afuera.
-      # Se prende con `plugins.enabled` en el config, que también es :ro.
-      - ./politica/plugins:/opt/data/plugins:ro
+      # THE `promises` PLUGIN, READ ONLY. The engine looks for user plugins
+      # under HERMES_HOME/plugins (`hermes_cli/plugins.py:1369`), i.e. inside
+      # ./data, which belongs to the agent: without this mount on top, the
+      # agent can `rm` away the guard that stops it from announcing a flow it
+      # never created. It's the same reason policy/ lives outside.
+      # It's turned on with `plugins.enabled` in the config, also :ro.
+      - ./policy/plugins:/opt/data/plugins:ro
     environment:
       - TZ=America/Montevideo
-      # DASHBOARD APAGADO. Con =1 el motor intenta bindear el dashboard en
-      # 0.0.0.0:9119, se niega porque no hay proveedor de auth configurado, s6
-      # lo reinicia, y vuelve a empezar. Medido en un agente local recién
-      # levantado (12/8/2026, Docker Desktop en macOS): 27 reinicios y 216
-      # líneas de log POR MINUTO, de un bloque de seis líneas que se repite.
+      # DASHBOARD OFF. With =1 the engine tries to bind the dashboard on
+      # 0.0.0.0:9119, gets refused because no auth provider is configured, s6
+      # restarts it, and it starts over. Measured on a freshly started local
+      # agent (12/8/2026, Docker Desktop on macOS): 27 restarts and 216 log
+      # lines PER MINUTE, from a six-line block repeating itself.
       #
-      # No rompe el agente: rompe `docker compose logs`, que en un alta es la
-      # única herramienta de diagnóstico que hay. Un ERROR de verdad tapado por
-      # 216 líneas de ruido es un ERROR que nadie ve.
+      # It doesn't break the agent: it breaks `docker compose logs`, which
+      # during an onboarding is the only diagnostic tool there is. A real
+      # ERROR buried under 216 lines of noise is an ERROR nobody sees.
       #
-      # (Durante un tiempo esto decía =1 acá y =0 en el compose remoto, con un
-      # comentario que decía que "en la Mac no se nota porque igual queda detrás
-      # de 127.0.0.1". Es falso: el 127.0.0.1 es el mapeo del HOST, y adentro
-      # del contenedor el dashboard igual intenta 0.0.0.0. El loop es idéntico.)
+      # (For a while this said =1 here and =0 in the remote compose, with a
+      # comment claiming "on the Mac it's not noticeable because it's behind
+      # 127.0.0.1 anyway." That's false: 127.0.0.1 is the HOST mapping, and
+      # inside the container the dashboard still tries 0.0.0.0. The loop is
+      # identical.)
       - HERMES_DASHBOARD=0
-      # El consentimiento de los hooks va ACA y no en el allowlist de data/:
-      # ese vive en el volumen del agente, que lo puede borrar — y un hook sin
-      # consentimiento no corre, o sea que la puerta queda abierta sin ruido.
+      # Hook consent goes HERE and not in data/'s allowlist: that one lives in
+      # the agent's volume, which it can delete — and a hook without consent
+      # doesn't run, meaning the gate would stay open with no noise.
       - HERMES_ACCEPT_HOOKS=1
-      # Sin esto el browser descarta todas las respuestas del gateway.
+      # Without this the browser discards every response from the gateway.
       #
-      # VAN LAS DOS ESCRITURAS DEL LOOPBACK: `localhost` y `127.0.0.1` son
-      # orígenes DISTINTOS para el browser, y el portal de desarrollo se abre
-      # con cualquiera de las dos (el link mágico que armamos para probar suele
-      # llevar 127.0.0.1). Con una sola, curl anda —no manda `Origin`— y el
-      # browser no: es el "anda por curl y no anda en el navegador" clásico, y
-      # se arreglaba a mano en cada alta, en los dos servicios.
+      # BOTH LOOPBACK SPELLINGS GO IN: `localhost` and `127.0.0.1` are
+      # DIFFERENT origins to the browser, and the dev portal opens with either
+      # one (the magic link we build for testing usually carries 127.0.0.1).
+      # With only one, curl works —it doesn't send `Origin`— and the browser
+      # doesn't: the classic "works over curl, doesn't work in the browser",
+      # and it used to get fixed by hand on every onboarding, in both services.
       - API_SERVER_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy,http://localhost:8090,http://127.0.0.1:8090
-    # LOS SECRETOS NO VIVEN EN data/, y es una cadena de escalada, no un gusto:
-    # `data/` es del agente, este archivo es el env_file de los DOS servicios, y
-    # con una variable como PYTHONPATH el agente ejecuta codigo suyo adentro de
-    # este contenedor —medido— y de ahi llega a politica/ y al cont-init que s6
-    # corre como root. Vive afuera, root:root 600, sin ningun montaje que lo
-    # exponga al agente.
+    # SECRETS DO NOT LIVE IN data/, and it's an escalation chain, not a
+    # preference: `data/` belongs to the agent, this file is the env_file for
+    # BOTH services, and with a variable like PYTHONPATH the agent runs its
+    # own code inside this container —measured— and from there reaches
+    # policy/ and the cont-init that s6 runs as root. It lives outside,
+    # root:root 600, with no mount that exposes it to the agent.
     env_file:
-      - ./secretos.env
+      - ./secrets.env
     deploy:
       resources:
         limits:
@@ -125,68 +128,72 @@ services:
           cpus: "2.0"
 
   portal-adapter:
-    image: nousresearch/hermes-agent:v2026.7.30   # ver nota de arriba antes de subirla
-    container_name: ${CLIENTE}-portal-adapter
+    image: nousresearch/hermes-agent:v2026.7.30   # see the note above before bumping this
+    container_name: ${CLIENT}-portal-adapter
     restart: unless-stopped
-    # EL CODIGO DEL ADAPTER NO SALE DE data/. `data/` es del agente (la tiene rw y
-    # adentro de su contenedor corre como root), asi que podia reescribir el
-    # archivo que este servicio ejecuta. Ahora viene de kit-adapter/, montada :ro.
+    # THE ADAPTER'S CODE DOES NOT COME OUT OF data/. `data/` belongs to the
+    # agent (it has it rw and inside its container it runs as root), so it
+    # could rewrite the file this service runs. Now it comes from
+    # kit-adapter/, mounted :ro.
     #
-    # QUE CIERRA Y QUE NO, para que nadie lea de mas: cierra que el agente elija
-    # DIRECTAMENTE el codigo del adapter, y que ese codigo corra como root (ver
-    # `user:`). NO cerraba, por si solo, el camino por el env_file: mientras los
-    # secretos vivieron en `data/.env` —del agente— un `PYTHONPATH=/opt/data/...`
-    # le hacia ejecutar codigo suyo ADENTRO de este contenedor igual, y desde ahi
-    # llegaba a `politica/`: la puerta y el `cont-init` que s6 corre como root en
-    # hermes. Medido con la imagen real. Por eso los secretos salieron de data/
-    # (ver `env_file`): hacen falta LAS DOS cosas, y ninguna sirve sola.
+    # WHAT THIS CLOSES AND WHAT IT DOESN'T, so nobody reads too much into it:
+    # it closes the path where the agent DIRECTLY picks the adapter's code,
+    # and where that code runs as root (see `user:`). It did NOT close, on its
+    # own, the env_file path: while secrets lived in `data/.env` —the agent's—
+    # a `PYTHONPATH=/opt/data/...` made it run its own code INSIDE this
+    # container all the same, and from there it reached `policy/`: the gate
+    # and the `cont-init` that s6 runs as root on hermes. Measured against the
+    # real image. That's why secrets moved out of data/ (see `env_file`):
+    # BOTH things are needed, and neither one works alone.
     entrypoint: ["python3", "/opt/kit/adapter/portal_adapter.py"]
-    # Y NO CORRE COMO ROOT. Verificado en el lab con el adapter real:
-    # portal-check 14/14, y escribe politica.json y capacidades/pedidos.jsonl
-    # igual (uid 10000 es el dueño de data/ y de politica/). De paso deja de
-    # sembrar archivos de root adentro de data/, que es lo que rompio el primer
-    # despliegue.
+    # AND IT DOES NOT RUN AS ROOT. Verified in the lab with the real adapter:
+    # portal-check 14/14, and it still writes policy.json and
+    # capabilities/requests.jsonl fine (uid 10000 owns data/ and policy/).
+    # As a side effect it stops seeding root-owned files inside data/, which
+    # is what broke the first deployment.
     user: "10000:10000"
     ports:
-      # El puerto del host lo resuelve `nuevo-agente.sh` (es el del gateway + 1);
-      # adentro del contenedor siempre es 8643.
-      - "127.0.0.1:${PUERTO_ADAPTER}:8643"
+      # The host port is resolved by `new-agent.sh` (it's the gateway's + 1);
+      # inside the container it is always 8643.
+      - "127.0.0.1:${ADAPTER_PORT}:8643"
     volumes:
       - ./data:/opt/data
-      # El adapter SÍ escribe: es quien recibe el clic del cliente en el portal.
-      - ./politica:/opt/politica
-      # Las mismas skills del kit: el adapter las lista en la pestaña de
-      # habilidades del portal, y sin este montaje desaparecerian de ahi.
+      # The adapter DOES write: it's the one that receives the client's click
+      # in the portal.
+      - ./policy:/opt/policy
+      # The same kit skills: the adapter lists them in the portal's skills
+      # tab, and without this mount they'd disappear from there.
       - ./kit-skills:/opt/kit/skills:ro
-      # El codigo del adapter, de SOLO LECTURA: es lo que este contenedor
-      # ejecuta, y no puede vivir en un lugar que el agente pueda escribir.
+      # The adapter's code, READ ONLY: it's what this container runs, and it
+      # can't live somewhere the agent can write to.
       - ./kit-adapter:/opt/kit/adapter:ro
-      # El config del agente, de SOLO LECTURA: el adapter lo LEE (el modelo por
-      # defecto, las skills apagadas, el preambulo) y no lo escribe nunca. Sin
-      # esta linea lo tenia rw por el montaje de ./data, y era el segundo camino
-      # para tocar algo que el motor lee con mas privilegio.
+      # The agent's config, READ ONLY: the adapter READS it (the default
+      # model, the disabled skills, the preamble) and never writes it.
+      # Without this line it had it rw through the ./data mount, and it was
+      # the second path to touch something the engine reads with more
+      # privilege.
       - ./data/config.yaml:/opt/data/config.yaml:ro
     environment:
       - TZ=America/Montevideo
-      # Las dos escrituras del loopback, por lo mismo que en el gateway: para el
-      # browser `localhost:8090` y `127.0.0.1:8090` son orígenes distintos, y la
-      # lista de los DOS servicios tiene que decir lo mismo o la mitad del
-      # portal funciona y la otra mitad no.
+      # Both loopback spellings, for the same reason as the gateway: to the
+      # browser `localhost:8090` and `127.0.0.1:8090` are different origins,
+      # and the list on BOTH services has to say the same thing or half the
+      # portal works and the other half doesn't.
       - PORTAL_CORS_ORIGINS=https://tuagente.uy,https://app.tuagente.uy,http://localhost:8090,http://127.0.0.1:8090
-      # El nombre que el cliente ve en su portal. Si falta, dice "Agente".
+      # The name the client sees in their portal. If missing, it says "Agente".
       - AGENT_NAME=${AGENT_NAME}
-    # LOS SECRETOS NO VIVEN EN data/, y es una cadena de escalada, no un gusto:
-    # `data/` es del agente, este archivo es el env_file de los DOS servicios, y
-    # con una variable como PYTHONPATH el agente ejecuta codigo suyo adentro de
-    # este contenedor —medido— y de ahi llega a politica/ y al cont-init que s6
-    # corre como root. Vive afuera, root:root 600, sin ningun montaje que lo
-    # exponga al agente.
+    # SECRETS DO NOT LIVE IN data/, and it's an escalation chain, not a
+    # preference: `data/` belongs to the agent, this file is the env_file for
+    # BOTH services, and with a variable like PYTHONPATH the agent runs its
+    # own code inside this container —measured— and from there reaches
+    # policy/ and the cont-init that s6 runs as root. It lives outside,
+    # root:root 600, with no mount that exposes it to the agent.
     env_file:
-      - ./secretos.env
+      - ./secrets.env
 
-# secretos.env, en la raíz del agente (nunca se commitea, root:root 600):
-#   API_SERVER_KEY=          openssl rand -hex 32, única por cliente
-#   OPENROUTER_API_KEY=      o la del proveedor que uses
-#   TELEGRAM_BOT_TOKEN=      de @BotFather
-#   TELEGRAM_ALLOWED_USERS=  ids autorizados; sin esto le escribe cualquiera
-#   SMTP_USER= / SMTP_APP_PASSWORD=   si manda mails
+# secrets.env, at the agent's root (never committed, root:root 600):
+#   API_SERVER_KEY=          openssl rand -hex 32, unique per client
+#   OPENROUTER_API_KEY=      or whichever provider's you use
+#   TELEGRAM_BOT_TOKEN=      from @BotFather
+#   TELEGRAM_ALLOWED_USERS=  authorized ids; without this anyone can write to it
+#   SMTP_USER= / SMTP_APP_PASSWORD=   if it sends mail

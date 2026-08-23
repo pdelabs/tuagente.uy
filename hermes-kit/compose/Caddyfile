@@ -1,34 +1,37 @@
-# La única puerta de la caja. Caddy saca y renueva los certificados solo.
+# The box's only door. Caddy issues and renews the certificates on its own.
 #
-# Dos hostnames en la misma IP porque el portal necesita DOS bases distintas
-# (endpoint y adapter) y montar servicios bajo un prefijo de path es pedirle a
-# Hermes algo que no prometió. Dos registros A a la misma IP y listo.
+# Two hostnames on the same IP because the portal needs TWO separate bases
+# (endpoint and adapter), and mounting services under a path prefix is asking
+# Hermes for something it never promised. Two A records to the same IP and
+# that's it.
 {
 	email {$EMAIL_TLS}
 }
 
-# ── El gateway de Hermes: chat, sesiones, jobs ────────────────────────────
-{$DOMINIO_API} {
+# ── The Hermes gateway: chat, sessions, jobs ──────────────────────────────
+{$API_DOMAIN} {
 	reverse_proxy hermes:8642 {
-		# EL CHAT ES SSE. Si el proxy junta bytes en un buffer, el cliente ve
-		# la respuesta entera de golpe al final, o no la ve. -1 = mandar cada
-		# escritura apenas pasa.
-		# Caddy lo detecta solo cuando el Content-Type es text/event-stream,
-		# pero acá va explícito: ya nos comimos dos bugs de streaming en el
-		# portal y no vale la pena depender de una heurística.
+		# THE CHAT IS SSE. If the proxy buffers bytes, the client sees the
+		# whole response at once at the end, or doesn't see it at all. -1 =
+		# send every write as soon as it happens.
+		# Caddy detects this on its own when Content-Type is
+		# text/event-stream, but it's explicit here anyway: we've already
+		# eaten two streaming bugs in the portal and it's not worth relying
+		# on a heuristic.
 		flush_interval -1
 
-		# Un job largo puede tardar. Sin esto, el proxy corta a los 30 s y el
-		# cliente ve un error donde en realidad el agente seguía trabajando.
+		# A long job can take a while. Without this, the proxy cuts off at
+		# 30 s and the client sees an error where the agent was actually
+		# still working.
 		transport http {
 			read_timeout 30m
 			write_timeout 30m
 		}
 	}
 
-	# CORS lo maneja Hermes con API_SERVER_CORS_ORIGINS. Si lo agregáramos acá
-	# también, el browser recibe el header DUPLICADO y rechaza todo — que se
-	# lee igual que "el server está caído".
+	# CORS is handled by Hermes with API_SERVER_CORS_ORIGINS. If we added it
+	# here too, the browser gets the header TWICE and rejects everything —
+	# which reads exactly like "the server is down."
 
 	header {
 		Strict-Transport-Security "max-age=31536000"
@@ -37,15 +40,15 @@
 	}
 
 	log {
-		output file /data/acceso-api.log {
+		output file /data/access-api.log {
 			roll_size 10mb
 			roll_keep 5
 		}
 	}
 }
 
-# ── El adapter: tickets, aprobaciones, entregas, archivos, conexiones ──────
-{$DOMINIO_PORTAL} {
+# ── The adapter: tickets, approvals, deliverables, files, connections ─────
+{$PORTAL_DOMAIN} {
 	reverse_proxy portal-adapter:8643 {
 		flush_interval -1
 		transport http {
@@ -54,7 +57,7 @@
 		}
 	}
 
-	# El cliente sube archivos por acá.
+	# The client uploads files through here.
 	request_body {
 		max_size 100MB
 	}
@@ -66,7 +69,7 @@
 	}
 
 	log {
-		output file /data/acceso-portal.log {
+		output file /data/access-portal.log {
 			roll_size 10mb
 			roll_keep 5
 		}
