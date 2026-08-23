@@ -8,6 +8,7 @@
 //
 // Contract (adapter ≥0.21): GET {adapter}/portal/inventory →
 //   { skills: [{ name, summary, source, category?, editable? }] }
+//   (it also returns `engine_plugins` and `mcp`; this page draws neither)
 //   GET  /portal/skills/{name} → { name, content }   (ours only)
 //   POST /portal/skills/{name} { content }           (same)
 //
@@ -259,7 +260,7 @@ export default function SkillsPage() {
     setLoading(true);
     getInventory(cfg)
       .then((r) => {
-        setData(r && typeof r === "object" ? r : { skills: [], plugins: [], mcp: [] });
+        setData(r && typeof r === "object" ? r : { skills: [], engine_plugins: [], mcp: [] });
         setErr(null);
         setLastUpdated(new Date());
       })

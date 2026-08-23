@@ -828,7 +828,9 @@ export type InventoryItem = {
 };
 export type Inventory = {
   skills: InventoryItem[];
-  plugins: { name: string; summary: string }[];
+  /** The ENGINE's plugins (`hermes plugins list`), which are not the kit's
+   *  plugins -- hence the name (adapter 0.40+, `plugins` before that). */
+  engine_plugins: { name: string; summary: string }[];
   mcp: { name: string; detail: string }[];
 };
 export const getInventory = (c: PortalConfig) =>

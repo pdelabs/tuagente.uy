@@ -23,7 +23,7 @@ from kanban import KanbanStore
 from rooms import RoomStore
 from workspace import MAX_FILE_BYTES, WorkspaceStore
 
-VERSION = "0.39.0"
+VERSION = "0.40.0"
 # The gateway answers the session stream WITHOUT CORS headers (it only sends
 # them on the preflight), so the browser discards the response. We proxy it.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -394,11 +394,18 @@ def manifest():
     }
 
 
-# ---------- inventory (skills/plugins/mcp actually installed) ----------
+# ---------- inventory (skills/engine plugins/mcp actually installed) ----------
 # Sources: the SKILL.md files on disk (the local ones, always fresh), the
 # snapshot Hermes builds for the prompt (carries description and category for
 # the bundled ones), `plugins list --json`, and `mcp list` (no --json, the
 # text gets parsed).
+#
+# THE WORD "PLUGIN" IS THE KIT'S NOW, so what the ENGINE calls a plugin travels
+# as `engine_plugins` (adapter 0.40+). They are two different things: a kit
+# plugin is a folder in hermes-kit/plugins/ with a plugin.json we wrote
+# (notes/plugin-system-plan.md); an engine plugin is whatever `hermes plugins
+# list` reports. /portal/plugins belongs to the kit's registry, so the
+# inventory cannot keep the bare name for the engine's.
 
 SKILLS_DIR = DATA / "skills"
 SKILLS_SNAPSHOT = DATA / ".skills_prompt_snapshot.json"
@@ -627,15 +634,17 @@ def inventory():
     except (OSError, ValueError):
         pass
 
-    plugins = []
+    engine_plugins = []
     try:
         raw = subprocess.run(["hermes", "plugins", "list", "--json"],
                              capture_output=True, text=True, timeout=30)
         data = json.loads(raw.stdout or "[]")
+        # `plugins` here is the ENGINE's own JSON key, not ours.
         items = data if isinstance(data, list) else data.get("plugins", [])
         for p in items:
             if str(p.get("status", "")).lower() == "enabled" or p.get("enabled"):
-                plugins.append({"name": p.get("name"), "summary": p.get("description") or ""})
+                engine_plugins.append(
+                    {"name": p.get("name"), "summary": p.get("description") or ""})
     except (OSError, ValueError, subprocess.SubprocessError):
         pass
 
@@ -652,7 +661,7 @@ def inventory():
     except (OSError, subprocess.SubprocessError):
         pass
 
-    return {"skills": skills, "plugins": plugins, "mcp": mcp}
+    return {"skills": skills, "engine_plugins": engine_plugins, "mcp": mcp}
 
 
 # ---------- connections (which of the client's systems it's plugged into) ----------
