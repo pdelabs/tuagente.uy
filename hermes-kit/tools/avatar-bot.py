@@ -13,21 +13,31 @@ Preparacion (una vez):
     python3 -m venv ~/.tuagente-tools && ~/.tuagente-tools/bin/pip install telethon
     # y guardar {"api_id": ..., "api_hash": "..."} en
     # tuagente.uy/.secrets/telegram_api.json
+    # para dibujar solo (sin --png): cd hermes-kit/tools && npm install
 
-Uso:
+Uso — con un PNG ya capturado (el del portal):
     ~/.tuagente-tools/bin/python3 avatar-bot.py \
         --png /ruta/agente/data/bot_avatar.png \
         --env /ruta/agente/data/.env      # de aca sale TELEGRAM_BOT_TOKEN
+
+Uso — dibujando solo, sin portal ni browser (dibujar-agentito.mjs):
+    ~/.tuagente-tools/bin/python3 avatar-bot.py \
+        --rol asistente --agente /ruta/agente \
+        --env /ruta/agente/data/.env
+    # --rol solo: la cara del catalogo. --agente ademas: el bautizo del cliente.
 """
 import argparse
 import asyncio
 import json
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 SECRETS = Path.home() / "Desktop/Luis/Projects/tuagente.uy/.secrets"
 API_JSON = SECRETS / "telegram_api.json"
+DIBUJAR = Path(__file__).resolve().parent / "dibujar-agentito.mjs"
 
 
 def token_de_env(ruta):
@@ -78,9 +88,22 @@ def _tiene_alfa(png: Path) -> bool:
         return False
 
 
+def dibujar(rol, agente, destino):
+    """Draw the face with the headless tool: the telegram preset already lands
+    on 512px with a solid background, so the alpha warning below never fires."""
+    cmd = ["node", str(DIBUJAR), "--para", "telegram", "--png", str(destino)]
+    if rol:
+        cmd += ["--rol", rol]
+    if agente:
+        cmd += ["--agente", agente]
+    subprocess.run(cmd, check=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--png", required=True)
+    ap.add_argument("--png", help="PNG ya listo (el capturado por el portal)")
+    ap.add_argument("--rol", help="dibuja la cara de ese rol con dibujar-agentito.mjs")
+    ap.add_argument("--agente", help="ruta del agente: usa el bautizo de politica/roles/identidades.json")
     ap.add_argument("--env", required=True, help=".env del agente (para el token)")
     args = ap.parse_args()
 
@@ -88,7 +111,15 @@ def main():
         sys.exit(f"faltan las credenciales de my.telegram.org en {API_JSON} "
                  '(formato: {"api_id": 123, "api_hash": "..."})')
     creds = json.loads(API_JSON.read_text())
-    png = Path(args.png)
+
+    if args.png:
+        png = Path(args.png)
+    elif args.rol or args.agente:
+        png = Path(tempfile.mkdtemp()) / "agentito.png"
+        dibujar(args.rol, args.agente, png)
+    else:
+        sys.exit("falta la cara: --png <archivo>, o --rol/--agente para dibujarla solo")
+
     if _tiene_alfa(png):
         print("AVISO: el PNG tiene transparencia. Telegram la aplasta contra "
               "NEGRO en las fotos de perfil — la cara va a quedar recortada "

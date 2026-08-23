@@ -10,3 +10,6 @@ respaldos-soul/
 # un agente concreto, no del kit.
 respaldos-config/
 dist/
+
+# Deps of the drawing CLI (tools/dibujar-agentito.mjs); npm install brings them.
+tools/node_modules/

@@ -402,3 +402,26 @@ PY
   echo "Instalalas con el catálogo en la mano (capacidades/catalogo.json)."
   echo "=============================================================="
 fi
+
+# THE BOT PHOTO, offered and never automatic: uploading a profile photo talks
+# to Telegram AS the client's bot, and that is an outward-facing move the
+# operator triggers on purpose. If the agent has no bot token there is nothing
+# to offer, so the hint only prints when one is set.
+TIENE_TOKEN=0
+if [[ "$MODO" == local ]]; then
+  grep -qE '^TELEGRAM_BOT_TOKEN=.+' "$DIR/secretos.env" 2>/dev/null && TIENE_TOKEN=1
+else
+  ssh "$HOST" "grep -qE '^TELEGRAM_BOT_TOKEN=.+' /opt/agentes/$SLUG/secretos.env" 2>/dev/null && TIENE_TOKEN=1
+fi
+if [[ "$TIENE_TOKEN" == 1 ]]; then
+  echo
+  echo "El bot de Telegram puede llevar la cara de ${NOMBRE:-$ROL} (a mano, cuando quieras):"
+  if [[ "$MODO" == local ]]; then
+    echo "  ~/.tuagente-tools/bin/python3 $KIT/tools/avatar-bot.py \\"
+    echo "      --rol $ROL --agente $DIR --env $DIR/data/.env"
+  else
+    echo "  ~/.tuagente-tools/bin/python3 $KIT/tools/avatar-bot.py --rol $ROL --env <.env con el token>"
+    echo "  (para la cara del bautizo hace falta el politica/roles/identidades.json del"
+    echo "   agente: traelo con scp y pasá esa carpeta con --agente)"
+  fi
+fi
