@@ -8,9 +8,10 @@ the command line the way an operator runs it, because the exit code and the
 message ARE the feature: `roles/build_role.py` and `install.sh` both stop on
 this and the person reading the output has to know which file to open.
 
-The last two classes go at the resolver directly (`plugin_registry`), which is
-where a ROLE's plugin list is turned into skills — the registry can be perfect
-and the role still ask for a plugin that is not there.
+The classes after `BrokenRegistry` go at the resolver directly
+(`plugin_registry`), which is where a ROLE's declaration is turned into skills —
+the registry can be perfect and the role still ask for a plugin that is not
+there, or ask for a plugin's skill by name instead of declaring the plugin.
 """
 import json
 import subprocess
@@ -271,6 +272,49 @@ class RoleResolution(unittest.TestCase):
             write(tmp, "beta", manifest("beta", system=True))
             got = plugin_registry.role_skills(["alpha"], "accounting", Path(tmp))
             self.assertEqual(list(got), ["alpha"])
+
+
+class RoleSkillsListIsKitSkillsOnly(unittest.TestCase):
+    """A role asks for a plugin's skill BY DECLARING THE PLUGIN, never by name.
+
+    The role-side half of the one-source rule. Both readers of a role.json go
+    through it, because they used to disagree: `skills_split.py` accepted a
+    plugin-owned name under `skills:` -- and accepting it made the skill look
+    declared by every role, which turned it SHARED and put it in kit-skills/ on
+    every team agent -- while `build_role.py` refused the same file saying the
+    skill "does not exist in skills/", which is the one place it was never
+    going to be.
+    """
+
+    def test_a_kit_skill_under_skills_is_fine(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "alpha", manifest("alpha"))
+            kit_skill(tmp, "quotes")
+            plugin_registry.check_kit_skills(["quotes"], "sales", Path(tmp))
+
+    def test_a_plugin_skill_under_skills_stops_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "artifact", manifest("artifact", system=True))
+            with self.assertRaises(SystemExit) as raised:
+                plugin_registry.check_kit_skills(["artifact"], "support", Path(tmp))
+            message = str(raised.exception)
+            self.assertIn("support", message)
+            self.assertIn("plugins/artifact/", message)
+            self.assertIn("one source", message)
+
+    def test_declaring_it_on_both_sides_is_caught_too(self):
+        """`skills: [approval]` AND `plugins: [approval]` is the same mistake."""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "approval", manifest("approval", system=True))
+            with self.assertRaises(SystemExit) as raised:
+                plugin_registry.check_kit_skills(["approval"], "support", Path(tmp))
+            self.assertIn("plugins/approval/", str(raised.exception))
+
+    def test_the_kits_own_roles_pass_it(self):
+        for role_id in ("marketing", "support", "sales", "accounting", "assistant"):
+            cfg = json.loads(
+                (KIT / "roles" / role_id / "role.json").read_text(encoding="utf-8"))
+            plugin_registry.check_kit_skills(cfg.get("skills") or [], role_id, KIT)
 
 
 SYSTEM = ["approval", "artifact", "deliverable", "flow", "kanban"]

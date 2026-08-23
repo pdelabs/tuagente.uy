@@ -185,6 +185,7 @@ def declared_by_role() -> dict[str, set[str]]:
                     "fix whichever one is wrong before installing anything."
                 )
         built = set(manifest.get("skills") or [])
+        plugin_registry.check_kit_skills(sorted(built), role_id, KIT)
         missing = sorted(built - existing)
         if missing:
             raise SystemExit(f"{role_id} declares skills that do not exist in skills/: {missing}")

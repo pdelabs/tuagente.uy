@@ -255,6 +255,35 @@ def skill_sources(root: Path = KIT) -> dict[str, Path]:
     return dict(sorted(out.items()))
 
 
+def check_kit_skills(names: list[str], owner: str, root: Path = KIT) -> None:
+    """A role's `skills:` list may only name skills that live in `skills/`.
+
+    THE OTHER HALF OF THE ONE-SOURCE RULE. `_check_skill_slots` stops a skill
+    name from having two homes in the REGISTRY; this stops a ROLE from asking
+    for a plugin's skill by name instead of declaring the plugin.
+
+    THE TWO READERS OF A role.json USED TO DISAGREE ABOUT IT. `skills_split.py`
+    checked the name against every skill in the kit, plugin-owned ones included,
+    so `skills: ["artifact"]` passed -- and passing CHANGED THE SPLIT: with
+    support and assistant declaring artifact it turned SHARED, and install.sh
+    wrote it into kit-skills/ on every team agent, which is the fat agent the
+    team pivot exists to replace. `build_role.py` refused the same file, with
+    "skill 'artifact' does not exist in skills/" -- pointing at the one place it
+    was never going to be. Install said yes, build said no, and the message was
+    wrong. One rule, one message, both sides.
+    """
+    owned = {name: data["id"]
+             for data in registry(root).values()
+             for name in data["surfaces"].get("skills") or []}
+    misplaced = [n for n in names if n in owned]
+    if misplaced:
+        raise SystemExit(
+            f"{owner}: {misplaced} listed under `skills`, but they ship inside a plugin "
+            f"({', '.join(f'{n} -> plugins/{owned[n]}/' for n in misplaced)}). A skill has "
+            "one source: take the name out of `skills` and declare the plugin under "
+            "`plugins`, in roles/catalog.json and in the role manifest.")
+
+
 def role_skills(ids: list[str], owner: str, root: Path = KIT) -> dict[str, Path]:
     """The skills a role's plugin list contributes, in declaration order.
 

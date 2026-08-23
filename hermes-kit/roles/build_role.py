@@ -138,6 +138,7 @@ def skill_sources(cfg: dict, role: str) -> dict[str, Path]:
     sorted (see write_role_json).
     """
     sources = plugin_registry.role_skills(cfg.get("plugins", []), role, KIT)
+    plugin_registry.check_kit_skills(cfg.get("skills", []), role, KIT)
     for name in cfg.get("skills", []):
         sources[name] = KIT / "skills" / name
     return sources
