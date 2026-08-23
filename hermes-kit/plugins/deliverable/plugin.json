@@ -1,0 +1,25 @@
+{
+  "id": "deliverable",
+  "version": "1.0.0",
+  "description": "Whatever the client is meant to read gets saved with a name, a date and a reference to cite instead of being dropped into the chat; Files is where it lands",
+  "client_copy": "Lo que te arma queda guardado con nombre y fecha en tus Archivos, siempre en el mismo lugar.",
+  "_comment": [
+    "IT DEPENDS ON kanban because a deliverable is the OUTPUT of a ticket: the",
+    "reference the skill returns is what the ticket cites when it closes, and",
+    "the Files page reads it back next to the work that produced it."
+  ],
+  "requires": {
+    "plugins": [
+      "kanban"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "deliverable"
+    ],
+    "tab": {
+      "builtin": "files"
+    }
+  },
+  "system": true
+}

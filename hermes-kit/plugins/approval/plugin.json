@@ -1,0 +1,30 @@
+{
+  "id": "approval",
+  "version": "1.0.0",
+  "description": "Nothing sensitive happens without the client's yes: the skill that gives the request a stable shape, the Approvals page it lands on, and the ticket it blocks until an answer comes back",
+  "client_copy": "Antes de hacer algo que te compromete —mandar un mail, publicar, gastar— te lo pide y espera tu sí.",
+  "_comment": [
+    "IT DEPENDS ON kanban BECAUSE THE SKILL SAYS SO: the request is not a",
+    "message, it is a block on the ticket the agent is working. An approval",
+    "with no board to sit on is a question nobody ever answers.",
+    "",
+    "The gate hook that enforces the rule lives in policy/hooks/gate.py and does",
+    "NOT move here: policy/ belongs to the host, mounted read only into the",
+    "container, and a plugin never owns policy (notes/plugin-system-plan.md,",
+    "'harness, not plugins')."
+  ],
+  "requires": {
+    "plugins": [
+      "kanban"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "approval"
+    ],
+    "tab": {
+      "builtin": "approvals"
+    }
+  },
+  "system": true
+}

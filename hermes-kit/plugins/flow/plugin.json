@@ -1,0 +1,35 @@
+{
+  "id": "flow",
+  "version": "1.0.0",
+  "description": "The only way to leave work running on its own: a named client flow with a trigger and results, and the cron that actually delivers it",
+  "client_copy": "Lo que se repite queda armado como un flujo y anda solo.",
+  "_comment": [
+    "IT DEPENDS ON kanban AND approval. Every run lands as a ticket, and a flow",
+    "that acts on the client's behalf goes through the approval gate like",
+    "anything else -- a scheduled job is not a licence to skip the yes.",
+    "",
+    "THE ENGINE SURFACE IS REAL AND IT DOES NOT MOVE IN THIS PHASE. It is",
+    "policy/plugins/promises/ (plugin.yaml + promises.py, a transform_llm_output",
+    "hook), the one place in the kit that already uses the ENGINE's own plugin",
+    "system. Bringing it in means changing where the compose mounts it --",
+    "policy/plugins is mounted at /opt/data/plugins read only and config.yaml's",
+    "`plugins.enabled` names it -- and phase 2 does not touch the install",
+    "layout. It migrates in phase 3, with the agent-side loader."
+  ],
+  "requires": {
+    "plugins": [
+      "kanban",
+      "approval"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "flow"
+    ],
+    "engine": null,
+    "tab": {
+      "builtin": "flows"
+    }
+  },
+  "system": true
+}

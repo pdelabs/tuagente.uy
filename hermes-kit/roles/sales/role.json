@@ -28,11 +28,13 @@
   },
   "skills": [
     "quotes",
+    "capability"
+  ],
+  "plugins": [
     "approval",
     "deliverable",
     "artifact",
-    "flow",
-    "capability"
+    "flow"
   ],
   "capabilities": [],
   "connections": [],

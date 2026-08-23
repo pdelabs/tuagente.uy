@@ -1,0 +1,35 @@
+{
+  "id": "kanban",
+  "version": "1.0.0",
+  "description": "The ticket store the other system plugins write into: the engine's own kanban, the Pipeline and Tasks pages over it, and the dispatcher that turns a client request into a ticket",
+  "client_copy": "El tablero donde ves en qué está trabajando tu equipo y cómo va cada pedido.",
+  "_comment": [
+    "THE ROOT OF THE SYSTEM GRAPH, AND THE ONE PLUGIN WITH NO SKILLS SURFACE.",
+    "There is no SKILL.md to ship because there is nothing to teach: the store",
+    "is the ENGINE's (the `kanban` toolset, `hermes kanban ...`, the sqlite the",
+    "adapter reads with PRAGMA query_only), and the screens are the portal's own",
+    "pages against /portal/boards and /portal/tickets, which the adapter has",
+    "served since long before anybody said the word plugin.",
+    "",
+    "SO WHAT THIS MANIFEST IS FOR: the dependency. approval, deliverable,",
+    "artifact and flow all write into a TICKET -- the approval skill tells the",
+    "agent to ask for it IN the ticket it is working -- so the graph says it out",
+    "loud and the build refuses a role that carries one of them without this.",
+    "",
+    "`adapter` stays absent in phase 2 on purpose: declaring it would mean",
+    "moving adapter/kanban.py into this folder, and this phase does not touch",
+    "the install layout (notes/plugin-system-plan.md). Manifests over the code",
+    "that is already there, nothing else."
+  ],
+  "requires": {
+    "toolsets": [
+      "kanban"
+    ]
+  },
+  "surfaces": {
+    "tab": {
+      "builtin": "pipeline"
+    }
+  },
+  "system": true
+}

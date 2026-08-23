@@ -36,10 +36,12 @@
     }
   },
   "skills": [
+    "capability"
+  ],
+  "plugins": [
     "approval",
     "deliverable",
-    "flow",
-    "capability"
+    "flow"
   ],
   "capabilities": [
     "web-search",

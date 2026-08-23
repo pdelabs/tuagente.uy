@@ -27,14 +27,14 @@
     }
   },
   "skills": [
-    "approval",
-    "deliverable",
-    "artifact",
-    "flow",
     "capability"
   ],
   "plugins": [
-    "invoices-to-data"
+    "invoices-to-data",
+    "approval",
+    "deliverable",
+    "artifact",
+    "flow"
   ],
   "capabilities": [],
   "connections": [],

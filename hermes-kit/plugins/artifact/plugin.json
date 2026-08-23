@@ -1,0 +1,31 @@
+{
+  "id": "artifact",
+  "version": "1.0.0",
+  "description": "Data that is understood by looking at it: a self-contained HTML visualization the portal renders and the chat can cite",
+  "client_copy": "Los gráficos, paneles y comparaciones que se entienden de una mirada, en Artefactos.",
+  "_comment": [
+    "IT DEPENDS ON kanban for the same reason deliverable does: an artifact is",
+    "produced BY a ticket and cited FROM it.",
+    "",
+    "NOT EVERY ROLE DECLARES IT, and that asymmetry is deliberate and older than",
+    "this plugin: marketing, sales and accounting have things worth drawing;",
+    "support and assistant do not. `system: true` ships the FOLDER to every",
+    "agent so anything may depend on it -- it does not put the skill in every",
+    "role's index. roles/skills_split.py is what governs exposure, and it still",
+    "calls this one role-only."
+  ],
+  "requires": {
+    "plugins": [
+      "kanban"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "artifact"
+    ],
+    "tab": {
+      "builtin": "artifacts"
+    }
+  },
+  "system": true
+}

@@ -32,11 +32,13 @@
     "brand-kit",
     "social-content",
     "post-image",
+    "capability"
+  ],
+  "plugins": [
     "deliverable",
     "artifact",
     "approval",
-    "flow",
-    "capability"
+    "flow"
   ],
   "capabilities": [
     "social-package"

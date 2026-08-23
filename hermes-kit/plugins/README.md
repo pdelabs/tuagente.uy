@@ -39,11 +39,29 @@ before adding a surface this registry has never shipped.
 | `requires.connections` | connection ids (`connections/`); a plugin never owns credentials |
 | `requires.toolsets` | engine toolsets the agent needs on |
 | `surfaces` | every one optional; a migrated leaf skill declares `skills` and nothing else |
-| `system` | `true` = installed on every agent, so anyone may depend on it |
+| `system` | `true` = the FOLDER ships to every agent, so anyone may depend on it |
 
 `requires` sub-lists and `surfaces` entries may be left out; unknown keys are a
 hard error, like everywhere else in the kit's closed catalogs. `_comment` (a
 string or a list of strings) is allowed and ignored.
+
+### `system: true` ships the folder, not the skill
+
+The five defaults — `kanban`, `approval`, `deliverable`, `artifact`, `flow` —
+are on every agent, which is what lets any client plugin depend on them without
+asking whether the client bought them. That is a statement about the FOLDER.
+
+It says nothing about which roles see the skills inside. Exposure is still
+whatever each role declares in `roles/catalog.json` and `roles/<id>/role.json`,
+computed by `roles/skills_split.py`, and it is not uniform: `artifact` is
+declared by marketing, sales and accounting and not by support or assistant, so
+it is a role-only skill and stays one. A system plugin whose skill was suddenly
+in every role's index would put the cost back where the team pivot took it
+from — every skill's description is loaded on every request.
+
+`kanban` is the extreme case: it has no skills surface at all. Its store is the
+engine's and its screens are the portal's; the manifest exists so the four that
+write into a ticket can say they need it.
 
 ### The tab surface has two shapes
 
@@ -66,7 +84,7 @@ that has nothing to do with plugins.
 
 ## Where the files actually land
 
-**Phase 1 — today — the plugin folder is repo-side packaging only.** Nothing
+**Through phase 2 the plugin folder is repo-side packaging only.** Nothing
 changed inside the container: at dist-assembly time a plugin's skills are
 flattened back into the layout the agent has always had, so
 `plugins/transcribe/skills/transcribe/` installs at `/opt/kit/skills/transcribe/`

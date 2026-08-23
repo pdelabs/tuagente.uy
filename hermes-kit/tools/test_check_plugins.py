@@ -273,20 +273,57 @@ class RoleResolution(unittest.TestCase):
             self.assertEqual(list(got), ["alpha"])
 
 
-class TheKitsOwnRegistry(unittest.TestCase):
-    """The pilots of phase 1, and the flattening the rest of the kit relies on."""
+SYSTEM = ["approval", "artifact", "deliverable", "flow", "kanban"]
+CLIENT = ["invoices-to-data", "transcribe"]
 
-    def test_the_two_pilots_are_there_with_a_skills_surface_only(self):
+
+class TheKitsOwnRegistry(unittest.TestCase):
+    """The five system plugins of phase 2, the two pilots of phase 1, and the
+    flattening the rest of the kit relies on."""
+
+    def test_the_registry_is_the_five_defaults_plus_the_two_pilots(self):
         plugins = plugin_registry.registry(KIT)
-        self.assertEqual(sorted(plugins), ["invoices-to-data", "transcribe"])
-        for pid, data in plugins.items():
-            self.assertEqual(data["surfaces"], {"skills": [pid]})
-            self.assertFalse(data["system"])
-            self.assertEqual(data["requires"], {})
+        self.assertEqual(sorted(plugins), sorted(SYSTEM + CLIENT))
+        for pid in SYSTEM:
+            self.assertTrue(plugins[pid]["system"], pid)
+        for pid in CLIENT:
+            self.assertFalse(plugins[pid]["system"], pid)
+            self.assertEqual(plugins[pid]["surfaces"], {"skills": [pid]})
+            self.assertEqual(plugins[pid]["requires"], {})
+
+    def test_the_system_graph_is_the_one_the_plan_drew(self):
+        """kanban is the root and everything else hangs off it."""
+        plugins = plugin_registry.registry(KIT)
+        needs = {pid: plugins[pid]["requires"].get("plugins", []) for pid in SYSTEM}
+        self.assertEqual(needs, {
+            "kanban": [],
+            "approval": ["kanban"],
+            "deliverable": ["kanban"],
+            "artifact": ["kanban"],
+            "flow": ["kanban", "approval"],
+        })
+
+    def test_kanban_carries_no_skill_and_says_why(self):
+        """The store is the engine's; the manifest exists for the dependency."""
+        kanban = plugin_registry.registry(KIT)["kanban"]
+        self.assertNotIn("skills", kanban["surfaces"])
+        self.assertEqual(kanban["surfaces"]["tab"], {"builtin": "pipeline"})
+        self.assertTrue(kanban["_comment"])
+
+    def test_every_system_plugin_names_a_portal_page_that_already_exists(self):
+        plugins = plugin_registry.registry(KIT)
+        self.assertEqual({pid: plugins[pid]["surfaces"]["tab"] for pid in SYSTEM}, {
+            "kanban": {"builtin": "pipeline"},
+            "approval": {"builtin": "approvals"},
+            "deliverable": {"builtin": "files"},
+            "artifact": {"builtin": "artifacts"},
+            "flow": {"builtin": "flows"},
+        })
 
     def test_their_skills_resolve_to_the_directory_that_holds_the_skill_md(self):
         sources = plugin_registry.skill_sources(KIT)
-        self.assertEqual(sorted(sources), ["invoices-to-data", "transcribe"])
+        # kanban is the one with nothing to ship.
+        self.assertEqual(sorted(sources), sorted(set(SYSTEM + CLIENT) - {"kanban"}))
         for name, where in sources.items():
             self.assertEqual(where, KIT / "plugins" / name / "skills" / name)
             self.assertTrue((where / "SKILL.md").is_file())
@@ -297,17 +334,24 @@ class TheKitsOwnRegistry(unittest.TestCase):
         import skills_split
         dirs = skills_split.skill_dirs()
         self.assertEqual(dirs["transcribe"], KIT / "plugins/transcribe/skills/transcribe")
-        self.assertEqual(dirs["approval"], KIT / "skills/approval")
+        self.assertEqual(dirs["approval"], KIT / "plugins/approval/skills/approval")
+        self.assertEqual(dirs["capability"], KIT / "skills/capability")
         self.assertEqual(len(dirs), len(set(dirs)))
 
 
 class FlattenedRoleJson(unittest.TestCase):
     """What the distribution's role.json says vs what its skills/ holds.
 
-    Phase 1 ships no `plugins` key to the agent, so `roles/build_role.py`
-    folds the resolved plugins back into `skills`. The two have to agree: a
-    manifest that lists fewer skills than the directory holds is an agent
-    whose role.json stopped describing it, and the build said nothing.
+    Nothing on the agent knows what a plugin is until phase 3, so
+    `roles/build_role.py` folds the resolved plugins back into `skills`. The two
+    have to agree: a manifest that lists fewer skills than the directory holds
+    is an agent whose role.json stopped describing it, and the build said
+    nothing.
+
+    AND THE LIST IS SORTED. Before phase 2 its order was wherever each name
+    happened to be written, so moving a skill into a plugin re-ordered it and
+    every future move would read as a change to the distribution. Nothing
+    consumes the order, so it is canonical.
     """
 
     def setUp(self):
@@ -332,10 +376,19 @@ class FlattenedRoleJson(unittest.TestCase):
 
     def test_the_plugins_key_never_reaches_the_agent(self):
         flat = self.flatten(
-            {"id": "accounting", "skills": ["approval"], "plugins": ["invoices-to-data"]},
-            ["invoices-to-data", "approval"])
+            {"id": "accounting", "skills": ["quotes"], "plugins": ["invoices-to-data"]},
+            ["invoices-to-data", "quotes"])
         self.assertNotIn("plugins", flat)
-        self.assertEqual(flat["skills"], ["invoices-to-data", "approval"])
+        self.assertEqual(flat["skills"], ["invoices-to-data", "quotes"])
+
+    def test_the_flattened_list_is_sorted_whoever_ships_each_skill(self):
+        """Resolution order is plugins first; what SHIPS is alphabetical."""
+        flat = self.flatten(
+            {"id": "marketing", "skills": ["brand-kit", "capability"],
+             "plugins": ["deliverable", "approval"]},
+            ["deliverable", "approval", "brand-kit", "capability"])
+        self.assertEqual(flat["skills"],
+                         ["approval", "brand-kit", "capability", "deliverable"])
 
     def test_a_role_whose_skills_all_come_from_plugins_still_lists_them(self):
         """No `skills` key to fold into is not a reason to ship none."""

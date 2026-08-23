@@ -133,8 +133,9 @@ def rewrite_kit_paths(dest: Path, role: str, packed: set[str]) -> None:
 def skill_sources(cfg: dict, role: str) -> dict[str, Path]:
     """Every skill this role ships -> where its files are in the repo.
 
-    The plugins first and the kit skills after, which is also the order the
-    distribution's role.json lists them in.
+    The plugins first and the kit skills after. That is a resolution order, not
+    a statement about the role: what the distribution's role.json LISTS is
+    sorted (see write_role_json).
     """
     sources = plugin_registry.role_skills(cfg.get("plugins", []), role, KIT)
     for name in cfg.get("skills", []):
@@ -160,6 +161,16 @@ def write_role_json(role_dir: Path, dest: Path, sources: dict[str, Path]) -> Non
     The distribution is today's container layout, and today's container has no
     /opt/plugins. A role that declares no plugins is copied byte for byte, so
     the transition cannot move a single distribution it does not have to.
+
+    THE FLATTENED LIST IS SORTED, and that is a decision, not tidiness. Before
+    phase 2 the order was an accident of where each name happened to be
+    written: marketing said deliverable, artifact, approval and support said
+    approval, deliverable, so no two roles even agreed with each other. Moving
+    a skill into a plugin re-ordered it, which made every future move look like
+    a change to the distribution and buried the ones that are. Nothing reads
+    this order -- the agent indexes the skills/ DIRECTORY, and every consumer of
+    role.json reads `identity` or compares sets -- so it is free to be
+    canonical, and canonical is what stops the question from coming back.
     """
     source = role_dir / "role.json"
     cfg = json.loads(source.read_text(encoding="utf-8"))
@@ -172,7 +183,7 @@ def write_role_json(role_dir: Path, dest: Path, sources: dict[str, Path]) -> Non
     # while skills/ held the files -- the manifest and the directory
     # disagreeing, with the build exiting 0.
     flat = {k: v for k, v in cfg.items() if k != "plugins"}
-    flat["skills"] = list(sources)
+    flat["skills"] = sorted(sources)
     (dest / "role.json").write_text(
         json.dumps(flat, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
