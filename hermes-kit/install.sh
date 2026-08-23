@@ -146,14 +146,9 @@ fi
 while IFS= read -r f; do
   FILES+=("policy/hooks/$(basename "$f"):$POLICY/hooks/$(basename "$f")")
 done < <(find "$KIT/policy/hooks" -type f -name "*.py" ! -path "*/__pycache__/*" | sort)
-# The engine's plugins, same story: the whole folder, with its plugin.yaml.
-# They go to policy/ and NOT to data/plugins/ —which is where the engine looks
-# for them— because data/ belongs to the agent: the compose mounts
-# policy/plugins on top, read-only, so the promises guard can't be taken off.
-while IFS= read -r f; do
-  rel="${f#"$KIT"/policy/plugins/}"      # promises/promises.py
-  FILES+=("policy/plugins/$rel:$POLICY/plugins/$rel")
-done < <(find "$KIT/policy/plugins" -type f \( -name "*.py" -o -name "*.yaml" \) ! -path "*/__pycache__/*" | sort)
+# (The engine's plugins used to be read from the kit's own policy/plugins/ right
+# here. They are a plugin's `engine` surface now and travel with the registry,
+# further down -- same destination, different source.)
 for c in "$KIT"/connections/*/tools.json; do
   [[ -f "$c" ]] || continue
   FILES+=("connections/$(basename "$(dirname "$c")")/tools.json:$POLICY/tools/$(basename "$(dirname "$c")").json")
@@ -265,6 +260,34 @@ for pid in "${PLUGIN_IDS[@]}"; do
     FILES+=("plugins/$rel:$AGENT/plugins/$rel")
   done < <(find "$KIT/plugins/$pid" -type f \
              ! -path "*/evals/*" ! -path "*/__pycache__/*" ! -name "*.pyc" | sort)
+done
+
+# THE ENGINE SURFACE, WHICH IS THE ONE THING A PLUGIN OWNS THAT DOES NOT LIVE
+# UNDER ITS OWN ROOF ON THE AGENT. `plugins/flow/engine/promises/` is a plugin of
+# the ENGINE's -- a plugin.yaml plus its hook --, and the engine reads those from
+# HERMES_HOME/plugins, i.e. inside data/, which belongs to the agent. So it is
+# copied to policy/plugins/<name>/, which the compose mounts :ro on top of
+# /opt/data/plugins: a guardrail the guarded can rewrite is not a guardrail.
+#
+# THE DESTINATION IS BYTE FOR BYTE WHAT IT ALWAYS WAS. Until phase 3b the source
+# was the kit's own policy/plugins/; now it is the surface the manifest declares
+# (notes/plugin-system-plan.md). Nothing on the agent moved: same paths, same
+# mount, same `plugins.enabled: [promises]`. And it follows THIS AGENT'S set, so
+# a plugin the agent does not have never installs its engine half. `flow` is a
+# system plugin, so the promises guard reaches everyone exactly as before.
+for pid in "${PLUGIN_IDS[@]}"; do
+  surface="$(python3 -c '
+import json, sys
+print(json.load(open(sys.argv[1]))["surfaces"].get("engine") or "")' \
+    "$KIT/plugins/$pid/plugin.json")"
+  [[ -n "$surface" ]] || continue
+  source_dir="$KIT/plugins/$pid/$surface"
+  name="$(basename "$surface")"                  # promises
+  while IFS= read -r f; do
+    rel="${f#"$source_dir"/}"                    # promises.py
+    FILES+=("plugins/$pid/$surface/$rel:$POLICY/plugins/$name/$rel")
+  done < <(find "$source_dir" -type f \( -name "*.py" -o -name "*.yaml" \) \
+             ! -path "*/__pycache__/*" | sort)
 done
 
 shorten() { echo "${1#"$AGENT"/}"; }        # readable paths in the messages

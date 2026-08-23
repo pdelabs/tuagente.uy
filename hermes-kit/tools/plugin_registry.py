@@ -139,6 +139,23 @@ def _check_surfaces(path: Path, data: dict, folder_dir: Path) -> None:
         if not (folder_dir / value).exists():
             fail(where, f"surfaces.{key} points at {value!r}, which does not exist in the plugin")
 
+    # THE ENGINE SURFACE IS NOT A FILE OF OURS, IT IS A PLUGIN OF THEIRS. What
+    # install.sh ships from there lands where the ENGINE looks for user plugins
+    # (HERMES_HOME/plugins), and the engine identifies one by its `plugin.yaml`:
+    # a directory without it is discovered and silently not loaded, which is the
+    # exact failure the promises guard exists to prevent -- installed, off, and
+    # `fleet.md` saying it is there. Checked here because "the file is there" is
+    # not "it works", and this is the cheapest place to find that out.
+    engine = surfaces.get("engine")
+    if engine is not None:
+        surface_dir = folder_dir / engine
+        if not surface_dir.is_dir():
+            fail(where, f"surfaces.engine points at {engine!r}, which is not a directory; "
+                        "an engine plugin is a folder the engine loads whole")
+        if not (surface_dir / "plugin.yaml").is_file():
+            fail(where, f"surfaces.engine {engine!r} has no plugin.yaml — the engine "
+                        "discovers a plugin by that file and loads nothing without it")
+
     # TWO SHAPES, NEVER BOTH. `label` is a page the portal does not have yet:
     # the client reads the word and phase 5 draws the generic plugin page under
     # it. `builtin` names a page app/app/ ALREADY has, which is the only shape a

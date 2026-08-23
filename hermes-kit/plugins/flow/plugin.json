@@ -8,13 +8,15 @@
     "that acts on the client's behalf goes through the approval gate like",
     "anything else -- a scheduled job is not a licence to skip the yes.",
     "",
-    "THE ENGINE SURFACE IS REAL AND IT DOES NOT MOVE IN THIS PHASE. It is",
-    "policy/plugins/promises/ (plugin.yaml + promises.py, a transform_llm_output",
-    "hook), the one place in the kit that already uses the ENGINE's own plugin",
-    "system. Bringing it in means changing where the compose mounts it --",
-    "policy/plugins is mounted at /opt/data/plugins read only and config.yaml's",
-    "`plugins.enabled` names it -- and phase 2 does not touch the install",
-    "layout. It migrates in phase 3, with the agent-side loader."
+    "THE ENGINE SURFACE IS THE promises GUARD, and it lives here as of phase 3b.",
+    "engine/promises/ (plugin.yaml + promises.py, a transform_llm_output hook) is",
+    "the one place in the kit that uses the ENGINE's own plugin system, and it is",
+    "flow's because what it checks is whether a flow the agent announced really",
+    "exists. WHERE IT LANDS ON THE AGENT DID NOT CHANGE: install.sh still writes",
+    "policy/plugins/promises/, the compose still mounts that at /opt/data/plugins",
+    "read only, and config.yaml's `plugins.enabled` still names it. The engine",
+    "reads its plugins from HERMES_HOME/plugins and knows nothing about this",
+    "registry; what moved is where the kit keeps the source."
   ],
   "requires": {
     "plugins": [
@@ -26,7 +28,7 @@
     "skills": [
       "flow"
     ],
-    "engine": null,
+    "engine": "engine/promises",
     "tab": {
       "builtin": "flows"
     }

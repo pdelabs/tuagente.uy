@@ -102,7 +102,7 @@ for a weekly check; the agent replied *"Queda definido: viernes a las
 *"Todavía no hay nada corriendo solo."* If she hadn't checked, she'd never
 have known.
 
-That's why there's a plugin, `policy/plugins/promises/`, that runs on
+That's why there's a plugin, `plugins/flow/engine/promises/`, that runs on
 `transform_llm_output` — the only point that sees the final response
 **before** it's saved and sent (`hermes:agent/turn_finalizer.py:485-505`) —
 and checks what the response claims against `flows/*/FLOW.md` +
@@ -120,7 +120,11 @@ Three formal notes that apply to any guard that comes after this one:
   turn with the bug wrote nothing.
 - **It lives in `policy/`, mounted `:ro` over `/opt/data/plugins`**, which is
   where the engine looks for them (`hermes_cli/plugins.py:1369`) and which
-  belongs to the agent.
+  belongs to the agent. That is where it lands ON THE AGENT; in the kit it is
+  the `engine` surface of the `flow` plugin (`plugins/flow/engine/promises/`),
+  because the guard checks whether a flow the agent announced exists. The two
+  are not in tension: the engine has its own plugin system and reads only
+  HERMES_HOME/plugins, so the source moved and the destination did not.
 - **It's turned on with `plugins.enabled`**: user plugins are opt-in, so
   without that list the engine discovers it and doesn't load it.
 

@@ -39,6 +39,7 @@ before adding a surface this registry has never shipped.
 | `requires.connections` | connection ids (`connections/`); a plugin never owns credentials |
 | `requires.toolsets` | engine toolsets the agent needs on |
 | `surfaces` | every one optional; a migrated leaf skill declares `skills` and nothing else |
+| `surfaces.engine` | a directory inside the plugin holding a `plugin.yaml`: a plugin of the ENGINE's, which install.sh copies to the agent's `policy/plugins/<name>/` |
 | `system` | `true` = the FOLDER ships to every agent, so anyone may depend on it |
 
 `requires` sub-lists and `surfaces` entries may be left out; unknown keys are a

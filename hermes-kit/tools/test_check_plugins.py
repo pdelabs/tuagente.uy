@@ -188,6 +188,29 @@ class BrokenRegistry(unittest.TestCase):
                 skills=["alpha"])
             self.fails_with(tmp, "surfaces.adapter points at 'endpoints.py'")
 
+    def test_an_engine_surface_that_is_a_file_and_not_a_folder(self):
+        """The engine loads a DIRECTORY: a lone .py is not a plugin of theirs."""
+        with tempfile.TemporaryDirectory() as tmp:
+            where = write(tmp, "alpha", manifest(
+                "alpha", surfaces={"skills": ["alpha"], "engine": "hook.py"}),
+                skills=["alpha"])
+            (where / "hook.py").write_text("# hook\n", encoding="utf-8")
+            self.fails_with(tmp, "which is not a directory")
+
+    def test_an_engine_surface_with_no_plugin_yaml(self):
+        """Without it the engine discovers the folder and loads nothing at all.
+
+        Which is the promises guard's own failure mode: installed, off, and the
+        fleet table saying it is there.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            where = write(tmp, "alpha", manifest(
+                "alpha", surfaces={"skills": ["alpha"], "engine": "engine/guard"}),
+                skills=["alpha"])
+            (where / "engine" / "guard").mkdir(parents=True)
+            (where / "engine" / "guard" / "guard.py").write_text("", encoding="utf-8")
+            self.fails_with(tmp, "has no plugin.yaml")
+
     def test_a_tab_that_declares_both_shapes(self):
         """A page the portal has AND a word to draw is two different tabs."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -346,6 +369,21 @@ class TheKitsOwnRegistry(unittest.TestCase):
             "artifact": ["kanban"],
             "flow": ["kanban", "approval"],
         })
+
+    def test_flow_carries_the_promises_guard_as_its_engine_surface(self):
+        """The one engine surface in the kit, and where it lands is not here.
+
+        `plugins/flow/engine/promises/` is the SOURCE (phase 3b); install.sh
+        copies it to the agent's `policy/plugins/promises/`, which is what the
+        compose mounts at /opt/data/plugins. The kit's job is that the folder is
+        a plugin the engine can actually load.
+        """
+        flow = plugin_registry.registry(KIT)["flow"]
+        self.assertEqual(flow["surfaces"]["engine"], "engine/promises")
+        surface = KIT / "plugins" / "flow" / "engine" / "promises"
+        self.assertTrue((surface / "plugin.yaml").is_file())
+        self.assertTrue((surface / "promises.py").is_file())
+        self.assertTrue((surface / "__init__.py").is_file())
 
     def test_kanban_carries_no_skill_and_says_why(self):
         """The store is the engine's; the manifest exists for the dependency."""
