@@ -6,7 +6,7 @@ One repo with the three pieces of the product:
 |---|---|
 | `app/page.tsx`, `app/blog/` | **the public landing** — marketing, SEO |
 | `app/app/` | **the client portal** — the interface a client uses to see and direct their team of agents. Static; all the logic lives in the browser |
-| `hermes-kit/` | **what gets installed on each client's agent** — portal adapter, skills, roles, SOULs, capabilities, compose and conformance checks. Has its own `CLAUDE.md` with the deep context: read it before touching the kit |
+| `hermes-kit/` | **what gets installed on each client's agent** — portal adapter, skills, plugins, roles, SOULs, capabilities, compose and conformance checks. Has its own `CLAUDE.md` with the deep context: read it before touching the kit |
 | `docs/` | the project's memory (portal + client onboarding) |
 | `hermes-kit/notes/` | the kit's memory (measurements, engine knobs, pivot status) |
 
@@ -113,8 +113,10 @@ npx next start -p 8090          # against the local agent
 
 # The kit (from the monorepo root)
 python3 -m unittest discover -s hermes-kit/adapter -p "test_*.py"
+python3 -m unittest discover -s hermes-kit/tools -p "test_*.py"
 python3 hermes-kit/tools/check-adapter-boundaries.py
 python3 hermes-kit/tools/check-clones.py
+python3 hermes-kit/tools/check-plugins.py
 
 # An agent, before powering it on
 python3 hermes-kit/tools/agent-check.py <path>/data

@@ -9,6 +9,7 @@ new-agent.sh                creates a new client's repo and installs the kit on 
 install.sh                  installs or diffs the kit against an existing agent
 adapter/portal_adapter.py   the sidecar the portal consumes (:8643)
 skills/                     artifact · deliverable · approval · capability · the shadow ones
+plugins/<id>/plugin.json    the plugin registry: reusable units of custom work (plugins/README.md)
 capabilities/catalog.json   which capabilities can be requested, and how they get installed
 policy/hooks/               the gate: what the agent CANNOT do, in code
 soul/                       the system-prompt blocks, with placeholders
@@ -22,6 +23,7 @@ tools/install-soul.sh       drops the SOUL block onto an agent that doesn't have
 tools/clean-obsolete.sh     removes from the agent what the kit stopped shipping, nothing else
 tools/compare-installers.sh  do a local and a remote agent get the same kit?
 tools/test-remote-deploy-ssh.sh  deploys against a real sshd (GNU rsync)
+tools/check-plugins.py      is the plugin registry whole? ids, versions, dependencies, surfaces
 tools/skills-knob.py        generates the list of engine skills to turn off
 tools/replace-block.py      swaps a SOUL's kit:base block without touching the rest
 fleet.md                    which agent runs where, with what SOUL and what engine
