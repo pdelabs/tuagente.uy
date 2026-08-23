@@ -4,6 +4,15 @@ These rules protect architectural decisions that previously regressed in
 production. They are intentionally narrow: a rule is added only when it
 prevents a demonstrated failure mode.
 
+## Language
+
+Code and internal documentation are English: identifiers, comments, commit
+messages, `docs/**`, `hermes-kit/notes/**`, `CLAUDE.md`, READMEs. The one
+exception is copy the client actually reads or receives — portal UI strings,
+messages the agent sends the client, SOUL and skill instruction prose,
+catalog `label`/`purpose` values — which stays in plain Rioplatense Spanish,
+no marketing tone.
+
 ## Portal network boundary
 
 All browser requests to a customer agent belong in `app/app/lib/agent.ts`.

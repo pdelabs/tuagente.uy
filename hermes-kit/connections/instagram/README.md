@@ -1,104 +1,112 @@
 # Instagram
 
-**Graph API oficial, empezando por leer.** Base:
+**Official Graph API, starting with reading.** Base:
 [`mcpware/instagram-mcp`](https://github.com/mcpware/instagram-mcp) — 23
-herramientas, token de larga duración, sin API privada de por medio.
+tools, long-lived token, no private API involved.
 
-## Por qué leer es la mitad que importa
+## Why reading is half of what matters
 
-Un agente que publica sin leer escribe a ciegas: repite temas, se contradice con
-lo que ya salió, rompe la línea. `get_media_posts` y `get_media_insights` son el
-motivo de esta conexión — con eso el flujo semanal deja de inventar en el vacío
-y escribe sabiendo qué se dijo y qué funcionó.
+An agent that publishes without reading writes blind: it repeats topics,
+contradicts what's already gone out, breaks the brand's voice.
+`get_media_posts` and `get_media_insights` are the whole reason for this
+connection — with them, the weekly flow stops making things up in a vacuum
+and writes knowing what's already been said and what worked.
 
-Leer vale aunque nunca prendas publicar.
+Reading is worth it even if you never turn on publishing.
 
-## Standard vs Advanced, sin el atajo
+## Standard vs Advanced, without the shortcut
 
-La regla de Standard Access **no es "cuentas propias"** — ese atajo confunde y
-lleva a conclusiones falsas. La regla es: se le puede pedir permiso a quien
-tenga **un rol en nuestra app de Meta** (admin, developer o tester).
+The rule for Standard Access **isn't "your own accounts"** — that shortcut
+is confusing and leads to wrong conclusions. The real rule is: you can
+request permission from anyone who has **a role in our Meta app** (admin,
+developer, or tester).
 
 | | Standard | Advanced |
 |---|---|---|
-| App review | no, auto-aprobado | sí, 2 a 4 semanas |
-| Quién puede conectar | solo quien tenga un rol en la app | cualquiera |
-| Qué hace el cliente | acepta una invitación en el panel de desarrolladores de Meta | aprieta un botón |
+| App review | no, auto-approved | yes, 2 to 4 weeks |
+| Who can connect | only someone with a role in the app | anyone |
+| What the client does | accepts an invitation in the Meta developer console | clicks a button |
 
-**Los permisos son los mismos y hacen lo mismo.** Lo único que cambia es a quién
-se le puede pedir.
+**The permissions are the same and do the same thing.** The only thing that
+changes is who you're allowed to ask.
 
-Consecuencia práctica, que es la que importa: **la cuenta de un cliente SÍ se
-conecta sin app review** — se lo agrega como tester y acepta. Anda hoy. Lo que
-no anda es el onboarding: ese cliente tiene que entrar al panel de
-desarrolladores de Meta, y es justo el cliente que no sabe qué es un token.
-Sirve para **pilotear con uno o dos, no para vender**.
+The practical consequence, which is the one that matters: **a client's
+account CAN connect without app review** — add them as a tester and they
+accept. That works today. What doesn't work is the onboarding: that client
+has to go into the Meta developer console, and that's exactly the client who
+has no idea what a token is. Good for **piloting with one or two, not for
+selling**.
 
-O sea que el app review no habilita capacidades nuevas: **habilita que
-conectarse deje de ser una pantalla de desarrollador**. Se pide cuando esto se
-venda, y como es espera y no trabajo, se arranca temprano.
+In other words, app review doesn't unlock new capabilities: **it turns
+connecting from a developer screen into something anyone can do**. Request
+it once this is actually being sold, and since it's a wait, not work, start
+it early.
 
-> Corrección: en la primera vuelta dije que publicar costaba 2 a 4 semanas.
-> Estaba mal. En la segunda dije "solo cuentas propias", que también es
-> impreciso. Vale lo de esta tabla.
+> Correction: on the first pass I said publishing took 2 to 4 weeks. That
+> was wrong. On the second I said "only your own accounts", which is also
+> imprecise. What this table says is what stands.
 
-**Requisito que no se saltea:** la cuenta tiene que ser **profesional** (Business
-o Creator) y **pública**, vinculada a una página de Facebook. Las personales no
-tienen API — Meta les cortó el soporte en octubre de 2024. Convertirla es gratis,
-lleva 5 minutos, es reversible y no se pierden seguidores ni posts.
+**A requirement that can't be skipped:** the account has to be
+**professional** (Business or Creator) and **public**, linked to a Facebook
+page. Personal accounts have no API — Meta cut off support for them in
+October 2024. Converting one is free, takes 5 minutes, is reversible, and
+doesn't lose followers or posts.
 
-**Excepción: los mensajes directos.** `instagram_manage_messages` pide Advanced
-Access **siempre**, aun en la cuenta propia. Las tres herramientas de DM
-(`get_conversations`, `get_conversation_messages`, `send_dm`) están declaradas
-pero **no van a andar** hasta que se haga esa revisión.
+**Exception: direct messages.** `instagram_manage_messages` requires
+Advanced Access **always**, even on your own account. The three DM tools
+(`get_conversations`, `get_conversation_messages`, `send_dm`) are declared
+but **won't work** until that review happens.
 
-## Por qué NO usamos un MCP no oficial
+## Why we DON'T use an unofficial MCP
 
-Hay varios buenos basados en `instagrapi` (la API privada). Los descartamos:
+There are several good ones based on `instagrapi` (the private API). We
+ruled them out:
 
-| | instagrapi | Graph API oficial |
+| | instagrapi | Official Graph API |
 |---|---|---|
-| Login | usuario + contraseña | token |
-| Detección | **horas** — genera un fingerprint nuevo por corrida | ninguna, es la vía legítima |
-| Escalada | challenge → bloqueo → 30 días → **baja permanente** | — |
-| Cuenta propia | — | sin app review |
+| Login | username + password | token |
+| Detection | **hours** — generates a new fingerprint every run | none, it's the legitimate path |
+| Escalation | challenge → block → 30 days → **permanent ban** | — |
+| Own account | — | no app review needed |
 
-Con WhatsApp aceptamos ese riesgo **porque el número es descartable**. Acá no
-hay equivalente: si Meta da de baja la cuenta de una empresa, se pierden el
-handle, los seguidores y el historial, y no se recuperan. El MCP no oficial no
-da nada que el oficial no dé gratis.
+With WhatsApp we accept that risk **because the number is disposable**.
+Here there's no equivalent: if Meta bans a company's account, the handle,
+followers, and history are gone for good. The unofficial MCP gives us
+nothing the official one doesn't already give for free.
 
-## Reparto de permisos
+## Permission split
 
-15 leen, 8 actúan (ver `tools.json`). Con la conexión recién conectada
-—**leer sí, actuar no**— el agente ve las 15 de lectura y **ni siquiera sabe que
-existen** `publish_media`, `delete_comment` y `send_dm`.
+15 read, 8 act (see `tools.json`). With the connection freshly connected —
+**read yes, act no** — the agent sees the 15 read tools and **doesn't even
+know** `publish_media`, `delete_comment`, and `send_dm` exist.
 
-Dos decisiones que no se leen del nombre:
+Two decisions you can't read off the name alone:
 
-- **`delete_comment` actúa**, obvio, pero vale decir por qué pesa: no se
-  deshace, y borrar el comentario de un cliente enojado —decidido por un
-  agente— es peor que el comentario.
-- **`validate_access_token` lee**, y es más importante de lo que parece: el
-  token dura 60 días y después **se cae en silencio**. Que el agente pueda
-  mirarlo convierte una falla muda en un aviso.
+- **`delete_comment` acts** — obviously — but it's worth saying why it
+  carries weight: it can't be undone, and having an agent decide to delete
+  an angry client's comment is worse than the comment itself.
+- **`validate_access_token` reads**, and it matters more than it looks: the
+  token lasts 60 days and then **fails silently**. Letting the agent check
+  it turns a silent failure into a warning.
 
-## Límites
+## Limits
 
-200 llamadas por hora. 25 publicaciones por día. Las imágenes van en JPEG.
+200 calls per hour. 25 posts per day. Images go out as JPEG.
 
-## Lo que falta
+## What's missing
 
-- **Refrescar el token antes de los 60 días.** Sin eso la conexión se muere
-  sola cada dos meses y el cliente se entera cuando el flujo falla.
-- Conectar una cuenta real y correr las de lectura de punta a punta. Nada de
-  esto tocó Instagram todavía.
+- **Refresh the token before the 60 days are up.** Without that, the
+  connection dies on its own every couple of months and the client finds
+  out when the flow fails.
+- Connect a real account and run the read tools end-to-end. None of this
+  has touched Instagram yet.
 
-## TODO antes de darlo por bueno
+## TODO before calling this done
 
-**Auditar el código de mcpware, no solo su README.** Las 23 clases de
-`tools.json` salieron de leer la documentación del repo. Con Mercado Pago eso
-no alcanzó: los tres bugs que encontramos —el `X-Idempotency-Key` faltante
-entre ellos, que podía devolver la plata dos veces— aparecieron recién al leer
-la implementación. Hay que bajarlo y verificar que cada función haga lo que
-dice el nombre, y que `lee`/`actua` coincida con lo que realmente toca.
+**Audit mcpware's code, not just its README.** The 23 classifications in
+`tools.json` came from reading the repo's documentation. With Mercado Pago
+that wasn't enough: the three bugs we found — the missing
+`X-Idempotency-Key` among them, which could refund money twice — only
+turned up once we read the implementation. This one needs to be pulled down
+and checked function by function, that each one does what its name says,
+and that `read`/`act` matches what it actually touches.

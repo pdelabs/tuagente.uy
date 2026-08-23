@@ -1,194 +1,205 @@
-# hermes-kit — contexto para trabajar en el kit
+# hermes-kit — context for working on the kit
 
-Este directorio del monorepo es **el producto que se instala en el agente de
-cada cliente** de tuagente.uy: el adapter del portal, las skills, los roles,
-los bloques de SOUL y el chequeo de conformidad. Leé `README.md` para el uso.
-El resto del monorepo (la landing y el portal) tiene su contexto en el
-`CLAUDE.md` de la raíz. Regla de la casa que aplica acá también: **código y
-comentarios en inglés, siempre**; en español solo el texto que lee el cliente
-o el agente para el cliente.
+This directory of the monorepo is **the product installed on each
+tuagente.uy client's agent**: the portal adapter, the skills, the roles,
+the SOUL blocks, and the conformance check. Read `README.md` for usage. The
+rest of the monorepo (the landing and the portal) has its context in the
+root `CLAUDE.md`. House rule that applies here too: **code and internal
+documentation in English, always**; the only thing in Spanish is text the
+client reads, or the agent reads on the client's behalf.
 
-Hasta el 22/8/2026 esto era un repo aparte (`github.com/luisgurmendez/
-hermes-kit`, hoy archivo); las rutas internas no cambiaron.
+Until 22/8/2026 this was a separate repo (`github.com/luisgurmendez/
+hermes-kit`, now archived); the internal paths didn't change.
 
-Hubo un tercero, `agente-pdelabs` —La Mano, el cliente 0 y el fixture de pruebas
-de casi todo lo que está medido en `notas/`—, **dado de baja el 12/8/2026**: el
-respaldo quedó en `~/Desktop/Luis/Projects/_respaldo-lamano/`. Para probar contra
-un agente de verdad hay que desempaquetarlo o crear uno con `nuevo-agente.sh`.
-Los agentes vivos están en `flota.md`.
+There was a third one, `agente-pdelabs` — La Mano, client 0 and the test
+fixture for almost everything measured in `notes/` —, **retired on
+12/8/2026**: the backup is at `~/Desktop/Luis/Projects/_respaldo-lamano/`.
+To test against a real agent you have to unpack it or create one with
+`new-agent.sh`. Live agents are in `fleet.md`.
 
-**El kit es la fuente de la verdad.** Si arreglás el adapter o una skill mientras
-depurás dentro de un agente, ese cambio hay que traerlo acá: `install.sh --diff`
-lo detecta, pero solo si lo corrés.
+**The kit is the source of truth.** If you fix the adapter or a skill while
+debugging inside an agent, that change has to be brought back here:
+`install.sh --diff` detects it, but only if you run it.
 
-## Principios que no se negocian
+## Non-negotiable principles
 
-**El modelo pone las palabras; el código pone el formato.** Cada convención que
-dependió de que el agente se acordara, falló. Las tres skills existen por eso:
-el script decide ruta, nombre, CSS y estructura; el modelo aporta el contenido.
+**The model supplies the words; the code supplies the format.** Every
+convention that depended on the agent remembering has failed. The three
+skills exist because of this: the script decides the path, the name, the CSS
+and the structure; the model contributes the content.
 
-**Genérico por defecto.** Nada de un cliente puntual entra al kit. Lo específico
-va en el SOUL de ese agente, que se compone a partir de las plantillas.
+**Generic by default.** Nothing specific to one client goes into the kit.
+What's specific lives in that agent's SOUL, which is composed from the
+templates.
 
-**Nunca SQL de escritura al kanban** — locks, claims y dispatcher se corrompen.
-Las escrituras van por subprocess del CLI `hermes kanban ...` desde el sidecar.
+**Never write SQL to the kanban** — locks, claims, and the dispatcher get
+corrupted. Writes go through a subprocess call to the `hermes kanban ...`
+CLI, from the sidecar.
 
-## Trampas verificadas (están en el código, no las deshagas)
+## Verified traps (they're in the code, don't undo them)
 
-- **Bloqueo pegajoso:** un ticket vuelve solo a `ready` salvo que el último
-  evento sea un `blocked` tipado. Crear con `--initial-status blocked` no deja
-  ese evento → el pedido de aprobación se auto-desbloquea y la tarea sigue como
-  si estuviera autorizada. Siempre `block --kind=needs_input`.
-- **CLI:** opciones `--flag=valor` y `--` antes de los posicionales; si no,
-  argparse rompe con valores que empiezan con `-`.
-- **Frontmatter obligatorio** en cada `SKILL.md` (`name` + `description` que diga
-  qué hace **y cuándo usarla**). Sin él se indexa con descripción vacía y el
-  agente no la usa. Hermes reindexa solo, pero tarda unos minutos.
-  Lo chequea `tools/agente-check.py`, y por algo: esta regla estaba escrita acá
-  y aun así un agente en producción tenía sin frontmatter **la skill que manda
-  mail a un lead**. Una regla que no chequea nadie no es una regla.
-- **Archivos al browser: siempre `text/plain`.** El HTML de un artefacto viaja
-  dentro del JSON y lo dibuja el portal en un iframe aislado.
-- **Confinamiento:** todo path del cliente se resuelve con `resolve()` +
-  `relative_to`, y en artefactos además se compara el padre — sin eso, un `.`
-  borraba la carpeta entera.
+- **Sticky blocking:** a ticket returns on its own to `ready` unless its
+  last event is a typed `blocked`. Creating one with `--initial-status
+  blocked` doesn't leave that event → the approval request auto-unblocks
+  itself and the task carries on as if it were authorized. Always
+  `block --kind=needs_input`.
+- **CLI:** `--flag=value` options and `--` before positionals; otherwise
+  argparse breaks on values that start with `-`.
+- **Mandatory frontmatter** on every `SKILL.md` (`name` + `description` that
+  says what it does **and when to use it**). Without it, it gets indexed
+  with an empty description and the agent never uses it. Hermes reindexes
+  on its own, but it takes a few minutes. `tools/agent-check.py` checks for
+  this, and for good reason: this rule was written here and a production
+  agent still had, with no frontmatter, **the skill that sends mail to a
+  lead**. A rule nobody checks isn't a rule.
+- **Files to the browser: always `text/plain`.** An artifact's HTML travels
+  inside the JSON and the portal draws it in a sandboxed iframe.
+- **Confinement:** every client path is resolved with `resolve()` +
+  `relative_to`, and for artifacts the parent is also compared — without
+  that, a `.` deleted the entire folder.
 
-## Las skills del motor van apagadas, y la lista se genera
+## The engine's own skills ship turned off, and the list is generated
 
-El motor trae 70 skills y las copia al volumen en cada arranque. Quedan cuatro
-—las de leer documentos: `xlsx`, `pdf`, `docx`, `ocr-and-documents`—, y un
-cliente puntual puede tener alguna más si queda **declarada con su motivo** en
-su config (`# kit:excepcion <skill> — <por qué>`, que el chequeo exige y
-reporta). El resto se apaga con `skills.disabled`,
-que **genera** `tools/perilla-skills.py` desde la imagen o desde el manifiesto
-del agente — nunca listando `data/skills/`, que también tiene las del kit y las
-que el agente escribió para ese cliente. Las del kit ya no viven ahí: van en
-`<agente>/kit-skills/`, montadas `:ro` y declaradas en `skills.external_dirs`.
-El porqué de cada perilla y el runbook para aplicarlo a un agente que ya existe:
-`notas/perillas-aplicadas.md`.
+The engine ships 70 skills and copies them onto the volume on every boot.
+Four are left on — the document-reading ones: `xlsx`, `pdf`, `docx`,
+`ocr-and-documents` —, and a specific client can have one more if it's
+**declared with its reason** in their config (`# kit:exception <skill> —
+<why>`, which the check requires and reports). The rest get turned off with
+`skills.disabled`, which `tools/skills-knob.py` **generates** from the image
+or from the agent's manifest — never by listing `data/skills/`, which also
+holds the kit's own and whatever the agent wrote for that client. The kit's
+own no longer live there: they go in `<agent>/kit-skills/`, mounted `:ro`
+and declared in `skills.external_dirs`. The why behind each knob, and the
+runbook for applying it to an agent that already exists: `notes/knobs-applied.md`.
 
-## Capacidades: se piden, no se instalan
+## Capabilities: requested, not installed
 
-Cuando al agente le falta con qué (generar una imagen, buscar en la web), no
-improvisa en silencio ni se instala nada: lo dice, y ofrece la capacidad con
-`capacidad:<id>` — el portal la dibuja como tarjeta con el texto de
-`capacidades/catalogo.json`, que es **cerrado** (lo que ya viene en la imagen
-del motor + lo que escribimos nosotros; sin hub) y que se instala en
-`politica/capacidades/`, no en `data/`: es texto que lee el cliente, y en el
-volumen del agente el agente lo podía reescribir. El registro de pedidos
-(`pedidos.jsonl`) vive al lado y lo escribe **el adapter**, que monta esa
-carpeta rw mientras el agente la tiene `:ro`. El disparador no depende de
-que el modelo se acuerde: las skills sombra (`sin-imagenes`,
-`sin-busqueda-web`) aparecen en su índice **solo cuando le falta la tool** y se
-retiran solas cuando está, con `metadata.hermes.fallback_for_tools`. Y la
-puerta —instalar software, poner una firma que no es la suya (`--author`,
-`--created-by`, `HERMES_PROFILE=`), desbloquearse solo— la cierra un hook en
-`politica/hooks/`, no la prosa. Bloquea la **familia**, no el comando, y el
-mensaje redirige a `capacidad` diciendo que no hay variante que pase: eso es lo
-que evita que el agente siga probando. Detalle: `notas/perillas-aplicadas.md`.
+When the agent lacks the means to do something (generate an image, search
+the web), it doesn't quietly improvise or install anything: it says so, and
+offers the capability with `capability:<id>` — the portal draws it as a card
+with the text from `capabilities/catalog.json`, which is **closed** (what
+already ships in the engine's image plus what we write; no hub) and which
+gets installed in `policy/capabilities/`, not in `data/`: it's text the
+client reads, and inside the agent's volume the agent could otherwise
+rewrite it. The request log (`requests.jsonl`) lives right next to it and is
+written by **the adapter**, which mounts that folder rw while the agent has
+it `:ro`. The trigger doesn't depend on the model remembering: the shadow
+skills (`no-images`, `no-web-search`) show up in its index **only when the
+tool is missing** and withdraw on their own once it's there, via
+`metadata.hermes.fallback_for_tools`. And the gate — installing software,
+signing as someone it isn't (`--author`, `--created-by`, `HERMES_PROFILE=`),
+unblocking itself — is closed by a hook in `policy/hooks/`, not by prose.
+It blocks the **family**, not the command, and the message redirects to
+`capability`, saying there's no variant that gets through: that's what
+stops the agent from continuing to try. Details: `notes/knobs-applied.md`.
 
-## Lo que el agente dice que dejó corriendo se contrasta con el disco
+## What the agent says it left running gets checked against disk
 
-El peor bug del producto no es que el agente falle: es que **diga que hizo algo
-que no hizo**. Pasó el 13/8/2026 con una clienta que pidió un control semanal;
-el agente contestó *"Queda definido: viernes a las 9:30"* y no llamó a
-`crear_flujo.py` ni una vez. En Flujos seguía diciendo "Todavía no hay nada
-corriendo solo". Si ella no iba a chequear, no se enteraba.
+The worst bug in the product isn't the agent failing: it's **saying it did
+something it didn't do**. It happened on 13/8/2026 with a client who asked
+for a weekly check; the agent replied *"Queda definido: viernes a las
+9:30"* and never called `create_flow.py` once. In Flujos it still said
+*"Todavía no hay nada corriendo solo."* If she hadn't checked, she'd never
+have known.
 
-Por eso hay un plugin, `politica/plugins/promesas/`, que corre en
-`transform_llm_output` —el único punto que ve la respuesta final **antes** de
-guardarla y de mandarla (`hermes:agent/turn_finalizer.py:485-505`)— y contrasta
-lo que la respuesta afirma contra `flujos/*/FLUJO.md` + `cron/jobs.json`. Si
-dice que algo quedó armado y no hay flujo vivo que lo respalde, le pega al
-mensaje una corrección que **afirma el hecho** (qué corre y qué no), nunca una
-acusación: la detección de la frase es aproximada; el estado del disco, no.
+That's why there's a plugin, `policy/plugins/promises/`, that runs on
+`transform_llm_output` — the only point that sees the final response
+**before** it's saved and sent (`hermes:agent/turn_finalizer.py:485-505`) —
+and checks what the response claims against `flows/*/FLOW.md` +
+`cron/jobs.json`. If it says something got set up and there's no live flow
+backing it, it appends a correction to the message that **states the fact**
+(what's running and what isn't), never an accusation: detecting the phrase
+is approximate; the state of the disk isn't.
 
-Tres cosas de forma que valen para cualquier guardia que venga después:
+Three formal notes that apply to any guard that comes after this one:
 
-- **Un hook de shell no servía.** `agent/shell_hooks.py` solo sabe devolver
-  `block`, `continue` o `context`; ninguno toca el texto de la respuesta. Y
-  `pre_verify`, que sería el lugar para hacerlo reintentar, se dispara **solo
-  si el turno editó archivos** (`agent/conversation_loop.py:6808-6815`): el
-  turno del bug no escribió nada.
-- **Va en `politica/`, montado `:ro` sobre `/opt/data/plugins`**, que es donde
-  el motor los busca (`hermes_cli/plugins.py:1369`) y que es del agente.
-- **Se prende con `plugins.enabled`**: los plugins de usuario son opt-in, así
-  que sin esa lista el motor lo descubre y no lo carga.
+- **A shell hook wasn't enough.** `agent/shell_hooks.py` can only return
+  `block`, `continue`, or `context`; none of them touch the response's text.
+  And `pre_verify`, which would be the place to make it retry, only fires
+  **if the turn edited files** (`agent/conversation_loop.py:6808-6815`): the
+  turn with the bug wrote nothing.
+- **It lives in `policy/`, mounted `:ro` over `/opt/data/plugins`**, which is
+  where the engine looks for them (`hermes_cli/plugins.py:1369`) and which
+  belongs to the agent.
+- **It's turned on with `plugins.enabled`**: user plugins are opt-in, so
+  without that list the engine discovers it and doesn't load it.
 
-`agente-check.py` falla si falta cualquiera de las tres, y además le hace
-correr la frase del bug: "está el archivo" no es "funciona".
+`agent-check.py` fails if any of the three is missing, and it also makes the
+bug's exact phrase run through it: "the file is there" isn't "it works."
 
-## Las tools de kanban se habilitan con DOS claves
+## Kanban tools get enabled with TWO keys
 
-No hay plugin: Hermes ya las trae. Pero hace falta `toolsets: [kanban]` **y**
-`platform_toolsets` con `kanban` en cada plataforma. Con una sola, el agente no
-ve ninguna y improvisa con Python sobre su propio tablero. La receta completa, la
-reproducción y por qué no era adivinable están en `notas/kanban-nativo.md`.
-Lo chequea `tools/agente-check.py`.
+There's no plugin: Hermes already ships them. But it needs `toolsets:
+[kanban]` **and** `platform_toolsets` with `kanban` on every platform. With
+only one, the agent sees none of them and improvises with Python over its
+own board. The full recipe, the reproduction, and why it wasn't guessable
+are in `notes/native-kanban.md`. `tools/agent-check.py` checks for it.
 
-## La version del motor va fija
+## The engine version stays pinned
 
-El compose apunta a un tag concreto (hoy `v2026.7.30`), nunca a `latest`: con
-`latest`, un push de Nous le cambia el motor a todos los clientes de un dia
-para el otro y nos enteramos por un ticket que falla. Al 5/8/2026 los agentes
-corrian v2026.7.30 mientras `latest` ya iba dos versiones adelante.
+The compose points at a specific tag (today `v2026.7.30`), never at
+`latest`: with `latest`, a push from Nous changes every client's engine
+overnight and we find out from a failing ticket. As of 5/8/2026, agents
+were running `v2026.7.30` while `latest` was already two versions ahead.
 
-Para subir: cambiar el tag, `docker compose pull && up -d`, correr
-`agente-check.py` y `portal-check.py`, y recien ahi darlo por bueno. Si algo se
-rompio, se vuelve al tag anterior.
+To upgrade: change the tag, `docker compose pull && up -d`, run
+`agent-check.py` and `portal-check.py`, and only then call it good. If
+something breaks, roll back to the previous tag.
 
-## El bloque de SOUL también tiene versión
+## The SOUL block has a version too
 
-Los bloques genéricos van envueltos entre `<!-- kit:base vN -->` y
-`<!-- /kit:base -->`, con la versión que dice `soul/VERSION`. Con eso se sabe qué
-reglas corre un agente sin leerle el prompt entero, `instalar-soul.sh` no pisa lo
-que ya está, y `05-precedencia.md` puede decir qué gana cuando el documento se
-contradice. Quién tiene qué versión: `flota.md`. El detalle: `soul/README.md`.
+The generic blocks are wrapped between `<!-- kit:base vN -->` and
+`<!-- /kit:base -->`, with the version `soul/VERSION` says. That's how you
+know which rules an agent is running without reading its whole prompt,
+`install-soul.sh` doesn't overwrite what's already there, and
+`05-precedence.md` can say what wins when the document contradicts itself.
+Who has which version: `fleet.md`. The details: `soul/README.md`.
 
-Corolario: **un cambio en `soul/` no llega solo a ningún agente.** Hay que subir
-`soul/VERSION` y reinstalar; `agente-check.py` avisa quién quedó atrás.
+Corollary: **a change in `soul/` doesn't reach any agent on its own.** You
+have to bump `soul/VERSION` and reinstall; `agent-check.py` flags who's
+fallen behind.
 
-## Verificar antes de entregar
+## Verify before delivering
 
-Dos chequeos, en este orden. El primero es offline y va **antes** de prender:
-
-```bash
-python3 tools/agente-check.py <ruta>/data
-```
-
-Mira el kit instalado, el frontmatter de todas las skills, el índice vivo, los
-tres olvidos clásicos del alta (`api_server` apagado, `model.default` vacío,
-plugin de kanban sin habilitar) y cinco cosas del SOUL: ningún hueco `<ASÍ>` sin
-llenar, ningún comentario HTML con las palabras que hacen que el motor descarte
-el archivo entero, el bloque `kit:base` presente y balanceado, qué versión tiene
-puesta contra la del kit, y que haya identidad. De paso avisa si el `soul/VERSION`
-del kit no tiene forma de versión.
-
-Y las perillas: que el motor no le pegue su pie de página a la respuesta
-(`display.file_mutation_verifier`), que el browser quede afuera **por la lista
-de `platform_toolsets`** —sacarlo con `disabled_toolsets` se lleva puesto
-`web_search`, que está en el catálogo de `browser`—, que **ninguna skill del
-motor** quede
-prendida fuera de las cuatro de documentos o de lo declarado para ese cliente
-(compara contra el
-`.bundled_manifest` que escribe el motor, así que un bump que traiga skills
-nuevas falla en vez de pasar), que `platform_hints.api_server.replace` esté
-puesto, y que las skills del kit estén montadas afuera de `data/` y **sin copia
-vieja que las tape**.
-
-Sobre un SOUL suelto —o sobre un bloque que todavía no instalaste— corren los dos
-chequeos de texto solos:
+Two checks, in this order. The first is offline and runs **before**
+powering on:
 
 ```bash
-python3 tools/agente-check.py --revisar <archivo>.md
+python3 tools/agent-check.py <path>/data
 ```
 
-El segundo corre contra el agente ya encendido:
+It looks at the installed kit, every skill's frontmatter, the live index,
+onboarding's three classic oversights (`api_server` turned off,
+`model.default` empty, the kanban plugin not enabled), and five things about
+the SOUL: no unfilled placeholder gaps, no HTML comment with the words that
+make the engine discard the whole file, the `kit:base` block present and
+balanced, which version it's running against the kit's, and that there's an
+identity. It also flags if the kit's `soul/VERSION` isn't shaped like a
+version.
+
+And the knobs: that the engine doesn't stick its own footer onto the
+response (`display.file_mutation_verifier`), that the browser stays out
+**via the `platform_toolsets` list** — pulling it out with `disabled_toolsets`
+takes `web_search` down with it, which is in `browser`'s catalog —, that
+**no engine skill** is left on outside the four document ones or whatever
+was declared for that client (compares against the `.bundled_manifest` the
+engine writes, so a bump that brings new skills fails instead of passing),
+that `platform_hints.api_server.replace` is set, and that the kit's skills
+are mounted outside `data/` and with **no old copy shadowing them**.
+
+Over a loose SOUL — or a block you haven't installed yet — the two text
+checks run on their own:
+
+```bash
+python3 tools/agent-check.py --review <file>.md
+```
+
+The second runs against an agent that's already powered on:
 
 ```bash
 python3 tools/portal-check.py --key <API_SERVER_KEY> \
   --adapter http://<host>:8643 --endpoint http://<host>:8642 --origin <portal>
 ```
 
-0 fallas. Los avisos son aceptables (ej. "approvals no declarado" cuando no hay
-nada esperando aprobación: es correcto).
+0 failures. Warnings are acceptable (e.g. "approvals module not declared"
+when nothing is waiting for approval: that's correct).

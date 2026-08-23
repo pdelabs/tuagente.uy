@@ -1,98 +1,111 @@
-# Conectar Google (Planillas, Drive, Agenda, Docs) sin que el cliente sufra
+# Connecting Google (Sheets, Drive, Calendar, Docs) without putting the client through pain
 
-**El motor ya sabe hacerlo.** La skill `google-workspace` viene con Hermes y
-cubre Gmail, Calendar, Drive, Docs y Sheets. Lo que falta no es código: es que
-alguien haga el trámite de Google, y ese alguien **no puede ser el cliente**.
+**The engine already knows how to do this.** The `google-workspace` skill
+ships with Hermes and covers Gmail, Calendar, Drive, Docs, and Sheets. What's
+missing isn't code: it's that someone has to go through Google's paperwork,
+and that someone **cannot be the client**.
 
-## El problema, en una línea
+> Note: Hermes also bundles its own skill named `google-workspace` (shipped
+> disabled, like the rest of the engine's skills) — same name, unrelated to
+> our `google-workspace` connection id: this doc is about our own OAuth
+> flow, not that skill.
 
-La skill, tal como viene, le pide al usuario que cree un proyecto en Google
-Cloud Console, habilite seis APIs, configure la pantalla de consentimiento y
-baje un JSON. Un contador de Pocitos no va a hacer eso, y si lo intenta lo va a
-hacer mal. Es exactamente donde quedó trabada la tarea de mails de un cliente
-real.
+## The problem, in one line
 
-## La salida: una sola app OAuth nuestra
+As shipped, the skill asks the user to create a Google Cloud Console
+project, enable six APIs, configure the consent screen, and download a JSON
+file. An accountant in Pocitos isn't going to do that, and if they try,
+they'll get it wrong. That's exactly where a real client's email task got
+stuck.
 
-El cliente OAuth que pide la skill es de tipo **"Desktop app"**. Google trata el
-secreto de ese tipo de cliente como **no confidencial** —está pensado para vivir
-dentro de aplicaciones que se distribuyen—, así que **podemos crear uno solo,
-nuestro, y usarlo en todos los agentes**.
+## The way out: one single OAuth app of our own
 
-Con eso, lo único que hace el cliente es: abrir un link, elegir su cuenta,
-aceptar y devolvernos un código. Dos minutos, por teléfono si hace falta.
+The OAuth client the skill asks for is of type **"Desktop app"**. Google
+treats that client type's secret as **non-confidential** — it's meant to
+live inside apps that get distributed — so **we can create just one, ours,
+and use it across every agent**.
 
-## Runbook — una vez, nosotros
+With that, all the client has to do is: open a link, pick their account,
+accept, and hand us back a code. Two minutes, over the phone if needed.
 
-1. Crear un proyecto en Google Cloud Console con la cuenta de tuagente.
-2. Habilitar las APIs que vayamos a ofrecer. **Empezar por Sheets, Drive, Docs y
-   Calendar**, y dejar Gmail afuera a propósito (ver la advertencia de abajo).
-3. Crear credenciales → ID de cliente de OAuth → tipo **Aplicación de escritorio**.
-4. Bajar el JSON y guardarlo donde guardamos los secretos del equipo.
-5. Configurar la pantalla de consentimiento con el nombre y el logo de
-   tuagente: es lo que el cliente va a ver cuando le pidamos permiso, y ahí se
-   gana o se pierde la confianza.
-6. **Publicar la app.** Mientras está en modo prueba solo funcionan los usuarios
-   que agregues a mano y **los permisos se vencen a los 7 días** — un agente que
-   deja de leer las planillas cada semana no es un producto.
+## Runbook — once, on our side
 
-## OJO: el `--services` de abajo no existe (medido 19/8/2026)
+1. Create a project in Google Cloud Console with tuagente's account.
+2. Enable the APIs we're going to offer. **Start with Sheets, Drive, Docs,
+   and Calendar**, and leave Gmail out on purpose (see the warning below).
+3. Create credentials → OAuth client ID → type **Desktop application**.
+4. Download the JSON and save it where we keep the team's secrets.
+5. Configure the consent screen with tuagente's name and logo: it's what
+   the client sees when we ask for permission, and that's where trust is
+   won or lost.
+6. **Publish the app.** While it's in test mode only the users you add by
+   hand work, and **permissions expire after 7 days** — an agent that stops
+   reading spreadsheets every week isn't a product.
 
-El `setup.py` del motor (v2026.7.30) tiene los scopes HARDCODEADOS — los ocho,
-Gmail y Drive completos incluidos — y no acepta acotarlos. Pero el chequeo sí
-tolera un token con menos scopes ("Don't pass scopes — user may have authorized
-only a subset"), así que la salida es hacer el flujo OAuth AFUERA con solo los
-scopes que el cliente necesita y escribir el token directo en
-`data/google_token.json` (formato authorized_user: client_id, client_secret,
-refresh_token, scopes). El helper vive en el scratchpad de la sesión del 19/8
-(`google_auth_url.py` + `google_exchange.py`); si se repite tres veces, entra
-al kit como `tools/conectar-google.py` de verdad.
+## HEADS UP: the `--services` flag below doesn't exist (measured 8/19/2026)
 
-## Runbook — por cada cliente
+The engine's `setup.py` (v2026.7.30) has the scopes HARDCODED — all eight,
+full Gmail and Drive included — and doesn't accept narrowing them. But the
+check DOES tolerate a token with fewer scopes ("Don't pass scopes — user may
+have authorized only a subset"), so the way out is running the OAuth flow
+OUTSIDE with only the scopes the client needs and writing the token straight
+into `data/google_token.json` (authorized_user format: client_id,
+client_secret, refresh_token, scopes). The helper lived in the 8/19
+session's scratchpad (`google_auth_url.py` + `google_exchange.py`); once it
+comes up a third time, it earns a real spot in the kit as
+`tools/connect-google.py`.
 
-1. Copiar el JSON del paso 4 al agente como `data/google_client_secret.json`.
-2. Correr el setup de la skill en modo no interactivo, pidiendo **solo los
-   servicios que ese cliente necesita** (`--services sheets,drive` si es lo
-   único que usa): cuantos menos permisos pida la pantalla, más gente acepta.
-3. Pasarle el link al cliente, que entra con su cuenta y acepta.
-4. Verificar con `--check`: tiene que decir `AUTHENTICATED`.
-5. Confirmar en el portal, pestaña Conexiones, que quedó en **Conectado**.
+## Runbook — per client
 
-## Advertencias que no hay que aprender a los golpes
+1. Copy the JSON from step 4 to the agent as `data/google_client_secret.json`.
+2. The skill's own setup can't narrow this (see the HEADS UP above: its
+   scopes are hardcoded). Run `tools/connect-google.py` instead, asking for
+   **only the scopes that client needs** — the fewer permissions the screen
+   asks for, the more people accept. Exact command in "Narrowed scopes"
+   below.
+3. Send the client the link; they sign in with their account and accept.
+4. Verify with `--check`: it has to say `AUTHENTICATED`.
+5. Confirm in the portal, Connections tab, that it shows as **Connected**.
 
-- **Gmail por OAuth sale caro.** Leer o mandar mail con la cuenta de Google es
-  un permiso *restringido*: para publicar la app, Google exige una auditoría de
-  seguridad de un tercero. Para correo usamos IMAP/SMTP con contraseña de
-  aplicación: minutos, cero trámite, y le sirve igual al cliente.
-- **Sheets/Docs/Calendar son permisos *sensibles*** (verificación de marca,
-  sin auditoría — el camino barato). **Ojo: Drive completo (`drive`,
-  `drive.readonly`) es *restringido* como Gmail** desde Project Strobe: para
-  verificar la app con ese permiso Google pide evaluación de seguridad (CASA).
-  Mientras la app esté publicada sin verificar funciona igual — con la pantalla
-  de "Google no verificó esta app" y tope de ~100 usuarios — que para pilotos
-  alcanza: el "Avanzado → continuar" lo tocamos nosotros, no el cliente.
-  **Verificado en vivo el 6/8/2026** con `drive.readonly`: en modo Prueba sin
-  test users da `403 access_denied`; publicada en producción, el consentimiento
-  pasa y el token queda andando.
-- **Protección Avanzada**: si la cuenta del cliente la tiene activada, su
-  administrador tiene que autorizar nuestro ID de cliente antes. Preguntarlo
-  ANTES de agendar la llamada, no durante.
-- **Un agente, una cuenta.** Nunca compartir un token entre clientes, ni usar la
-  cuenta de tuagente para operar los datos de un cliente.
+## Warnings not worth learning the hard way
 
-## Estado
+- **Gmail via OAuth is expensive.** Reading or sending mail with a Google
+  account is a *restricted* permission: to publish the app with it, Google
+  requires a third-party security audit. For email we use IMAP/SMTP with an
+  app password instead: minutes, zero paperwork, and it serves the client
+  just as well.
+- **Sheets/Docs/Calendar are *sensitive* permissions** (brand verification,
+  no audit needed — the cheap path). **Watch out: full Drive (`drive`,
+  `drive.readonly`) is *restricted*, just like Gmail,** since Project
+  Strobe: to verify the app with that permission Google requires a security
+  assessment (CASA). While the app is published unverified it still works —
+  with the "Google hasn't verified this app" screen and a cap of ~100 users
+  — which is enough for pilots: we're the ones who click through "Advanced
+  → continue", not the client. **Verified live on 6/8/2026** with
+  `drive.readonly`: in Testing mode without test users it returns `403
+  access_denied`; published in production, consent goes through and the
+  token keeps working.
+- **Advanced Protection**: if the client's account has it turned on, their
+  admin has to authorize our client ID beforehand. Ask about this BEFORE
+  scheduling the call, not during it.
+- **One agent, one account.** Never share a token between clients, and
+  never use tuagente's own account to operate on a client's data.
 
-**HECHO el 6/8/2026.** La app existe (proyecto GCP `tuagente-504715`, cliente
-Desktop, publicada en producción sin verificar) y el flujo completo está
-probado punta a punta con una cuenta real: consentimiento → token →
-`files.list` con `sharedWithMe=true` funcionando. El JSON del cliente OAuth
-vive en `tuagente.uy/.secrets/google_client_secret.json` (fuera de git).
+## Status
 
-## Scopes acotados: `tools/conectar-google.py`
+**DONE on 6/8/2026.** The app exists (GCP project `tuagente-504715`, Desktop
+client, published in production unverified) and the full flow has been
+tested end-to-end with a real account: consent → token → `files.list` with
+`sharedWithMe=true` working. The OAuth client's JSON lives in
+`tuagente.uy/.secrets/google_client_secret.json` (outside git).
 
-El `setup.py` del motor (v2026.7.30) tiene los scopes hardcodeados e incluye
-Gmail completo — esa pantalla no se le muestra a un cliente. Para el alta usar
-`tools/conectar-google.py` del kit: mismo flujo Desktop+PKCE, pero pide SOLO
-los scopes del caso (`--scopes drive.readonly`) y escribe el token en formato
-`authorized_user`, que el motor refresca solo. El `--check` del motor dirá
-`AUTHENTICATED (partial)` — es lo esperado.
+## Narrowed scopes: `tools/connect-google.py`
+
+The engine's `setup.py` (v2026.7.30) has the scopes hardcoded and includes
+full Gmail — that screen never gets shown to a client. For onboarding, use
+the kit's `tools/connect-google.py`: the same Desktop+PKCE flow, but it asks
+for ONLY the scopes the case needs (`--secret <path> --scopes
+drive.readonly --output google_token.json --url`, then `--code
+<redirect-url>` once the client accepts) and writes the token in
+`authorized_user` format, which the engine refreshes on its own. The
+engine's `--check` will say `AUTHENTICATED (partial)` — that's expected.

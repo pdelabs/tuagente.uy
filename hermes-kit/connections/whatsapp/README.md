@@ -1,80 +1,91 @@
 # WhatsApp
 
-Dos caminos, y la diferencia importa más que cualquier detalle técnico.
+Two paths, and the difference matters more than any technical detail.
 
-## Cloud API (oficial)
+## Cloud API (official)
 
-La única vía compatible para un número comercial. Pide cuenta de WhatsApp
-Business, Business Manager **verificado ante Meta** y un número que no esté
-activo en WhatsApp común.
+The only supported path for a business number. It requires a WhatsApp
+Business account, a Business Manager **verified with Meta**, and a number
+that isn't already active on regular WhatsApp.
 
-**Cuánto lleva:** días, por la verificación. Después no se toca nunca más.
+**How long it takes:** days, because of verification. After that, it's
+never touched again.
 
-**Ojo con el diagnóstico:** la app de WhatsApp Business (la gratuita) NO pide
-verificación — es otra cosa. Un cliente que ya hace catálogo o pauta en Meta
-probablemente ya tenga el Business Manager verificado y para él son horas. Uno
-que solo usa la app, arranca de cero. Preguntar antes de prometer un plazo.
+**Watch the diagnosis:** the WhatsApp Business app (the free one) does NOT
+require verification — it's a different thing. A client who already runs a
+catalog or ads on Meta probably already has a verified Business Manager,
+and for them it's a matter of hours. One who only uses the app starts from
+zero. Ask before promising a timeline.
 
-## Puente por QR (whatsapp-mcp)
+## QR bridge (whatsapp-mcp)
 
-Se aparea escaneando un QR con un WhatsApp normal. Cinco minutos y gratis.
+It pairs by scanning a QR code with a regular WhatsApp. Five minutes, and
+free.
 
-**El riesgo, dicho como es:** usa `whatsmeow`, una librería de ingeniería
-inversa del protocolo de WhatsApp Web. Viola los términos de Meta, que desde
-2025 viene detectando y bloqueando automatización de forma agresiva. **Le
-pueden bloquear el número.**
+**The risk, stated plainly:** it uses `whatsmeow`, a reverse-engineered
+library for the WhatsApp Web protocol. It violates Meta's terms, which
+since 2025 have been aggressively detecting and blocking automation. **The
+number can get blocked.**
 
-**Regla:** nunca en la línea comercial de un cliente. Solo en un número
-descartable, para una prueba, y con el riesgo dicho por escrito antes.
+**Rule:** never on a client's business line. Only on a disposable number,
+for a test, and with the risk spelled out in writing beforehand.
 
-## Qué se instala
+## What gets installed
 
-Un servicio más en el compose (ver `compose.yml`), con su bridge de Go y su
-SQLite. Ese SQLite guarda el historial de mensajes del dueño: vive dentro de su
-volumen y no sale de ahí.
+One more service in the compose file (see `compose.yml`), with its Go
+bridge and its SQLite database. That SQLite database stores the owner's
+message history: it lives inside their volume and never leaves it.
 
-El agente **no habla con este servicio**. Habla con el decorator, que es el
-único que puede alcanzarlo y el que aplica la política de `tools.json`.
+The agent **doesn't talk to this service directly**. It talks to the
+decorator, which is the only thing that can reach it and the one that
+applies the `tools.json` policy.
 
-## Política por defecto
+## Default policy
 
-Ocho herramientas leen y cuatro actúan (ver `tools.json`). Arranca con **leer
-sí, actuar no** — mandar mensajes se habilita después, a mano, desde el portal.
+Eight tools read and four act (see `tools.json`). It starts with **read
+yes, act no** — sending messages gets enabled later, by hand, from the
+portal.
 
-`download_media` quedó del lado de "actúa" aunque el nombre diga lo contrario:
-escribe en disco y baja lo que le manden.
+`download_media` ended up on the "act" side even though its name suggests
+otherwise: it writes to disk and downloads whatever gets sent to it.
 
-## Lo que falta construir
+## What's left to build
 
-La pantalla del QR en el portal. El bridge lo expone; el portal todavía no lo
-muestra. Sin eso, aparear es una tarea nuestra por consola.
+The QR screen in the portal. The bridge exposes it; the portal doesn't show
+it yet. Without that, pairing is a task we do ourselves from the console.
 
 ---
 
-## Lo que costó ponerlo a andar (9/8/2026)
+## What it cost to get this working (8/9/2026)
 
-El repo **no funciona como viene**. Queda anotado porque es el costo real de
-esta vía, y se va a repetir cada vez que Meta mueva algo.
+The repo **doesn't work out of the box**. This is noted because it's the
+real cost of this path, and it'll happen again every time Meta changes
+something.
 
-1. **`Client outdated (405)`** — el repo pinnea whatsmeow de marzo 2025 y
-   WhatsApp ya no lo acepta. Hubo que subirlo a la versión de agosto 2026.
-2. **Cinco cambios de API** en whatsmeow al actualizar: `Download`,
-   `sqlstore.New`, `GetFirstDevice`, `GetGroupInfo` y `Contacts.GetContact`
-   ahora piden `context.Context`. Y Go 1.25 como mínimo.
-3. **El pareo arrancaba solo** al levantar el contenedor: pedía un QR que
-   nadie miraba, se vencía a los 3 minutos, reiniciaba y volvía a pedir otro
-   — quemando sesiones para siempre. Ahora es a demanda.
+1. **`Client outdated (405)`** — the repo pins whatsmeow from March 2025
+   and WhatsApp no longer accepts it. It had to be bumped to the August
+   2026 version.
+2. **Five API changes** in whatsmeow after the update: `Download`,
+   `sqlstore.New`, `GetFirstDevice`, `GetGroupInfo`, and
+   `Contacts.GetContact` now require a `context.Context`. And Go 1.25 as a
+   minimum.
+3. **Pairing used to start on its own** when the container came up: it
+   requested a QR nobody was looking at, it expired after 3 minutes,
+   restarted, and requested another one — burning through sessions for
+   good. It's now on-demand.
 
-Los parches están en `bridge/main.go.patch`. Al actualizar el upstream hay que
-reaplicarlos.
+The patches are in `bridge/main.go.patch`. When updating upstream, they
+have to be reapplied.
 
-## Nuestros parches al bridge
+## Our patches to the bridge
 
-- **Pareo a demanda**: `POST /pair/start`, `GET /pair/status`,
-  `GET /pair/qr.png`. El REST arranca siempre, con o sin sesión.
-- **QR como PNG** además del de terminal, para que el portal lo muestre.
+- **On-demand pairing**: `POST /pair/start`, `GET /pair/status`,
+  `GET /pair/qr.png`. The REST API always comes up, with or without a
+  session.
+- **QR as a PNG** in addition to the terminal one, so the portal can
+  display it.
 
-El adapter los proxea con auth (`/portal/connections/whatsapp/pair/*`) y el
-portal tiene su propio diálogo, `DialogoWhatsApp.tsx`. El QR se trae por fetch
-con bearer y se dibuja como blob: un `<img src>` no manda el header, y un
-código de pareo no puede quedar abierto.
+The adapter proxies them with auth (`/portal/connections/whatsapp/pair/*`)
+and the portal has its own dialog, `WhatsAppDialog.tsx`. The QR gets
+fetched with a bearer token and rendered as a blob: an `<img src>` doesn't
+send the header, and a pairing code can't be left open.

@@ -7,7 +7,7 @@ Phase 0 lands — this plan builds on the English names.
 Language rule, restated because this plan was born from violating it: from now
 on EVERYTHING is English — file names, plugin ids, function names, comments,
 commit messages. The only Spanish in the repo is client-facing copy
-(rioplatense), which in a plugin manifest is exactly one field: `para_cliente`.
+(rioplatense), which in a plugin manifest is exactly one field: `for_client`.
 
 ## Why plugins
 
@@ -18,18 +18,18 @@ mechanisms with six names; the plugin is the package that unifies them.
 
 ## What exists today → the six surfaces of a plugin
 
-| # | Mechanism today (real paths, pre-translation) | Becomes |
+| # | Mechanism today (real paths) | Becomes |
 |---|---|---|
 | 1 | Kit skills: `skills/<name>/SKILL.md` + scripts, versioned frontmatter | **skills surface** — agent-facing instructions + code |
-| 2 | Hermes engine plugins: `politica/plugins/promesas/` (`plugin.yaml`, hooks like `transform_llm_output`) | **engine surface** — the engine already HAS a plugin system; we ship one today |
-| 3 | MCP gateway: `mcp-guardia/guardia.py` (hermes → gateway → real server on the internal compose net, policy mounted `:ro`, forbidden tools not even listed) | **mcp surface** — third-party MCP servers as compose services behind the gateway |
+| 2 | Hermes engine plugins: `policy/plugins/promises/` (`plugin.yaml`, hooks like `transform_llm_output`) | **engine surface** — the engine already HAS a plugin system; we ship one today |
+| 3 | MCP gateway: `mcp-guard/guard.py` (hermes → gateway → real server on the internal compose net, policy mounted `:ro`, forbidden tools not even listed) | **mcp surface** — third-party MCP servers as compose services behind the gateway |
 | 4 | Adapter endpoints: hand-written path-ifs in `adapter/portal_adapter.py` (~3.4k lines) | **adapter surface** — routes mounted under `/plugin/<id>/…` |
 | 5 | Portal tabs: hardcoded Next pages in `app/app/*` | **tab surface** — nav + a generic plugin page |
-| 6 | `capacidades/catalogo.json` entries (`instala/detecta/verifica` + client copy) | the plugin's **commercial face** (see "sales layer" below) |
+| 6 | `capabilities/catalog.json` entries (`installs/detects/verifies` + client copy) | the plugin's **commercial face** (see "sales layer" below) |
 
-Install pipeline that becomes plugin-aware (names pre-translation):
-`roles/build_role.py` → dist → `tools/contratar-rol.sh` (docker cp + hermes
-profile update) → `tools/agente-check.py` (post-install verification).
+Install pipeline that becomes plugin-aware: `roles/build_role.py` → dist →
+`tools/hire-role.sh` (docker cp + hermes profile update) →
+`tools/agent-check.py` (post-install verification).
 
 ## Plugin anatomy
 
@@ -43,7 +43,7 @@ the engine's inner `plugin.yaml` stays as the engine surface's own file).
   "id": "webscraping",
   "version": "1.0.0",
   "description": "Headless browser scraping, reusable across clients",
-  "para_cliente": "Que entre a una página y te traiga los datos solos.",
+  "for_client": "Que entre a una página y te traiga los datos solos.",
   "requires": {
     "plugins": ["kanban", "approvals"],
     "connections": [],
@@ -79,7 +79,7 @@ client-facing → Spanish.
 
 Constraint syntax starts minimal: bare id means "any version present". Add
 `id>=N` only when a real incompatibility exists. Registry version is truth:
-agents update explicitly via the update path (today `--actualizar`); no
+agents update explicitly via the update path (today `--update`); no
 per-client pins until a client actually needs one.
 
 ## System plugins (the defaults)
@@ -95,7 +95,7 @@ kanban            (root: Hermes ticket store /opt/data/kanban/… +
 ├── approvals     (skill + /portal/approvals + tab + the gate hook)
 ├── deliverables  (deliver script + /portal/files + tab)
 ├── artifacts     (skill + /portal/artifacts + tab)
-└── flows         (flow creation + /portal/flujos + tab;
+└── flows         (flow creation + /portal/flows + tab;
                    engine surface = the "promises" output-rewriter plugin)
 ```
 
@@ -108,7 +108,7 @@ kanban            (root: Hermes ticket store /opt/data/kanban/… +
 - **Harness, not plugins:** the MCP gateway and the connections system.
   Plugins declare `requires.connections`; they never own credentials or
   policy. Policy files stay under the read-only policy mount.
-- **Sales layer survives:** `capacidades/catalogo.json` remains what the
+- **Sales layer survives:** `capabilities/catalog.json` remains what the
   client sees and buys; an entry points at 1..n plugin ids. Plugin =
   engineering unit, capability = commercial unit.
 - **Portal:** nav is built from a new `/portal/plugins` endpoint (the adapter
@@ -119,18 +119,18 @@ kanban            (root: Hermes ticket store /opt/data/kanban/… +
 
 ## Naming map (proposed English ids; final renames belong to Phase 0)
 
-| Today (Spanish) | Plugin id |
+| Today | Plugin id |
 |---|---|
-| kanban / pipeline / tareas | `kanban` |
-| aprobacion | `approvals` |
-| entregable | `deliverables` |
-| artifact / artefactos | `artifacts` |
-| flujo / flujos (+ politica/plugins/promesas) | `flows` |
-| transcribir | `transcribe` |
-| facturas-a-datos | `invoice-extraction` |
-| presupuestos | `quotes` |
+| kanban / pipeline / tasks | `kanban` |
+| approval | `approvals` |
+| deliverable | `deliverables` |
+| artifact / artifacts | `artifacts` |
+| flow / flows (+ policy/plugins/promises) | `flows` |
+| transcribe | `transcribe` |
+| invoices-to-data | `invoice-extraction` |
+| quotes | `quotes` |
 | brand-kit, social-content, post-image | keep as-is (already English) |
-| capacidad (meta-skill: request a new capability) | `capability-requests` |
+| capability (meta-skill: request a new capability) | `capability-requests` |
 
 ## Phases (each shippable; nothing is a big bang)
 

@@ -1,346 +1,385 @@
-# COMPACT — estado del proyecto (2026-08-05, madrugada)
+# COMPACT — project status (2026-08-05, early morning)
 
-Contexto destilado para humanos y subagentes. **Fuente de verdad de hechos
-VERIFICADOS.** Lo que no diga "verificado", tratarlo como hipótesis.
+Distilled context for humans and subagents. **Source of truth for VERIFIED
+facts.** Anything that doesn't say "verified" should be treated as a
+hypothesis.
 
-## Los cuatro repos
+## The four repos
 
-| Repo | Qué es |
+| Repo | What it is |
 |---|---|
-| `tuagente.uy` | landing pública + **portal del cliente** (`app/app/`) + `docs/` |
-| `hermes-kit` | **lo que se instala en el agente de cada cliente** (producto) |
-| `agente-pdelabs` | La Mano — el agente de pdelabs, **cliente 0** y fixture |
-| `pdelabs-landing` | pdelabs.com, sin relación con esto |
+| `tuagente.uy` | public landing + **client portal** (`app/app/`) + `docs/` |
+| `hermes-kit` | **what gets installed on each client's agent** (the product) |
+| `agente-pdelabs` | La Mano — pdelabs' agent, **client 0** and fixture |
+| `pdelabs-landing` | pdelabs.com, unrelated to this |
 
-**PRINCIPIO CERO:** el portal sirve a CUALQUIER agente Hermes de cualquier
-cliente. Nada específico de un cliente entra al código ni al copy fijo.
+**PRINCIPLE ZERO:** the portal serves ANY Hermes agent of ANY client.
+Nothing client-specific goes into the code or into fixed copy.
 
-## Arquitectura
+## Architecture
 
-Portal estático (Next 14) → dos servicios **del agente del cliente**:
-- **`:8642`** gateway de Hermes (nativo): chat, sesiones, jobs.
-- **`:8643`** `portal_adapter.py` (nuestro sidecar, vive en el kit): tickets,
-  aprobaciones, artefactos, archivos, actividad, uso, capacidades, subidas, y el
-  **proxy del stream de chat** (el gateway lo sirve sin CORS y el browser lo
-  descarta). Hoy **v0.20.0**.
+Static portal (Next 14) → two services **on the client's agent**:
+- **`:8642`** Hermes gateway (native): chat, sessions, jobs.
+- **`:8643`** `portal_adapter.py` (our sidecar, lives in the kit): tickets,
+  approvals, artifacts, files, activity, usage, capabilities, uploads, and
+  the **chat stream proxy** (the gateway serves it without CORS and the
+  browser drops it). Today at **v0.20.0**.
 
-Auth: bearer con `API_SERVER_KEY` por magic link `#endpoint=&adapter=&key=`.
-`app/app/lib/agent.ts` es el ÚNICO punto de red del portal.
+Auth: bearer with `API_SERVER_KEY` via magic link `#endpoint=&adapter=&key=`.
+`app/app/lib/agent.ts` is the portal's ONLY network entry point.
 
-## El portal (11 pestañas)
+## The portal (11 tabs)
 
 Inicio · Chat · Pipeline · Aprobaciones · Artefactos · Tareas · Actividad ·
-Archivos · Uso · **Conexiones** · Capacidades. Cada una con su bienvenida propia
-(`app/app/lib/intros/`). Kit UI sin sombras, hairline, lucide, cero emojis.
+Archivos · Uso · **Conexiones** · Capacidades. Each with its own welcome
+screen (`app/app/lib/intros/`). UI kit with no shadows, hairline borders,
+lucide icons, zero emojis.
 
-Se puede: chatear con markdown rico (código, KaTeX, mermaid, HTML sanitizado,
-artefactos en iframe aislado), adjuntar archivos, referenciar tickets con `#` y
-archivos con `@`, crear/comentar/cambiar estado de tickets, **corregir un
-borrador y aprobarlo**, ver la consigna real de cada tarea programada con su
-historial, y el costo en USD por canal y por modelo.
+What it can do: chat with rich markdown (code with highlighting, KaTeX,
+mermaid, sanitized HTML, artifacts in a sandboxed iframe), attach files,
+reference tickets with `#` and files with `@`, create/comment/change the
+status of tickets, **correct a draft and approve it**, see the real prompt
+behind each scheduled task with its history, and cost in USD by channel and
+by model.
 
-**Todo lo que se abre tiene URL** (12/8): pestaña y detalle —una tarea, un
-entregable, una carpeta, una conversación, un pedido de aprobación—. Van por
-query sobre la pestaña (`/app/pipeline?tarea=t_ab12`,
-`/app/archivos?archivo=entregables/informe.md`) y NO por segmentos de path:
-en el build todas las pestañas son `○ (Static)` y la única `ƒ` es
-`/app/flujos/[slug]`; un segmento por detalle ataría el portal a tener
-servidor. Tampoco por hash: ahí llega la credencial. El contrato completo
-—lo que el agente puede citar, con **qué fila se probó y cuál no**— está en
-`docs/rutas-portal.md`: ojo con darlo por verificado entero, la primera versión
-de esa tabla decía "cada fila está probada" y tres filas mentían.
-De paso, el magic link ya no deja la clave en la barra de direcciones: se borra
-del hash apenas queda guardada.
+**Everything that opens has a URL** (12/8): tab and detail — a task, a
+deliverable, a folder, a conversation, an approval request. They travel as
+a query on top of the tab (`/app/pipeline?task=t_ab12`,
+`/app/files?file=entregables/informe.md`) and NOT as path segments: in the
+build every tab is `○ (Static)` and the only `ƒ` is `/app/flows/[slug]`; a
+segment per detail would tie the portal to needing a server. Not via hash
+either: that's where the credential travels. The full contract — what the
+agent can cite, with **which row was tested and which wasn't** — is in
+`docs/portal-routes.md`: careful about taking it as fully verified, the
+first version of that table said "every row is tested" and three rows were
+lying.
 
-Un comentario desde el portal **despierta al agente** (el adapter le manda la
-ficha del ticket con fechas) y **su respuesta se publica como comentario en el
-mismo ticket**. Todos los avisos usan una sola sesión, oculta del chat.
+Also, the magic link no longer leaves the key in the address bar: it gets
+wiped from the hash as soon as it's saved.
 
-## El kit
+A comment from the portal **wakes the agent up** (the adapter sends it the
+ticket's card with dates) and **its reply gets published as a comment on
+that same ticket**. All the notifications use a single session, hidden from
+the chat.
 
-`nuevo-agente.sh` (crea el repo del cliente: compose, config.yaml con la receta
-de kanban y los toolsets caros apagados, SOUL borrador, skills, adapter) · `install.sh` (instala/actualiza; `--diff` contra la
-deriva) · `adapter/` · `skills/` (artifact, entregable, aprobacion) ·
-`connections/` (catálogo curado + runbook de Google) · `soul/` (5 bloques con
-placeholders) · `onboarding/brief-empresa.md` · `tools/portal-check.py`
-(**0 fallas o no se entrega**) y `tools/agente-check.py` (offline, antes de
-prender: frontmatter, SOUL sin huecos, los olvidos de config).
+## The kit
 
-## Hechos verificados sobre Hermes (MIT, Nous Research)
+`new-agent.sh` (creates the client's repo: compose, `config.yaml` with the
+kanban recipe and the expensive toolsets turned off, draft SOUL, skills,
+adapter) · `install.sh` (installs/updates; `--diff` against drift) ·
+`adapter/` · `skills/` (artifact, deliverable, approval) · `connections/`
+(curated catalog + Google runbook) · `soul/` (5 blocks with placeholders) ·
+`onboarding/company-brief.md` · `tools/portal-check.py` (**0 failures or it
+doesn't ship**) and `tools/agent-check.py` (offline, before powering on:
+frontmatter, SOUL with no gaps, the classic config oversights).
 
-- **Skills:** se auto-descubren (un manifiesto mtime+tamaño dispara la
-  reindexación, sin comandos ni reinicio) pero **tardan** (~20 min observado).
-  Cada `SKILL.md` **necesita frontmatter con `name` y `description`**: sin eso se
-  indexa con descripción vacía y el agente no la usa nunca.
-- **Bloqueo pegajoso:** un ticket vuelve solo a `ready` salvo que su último
-  evento sea un `blocked` **tipado**. Demostrado con control: uno creado con
-  `--initial-status blocked` pasó a `ready` en ~75 s; uno bloqueado con la acción
-  aguantó. **Un pedido de aprobación creado "bloqueado" se lee como aprobado.**
-  Las herramientas nativas no exponen el estado inicial: por ahí no es alcanzable.
-- **Toolsets:** el toolset `kanban` (12 herramientas) necesita **dos** claves en
-  `config.yaml`: `toolsets: [kanban]` abre el `check_fn`, y `platform_toolsets`
-  con `kanban` por plataforma pasa el filtro con el que el gateway arma la
-  sesión. Con una sola, cero tools de kanban. `kanban` no está en
-  `CONFIGURABLE_TOOLSETS`, así que no se puede pedir por el camino normal.
-  Verificado el 4/8 con control en un agente descartable; receta y reproducción
-  en `hermes-kit/notas/kanban-nativo.md`. **Nuestro plugin se borró**: lo único
-  que hacía era declarar `kanban` en `provides_tools` y destrabarlo de rebote.
-- **Contexto:** ver la medición de abajo. Parte del system prompt es Hermes
-  hablando de sí mismo (le dice que es "Hermes Agent by Nous Research" y que dar
-  soporte del runtime es parte de su trabajo); eso no lo controlamos.
-- **Crons:** se crean por CLI, no por yaml. Una tarea creada desde una sesión del
-  portal entrega a esa sesión, **que no puede recibir mensajes**: corre bien y no
-  llega nada, sin aviso.
-- **Tableros:** el default es `kanban.db`; los demás en
-  `kanban/boards/<slug>/kanban.db` con un `board.json` que ya trae `project_id`.
-  El adapter los lista y acepta `?board=`; las escrituras van al default.
+## Verified facts about Hermes (MIT, Nous Research)
 
-## Conexiones (nuevo, 5/8)
+- **Skills:** they auto-discover (a manifest's mtime+size triggers
+  reindexing, no commands or restart needed) but it's **slow** (~20 min
+  observed). Every `SKILL.md` **needs frontmatter with `name` and
+  `description`**: without it, it gets indexed with an empty description and
+  the agent never uses it.
+- **Sticky blocking:** a ticket returns on its own to `ready` unless its
+  last event is a **typed** `blocked`. Demonstrated with a control: one
+  created with `--initial-status blocked` moved to `ready` in ~75 s; one
+  blocked via the action held. **An approval request created "blocked"
+  reads as approved.** The native tools don't expose the initial status:
+  that path isn't reachable.
+- **Toolsets:** the `kanban` toolset (12 tools) needs **two** keys in
+  `config.yaml`: `toolsets: [kanban]` opens the `check_fn`, and
+  `platform_toolsets` with `kanban` per platform gets past the filter the
+  gateway uses to assemble the session. With only one, zero kanban tools.
+  `kanban` isn't in `CONFIGURABLE_TOOLSETS`, so it can't be requested the
+  normal way. Verified on 4/8 with a control on a disposable agent; recipe
+  and reproduction in `hermes-kit/notes/native-kanban.md`. **Our plugin got
+  deleted**: all it did was declare `kanban` in `provides_tools` and
+  unblock it as a side effect.
+- **Context:** see the measurement below. Part of the system prompt is
+  Hermes talking about itself (it tells the model it's "Hermes Agent by
+  Nous Research" and that supporting the runtime is part of its job); we
+  don't control that.
+- **Crons:** they're created via CLI, not yaml. A task created from a
+  portal session delivers to that session, **which can't receive
+  messages**: it runs fine and nothing arrives, with no warning.
+- **Boards:** the default is `kanban.db`; the rest are at
+  `kanban/boards/<slug>/kanban.db` with a `board.json` that already carries
+  `project_id`. The adapter lists them and accepts `?board=`; writes go to
+  the default.
 
-El catálogo vive en el kit (`connections/catalogo.json`) y se instala en cada
-agente; el adapter calcula el estado **por presencia** de credenciales, archivos
-o plugins y nunca devuelve un valor. Tres estados: conectado / sin_conectar /
-**bloqueado** (= falta algo NUESTRO, típicamente la app OAuth de tuagente).
+## Connections (new, 5/8)
 
-Desde el portal no se conecta ni se pegan claves: se **pide**, y eso crea un
-ticket. Google Workspace (Sheets, Drive, Agenda, Docs) ya lo soporta el motor;
-falta crear una sola app OAuth tipo "Desktop app" nuestra y reusarla en todos
-los clientes — ver `hermes-kit/connections/google-workspace.md`.
+The catalog lives in the kit (`connections/catalog.json`) and gets
+installed on every agent; the adapter computes status **by presence** of
+credentials, files, or plugins and never returns a stored value. Three
+states: connected / disconnected / **blocked** (= something of OURS is
+missing, typically tuagente's OAuth app).
 
-## Presupuesto de contexto, medido (5/8, agente nuevo)
+Nothing gets connected or pasted from the portal: it's **requested**, and
+that creates a ticket. Google Workspace (Sheets, Drive, Calendar, Docs) is
+already supported by the engine; what's missing is creating a single
+"Desktop app"-type OAuth app of ours and reusing it across every client —
+see `hermes-kit/connections/google-workspace.md`.
+
+## Context budget, measured (5/8, new agent)
 
 ```
-system prompt   39,6 KB   (de eso ~11 KB son los bloques de SOUL del kit)
-esquemas tools  67,6 KB   → 60,0 KB apagando tts y delegation
+system prompt   39.6 KB   (of that, ~11 KB are the kit's SOUL blocks)
+tool schemas    67.6 KB   → 60.0 KB with tts and delegation turned off
 ```
 
-Los esquemas pesan casi el doble que el system prompt entero: **la palanca es
-`agent.disabled_toolsets`, no reescribir prosa.** kanban solo son 19,8 KB.
+The schemas weigh almost double the entire system prompt: **the lever is
+`agent.disabled_toolsets`, not rewriting prose.** kanban alone is only 19.8 KB.
 
-## Endpoints verificados
+## Verified endpoints
 
-**:8642** — `POST /v1/chat/completions` (stream OpenAI) · `GET/POST /api/sessions`
-· `PATCH`/`DELETE /api/sessions/{id}` · `POST /api/sessions/{id}/chat/stream`
-(body `{message}` singular, **SSE nativo**, incompatible con el parser OpenAI) ·
-`GET /api/jobs?include_disabled=true` (¡sin eso esconde los pausados!) ·
-`POST /api/jobs/{id}/pause|resume|run` · `GET /health`.
+**:8642** — `POST /v1/chat/completions` (OpenAI-style stream) ·
+`GET/POST /api/sessions` · `PATCH`/`DELETE /api/sessions/{id}` ·
+`POST /api/sessions/{id}/chat/stream` (body `{message}` singular, **native
+SSE**, incompatible with the OpenAI parser) ·
+`GET /api/jobs?include_disabled=true` (without that it hides the paused
+ones!) · `POST /api/jobs/{id}/pause|resume|run` · `GET /health`.
 
-**:8643** — `manifest` · `tickets` (+`/{id}`, POST crear, comentar, estado) ·
-`approvals` (+approve con `{correction}` opcional; reject con `{reason}` y
-`{definitivo}` opcional, que además CIERRA el ticket) · `artifacts`
-(+`/{id}`, DELETE) · `activity` · `uso` (lo que OpenRouter le cobró a la
-clave del agente; reemplazó a `usage`, que mentía 9x para abajo) · `files` (+`/{path}`, siempre
-text/plain) · `crons/{id}` · `capabilities` · `boards` · `POST upload` ·
-`POST sessions/{id}/chat/stream` (proxy).
+**:8643** — `manifest` · `tickets` (+`/{id}`, POST create, comment, status) ·
+`approvals` (+approve with optional `{correction}`; reject with `{reason}`
+and optional `{final}`, which also CLOSES the ticket) · `artifacts`
+(+`/{id}`, DELETE) · `activity` · `usage` (what OpenRouter actually billed
+the agent's key; this is `/portal/uso` under its new English name,
+`/portal/usage` — not to be confused with an earlier, unrelated
+`/portal/usage` v1 that undercounted by 9x and was retired in favor of
+`/portal/uso` back then; the current endpoint is that same `uso`
+implementation, just renamed, not the old broken one coming back) ·
+`files` (+`/{path}`, always `text/plain`) · `crons/{id}` · `capabilities` ·
+`boards` · `POST upload` · `POST sessions/{id}/chat/stream` (proxy).
 
-## Lecciones duras (NO repetir)
+## Hard lessons (do NOT repeat)
 
-0. **Verificar el camino del cliente, no la pieza recién construida.** Todos los
-   huecos de hoy aparecieron cuando Luis empujó, y todos morían con un solo
-   comando. Antes de decir "listo": correr el flujo entero desde el estado en que
-   lo encontraría un cliente, y separar lo verificado de lo inferido.
-1. **kanban.db: jamás SQL de escritura.** Y para leer, `PRAGMA query_only`, NO
-   `mode=ro`: en WAL, una conexión de solo lectura crea el `-shm` sin permiso de
-   escritura y **rompe a todo el que quiera escribir** (nos tumbaba el dashboard
-   de Hermes al ritmo del polling).
-2. **Las memorias del agente pisan las herramientas.** Se había escrito solo la
-   receta del terminal y la siguió usando aun con herramientas nativas
-   disponibles. Dar una herramienta nueva incluye revisar qué tiene memorizado.
-3. **Telegram: jamás diagnosticar con `getUpdates` desde afuera** — hay un solo
-   long-poll por bot: la sonda le corta la conexión al agente y fabrica la falla
-   que quiere medir. Verificar en pasivo con `docker logs`.
-4. `docker exec` con heredoc: siempre `-i`. Archivos al browser: siempre
-   `text/plain`. Nunca `git add -A` con subagentes escribiendo.
-5. `hermes kanban`: opciones `--flag=valor` y `--` antes de los posicionales.
-6. **Un ticket tiene UN desbloqueo, y no es del portal gastarlo.** A las dos
-   re-bloqueadas por la misma causa el motor lo manda a `triage` —donde Aprobar
-   contesta 409— o lo parte con el auto-decomposer usando el **cuerpo viejo**.
-   Por eso rechazar es sólo un comentario firmado `cliente` y no toca el estado:
-   el `unblock` se gasta una vez, al aprobar. Ver `docs/PENDIENTES.md`.
-7. **Lo que firma `cliente` no siempre lo escribió el cliente.** Rechazar y
-   aprobar-con-corrección dejan en el ticket un prompt para la máquina firmado
-   como suyo ("RECHAZADO POR TU CLIENTE. No hagas lo que pediste aprobar…"), y
-   el portal lo mostraba tal cual arriba de un "Vos". Todo comentario pasa por
-   `leerComentario` (`lib/agent.ts`) antes de llegar a la pantalla.
-7b. **Y ese filtro se aplica MIRANDO QUIÉN FIRMA, no el prefijo.** Reconocerlo
-   sólo por el texto convertía el prefijo en un interruptor de luz: un
-   comentario del AGENTE que arrancaba con "RECHAZADO POR TU CLIENTE." salía
-   como «Tu agente · Lo rechazaste» y **sin una palabra de texto** — porque de
-   un rechazo se muestra el bloque del motivo, que un comentario suyo no tiene.
-   O sea, un canal por el cual el modelo esconde de la pantalla cualquier cosa
-   que escriba. Regla: los formatos de máquina se aplican sólo a lo que firma
-   el cliente; lo demás se muestra crudo. Y **ningún camino puede devolver
-   vacío**: si el formato no matchea entero (un rechazo sin bloque de motivo),
-   se muestra el crudo. Medido contra el agente del lab con comentarios
-   sembrados por CLI, 12/8.
-8. **El interruptor de "pasos internos" es para el ruido, no para las malas
-   noticias.** `block_loop_detected` y `decomposed` suenan a maquinaria y son
-   las dos únicas señales de que el pedido del cliente se rompió: van siempre a
-   la vista. Detrás del interruptor sólo lo que no cambia ninguna decisión
-   (latidos, arranques, esperas, asignaciones).
-9. **Un id de la URL nunca se humaniza para hacerlo pasar por un nombre.**
-   `?conexion=noexiste-xyz` terminaba anunciando "Venís a conectar noexiste
-   xyz": el portal inventándole un producto al cliente. Chequeo de existencia
-   primero, y si no está, `AvisoLinkViejo` + la lista.
+0. **Verify the client's path, not the piece you just built.** Every gap
+   today showed up when Luis pushed, and every one of them died with a
+   single command. Before saying "done": run the whole flow from the state
+   a client would actually find it in, and separate what's verified from
+   what's inferred.
+1. **kanban.db: never write SQL to it.** And to read it, `PRAGMA
+   query_only`, NOT `mode=ro`: in WAL, a read-only connection creates the
+   `-shm` file without write permission and **breaks everyone else who wants
+   to write** (it used to take down Hermes' own dashboard at the pace of
+   its polling).
+2. **The agent's memories override its tools.** It had only ever written
+   down the terminal recipe and kept using it even once native tools were
+   available. Giving it a new tool includes checking what it has memorized.
+3. **Telegram: never diagnose with `getUpdates` from outside** — there's a
+   single long-poll per bot: the probe cuts the agent's own connection and
+   manufactures the exact failure it's trying to measure. Verify passively
+   with `docker logs`.
+4. `docker exec` with a heredoc: always `-i`. Files to the browser: always
+   `text/plain`. Never `git add -A` while subagents are writing.
+5. `hermes kanban`: `--flag=value` options and `--` before positionals.
+6. **A ticket has ONE unblock, and it's not the portal's to spend.** On the
+   second re-block for the same cause, the engine sends it to `triage` —
+   where Approve answers `409` — or splits it with the auto-decomposer
+   using the **old body**. That's why rejecting is just a comment signed
+   `cliente` and doesn't touch the status: the `unblock` gets spent once,
+   on approval. See `docs/PENDING.md`.
+7. **What's signed `cliente` wasn't always written by the client.**
+   Rejecting and approving-with-correction leave a machine prompt on the
+   ticket signed as if it were the client's own ("RECHAZADO POR TU CLIENTE.
+   No hagas lo que pediste aprobar…"), and the portal used to show it
+   verbatim above a "Vos." Every comment goes through `readComment`
+   (`lib/agent.ts`) before it reaches the screen.
+7b. **And that filter is applied by LOOKING AT WHO SIGNED IT, not the
+   prefix.** Recognizing it by text alone turned the prefix into a light
+   switch: a comment from the AGENT that happened to start with "RECHAZADO
+   POR TU CLIENTE." came out as «Tu agente · Lo rechazaste» and **with not
+   a word of text** — because a rejection shows the reason block, which a
+   comment of its own doesn't have. In other words, a channel through which
+   the model can hide anything it writes from the screen. Rule: machine
+   formats apply only to what the client signs; everything else is shown
+   raw. And **no path can return empty**: if the format doesn't match in
+   full (a rejection with no reason block), the raw text is shown. Measured
+   against the lab agent with comments seeded via CLI, 12/8.
+8. **The "internal steps" toggle is for noise, not for bad news.**
+   `block_loop_detected` and `decomposed` sound like plumbing and are the
+   only two signals that the client's request broke: they're always
+   visible. Behind the toggle goes only what doesn't change any decision
+   (heartbeats, startups, waits, assignments).
+9. **A URL id never gets humanized to pass for a name.**
+   `?connection=noexiste-xyz` used to announce "Venís a conectar noexiste
+   xyz": the portal inventing a product for the client. Existence check
+   first, and if it's not there, `StaleLinkNotice` + the list.
 
-## Estética
-M3 expressive del `tailwind.config.ts`: primary #5B4BE8, surface #FBFAFF,
-ink #14131F, tonales c-violet/c-green/c-coral/c-amber, Jakarta. Sin sombras.
+## Aesthetics
+M3 expressive from `tailwind.config.ts`: primary #5B4BE8, surface #FBFAFF,
+ink #14131F, tonal colors c-violet/c-green/c-coral/c-amber, Jakarta. No
+shadows.
 
-## El agentito (7-8/8)
-Personaje Rive en `public/agentito.riv` (21 KB), autorado 100% por MCP
-(`rivemcp`). El state machine "Agentito" expone 13 inputs: `miradaX`/`miradaY`
-(pupilas), `gesto` (qué objeto saca), los triggers `festejar` y `matear`, y 8
-ejes de rasgos —tono, antena, accesorio, pupila, boca, piel, traje, cejas— que
-dan 31 mil combinaciones. El cliente lo bautiza y le sortea la pinta en el
-onboarding.
+## The agentito (7-8/8)
+A Rive character in `public/agentito.riv` (21 KB), 100% authored via MCP
+(`rivemcp`). The "Agentito" state machine exposes 13 inputs: `miradaX`/
+`miradaY` (pupils), `gesto` (which object it pulls out), the `festejar` and
+`matear` triggers, and 8 trait axes — tone, antenna, accessory, pupil,
+mouth, skin, suit, brows — that give 31 thousand combinations. The client
+names it and rolls its look during onboarding.
 
-**Los gestos de trabajo son pose + mirada** (`gesto` 1-5): pensar es ladear la
-cabeza y arquear UNA ceja (dibujada aparte, `cejaArco`: tapa las cejas del look,
-así aparece también en los agentitos que no tienen); leer saca un libro y pasa
-la página; escribir, libreta y lápiz que garabatea; buscar, una lupa que barre
-la cara; hacer, una llave inglesa que gira un tornillo (la boca en C es un
-`boolean_shapes` de verdad, con agujero, así se ve la tuerca por adentro). Son
-animaciones en loop del `.riv`, en su propio layer (el 14), cada una apagando
-los objetos de los otros por opacidad; el state machine cruza suave en 220 ms.
-La mirada la sigue manejando el código y apunta a donde está la acción. Antes
-eran solo pupilas y a 28px eso no se leía — el usuario los vio y no distinguía
-ninguno. Solo "pensando" toca las cejas; en el resto la expresión la da el
-objeto. Descartado por feo: el globo con tres puntos (parecía el "está
-escribiendo…" de un chat), los engranajes, y **la mano** — se probaron tres
-versiones (nudillos, puño de barras, manopla) y ninguna cerró: el agentito no
-tiene brazos, así que cualquier mano queda flotando y a 28px es una manchita.
+**The working gestures are pose + gaze** (`gesto` 1-5): thinking is tilting
+the head and arching ONE brow (drawn separately, `cejaArco`: it covers the
+look's own brows, so it shows up even on agentitos that don't have any);
+reading pulls out a book and turns the page; writing, a notepad and a pencil
+that scribbles; searching, a magnifying glass sweeping across the face;
+doing, a wrench turning a screw (the mouth in a C is a real `boolean_shapes`,
+with a hole, so you can see the nut from inside). They're looping animations
+inside the `.riv`, each in its own layer (14), each one turning off the
+others' objects via opacity; the state machine cross-fades over 220 ms. The
+gaze is still driven by code and points at wherever the action is. It used
+to be just the pupils, and at 28px that didn't read — the user saw them and
+couldn't tell any of them apart. Only "thinking" touches the brows; for the
+rest, the object carries the expression. Discarded for being ugly: the
+three-dot bubble (it looked like a chat's "typing…"), gears, and **the
+hand** — three versions were tried (knuckles, a fist of bars, a mitten) and
+none landed: the agentito has no arms, so any hand ends up floating, and at
+28px it's just a smudge.
 
-**El bautizo vive en el agente, no en el browser** (`POST /portal/identity`,
-adapter 0.26). El adapter lo guarda en `/opt/data/portal_identidad.json`, lo
-reporta en el manifiesto (`agent`, `look`, `bautizado`), escribe el nombre en un
-bloque acotado del `SOUL.md` —entre marcadores `<!-- portal:identidad -->`, sin
-tocar la prosa del alta— para que el agente SE PRESENTE así, y le pega un
-`setMyName` al bot de Telegram. Todo lo de afuera es best-effort: si Telegram
-limita o falta el SOUL, el bautizo igual quedó. localStorage queda como caché:
-desde otra máquina el portal aprende del agente y no vuelve a pedir el nombre.
-La **foto** del bot no se puede por API — `@BotFather` `/setuserpic`, a mano.
+**The naming lives on the agent, not in the browser** (`POST
+/portal/identity`, adapter 0.26). The adapter stores it at
+`/opt/data/portal_identity.json`, reports it in the manifest (`agent`,
+`look`, `named`), writes the name into a bounded block of `SOUL.md` —
+between `<!-- portal:identity -->` markers, without touching the onboarding
+prose — so the agent INTRODUCES ITSELF that way, and pushes a `setMyName`
+to the Telegram bot. Everything outside the agent is best-effort: if
+Telegram rate-limits or the SOUL is missing, the naming still went through.
+localStorage acts as a cache: from another machine the portal learns from
+the agent and doesn't ask for the name again. The bot's **photo** can't be
+set via API — `@BotFather` `/setuserpic`, by hand.
 
-**Dónde aparece, y en ningún lado más**: onboarding (grande, animado), logo del
-sidebar (chico, SVG), login (SVG), Inicio (chico, animado: se ceba mates si no
-hay pendientes, festeja cuando aparece un entregable, mira al badge si algo
-espera tu ok) y la pantalla de sin conexión (SVG dormido). NO va flotando, ni
-en cada empty state, ni en las intros de módulo.
+**Where it shows up, and nowhere else**: onboarding (large, animated),
+sidebar logo (small, SVG), login (SVG), Inicio (small, animated: it brews
+mate if nothing's pending, celebrates when a deliverable shows up, looks at
+the badge if something's waiting on your ok), and the disconnected screen
+(SVG, asleep). It does NOT float around, isn't in every empty state, and
+isn't in the module intros.
 
-`lib/agentito.tsx` es la casa del look: tipos, ejes, localStorage y
-`AgentitoAvatar`, el mismo dibujo en SVG estático sin runtime. El runtime Rive
-(`@rive-app/react-canvas-lite`, wasm ~330 KB servido desde `/public`) entra solo
-con `next/dynamic` en el onboarding y en Inicio.
+`lib/agentito.tsx` is where the look lives: types, axes, localStorage, and
+`AgentitoAvatar`, the same drawing as a static SVG with no runtime. The Rive
+runtime (`@rive-app/react-canvas-lite`, wasm ~330 KB served from `/public`)
+only loads via `next/dynamic`, in onboarding and in Inicio.
 
-### La escalera del ocio (12/8)
-Dos animaciones nuevas, las dos sobre el ABURRIMIENTO DEL USUARIO, no sobre el
-estado del agente — por eso el reloj vive dentro de `AgentitoRive` y no en el
-prop `estado`: el portal sabe si hay pendientes, no si te fuiste a hacer otra
-cosa. Solo corre con `estado === "tranquilo"`. Mates (~20 s, ya estaba) →
-**bostezo** (trigger `bostezar`, 1½ min, se repite) → **el celu** (`gesto = 10`,
-4 min): saca el teléfono DADO VUELTA —la cámara le ve la espalda—, la pantalla
-le baña la cara con un haz de cuatro elipses de gradiente radial, y los ojos
-leen siguiendo los tirones del scroll.
+### The idleness ladder (12/8)
+Two new animations, both about the USER'S BOREDOM, not the agent's state —
+that's why the clock lives inside `AgentitoRive` and not in the `status`
+prop: the portal knows if there's anything pending, not whether you wandered
+off to do something else. It only runs with `status === "tranquilo"`. Mate
+(~20 s, already existed) → **yawn** (`bostezar` trigger, 1½ min, repeats) →
+**the phone** (`gesto = 10`, 4 min): it pulls out the phone FACE DOWN — the
+camera sees its back —, the screen washes its face with a beam of four
+radial-gradient ellipses, and the eyes read along with the scroll's tugs.
 
-**El clic es el remate.** Mover el mouse NO le guarda el celu (solo reprograma
-el reloj): si el mousemove cortara el gesto, la guardada no se vería nunca,
-porque siempre movés el mouse ANTES de hacer clic. Lo despiertan solo las
-acciones deliberadas —clic, tecla, scroll, toque— y ahí el `.riv` dispara
-`guardarCelu` solo, por la condición `gesto != 10`. Si llega laburo mientras
-está distraído, el gesto pedido gana: guarda y va a lo suyo.
+**The click is the payoff.** Moving the mouse does NOT save the phone gesture
+(it only reschedules the clock): if `mousemove` cut the gesture short, the
+save would never be seen, because you always move the mouse BEFORE
+clicking. Only deliberate actions wake it up — click, keypress, scroll,
+touch — and there the `.riv` fires `guardarCelu` on its own, via the
+condition `gesto != 10`. If work arrives while it's distracted, the
+requested gesture wins: it saves the phone and gets on with it.
 
-Sale en Inicio (64-72 px) y en la bienvenida del chat (144 px). En el avatar de
-28 px del chat no puede salir: ahí el estado siempre es un gesto de trabajo.
+Shows up in Inicio (64-72 px) and in the chat's welcome screen (144 px). In
+the chat's 28px avatar it can't show up: there, the state is always a
+working gesture.
 
-Las otras ocho que se probaron y NO entraron están en
-`scratchpad/agentito/drafts/` de la sesión del 12/8 (desperezarse, cabecear,
-disimular, entregar, apagado, preocupado, escuchando, hablando), cada una con
-su `.riv` propio y su gif.
+The other eight that were tried and did NOT make it are in
+`scratchpad/agentito/drafts/` from the 12/8 session (stretching, nodding
+off, playing it cool, handing off, powered down, worried, listening,
+talking), each with its own `.riv` and gif.
 
-### Trampas verificadas
-1. **Z-order al revés**: los hijos de un grupo se listan de ADELANTE hacia
-   atrás. Un `add_*` con `group=` entra al FONDO (detrás de la panza,
-   invisible). Hay que sacarlo a la raíz y volver a meterlo con `place:"front"`.
-   Dentro del grupo, en cambio, el orden es el de creación: lo que se agrega
-   PRIMERO queda adelante. Al dibujar un objeto, agregar de adelante hacia
-   atrás (los renglones antes que las hojas del libro).
-2. **El linter miente con los blend states**: `validate_riv_structural` marca
-   "transition-target-range" en los dos layers de mirada desde el día uno. Es
-   falso positivo: en el runtime real la mirada anda. Confiar en `export_riv
-   --dryRun` + el navegador, no en el linter.
-3. **No calcular posiciones a ojo**: para calibrar la bombilla en la boca se
-   midió leyendo píxeles del canvas (`scratchpad/rive-test/probe.js`). Reveló
-   que la matemática estaba bien y el problema era el z-order.
-4. **Nunca escribir en un input de Rive desde el cleanup de un efecto.**
-   `useRive` se declara ANTES que tus efectos, así que al desmontar su cleanup
-   corre primero y destruye la instancia: escribir después tira "Cannot set
-   properties of null" y se lleva puesta la pantalla entera (pantalla blanca de
-   Next). Pasó con los gestos del chat, al terminar cada respuesta. El cleanup
-   solo corta el rAF; las escrituras por frame van con try/catch.
-5. **rivemcp tiene cupo de exports** (3, parece que se renuevan por día).
-   Iterar sobre `save_session` —que escribe un .riv que anda— y gastar el
-   export solo para el archivo que se commitea. Si el cupo se agotó, el
-   checkpoint de `save_session` sirve igual: el `.riv` de los gestos se
-   verificó en el navegador y se copió a `public/` desde ahí.
-6. **Lo que un gesto mueve, alguien lo tiene que devolver.** Rive no resetea:
-   una propiedad que solo escribe tu animación queda clavada en el último valor
-   cuando el gesto termina. Pasó con la inclinación del cuerpo al pensar: el
-   agentito quedaba torcido para siempre. Lo que escribe un layer más abajo se
-   arregla solo (la opacidad de las cejas la pone el layer del look cada frame);
-   lo demás hay que devolverlo a mano. `cuerpo.rotation` se resetea en
-   `sinMate`, no en `sinGesto`: el layer del mate corre ANTES, así que desde
-   `sinGesto` le pisábamos la inclinación de la cebada. Lo prueba
-   `scratchpad/drive-reset.js`, que prende y apaga cada gesto y mide la punta
-   de la antena.
-7. **El trim path se rompe si tocás la geometría después.** Para la ceja curva
-   se probó elipse + stroke + `set_trim_path`: el primer arco sale bien, pero
-   cambiar `width`/`height`/`rotation` lo parte en pedacitos y volver a aplicar
-   el trim no lo arregla. Terminó siendo tres barras redondeadas que arman el
-   arco — feo de escribir, pero se ve igual y no se rompe.
-8. **`move_object` conserva la APARIENCIA, y eso incluye la opacidad.** Sacar
-   un hijo de un grupo invisible a la raíz le escribe opacidad 0 encima para
-   que siga sin verse; al devolverlo al grupo, esa opacidad 0 QUEDA y el objeto
-   nunca más aparece. Pasó con el lápiz: se movió mientras `libreta` estaba en
-   0 y desapareció, aunque el orden de dibujo estuviera bien. Después de mover
-   algo dentro de un grupo apagado, revisar su opacidad con `get_object_info`.
-9. **La opacidad ESTÁTICA de un objeto es lo que se ve en el primer frame, y
-   `sinGesto` no siempre llega a tiempo.** `herramienta` estaba en 1 estático
-   desde el día uno y no se notaba porque `sinGesto` lo apaga al entrar; al
-   sumar el layer del celu esa aplicación inicial dejó de darse y la llave
-   inglesa apareció flotando en reposo, en Inicio y en el chat. El arreglo no
-   es tocar el state machine: es que **el reposo del archivo sea el reposo de
-   verdad**, o sea opacidad estática 0 en todo lo que `sinGesto` apaga
-   (`libro`, `libreta`, `lupa`, `herramienta`, `cejaArco`, `celu`, `luzCelu`).
-   Cada gesto prende el suyo explícitamente en el frame 0, así que poner los
-   estáticos en 0 no rompe nada. Se caza mirando el primer frame en el
-   navegador, no en el editor ni en el gif.
-10. **`preview_riv_gif` con `stateMachine` MIENTE en el reposo.** Muestra la
-   llave inglesa que el runtime real no muestra. Verificado: el checkpoint de
-   `save_session` es byte-idéntico al `.riv` de producción y aun así rendea
-   distinto. Para el estado inicial, el navegador es la única fuente.
-11. **`describe_scene` devuelve TODO** —cada keyframe con frame, valor,
-   interpolación y los cuatro puntos de control cúbicos, más el grafo completo
-   del state machine con condiciones y flags—. Es lo que convierte "fusionar
-   dos animaciones" en un trasplante exacto en vez de un redibujo a ojo. Con
-   `includeKeyframes:false` sale la vista estructural, que es la que conviene
-   para comparar cableados.
-12. **`set_gradient_fill` AGREGA un fill, no lo reemplaza.** Tres llamadas
-   seguidas dejan tres gradientes apilados; el síntoma fue una luz que lavaba
-   las pupilas a gris. Para retocar un gradiente hay que borrar la forma y
-   rehacerla. Y **`set_feather` se aplica pero el render lo ignora**: los
-   bordes suaves salen del gradiente, no del feather.
-13. **Un gradiente lineal deja filo en los costados.** Una luz con caída solo
-   longitudinal muestra dos rectas donde termina la forma. Lo que no deja
-   ningún borde visible es un gradiente RADIAL que llega a alpha 0 justo en el
-   borde de la geometría —si la forma termina donde el alpha ya es 0, no puede
-   delatarse— y darle dirección escalando el círculo a elipse.
+### Verified traps
+1. **Z-order runs backward**: a group's children are listed FRONT to back.
+   An `add_*` with `group=` lands at the BACK (behind the belly, invisible).
+   You have to pull it out to the root and put it back with
+   `place:"front"`. Inside the group, though, the order is creation order:
+   whatever gets added FIRST stays in front. When drawing an object, add
+   front-to-back (the lines before the pages of the book).
+2. **The linter lies about blend states**: `validate_riv_structural` flags
+   `"transition-target-range"` on both gaze layers from day one. It's a
+   false positive: in the real runtime the gaze works fine. Trust
+   `export_riv --dryRun` + the browser, not the linter.
+3. **Don't eyeball positions**: to calibrate the bulb in the mouth,
+   positions were measured by reading pixels off the canvas
+   (`scratchpad/rive-test/probe.js`). It showed the math was right and the
+   problem was the z-order.
+4. **Never write to a Rive input from an effect's cleanup.** `useRive` gets
+   declared BEFORE your effects, so on unmount its cleanup runs first and
+   destroys the instance: writing afterward throws "Cannot set properties
+   of null" and takes down the whole screen (Next's white screen). Happened
+   with the chat gestures, at the end of every response. The cleanup only
+   cancels the rAF; per-frame writes go through try/catch.
+5. **`rivemcp` has an export quota** (3, seems to renew daily). Iterate on
+   `save_session` — which writes a `.riv` that works — and spend the export
+   only on the file that gets committed. If the quota runs out, the
+   `save_session` checkpoint works just as well: the gestures' `.riv` was
+   verified in the browser and copied to `public/` from there.
+6. **Whatever a gesture moves, someone has to put back.** Rive doesn't
+   reset: a property that only your animation writes stays pinned at its
+   last value once the gesture ends. Happened with the body's tilt while
+   thinking: the agentito stayed crooked forever. Whatever a layer further
+   down writes fixes itself (the brows' opacity gets set by the look's
+   layer every frame); everything else has to be returned by hand.
+   `cuerpo.rotation` resets in `sinMate`, not in `sinGesto`: the mate layer
+   runs BEFORE it, so from `sinGesto` we were stomping on the mate
+   gesture's tilt. Proven by `scratchpad/drive-reset.js`, which toggles
+   every gesture on and off and measures the tip of the antenna.
+7. **Trim path breaks if you touch the geometry afterward.** For the
+   curved brow, ellipse + stroke + `set_trim_path` was tried: the first arc
+   comes out fine, but changing `width`/`height`/`rotation` shatters it into
+   little pieces and reapplying the trim doesn't fix it. It ended up being
+   three rounded bars forming the arc — ugly to write, but looks the same
+   and doesn't break.
+8. **`move_object` preserves APPEARANCE, and that includes opacity.**
+   Pulling a child out of an invisible group to the root writes opacity 0
+   onto it so it stays hidden; putting it back into the group, that opacity
+   0 STAYS and the object never shows up again. Happened with the pencil:
+   it got moved while `libreta` was at 0 and it disappeared, even though the
+   drawing order was right. After moving something inside a group that's
+   turned off, check its opacity with `get_object_info`.
+9. **An object's STATIC opacity is what shows on the first frame, and
+   `sinGesto` doesn't always get there in time.** `herramienta` had been at
+   static 1 since day one and it went unnoticed because `sinGesto` turns it
+   off on entry; once the phone layer was added, that initial pass stopped
+   happening and the wrench appeared floating at rest, in Inicio and in
+   chat. The fix isn't touching the state machine: it's making the file's
+   rest state the REAL rest state, i.e. static opacity 0 on everything
+   `sinGesto` turns off (`libro`, `libreta`, `lupa`, `herramienta`,
+   `cejaArco`, `celu`, `luzCelu`). Every gesture turns its own on
+   explicitly at frame 0, so setting the statics to 0 breaks nothing.
+   Caught by watching the first frame in the browser, not the editor or the
+   gif.
+10. **`preview_riv_gif` with `stateMachine` LIES about the rest state.** It
+   shows the wrench that the real runtime doesn't show. Verified: the
+   `save_session` checkpoint is byte-identical to the production `.riv` and
+   still renders differently. For the initial state, the browser is the
+   only source of truth.
+11. **`describe_scene` returns EVERYTHING** — every keyframe with its
+   frame, value, interpolation, and the four cubic control points, plus the
+   full state-machine graph with conditions and flags. That's what turns
+   "merge two animations" into an exact transplant instead of an eyeballed
+   redraw. `includeKeyframes:false` gives the structural view, which is
+   better for comparing wiring.
+12. **`set_gradient_fill` ADDS a fill, it doesn't replace it.** Three calls
+   in a row leave three gradients stacked; the symptom was a light washing
+   the pupils out to gray. To retouch a gradient you have to delete the
+   shape and redo it. And **`set_feather` gets applied but the render
+   ignores it**: soft edges come from the gradient, not from the feather.
+13. **A linear gradient leaves a hard edge on the sides.** A light that
+   only falls off lengthwise shows two straight lines where the shape ends.
+   What leaves no visible edge at all is a RADIAL gradient that hits alpha
+   0 right at the geometry's edge — if the shape ends where alpha is
+   already 0, it can't give itself away — and giving it direction by
+   scaling the circle into an ellipse.
 
-### Trabajar en paralelo con rivemcp
-La sesión del MCP es UNA sola y en memoria: dos agentes editando a la vez se
-pisan el archivo. Para las diez animaciones del 12/8 se usó
-`scratchpad/agentito/rive-driver.mjs`, que le levanta a cada agente su propio
-servidor `rivemcp` por socket Unix (`start` / `call <tool> '<json>'` / `stop`).
-Dos detalles que costaron: el socket tiene que vivir en `tmpdir` con nombre
-corto (los unix sockets de macOS aguantan ~104 caracteres y el scratchpad se
-pasa), y **`call` trunca stdout si lo pipeás** —hace `process.exit` justo
-después del `console.log`—, así que hay que redirigir a archivo.
+### Working in parallel with rivemcp
+The MCP session is a SINGLE one, in memory: two agents editing at the same
+time step on each other's file. For the ten animations from 12/8,
+`scratchpad/agentito/rive-driver.mjs` was used, which spins up a separate
+`rivemcp` server per agent over a Unix socket (`start` / `call <tool>
+'<json>'` / `stop`). Two details that cost time: the socket has to live in
+`tmpdir` with a short name (macOS Unix sockets max out at ~104 characters
+and the scratchpad path goes over), and **`call` truncates stdout if you
+pipe it** — it calls `process.exit` right after the `console.log` — so you
+have to redirect to a file instead.

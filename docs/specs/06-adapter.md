@@ -1,21 +1,22 @@
-# Spec — Adapter backend (owner: subagente A · repo ~/Desktop/Luis/Projects/agente-pdelabs)
+# Spec — Adapter backend (owner: subagent A · repo ~/Desktop/Luis/Projects/agente-pdelabs)
 
-Extender data/scripts/portal_adapter.py (stdlib only, mismo estilo) con los
-contratos que consumen D y F (ver 03 y 05). Reglas:
+Extend data/scripts/portal_adapter.py (stdlib only, same style) with the
+contracts D and F consume (see 03 and 05). Rules:
 
-- Escrituras de kanban (approve/reject): subprocess al CLI
-  `hermes kanban comment|unblock` — DESDE el sidecar el guard NO aplica
-  (patrón verificado). JAMÁS SQL de escritura. Approve en el PoC = comentar
-  "Aprobado vía portal" + unblock. NADA de enviar mails desde el adapter.
-- Lecturas: sqlite mode=ro (tickets/approvals), filesystem (files, confinado
-  a /opt/data/workspace con resolve+relative_to, SIEMPRE text/plain),
-  activity vía `hermes cron list --json` + runs si existe (explorar CLI),
-  usage vía lo que exponga `hermes insights` o state.db ro (explorar; si es
-  frágil, devolver lo que haya y documentar).
-- manifest v2: GENÉRICO — agent name desde env AGENT_NAME (fallback: leer el
-  branding del config del agente; jamás hardcodear), módulos por detección
-  real (kanban si existe db, approvals si hay blocked, files/usage/activity
-  según disponibilidad) + version del adapter.
-- Restart para probar: `docker compose restart portal-adapter` (repo hermes).
-- DoD: cada endpoint probado con curl (con y sin auth, con Origin) y los
-  resultados pegados en el reporte final. Commit en el repo hermes.
+- Kanban writes (approve/reject): subprocess to the CLI
+  `hermes kanban comment|unblock` — the guard does NOT apply FROM the
+  sidecar (verified pattern). NEVER write SQL. Approve in the PoC = comment
+  "Aprobado vía portal" + unblock. NO sending mail from the adapter.
+- Reads: sqlite mode=ro (tickets/approvals), filesystem (files, confined to
+  /opt/data/workspace via resolve+relative_to, ALWAYS text/plain), activity
+  via `hermes cron list --json` + runs if it exists (explore the CLI),
+  usage via whatever `hermes insights` exposes or state.db ro (explore; if
+  it's fragile, return whatever's there and document it).
+- manifest v2: GENERIC — agent name from env AGENT_NAME (fallback: read the
+  agent's own config branding, never hardcode), modules by real detection
+  (kanban if a db exists, approvals if there's anything blocked,
+  files/usage/activity per availability) + adapter version.
+- Restart to test: `docker compose restart portal-adapter` (hermes repo).
+- DoD: every endpoint tested with curl (with and without auth, with
+  Origin) and the results pasted into the final report. Commit to the
+  hermes repo.

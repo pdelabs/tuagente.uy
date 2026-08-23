@@ -2,16 +2,16 @@
 <link rel="stylesheet" href="base.css">
 <style>
 .owner{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;margin-bottom:8px}
-.owner.mio{background:#DCF3E4;color:#1F7A46}
-.owner.suyo{background:#EDE9FE;color:#4C3FC7}
-.owner.nuestro{background:rgba(0,0,0,.05);color:#6B6980}
-.tranqui{background:#F4F1FF;border:1px solid rgba(91,75,232,.18);border-radius:10px;padding:10px 12px;font-size:12.5px;color:#4C3FC7;line-height:1.5;margin-top:10px}
-.cajon{border-top:1px solid rgba(0,0,0,.07);padding-top:12px;margin-top:12px}
-.cajon:first-of-type{border-top:0;padding-top:0;margin-top:0}
-.nuevo{background:#FCEBCF;color:#8A5A16;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:700}
-.solo{font-size:11.5px;font-weight:600;color:#1F7A46}
-.pregunta{font-size:11.5px;font-weight:600;color:#8A5A16}
-.mirar{background:#FAFAFC;border-style:dashed}
+.owner.client{background:#DCF3E4;color:#1F7A46}
+.owner.agent{background:#EDE9FE;color:#4C3FC7}
+.owner.us{background:rgba(0,0,0,.05);color:#6B6980}
+.reassurance{background:#F4F1FF;border:1px solid rgba(91,75,232,.18);border-radius:10px;padding:10px 12px;font-size:12.5px;color:#4C3FC7;line-height:1.5;margin-top:10px}
+.drawer{border-top:1px solid rgba(0,0,0,.07);padding-top:12px;margin-top:12px}
+.drawer:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.new{background:#FCEBCF;color:#8A5A16;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:700}
+.auto{font-size:11.5px;font-weight:600;color:#1F7A46}
+.asks-first{font-size:11.5px;font-weight:600;color:#8A5A16}
+.readonly{background:#FAFAFC;border-style:dashed}
 </style></head><body>
 <div class="shell">
  <aside class="side">
@@ -27,7 +27,7 @@
     <div><h1>Tota</h1><p class="sub" style="margin-top:2px">Trabaja para vos desde el 12 de junio · le contaste 5 cosas · se anotó 12</p></div>
   </div>
 
-  <!-- 1. LO QUE HACE TODAS LAS SEMANAS -->
+  <!-- 1. WHAT IT DOES EVERY WEEK -->
   <section class="sec">
    <h2>Lo que hace todas las semanas</h2>
    <p class="why">Sin que se lo pidas. Si algo no llegó, mirá acá primero.</p>
@@ -38,23 +38,23 @@
    </div>
   </section>
 
-  <!-- 2. LO QUE LE CONTASTE -->
+  <!-- 2. WHAT YOU TOLD IT -->
   <section class="sec">
-   <span class="owner mio">Esto lo escribís vos</span>
+   <span class="owner client">Esto lo escribís vos</span>
    <h2>Lo que sabe de nosotros</h2>
    <p class="why">Es lo primero que mira antes de hacer cualquier cosa a nombre tuyo. Cuanto mejor esté esto, mejor trabaja.</p>
    <div class="card" style="margin-top:12px">
-    <div class="cajon"><div class="eyebrow">Cómo trabajamos acá</div>
-     <div class="ficha">Tres locales en Salto: centro, Ceibal y la ruta. El del centro abre 8 a 21, el Ceibal cierra al mediodía los sábados, el de la ruta abre domingo.
+    <div class="drawer"><div class="eyebrow">Cómo trabajamos acá</div>
+     <div class="profile">Tres locales en Salto: centro, Ceibal y la ruta. El del centro abre 8 a 21, el Ceibal cierra al mediodía los sábados, el de la ruta abre domingo.
 El local de la ruta no recibe pedido los lunes: la droguería no sube hasta el martes.</div></div>
-    <div class="cajon"><div class="eyebrow">Cómo quiero que hable</div>
-     <div class="ficha">Cordial y de usted con los clientes. Conmigo, corto y al grano.
+    <div class="drawer"><div class="eyebrow">Cómo quiero que hable</div>
+     <div class="profile">Cordial y de usted con los clientes. Conmigo, corto y al grano.
 Los informes cortos y separados por local, no todo mezclado. La plata siempre en pesos.</div></div>
-    <div class="cajon" style="border-color:rgba(214,110,90,.35)"><div class="eyebrow" style="color:#B4462E">Lo que nunca hay que hacer</div>
-     <div class="ficha">No prometas stock sin haberlo chequeado. No des consejo médico.
+    <div class="drawer" style="border-color:rgba(214,110,90,.35)"><div class="eyebrow" style="color:#B4462E">Lo que nunca hay que hacer</div>
+     <div class="profile">No prometas stock sin haberlo chequeado. No des consejo médico.
 Los psicofármacos no se tocan sin la química: si aparece algo de recetario verde en un listado, marcalo aparte y avisale a ella.</div></div>
     <div class="meta">Lo escribiste vos · actualizado hace 3 días</div>
-    <div class="tranqui">Los cambios los toma sola en unos minutos. <b>Podés volver atrás cuando quieras</b>: guardamos las versiones anteriores.</div>
+    <div class="reassurance">Los cambios los toma sola en unos minutos. <b>Podés volver atrás cuando quieras</b>: guardamos las versiones anteriores.</div>
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn">Editar</button>
       <button class="btn sec2">Agregar un cajón</button>
@@ -63,30 +63,30 @@ Los psicofármacos no se tocan sin la química: si aparece algo de recetario ver
    </div>
   </section>
 
-  <!-- 3. LO QUE SE ANOTÓ SOLA -->
+  <!-- 3. WHAT IT NOTED ON ITS OWN -->
   <section class="sec">
-   <span class="owner suyo">Esto se lo anotó Tota sola</span>
+   <span class="owner agent">Esto se lo anotó Tota sola</span>
    <h2>Lo que se fue anotando</h2>
    <p class="why">Mientras trabaja se anota cosas para no volver a preguntarlas. Si algo está mal, corregilo — lo va a seguir usando hasta que se lo digas.</p>
    <div class="card" style="margin-top:12px;padding:4px 16px">
-    <div class="row"><div class="t"><b>Los pedidos a Cofarsal se hacen los martes <span class="nuevo">nueva</span></b><span>Se lo anotó hace 3 días, armando el listado de faltantes</span></div><div class="acts"><button class="btn sm sec2">Está bien</button><button class="btn sm sec2">Corregir</button></div></div>
-    <div class="row"><div class="t"><b>A Marisol avisarle por WhatsApp, no por mail <span class="nuevo">nueva</span></b><span>Se lo anotó hace 5 días, después de que le escribiste</span></div><div class="acts"><button class="btn sm sec2">Está bien</button><button class="btn sm sec2">Corregir</button></div></div>
+    <div class="row"><div class="t"><b>Los pedidos a Cofarsal se hacen los martes <span class="new">nueva</span></b><span>Se lo anotó hace 3 días, armando el listado de faltantes</span></div><div class="acts"><button class="btn sm sec2">Está bien</button><button class="btn sm sec2">Corregir</button></div></div>
+    <div class="row"><div class="t"><b>A Marisol avisarle por WhatsApp, no por mail <span class="new">nueva</span></b><span>Se lo anotó hace 5 días, después de que le escribiste</span></div><div class="acts"><button class="btn sm sec2">Está bien</button><button class="btn sm sec2">Corregir</button></div></div>
     <div class="row"><div class="t"><b>Cerramos el 1 de mayo los tres locales</b><span>Se lo anotó hace 3 semanas</span></div><div class="acts"><button class="btn sm sec2">Está bien</button><button class="btn sm sec2">Corregir</button></div></div>
    </div>
    <div style="margin-top:10px"><button class="btn sec2 sm">Ver las 12 que se anotó</button></div>
   </section>
 
-  <!-- 4. LO QUE SABE HACER -->
+  <!-- 4. WHAT IT KNOWS HOW TO DO -->
   <section class="sec">
-   <span class="owner nuestro">Esto se lo instalamos nosotros</span>
+   <span class="owner us">Esto se lo instalamos nosotros</span>
    <h2>Qué sabe hacer</h2>
    <p class="why">Sus herramientas. Acá no hay nada que tocar: es para que sepas con qué cuenta.</p>
-   <div class="card mirar" style="margin-top:12px;padding:4px 16px">
-    <div class="row"><div class="t"><b>Armar informes y listados</b><span>Te los deja en Entregas, con fecha.</span></div><span class="solo">lo hace sola</span></div>
-    <div class="row"><div class="t"><b>Leer y escribir planillas</b><span>Abre tus Excel, saca los datos y te devuelve otra planilla.</span></div><span class="solo">lo hace sola</span></div>
-    <div class="row"><div class="t"><b>Transcribir audios y videos</b><span>Pasa a texto los audios largos que te mandan.</span></div><span class="solo">lo hace sola</span></div>
-    <div class="row"><div class="t"><b>Mandar mails desde la casilla de la farmacia</b><span>Escribe el mail y te lo muestra entero antes de mandarlo.</span></div><span class="pregunta">te pregunta antes</span></div>
-    <div class="row"><div class="t"><b>Buscar información en internet</b><span>Busca datos públicos: precios, teléfonos, direcciones. No entra a ningún sistema tuyo.</span></div><span class="solo">lo hace sola</span></div>
+   <div class="card readonly" style="margin-top:12px;padding:4px 16px">
+    <div class="row"><div class="t"><b>Armar informes y listados</b><span>Te los deja en Entregas, con fecha.</span></div><span class="auto">lo hace sola</span></div>
+    <div class="row"><div class="t"><b>Leer y escribir planillas</b><span>Abre tus Excel, saca los datos y te devuelve otra planilla.</span></div><span class="auto">lo hace sola</span></div>
+    <div class="row"><div class="t"><b>Transcribir audios y videos</b><span>Pasa a texto los audios largos que te mandan.</span></div><span class="auto">lo hace sola</span></div>
+    <div class="row"><div class="t"><b>Mandar mails desde la casilla de la farmacia</b><span>Escribe el mail y te lo muestra entero antes de mandarlo.</span></div><span class="asks-first">te pregunta antes</span></div>
+    <div class="row"><div class="t"><b>Buscar información en internet</b><span>Busca datos públicos: precios, teléfonos, direcciones. No entra a ningún sistema tuyo.</span></div><span class="auto">lo hace sola</span></div>
    </div>
    <p class="why" style="margin-top:10px">¿Te falta algo que necesitás que haga? Escribinos al 099 002 835 y lo armamos nosotros.</p>
   </section>

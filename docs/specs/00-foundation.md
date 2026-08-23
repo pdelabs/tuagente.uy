@@ -1,12 +1,13 @@
-# Spec F0 — Fundación (la implementa Claude, NO subagentes)
+# Spec F0 — Foundation (implemented by Claude, NOT subagents)
 
-- Ruta /app en este repo (app/app/). Shell: sidebar con módulos según
-  /portal/manifest, header con nombre del agente, look M3 tonal.
-- app/app/lib/agent.ts: config desde hash del magic link
-  (#endpoint=…&adapter=…&key=…) con defaults localhost:8642/8643, persistida
-  en localStorage. Fetchers tipados + chatStream(). ÚNICO punto de red.
-- app/app/lib/ui.tsx: Card, Chip, Btn, EmptyState, Spinner — tonales M3.
-- Pantalla de login si falta key: pegar magic link.
-- Deps compartidas ya instaladas por la fundación: react-markdown.
-- REGLA para features: importar SOLO de ../lib/*; no tocar package.json,
-  layout.tsx, lib/* — si falta algo en la lib, reportarlo, no editarla.
+- Route /app in this repo (app/app/). Shell: sidebar with modules per
+  /portal/manifest, header with the agent's name, tonal M3 look.
+- app/app/lib/agent.ts: config from the magic link's hash
+  (#endpoint=…&adapter=…&key=…) with defaults localhost:8642/8643, persisted
+  in localStorage. Typed fetchers + chatStream(). ONLY network entry point.
+- app/app/lib/ui.tsx: Card, Chip, Btn, EmptyState, Spinner — tonal M3.
+- Login screen if the key is missing: paste the magic link.
+- Shared deps already installed by the foundation: react-markdown.
+- RULE for features: import ONLY from ../lib/*; don't touch package.json,
+  layout.tsx, lib/* — if something's missing from the lib, report it, don't
+  edit it.

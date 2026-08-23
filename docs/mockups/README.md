@@ -1,8 +1,9 @@
-# Mockups de la entrevista con el cliente no técnico (7-8/8/2026)
+# Mockups from the non-technical client interview (8/7-8/2026)
 
-Rondas de UX que se le mostraron al subagente-cliente ("Rubén") para elegir
-entre alternativas. Son HTML sueltos, se abren con doble clic.
+UX rounds shown to the subagent-client ("Rubén") to pick between
+alternatives. Standalone HTML files, open with a double-click.
 
-**Vivían en `public/`, y eso era un problema**: Next sirve `public/` tal cual,
-así que estaban publicados en `tuagente.uy/mockups/a.html` — experimentos
-internos accesibles desde el sitio de marketing. Acá no los sirve nadie.
+**They used to live in `public/`, and that was a problem**: Next serves
+`public/` as-is, so they were published at `tuagente.uy/mockups/a.html` —
+internal experiments reachable from the marketing site. Nobody serves them
+from here.

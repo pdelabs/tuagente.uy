@@ -1,147 +1,154 @@
 # Mercado Pago
 
-La pasarela más usada por vendedores uruguayos, y la de mejor API del país:
-pública, documentada y con sandbox.
+The payment gateway most used by Uruguayan sellers, and the one with the
+best API in the country: public, documented, and with a sandbox.
 
-## Por qué NO usamos el MCP oficial
+## Why we DON'T use the official MCP
 
-Mercado Pago tiene un MCP oficial (`mercadolibre/mercadopago-mcp-server`), y no
-sirve para esto. Sus herramientas son **de desarrollo**: buscar documentación,
-crear aplicaciones, obtener credenciales, configurar webhooks, generar usuarios
-de prueba, correr el medidor de calidad de la integración.
+Mercado Pago has an official MCP (`mercadolibre/mercadopago-mcp-server`),
+and it doesn't work for this. Its tools are **for development**: searching
+documentation, creating applications, getting credentials, configuring
+webhooks, generating test users, running the integration's quality checker.
 
-Eso es para el que **está integrando** Mercado Pago. Nuestro cliente ya lo
-tiene integrado — quiere saber quién no le pagó. Por eso el nuestro, en `mcp/`,
-va contra la API REST y habla en las palabras del dueño.
+That's for someone who's **integrating** Mercado Pago. Our client already
+has it integrated — they want to know who hasn't paid them. That's why
+ours, in `mcp/`, talks directly to the REST API and speaks in the business
+owner's own words.
 
-## Qué expone
+## What it exposes
 
-Cuatro herramientas que leen y dos que actúan (ver `tools.json`):
+Four tools that read and two that act (see `tools.json`):
 
 | | |
 |---|---|
-| `cobros_del_periodo` | Cuánto entró entre dos fechas, con desglose por medio de pago |
-| `buscar_cobros` | Por estado, fecha o referencia |
-| `ver_cobro` | El detalle de uno |
-| `cobros_pendientes` | Lo que quedó pendiente o rechazado |
-| `crear_link_de_cobro` | **actúa** — sale a nombre de la empresa |
-| `devolver_cobro` | **actúa** — saca plata y no se deshace |
+| `payments_for_period` | How much came in between two dates, broken down by payment method |
+| `search_payments` | By status, date, or reference |
+| `get_payment` | The detail of one |
+| `pending_payments` | What's left pending or was rejected |
+| `create_payment_link` | **acts** — goes out under the business's name |
+| `refund_payment` | **acts** — takes money out and can't be undone |
 
-## Política por defecto
+## Default policy
 
-Leer sí, actuar no. `devolver_cobro` además **tiene que pasar por la puerta de
-aprobación** aunque el cliente habilite "puede escribir": sacar plata de la
-cuenta es irreversible y no alcanza con un interruptor.
+Read yes, act no. `refund_payment` also **has to go through the approval
+gate** even if the client turns on "puede escribir": taking money out of
+the account is irreversible, and a toggle switch isn't enough.
 
-## La credencial
+## The credential
 
-Un Access Token de producción en `MP_ACCESS_TOKEN`. Va en el `.env` del agente:
-el cliente **no pega claves en el portal**. Le decimos dónde encontrarla en su
-panel y la cargamos nosotros — por eso `quien: asistido`.
+A production Access Token in `MP_ACCESS_TOKEN`. It goes in the agent's
+`.env`: the client **never pastes keys into the portal**. We tell them
+where to find it in their dashboard and we load it ourselves — which is why
+`who: assisted`.
 
-## Límites de la API, verificados
+## API limits, verified
 
-- La búsqueda devuelve **hasta 100 por consulta** y solo los **últimos 12
-  meses**; el rango no puede pasar de 365 días. `cobros_del_periodo` avisa
-  cuando el total puede estar recortado en vez de mentir un número redondo.
-- Las fechas van en `yyyy-MM-dd'T'HH:mm:ss.SSSZ`.
+- Search returns **up to 100 per query** and only the **last 12 months**;
+  the range can't exceed 365 days. `payments_for_period` warns when the
+  total might be truncated instead of lying with a round number.
+- Dates go in `yyyy-MM-dd'T'HH:mm:ss.SSSZ`.
 
-## Lo que falta
+## What's missing
 
-Probarlo contra una cuenta real. Está escrito y pasa por la guardia, pero
-ningún endpoint se ejecutó todavía contra Mercado Pago — hace falta el token.
-Empezar con las credenciales de **sandbox**, no con las de producción.
-
----
-
-## Lo que arreglamos después de mirar código de verdad (9/8)
-
-La primera versión salió de la documentación y tenía errores. Se corrigió
-leyendo la integración de **demoda** (`backend/src/orders/`,
-`common/mercadopago/`), que lleva años en producción.
-
-**1. `X-Idempotency-Key` faltaba, y es obligatorio.** Mercado Pago lo hizo
-mandatorio en Pagos y Devoluciones porque se estaban duplicando. Sin el header,
-un reintento por timeout puede **devolver la plata dos veces** — y eso no se
-deshace. Ahora la clave se deriva del pago y el monto, así el reintento de la
-misma operación es el mismo pedido.
-
-**2. Chequear el estado antes de devolver.** demoda lo hace y la doc no lo
-sugiere: si el pago ya figura `refunded`, se responde sin tocar nada. La
-idempotencia protege del reintento idéntico; esto protege de la orden repetida
-a mano.
-
-**3. Los webhooks faltaban por completo.** Y con ellos, la regla que hace toda
-la diferencia y que sale del handler de demoda:
-
-> **La notificación es el disparador, no el dato.** Trae un id y nada más
-> confiable que eso. El estado se le pide a la API. Creerle el `status` al
-> webhook es creerle a algo que te mandó un desconocido.
-
-Se agregó verificación de firma (HMAC-SHA256 sobre
-`id:<data.id>;request-id:<x-request-id>;ts:<ts>;` con `MP_WEBHOOK_SECRET`),
-filtrado explícito por `type`/`action`, y el aviso de que hay que contestar 200
-en menos de 22 segundos o MP reintenta cada 15 minutos.
-
-**4. Los tokens van cifrados en reposo.** demoda guarda uno por tienda y lo
-descifra al usarlo. Nosotros hoy lo tenemos en el `.env` del agente, que para
-un agente por cliente alcanza — pero si algún día un agente maneja varias
-cuentas, ese es el patrón.
-
-## Lo que NO cubre demoda: suscripciones
-
-Buscamos y **no hay nada de `preapproval` ni suscripciones** en su código. Así
-que para eso no tenemos referencia probada: habría que ir a la documentación,
-que es justo lo que acá falló. Si un cliente lo necesita, conviene tratarlo
-como trabajo de investigación y no como "agregar una herramienta más".
+Testing it against a real account. It's written and goes through the
+guard, but no endpoint has run against Mercado Pago yet — it needs the
+token. Start with **sandbox** credentials, not production ones.
 
 ---
 
-## Crosscheck: demoda (2023) contra la doc de hoy, y contra los MCP de terceros
+## What we fixed after actually reading real code (8/9)
 
-### demoda es de septiembre 2023
+The first version came from the documentation and had bugs. It got fixed by
+reading **demoda**'s integration (`backend/src/orders/`,
+`common/mercadopago/`), which has been in production for years.
 
-Casi tres años. Sus **conceptos** siguen valiendo y son los que copiamos
-—webhook como disparador, chequear antes de devolver, tokens cifrados— pero su
-superficie de API hay que mirarla con lupa. Lo que cambió:
+**1. `X-Idempotency-Key` was missing, and it's mandatory.** Mercado Pago
+made it mandatory on Payments and Refunds because they were getting
+duplicated. Without the header, a retry after a timeout can **refund the
+money twice** — and that can't be undone. Now the key is derived from the
+payment and the amount, so retrying the same operation produces the same
+request.
 
-- **Mercado Pago está empujando la API de Orders.** Checkout API ahora procesa
-  pagos por Orders, y la Payments API + Merchant Orders **están deprecadas para
-  los flujos de QR**, con guías de migración publicadas.
-- **Para lo nuestro no cambia nada todavía**: `/v1/payments/search` sigue en la
-  referencia vigente y es el camino para *leer* los cobros de un comercio. La
-  deprecación apunta a QR, no a la consulta.
-- **A vigilar**: si un cliente cobra por QR o por Point, ahí sí hay que ir por
-  Orders. Cuando aparezca, se revisa.
+**2. Check the status before refunding.** demoda does this and the docs
+don't suggest it: if the payment already shows `refunded`, it responds
+without touching anything. Idempotency protects against an identical
+retry; this protects against a manually repeated order.
 
-### Los MCP no oficiales: los dos tienen el bug que arreglamos
+**3. Webhooks were completely missing.** And with them, the rule that
+makes all the difference, taken straight from demoda's handler:
 
-**`hdbookie/mercado-pago-mcp`** — 27+ herramientas.
+> **The notification is the trigger, not the data.** It carries an id and
+> nothing more trustworthy than that. The status gets requested from the
+> API. Trusting the webhook's `status` is trusting something a stranger
+> sent you.
 
-- **Sin `X-Idempotency-Key` en los refunds.** El mismo agujero: un reintento
-  devuelve dos veces.
-- **Sin validación de firma de webhooks.** Tiene `simulate_webhook` pero nada
-  que verifique los reales: cualquiera que sepa la URL te avisa que cobraste.
-- **No chequea el estado antes de devolver.**
-- Expone `cancel_payment`, `batch_create_payments`, `create_split_payment` y
-  `retry_failed_payment` **sin ningún guardrail**. Crear pagos en lote sin
-  protección, con la clave de producción de alguien, es un accidente esperando.
-- Y 27 esquemas es una pared para el modelo, además del contexto que cuesta.
+Signature verification got added (HMAC-SHA256 over
+`id:<data.id>;request-id:<x-request-id>;ts:<ts>;` with `MP_WEBHOOK_SECRET`),
+explicit filtering by `type`/`action`, and the warning that you have to
+answer 200 in under 22 seconds or MP retries every 15 minutes.
 
-**`dan1d/mercadopago-tool` (CobroYa)** — 5 herramientas, más sobrio.
+**4. Tokens are encrypted at rest.** demoda stores one per store and
+decrypts it when used. We currently keep it in the agent's `.env`, which is
+enough for one agent per client — but if an agent ever handles several
+accounts, that's the pattern to use.
 
-- Tiene `MERCADO_PAGO_WEBHOOK_SECRET` para validación HMAC, pero **no
-  documenta la implementación**.
-- Tampoco menciona idempotencia en escrituras.
-- Expone refunds totales y parciales.
+## What demoda does NOT cover: subscriptions
 
-### Conclusión
+We looked, and **there's nothing about `preapproval` or subscriptions** in
+its code. So for that we have no proven reference: we'd have to go back to
+the documentation, which is exactly what failed us here. If a client needs
+it, it's best treated as research work, not as "just add one more tool".
 
-Nuestras 6 herramientas con la guardia adelante quedan **materialmente más
-seguras** que las dos alternativas populares: idempotencia derivada, chequeo de
-estado previo, firma de webhook verificada y probada, y `devolver_cobro`
-cerrada por defecto — el agente ni la ve.
+---
 
-Y confirma la postura del kit: no es que los MCP de terceros sean malos, es que
-**nadie audita lo que instala**. Bajar uno de estos y enchufarlo con la clave
-de producción de un cliente es el escenario que la guardia existe para evitar.
+## Crosscheck: demoda (2023) against today's docs, and against third-party MCPs
+
+### demoda is from September 2023
+
+Almost three years. Its **concepts** still hold and are the ones we copied
+— webhook as trigger, checking before refunding, encrypted tokens — but its
+API surface needs a close look. What changed:
+
+- **Mercado Pago is pushing the Orders API.** Checkout API now processes
+  payments through Orders, and the Payments API + Merchant Orders **are
+  deprecated for QR flows**, with published migration guides.
+- **Nothing changes for us yet**: `/v1/payments/search` is still in the
+  current reference and is the path for *reading* a business's payments.
+  The deprecation targets QR, not querying.
+- **Something to watch**: if a client charges via QR or Point, that's when
+  we'd need to move to Orders. We'll revisit it when it comes up.
+
+### The unofficial MCPs: both have the bug we fixed
+
+**`hdbookie/mercado-pago-mcp`** — 27+ tools.
+
+- **No `X-Idempotency-Key` on refunds.** The same hole: a retry refunds
+  twice.
+- **No webhook signature validation.** It has `simulate_webhook` but
+  nothing that verifies real ones: anyone who knows the URL can tell you
+  you got paid.
+- **Doesn't check the status before refunding.**
+- Exposes `cancel_payment`, `batch_create_payments`, `create_split_payment`,
+  and `retry_failed_payment` **with no guardrails at all**. Creating batch
+  payments with no protection, using someone's production key, is an
+  accident waiting to happen.
+- And 27 schemas is a wall for the model, on top of the context it costs.
+
+**`dan1d/mercadopago-tool` (CobroYa)** — 5 tools, more restrained.
+
+- Has `MERCADO_PAGO_WEBHOOK_SECRET` for HMAC validation, but **doesn't
+  document the implementation**.
+- Also doesn't mention idempotency on writes.
+- Exposes full and partial refunds.
+
+### Conclusion
+
+Our 6 tools, with the guard in front of them, end up **materially safer**
+than the two popular alternatives: derived idempotency, a status check
+before refunding, verified and tested webhook signatures, and
+`refund_payment` closed by default — the agent doesn't even see it.
+
+And it confirms the kit's stance: it's not that third-party MCPs are bad,
+it's that **nobody audits what they install**. Pulling one of these down
+and plugging it in with a client's production key is exactly the scenario
+the guard exists to prevent.
