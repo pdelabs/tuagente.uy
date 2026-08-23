@@ -166,8 +166,13 @@ def write_role_json(role_dir: Path, dest: Path, sources: dict[str, Path]) -> Non
     if "plugins" not in cfg:
         shutil.copy2(source, dest / "role.json")
         return
-    flat = {k: (list(sources) if k == "skills" else v)
-            for k, v in cfg.items() if k != "plugins"}
+    # `skills` is WRITTEN, not rewritten. A role whose skills all arrive
+    # through plugins has no `skills` key of its own, and folding into a key
+    # that is not there shipped a distribution whose role.json listed nothing
+    # while skills/ held the files -- the manifest and the directory
+    # disagreeing, with the build exiting 0.
+    flat = {k: v for k, v in cfg.items() if k != "plugins"}
+    flat["skills"] = list(sources)
     (dest / "role.json").write_text(
         json.dumps(flat, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

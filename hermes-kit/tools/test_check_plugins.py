@@ -254,5 +254,49 @@ class TheKitsOwnRegistry(unittest.TestCase):
         self.assertEqual(len(dirs), len(set(dirs)))
 
 
+class FlattenedRoleJson(unittest.TestCase):
+    """What the distribution's role.json says vs what its skills/ holds.
+
+    Phase 1 ships no `plugins` key to the agent, so `roles/build_role.py`
+    folds the resolved plugins back into `skills`. The two have to agree: a
+    manifest that lists fewer skills than the directory holds is an agent
+    whose role.json stopped describing it, and the build said nothing.
+    """
+
+    def setUp(self):
+        sys.path.insert(0, str(KIT / "roles"))
+        import build_role
+        self.build_role = build_role
+
+    def flatten(self, cfg, sources):
+        with tempfile.TemporaryDirectory() as tmp:
+            role_dir, dest = Path(tmp) / "role", Path(tmp) / "dist"
+            role_dir.mkdir()
+            dest.mkdir()
+            (role_dir / "role.json").write_text(
+                json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            self.build_role.write_role_json(
+                role_dir, dest, {name: Path(tmp) / name for name in sources})
+            return json.loads((dest / "role.json").read_text(encoding="utf-8"))
+
+    def test_a_role_with_no_plugins_travels_untouched(self):
+        cfg = {"id": "sales", "skills": ["approval"]}
+        self.assertEqual(self.flatten(cfg, ["approval"]), cfg)
+
+    def test_the_plugins_key_never_reaches_the_agent(self):
+        flat = self.flatten(
+            {"id": "accounting", "skills": ["approval"], "plugins": ["invoices-to-data"]},
+            ["invoices-to-data", "approval"])
+        self.assertNotIn("plugins", flat)
+        self.assertEqual(flat["skills"], ["invoices-to-data", "approval"])
+
+    def test_a_role_whose_skills_all_come_from_plugins_still_lists_them(self):
+        """No `skills` key to fold into is not a reason to ship none."""
+        flat = self.flatten(
+            {"id": "accounting", "plugins": ["invoices-to-data"]}, ["invoices-to-data"])
+        self.assertNotIn("plugins", flat)
+        self.assertEqual(flat["skills"], ["invoices-to-data"])
+
+
 if __name__ == "__main__":
     unittest.main()
