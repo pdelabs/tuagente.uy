@@ -1,0 +1,45 @@
+{
+  "id": "sales",
+  "version": "0.2.1",
+  "_comment": [
+    "Identity and packaging for ONE role: what the client sees (name and face)",
+    "and what the role needs to work (skills, connections, keys).",
+    "",
+    "THE NAME AND FACE SHIP PRESET on purpose. Hiring a role has to be one click:",
+    "opening a character editor before the agent does anything puts an aesthetic",
+    "decision in front of the value.",
+    "",
+    "SKILLS ARE THE EXPENSIVE PART. Every skill's description is loaded on EVERY",
+    "request, so this list is what the role needs and nothing more. A role that",
+    "carries the whole kit is the single fat agent this pivot exists to replace."
+  ],
+  "identity": {
+    "name": "Nina",
+    "look": {
+      "tone": 2,
+      "antenna": 1,
+      "accessory": 0,
+      "pupil": 1,
+      "mouth": 3,
+      "skin": 1,
+      "suit": 0,
+      "brows": 2
+    }
+  },
+  "skills": [
+    "quotes",
+    "approval",
+    "deliverable",
+    "artifact",
+    "flow",
+    "capability"
+  ],
+  "capabilities": [],
+  "connections": [],
+  "env_requires": [],
+  "flows": [
+    "presupuesto-nuevo",
+    "seguimiento-de-presupuestos",
+    "alta-de-cliente"
+  ]
+}

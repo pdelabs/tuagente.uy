@@ -20,7 +20,7 @@ agent shipped without them.
     role needs to work at all, whatever its craft: ask for approval, deliver a
     file, leave something running, ask for a capability. Everything else belongs
     to the roles that claim it and ships inside their profile
-    (roles/build_role.py packs it, tools/contratar-rol.sh installs it).
+    (roles/build_role.py packs it, tools/hire-role.sh installs it).
 
     "On offer" is the roster's `state: "ready"`, and it matters because the
     intersection is the whole rule: a half-written entry nobody can hire yet
@@ -33,23 +33,23 @@ agent shipped without them.
     capability is there and they are the only thing standing between a missing
     tool and an agent that fakes the result. They are guardrails, not craft.
 
-    Plus the kit skills behind BASE capacities. capacidades/catalogo.json
-    promises every `nivel: base` row as already installed on every agent
+    Plus the kit skills behind BASE capabilities. capabilities/catalog.json
+    promises every `level: base` row as already installed on every agent
     ("ya viene puesta: no hay que pedirla"), so whatever kit skill such a row
     installs is shared by definition -- a role-only copy would make the base
     card lie on every teammate that lacks that role. Today that is
-    `transcribir` (the `transcripcion` base capacity).
+    `transcribe` (the `transcription` base capability).
 
 A skill that no role claims and is not a fallback reaches NOBODY on a team
 agent: `--orphan` lists them so the installer can say so out loud instead of
 dropping them in silence.
 
-THE TWO DECLARATIONS MUST AGREE. `roles/catalogo.json` is what the client is
+THE TWO DECLARATIONS MUST AGREE. `roles/catalog.json` is what the client is
 sold; `roles/<id>/role.json` is what gets built into the profile. A difference
 between them is a role whose price does not match its contents, so this raises
 instead of quietly picking one. They had drifted before this check existed: the
-catalog was missing `transcribir` on soporte and `artifact` on ventas and
-contabilidad, and nothing said a word.
+catalog was missing `transcribe` on support and `artifact` on sales and
+accounting, and nothing said a word.
 """
 
 from __future__ import annotations
@@ -61,8 +61,8 @@ import sys
 from pathlib import Path
 
 KIT = Path(__file__).resolve().parent.parent
-CATALOG = KIT / "roles" / "catalogo.json"
-CAPACIDADES = KIT / "capacidades" / "catalogo.json"
+CATALOG = KIT / "roles" / "catalog.json"
+CAPABILITIES = KIT / "capabilities" / "catalog.json"
 SKILLS = KIT / "skills"
 
 # THE ONLY STATE OF A ROLE SOMEBODY CAN HIRE. The roster's own vocabulary: an
@@ -75,13 +75,13 @@ SKILLS = KIT / "skills"
 # shared skill out of kit-skills/ -- on agents whose clients cannot even hire the
 # role that caused it. The draft of a role we have not sold yet must not be able
 # to take a screen off a client's portal.
-A_LA_VENTA = "ready"
+ON_OFFER = "ready"
 
 # A frontmatter item under some key: `      - image_generate`.
 ITEM = re.compile(r"^\s+-\s+\S")
 # The key, with whatever it carries on its own line: nothing when the list is
 # written below it, the list itself when it is written inline.
-CLAVE_FALLBACK = re.compile(r"^\s*fallback_for_tools:\s*(.*?)\s*$")
+FALLBACK_KEY = re.compile(r"^\s*fallback_for_tools:\s*(.*?)\s*$")
 
 
 def all_skills() -> set[str]:
@@ -115,7 +115,7 @@ def is_fallback(name: str) -> bool:
     end = next((i for i, l in enumerate(frontmatter) if l.strip() == "---"), len(frontmatter))
     frontmatter = frontmatter[:end]
     for i, line in enumerate(frontmatter):
-        match = CLAVE_FALLBACK.match(line)
+        match = FALLBACK_KEY.match(line)
         if not match:
             continue
         inline = match.group(1)
@@ -123,10 +123,10 @@ def is_fallback(name: str) -> bool:
             inline = ""
         if inline:
             return bool(inline.strip("[] \t"))     # `[]` declares nothing
-        for siguiente in frontmatter[i + 1:]:
-            if not siguiente.strip() or siguiente.lstrip().startswith("#"):
+        for following in frontmatter[i + 1:]:
+            if not following.strip() or following.lstrip().startswith("#"):
                 continue
-            return bool(ITEM.match(siguiente))
+            return bool(ITEM.match(following))
         return False
     return False
 
@@ -155,7 +155,7 @@ def declared_by_role() -> dict[str, set[str]]:
         if sold != built:
             raise SystemExit(
                 f"{role_id}: the roster and the role manifest declare different skills.\n"
-                f"    {'roles/catalogo.json':<28}{sorted(sold)}\n"
+                f"    {'roles/catalog.json':<28}{sorted(sold)}\n"
                 f"    {f'roles/{role_id}/role.json':<28}{sorted(built)}\n"
                 "The catalog is what the client buys and role.json is what gets built: "
                 "fix whichever one is wrong before installing anything."
@@ -163,37 +163,37 @@ def declared_by_role() -> dict[str, set[str]]:
         missing = sorted(built - existing)
         if missing:
             raise SystemExit(f"{role_id} declares skills that do not exist in skills/: {missing}")
-        if role.get("state") == A_LA_VENTA:
+        if role.get("state") == ON_OFFER:
             out[role_id] = built
     if not out:
         raise SystemExit(
-            f"{CATALOG} has no role in state '{A_LA_VENTA}': nobody can be hired, "
+            f"{CATALOG} has no role in state '{ON_OFFER}': nobody can be hired, "
             "so there is no split to compute"
         )
     return out
 
 
-def base_capacity_skills() -> set[str]:
-    """Kit skills that `nivel: base` capacities install: promised to every agent."""
-    catalog = json.loads(CAPACIDADES.read_text(encoding="utf-8"))
+def base_capability_skills() -> set[str]:
+    """Kit skills that `level: base` capabilities install: promised to every agent."""
+    catalog = json.loads(CAPABILITIES.read_text(encoding="utf-8"))
     names: set[str] = set()
-    for entry in catalog["capacidades"]:
-        if entry.get("nivel") == "base":
-            names.update(entry.get("instala", {}).get("kit_skills", []))
+    for entry in catalog["capabilities"]:
+        if entry.get("level") == "base":
+            names.update(entry.get("installs", {}).get("kit_skills", []))
     missing = sorted(names - all_skills())
     if missing:
         raise SystemExit(
-            f"base capacities install kit skills that do not exist in skills/: {missing}"
+            f"base capabilities install kit skills that do not exist in skills/: {missing}"
         )
     return names
 
 
 def shared_skills() -> list[str]:
-    """The plumbing, the guardrails and the base capacities: every agent gets these."""
+    """The plumbing, the guardrails and the base capabilities: every agent gets these."""
     declared = list(declared_by_role().values())
     every_role = set.intersection(*declared)
     fallbacks = {s for s in all_skills() if is_fallback(s)}
-    return sorted(every_role | fallbacks | base_capacity_skills())
+    return sorted(every_role | fallbacks | base_capability_skills())
 
 
 def role_skills() -> list[str]:

@@ -1,0 +1,45 @@
+{
+  "id": "accounting",
+  "version": "0.2.1",
+  "_comment": [
+    "Identity and packaging for ONE role: what the client sees (name and face)",
+    "and what the role needs to work (skills, connections, keys).",
+    "",
+    "THE NAME AND FACE SHIP PRESET on purpose. Hiring a role has to be one click:",
+    "opening a character editor before the agent does anything puts an aesthetic",
+    "decision in front of the value.",
+    "",
+    "SKILLS ARE THE EXPENSIVE PART. Every skill's description is loaded on EVERY",
+    "request, so this list is what the role needs and nothing more. A role that",
+    "carries the whole kit is the single fat agent this pivot exists to replace."
+  ],
+  "identity": {
+    "name": "Tino",
+    "look": {
+      "tone": 4,
+      "antenna": 2,
+      "accessory": 1,
+      "pupil": 2,
+      "mouth": 2,
+      "skin": 0,
+      "suit": 0,
+      "brows": 1
+    }
+  },
+  "skills": [
+    "invoices-to-data",
+    "approval",
+    "deliverable",
+    "artifact",
+    "flow",
+    "capability"
+  ],
+  "capabilities": [],
+  "connections": [],
+  "env_requires": [],
+  "flows": [
+    "planilla-del-mes",
+    "conciliar-cobros",
+    "facturas-vencidas"
+  ]
+}

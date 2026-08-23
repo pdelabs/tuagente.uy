@@ -1,37 +1,6 @@
 {
   "id": "marketing",
   "version": "0.3.0",
-  "_comentario": [
-    "Identidad y empaque de UN rol. Lo que el cliente ve (nombre y cara) y lo",
-    "que el rol necesita para trabajar (skills, conexiones, claves).",
-    "",
-    "EL NOMBRE Y LA CARA VIENEN PUESTOS a proposito. Contratar un rol tiene que",
-    "ser un click: si abre un editor de personaje antes de que el agente haga",
-    "nada, pusiste una decision estetica delante del valor. Renombrar es",
-    "opcional y va despues, cuando el cliente le agarre cariño.",
-    "",
-    "El look son los ejes del personaje de `app/app/lib/agentito.tsx` (tono,",
-    "antena, accesorio, pupila, boca, piel, traje, cejas). Cada rol arranca en",
-    "un punto CLARAMENTE distinto del espacio: la cara es como se distingue",
-    "quien hizo que en una lista de veinte tarjetas."
-  ],
-  "skills": [
-    "brand-kit",
-    "social-content",
-    "post-image",
-    "entregable",
-    "artifact",
-    "aprobacion",
-    "flujo",
-    "capacidad"
-  ],
-  "env_requires": [
-    {
-      "name": "OPENROUTER_API_KEY",
-      "description": "Generates the images for the posts",
-      "required": true
-    }
-  ],
   "_comment": [
     "Identity and packaging for ONE role: what the client sees (name and face)",
     "and what the role needs to work (skills, connections, keys).",
@@ -47,25 +16,39 @@
     "list of twenty cards."
   ],
   "identity": {
+    "name": "Vera",
     "look": {
-      "tono": 0,
-      "antena": 5,
-      "accesorio": 1,
-      "pupila": 1,
-      "boca": 1,
-      "piel": 0,
-      "traje": 0,
-      "cejas": 1
-    },
-    "name": "Vera"
+      "tone": 0,
+      "antenna": 5,
+      "accessory": 1,
+      "pupil": 1,
+      "mouth": 1,
+      "skin": 0,
+      "suit": 0,
+      "brows": 1
+    }
   },
-  "capabilities": [
-    "imagenes",
+  "skills": [
     "brand-kit",
     "social-content",
-    "post-image"
+    "post-image",
+    "deliverable",
+    "artifact",
+    "approval",
+    "flow",
+    "capability"
+  ],
+  "capabilities": [
+    "social-package"
   ],
   "connections": [],
+  "env_requires": [
+    {
+      "name": "OPENROUTER_API_KEY",
+      "description": "Generates the images for the posts",
+      "required": true
+    }
+  ],
   "flows": [
     "contenido-instagram-diario",
     "reporte-de-lo-publicado",

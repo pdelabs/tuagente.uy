@@ -1,45 +1,45 @@
 {
-  "conexion": "mercadopago",
-  "servidor": "mercadopago-mcp (nuestro)",
-  "fuente": "escrito por nosotros — ver mcp/",
-  "auditado": "2026-08-09",
-  "nota": "El MCP OFICIAL de Mercado Pago (mercadolibre/mercadopago-mcp-server) NO sirve para esto: sus herramientas son de desarrollo — buscar documentacion, crear aplicaciones, configurar webhooks, generar usuarios de prueba. Un dueño de PyME no quiere 'crear test users', quiere saber quien no le pago. Por eso escribimos el nuestro contra la API REST. Escrito mirando la integracion de demoda (backend/src/orders y common/mercadopago), que lleva años en produccion — la doc de MP no alcanza y en varios puntos enseña mal.",
+  "connection": "mercadopago",
+  "server": "mercadopago-mcp (ours)",
+  "source": "written by us — see mcp/",
+  "audited": "2026-08-09",
+  "note": "Mercado Pago's OFFICIAL MCP (mercadolibre/mercadopago-mcp-server) does NOT work for this: its tools are for development — look up docs, create applications, configure webhooks, generate test users. An SMB owner doesn't want to 'create test users', they want to know who hasn't paid them. That's why we wrote our own against the REST API, written by looking at demoda's integration (backend/src/orders and common/mercadopago), which has been in production for years — MP's own docs aren't enough and in several places teach it wrong.",
   "tools": {
-    "cobros_del_periodo": {
-      "clase": "lee",
-      "que_hace": "Cuanto entro entre dos fechas, con el desglose por medio de pago."
+    "payments_for_period": {
+      "kind": "read",
+      "what_it_does": "How much came in between two dates, broken down by payment method."
     },
-    "buscar_cobros": {
-      "clase": "lee",
-      "que_hace": "Busca pagos por estado, fecha o referencia."
+    "search_payments": {
+      "kind": "read",
+      "what_it_does": "Searches payments by status, date or reference."
     },
-    "ver_cobro": {
-      "clase": "lee",
-      "que_hace": "El detalle de un cobro: quien, cuanto, como y cuando."
+    "get_payment": {
+      "kind": "read",
+      "what_it_does": "The detail of one payment: who, how much, how and when."
     },
-    "cobros_pendientes": {
-      "clase": "lee",
-      "que_hace": "Lo que quedo pendiente o rechazado y todavia no entro."
+    "pending_payments": {
+      "kind": "read",
+      "what_it_does": "What's still pending or rejected and hasn't come in yet."
     },
-    "crear_link_de_cobro": {
-      "clase": "actua",
-      "que_hace": "Genera un link para cobrarle a alguien.",
-      "por_que_actua": "No mueve plata sola, pero crea algo que sale a nombre de la empresa y se le manda a un cliente. Si sale mal, sale mal con el nombre del negocio adelante."
+    "create_payment_link": {
+      "kind": "act",
+      "what_it_does": "Generates a link to charge someone.",
+      "why_it_acts": "It doesn't move money on its own, but it creates something that goes out under the company's name and gets sent to a customer. If it goes wrong, it goes wrong with the business's name in front."
     },
-    "devolver_cobro": {
-      "clase": "actua",
-      "que_hace": "Devuelve un pago, total o parcialmente.",
-      "por_que_actua": "SACA PLATA de la cuenta y no se puede deshacer. Aunque el cliente prenda 'puede escribir', esta ademas tiene que pasar por la puerta de aprobacion."
+    "refund_payment": {
+      "kind": "act",
+      "what_it_does": "Refunds a payment, in full or in part.",
+      "why_it_acts": "It TAKES MONEY out of the account and cannot be undone. Even if the client has 'can write' turned on, this one also has to go through the approval gate."
     }
   },
   "webhooks": {
-    "eventos": [
+    "events": [
       "payment.created",
       "payment.updated"
     ],
-    "secreto": "MP_WEBHOOK_SECRET",
-    "regla": "La notificacion es el DISPARADOR, no el dato: trae un id y el estado se le pide a la API. Creerle el status al webhook es creerle a algo que te mando un desconocido.",
-    "firma": "HMAC-SHA256 sobre 'id:<data.id>;request-id:<x-request-id>;ts:<ts>;'",
-    "plazo": "Hay que contestar 200 en menos de 22 s o MP reintenta cada 15 min."
+    "secret": "MP_WEBHOOK_SECRET",
+    "rule": "The notification is the TRIGGER, not the data: it carries an id and the status gets requested from the API. Trusting the webhook's status is trusting something a stranger sent you.",
+    "signature": "HMAC-SHA256 over 'id:<data.id>;request-id:<x-request-id>;ts:<ts>;'",
+    "deadline": "Has to answer 200 in under 22s or MP retries every 15 min."
   }
 }

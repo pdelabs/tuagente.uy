@@ -59,7 +59,7 @@ def read_version() -> str:
 def build_base_soul() -> str:
     """The shared SOUL block, straight from the one tool that knows how to make it."""
     out = subprocess.run(
-        ["bash", str(KIT / "tools" / "instalar-soul.sh"), "--bloque"],
+        ["bash", str(KIT / "tools" / "install-soul.sh"), "--block"],
         capture_output=True, text=True, check=True,
     )
     return out.stdout
@@ -71,7 +71,7 @@ def check_identity(identity: str, role: str) -> None:
         raise SystemExit(
             f"{role}/identity.md redefines a base-block rule:\n"
             f"    {heading.group(0).strip()}\n"
-            "The approval rule lives in soul/01-aprobaciones.md and nowhere else. "
+            "The approval rule lives in soul/01-approvals.md and nowhere else. "
             "State how this role APPLIES it, never what it is."
         )
 
@@ -173,12 +173,12 @@ def build(role: str, out_root: Path) -> Path:
     # check runs at build time for the same reason check_identity does: the
     # moment a copy-pasted identity would ship is the cheapest moment to stop it.
     clones = subprocess.run(
-        [sys.executable, str(KIT / "tools" / "chequear-clones.py")],
+        [sys.executable, str(KIT / "tools" / "check-clones.py")],
         capture_output=True, text=True,
     )
     if clones.returncode != 0:
         raise SystemExit(
-            f"{role}: tools/chequear-clones.py failed:\n{clones.stdout}{clones.stderr}")
+            f"{role}: tools/check-clones.py failed:\n{clones.stdout}{clones.stderr}")
 
     dest = out_root / role
     if dest.exists():

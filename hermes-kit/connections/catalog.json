@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "_comment": [
+    "CURATED catalog of connections. Closed on purpose: installing arbitrary",
+    "things from the internet inside a client's agent is a supply-chain risk",
+    "over someone else's data. The client requests, we audit and install.",
+    "",
+    "Each entry says, in the client's own words, WHAT it unlocks for the agent,",
+    "and how to detect whether it's already connected. Detection is about",
+    "PRESENCE, never about values: the adapter never returns a credential.",
+    "",
+    "  detects.files  -> files that have to exist under data/",
+    "  detects.env    -> variables that have to be set and not empty",
+    "  detects.plugin -> plugin enabled in config.yaml",
+    "",
+    "effort: minutes | hours | days  (how long setup takes, not the work itself)",
+    "who: client_only | assisted | us"
+  ],
+  "connections": [
+    {
+      "id": "telegram",
+      "label": "Telegram",
+      "group": "channel",
+      "purpose": "Hablarle al agente desde el celular, como a cualquier contacto.",
+      "detects": {
+        "env": [
+          "TELEGRAM_BOT_TOKEN"
+        ]
+      },
+      "how": "El bot ya está creado: tocás Abrir el chat y le mandás un hola. Si te contesta con un código, lo pegás acá y queda activado.",
+      "effort": "minutes",
+      "who": "client_only"
+    },
+    {
+      "id": "email",
+      "label": "Correo de la empresa",
+      "group": "channel",
+      "purpose": "Que el agente reciba y conteste mails desde la casilla de la empresa.",
+      "detects": {
+        "env": [
+          "EMAIL_ADDRESS",
+          "EMAIL_PASSWORD",
+          "EMAIL_SMTP_HOST"
+        ]
+      },
+      "how": "Con el usuario y la contraseña de la casilla. ¿Usás Gmail? Esta misma sirve: alcanza una contraseña de aplicación y no hace falta crear nada en Google.",
+      "effort": "minutes",
+      "who": "assisted",
+      "internal_note": "Used to coexist with `gmail-lectura` (Google OAuth) and the client didn't know which to pick: the first ticket the pdelabs agent ever got was exactly a request for the Gmail one, the one we DON'T want. Removed from the catalog on 8/9. The OAuth path is still possible but Google treats it as a restricted-scope permission and requires an expensive security review to publish the app; for email, IMAP/SMTP is enough. If a client genuinely needs it, that's a conversation, not a card."
+    },
+    {
+      "id": "whatsapp",
+      "label": "WhatsApp",
+      "group": "channel",
+      "purpose": "Que tus clientes le escriban al número de la empresa y el agente conteste.",
+      "detects": {
+        "env": [
+          "WHATSAPP_ENABLED"
+        ]
+      },
+      "how": "Dos caminos. El oficial pide verificación de empresa ante Meta y lleva días: lo tramitamos nosotros y es el único apto para la línea comercial. El rápido se aparea escaneando un QR desde el portal, en minutos — pero WhatsApp puede bloquear ese número.",
+      "effort": "days",
+      "who": "us",
+      "warning": "El atajo de vincular por código QR pone en riesgo la linea comercial: WhatsApp puede bloquearla. No lo usamos en números que la empresa necesita.",
+      "setup_flow": "whatsapp-qr"
+    },
+    {
+      "id": "google-workspace",
+      "label": "Google: Planillas, Drive, Agenda y Documentos",
+      "group": "system",
+      "purpose": "Que el agente lea y actualice tus planillas, guarde archivos en Drive y mire la agenda.",
+      "detects": {
+        "files": [
+          "google_token.json"
+        ]
+      },
+      "requires": {
+        "files": [
+          "google_client_secret.json"
+        ]
+      },
+      "how": "Tocás Conectar, entrás con tu cuenta de Google, aceptás, y pegás la dirección que te devuelve. Dos minutos, sin configurar nada.",
+      "effort": "minutes",
+      "who": "client_only",
+      "setup_flow": "google-oauth",
+      "internal_note": "The permission is requested with OUR OWN OAuth app (Desktop type, reusable across clients). Without that, every client would have to create their own Google Cloud project, which is exactly what a non-technical client cannot do."
+    },
+    {
+      "id": "auxiliary-models",
+      "label": "Modelos de IA auxiliares (transcripción, imágenes)",
+      "group": "system",
+      "purpose": "Que el agente pueda transcribir audios y videos, y generar o analizar imágenes, usando el modelo que mejor sirva para cada tarea.",
+      "detects": {
+        "env": [
+          "OPENROUTER_API_KEY"
+        ]
+      },
+      "how": "Viene incluida con tu agente: le creamos una cuota propia de modelos con límite de gasto. No tenés que crear ninguna cuenta.",
+      "effort": "minutes",
+      "who": "us",
+      "internal_note": "One key per client under the tuagente OpenRouter org, created via the Management API with a USD spending limit (see notes/auxiliary-models.md). Per-client spend is visible by key in Activity. The kit's skill decides provider and model; the agent only invokes it."
+    },
+    {
+      "id": "slack",
+      "label": "Slack",
+      "group": "channel",
+      "purpose": "Que el equipo le hable al agente desde los canales donde ya trabaja.",
+      "detects": {
+        "env": [
+          "SLACK_BOT_TOKEN"
+        ]
+      },
+      "how": "Un administrador del Slack instala la app y nos pasa el token.",
+      "effort": "minutes",
+      "who": "assisted"
+    },
+    {
+      "id": "mercadopago",
+      "label": "Mercado Pago",
+      "group": "system",
+      "purpose": "Que el agente vea tus cobros: cuánto entró, quién no pagó y qué quedó pendiente.",
+      "how": "Con una clave que sacás de tu panel de Mercado Pago. Te decimos dónde encontrarla y la cargamos nosotros, así no la pegás en ninguna pantalla.",
+      "detects": {
+        "env": [
+          "MP_ACCESS_TOKEN"
+        ]
+      },
+      "effort": "minutes",
+      "who": "assisted",
+      "recommended": true,
+      "internal_note": "Production access token. Mercado Pago's own official MCP does NOT work for this (it's for development: docs, apps, webhooks, test users); ours lives in connections/mercadopago/mcp/."
+    },
+    {
+      "id": "instagram",
+      "label": "Instagram",
+      "group": "channel",
+      "purpose": "Que el agente lea lo que ya publicaste — para no repetirse ni pisarse con lo que salio — y, si lo habilitas, publique.",
+      "how": "Tu cuenta tiene que ser profesional (Business o Creator, no personal) y estar vinculada a una pagina de Facebook. Pasarla es gratis y lleva 5 minutos: conservas seguidores y posts. Con eso queda andando el mismo dia.",
+      "detects": {
+        "env": [
+          "IG_ACCESS_TOKEN"
+        ]
+      },
+      "effort": "hours",
+      "who": "assisted",
+      "recommended": true,
+      "warning": "Arranca en solo leer. Publicar es un permiso aparte que prendes vos, y lo que sale lleva tu marca.",
+      "internal_note": "WATCH THE SHORTCUT: the Standard Access rule is NOT 'accounts you own' — it's accounts whose owner has a ROLE in our Meta app (admin/developer/tester). Practical consequence: a CLIENT's account can be connected without app review, by adding them as a tester and having them accept the invite. Works today. What doesn't work is onboarding: the client has to go into Meta's developer console, and that's exactly the client who doesn't know what a token is. Good for piloting with 1 or 2, not for selling. Advanced Access (2-4 weeks) doesn't unlock new capabilities: it unlocks anyone connecting with a button. Request it when connecting has to stop being a developer-console screen. A PERSONAL account cannot be connected under any circumstances: Meta cut support for personal profiles in October 2024. Has to be professional and PUBLIC. DMs are separate: instagram_manage_messages always requires Advanced Access, so the 3 messaging tools don't work even on our own account. instagrapi and any private-API MCP were ruled out: detected within hours, escalates to a PERMANENT ban, and a brand account isn't disposable like a phone number. The token lasts 60 days and expires silently — it has to be refreshed."
+    }
+  ]
+}

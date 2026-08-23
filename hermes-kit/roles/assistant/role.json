@@ -1,0 +1,63 @@
+{
+  "id": "assistant",
+  "version": "0.1.1",
+  "_comment": [
+    "Identity and packaging for ONE role: what the client sees (name and face)",
+    "and what the role needs to work (skills, connections, keys).",
+    "",
+    "THE NAME AND FACE SHIP PRESET on purpose. Hiring a role has to be one click:",
+    "opening a character editor before the agent does anything puts an aesthetic",
+    "decision in front of the value.",
+    "",
+    "THIS ONE SHIPS NO CRAFT SKILL, AND THAT IS THE DESIGN. The four skills below",
+    "are the plumbing every role carries; its hands are the `level: base`",
+    "capabilities every agent already has (see `capabilities`). What it can do",
+    "beyond that is whatever the client picks from the capability menu at hire",
+    "time -- the role does not grow by itself, and the agent never installs",
+    "anything: the `capability` skill's card is the only way in.",
+    "",
+    "`look` are the character axes from app/app/lib/agentito.tsx (tone, antenna,",
+    "accessory, pupil, mouth, skin, suit, brows). Each role starts at a CLEARLY",
+    "different point in that space: the face is how you tell who did what in a",
+    "list of twenty cards. This one takes the plain antenna and the freckles,",
+    "both unused by the four craft roles."
+  ],
+  "identity": {
+    "name": "Lola",
+    "look": {
+      "tone": 3,
+      "antenna": 0,
+      "accessory": 3,
+      "pupil": 0,
+      "mouth": 3,
+      "skin": 0,
+      "suit": 2,
+      "brows": 1
+    }
+  },
+  "skills": [
+    "approval",
+    "deliverable",
+    "flow",
+    "capability"
+  ],
+  "capabilities": [
+    "web-search",
+    "vision",
+    "transcription",
+    "calc-and-spreadsheets"
+  ],
+  "connections": [],
+  "env_requires": [
+    {
+      "name": "OPENROUTER_API_KEY",
+      "description": "Transcribes the audio and reads the images the client sends",
+      "required": true
+    }
+  ],
+  "flows": [
+    "informe-con-fuentes",
+    "de-fotos-y-audios-a-documento",
+    "repaso-de-internet"
+  ]
+}

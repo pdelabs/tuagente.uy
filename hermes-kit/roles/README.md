@@ -1,48 +1,50 @@
-# roles/ — un agente por oficio, contratado aparte
+# roles/ — one agent per trade, hired separately
 
-Un cliente no compra "un asistente": compra **un equipo** y contrata un rol por
-vez. Cada rol es un *profile* de Hermes con su propio SOUL, sus skills, su
-memoria y su nombre; todos viven en el mismo contenedor, comparten el tablero y
-los datos de la empresa.
+A client doesn't buy "an assistant": they buy **a team** and hire one role at
+a time. Each role is a Hermes *profile* with its own SOUL, its own skills,
+its own memory and its own name; they all live in the same container, share
+the board and the company's data.
 
-Esto no lo inventamos nosotros. El motor ya trae `hermes profile`, el formato
-`distribution.yaml` y un tablero **compartido entre profiles** que rutea por la
-descripción del rol. Lo verificamos antes de escribir una línea (16/8/2026, ver
-`notas/spike-profiles.md`): un pedido de clienta partido en dos, ruteado a
-`marketing` y a `soporte`, despachado en paralelo, cada mitad pidiendo su
-aprobación por separado.
+We didn't invent this. The engine already ships `hermes profile`, the
+`distribution.yaml` format, and a board **shared across profiles** that
+routes by the role's description. We verified it before writing a line
+(16/8/2026, see `notes/spike-profiles.md`): a client request split in two,
+routed to `marketing` and to `support`, dispatched in parallel, each half
+asking for its own approval separately.
 
-## Qué hay acá
+## What's here
 
     roles/
-      catalogo.json          el roster: qué rol existe, qué hace, qué cuesta
-      build_role.py          arma la distribución instalable de un rol
-      <rol>/
-        role.json            identidad (nombre y cara), skills, conexiones
-        identity.md          el bloque de SOUL propio del rol
-        flows/               los flujos curados que llegan con el rol
+      catalog.json            the roster: which role exists, what it does, what it costs
+      build_role.py           builds a role's installable distribution
+      <role>/
+        role.json             identity (name and face), skills, connections
+        identity.md           the role's own SOUL block
+        flows/                the curated flows that ship with the role
 
-Las skills **no se copian acá**. Viven una sola vez en `skills/` y cada rol
-declara cuáles son suyas en `role.json`. `build_role.py` las junta al armar la
-distribución.
+Skills **aren't copied here**. They live once in `skills/`, and each role
+declares which ones are its own in `role.json`. `build_role.py` pulls them
+together when it builds the distribution.
 
-## La regla que no se puede romper
+## The rule that can't be broken
 
-**El bloque `kit:base` del SOUL es el mismo para todos los roles, byte por
-byte.** Ahí viven la regla de aprobación, las convenciones de entrega y el
-idioma. Si cada rol tuviera su copia editable, en tres meses una diría algo
-distinto — y eso se manifiesta como un rol publicando sin preguntar.
+**The SOUL's `kit:base` block is the same for every role, byte for byte.**
+That's where the approval rule, the delivery conventions, and the language
+live. If every role had its own editable copy, within three months one of
+them would say something different — and that shows up as a role publishing
+without asking.
 
-Por eso `identity.md` es **solo** la parte propia del rol: qué hace, qué no hace
-nunca, con qué otros roles se cruza. `build_role.py` compone
-`SOUL.md = kit:base + identity.md` y falla si un `identity.md` intenta redefinir
-algo del bloque base.
+That's why `identity.md` is **only** the role's own part: what it does, what
+it never does, which other roles it overlaps with. `build_role.py` composes
+`SOUL.md = kit:base + identity.md` and fails if an `identity.md` tries to
+redefine anything in the base block.
 
-## La regla anti-patear
+## The rule against punting work
 
-Cada `identity.md` termina con la misma advertencia, y no es adorno: cuando los
-roles se cobran por separado, un rol tiene una razón estructural para derivar
-trabajo que sí podía hacer. Así se construye un producto que se siente capado.
+Every `identity.md` ends with the same warning, and it isn't decoration:
+when roles are billed separately, a role has a structural reason to punt
+work it could actually do. That's how you end up with a product that feels
+crippled.
 
-**Nunca patees lo que podés hacer.** Nombrá el hueco solo cuando de verdad no
-podés, una vez, sin insistir.
+**Never punt what you can do yourself.** Name the gap only when you truly
+can't do it, once, without belaboring it.

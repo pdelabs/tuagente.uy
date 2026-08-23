@@ -1,0 +1,53 @@
+{
+  "id": "support",
+  "version": "0.1.2",
+  "_comment": [
+    "Identity and packaging for ONE role: what the client sees (name and face)",
+    "and what the role needs to work (skills, connections, keys).",
+    "",
+    "THE NAME AND FACE SHIP PRESET on purpose. Hiring a role has to be one click:",
+    "opening a character editor before the agent does anything puts an aesthetic",
+    "decision in front of the value.",
+    "",
+    "SKILLS ARE THE EXPENSIVE PART. Every skill's description is loaded on EVERY",
+    "request, so this list is what the role needs and nothing more. A role that",
+    "carries the whole kit is the single fat agent this pivot exists to replace."
+  ],
+  "identity": {
+    "name": "Beto",
+    "look": {
+      "tone": 1,
+      "antenna": 3,
+      "accessory": 2,
+      "pupil": 0,
+      "mouth": 0,
+      "skin": 0,
+      "suit": 1,
+      "brows": 0
+    }
+  },
+  "skills": [
+    "approval",
+    "deliverable",
+    "flow",
+    "capability"
+  ],
+  "capabilities": [],
+  "connections": [
+    "whatsapp",
+    "auxiliary-models"
+  ],
+  "env_requires": [
+    {
+      "name": "OPENROUTER_API_KEY",
+      "description": "Transcribes the voice notes customers send",
+      "required": true
+    }
+  ],
+  "flows": [
+    "fuera-de-hora",
+    "resumen-de-la-bandeja",
+    "casos-sin-cerrar",
+    "queja-de-cliente"
+  ]
+}
