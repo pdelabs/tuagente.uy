@@ -65,12 +65,13 @@
         "look": {
           "tono": 0,
           "antena": 5,
-          "accesorio": 1,
+          "accesorio": 0,
           "pupila": 1,
           "boca": 1,
-          "piel": 0,
+          "piel": 1,
           "traje": 0,
-          "cejas": 1
+          "cejas": 1,
+          "sombrero": 0
         }
       }
     },
@@ -103,10 +104,11 @@
           "antena": 3,
           "accesorio": 2,
           "pupila": 0,
-          "boca": 0,
+          "boca": 1,
           "piel": 0,
-          "traje": 1,
-          "cejas": 0
+          "traje": 0,
+          "cejas": 0,
+          "sombrero": 0
         }
       }
     },
@@ -134,14 +136,15 @@
       "identity": {
         "name": "Nina",
         "look": {
-          "tono": 2,
-          "antena": 1,
-          "accesorio": 0,
-          "pupila": 1,
+          "tono": 5,
+          "antena": 4,
+          "accesorio": 2,
+          "pupila": 2,
           "boca": 3,
           "piel": 1,
           "traje": 0,
-          "cejas": 2
+          "cejas": 2,
+          "sombrero": 0
         }
       }
     },
@@ -176,8 +179,9 @@
           "pupila": 2,
           "boca": 2,
           "piel": 0,
-          "traje": 0,
-          "cejas": 1
+          "traje": 1,
+          "cejas": 1,
+          "sombrero": 0
         }
       }
     },
@@ -204,14 +208,15 @@
       "identity": {
         "name": "Lola",
         "look": {
-          "tono": 3,
+          "tono": 2,
           "antena": 0,
           "accesorio": 3,
-          "pupila": 0,
-          "boca": 3,
+          "pupila": 1,
+          "boca": 1,
           "piel": 0,
-          "traje": 2,
-          "cejas": 1
+          "traje": 0,
+          "cejas": 0,
+          "sombrero": 0
         }
       }
     }

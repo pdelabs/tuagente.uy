@@ -9,8 +9,9 @@ export type AgentitoLook = {
   pupila: number;    // 0-2: normal / big / small
   boca: number;      // 0-3: smile / grin / half smile / tongue
   piel: number;      // 0-1: plain / specks
-  traje: number;     // 0-2: none / bow / tie
+  traje: number;     // 0-3: none / bow / tie / scarf
   cejas: number;     // 0-2: none / normal / determined
+  sombrero: number;  // 0-3: none / cap / beret / top hat
 };
 
 export declare const LOOK_EJES: Record<keyof AgentitoLook, number>;

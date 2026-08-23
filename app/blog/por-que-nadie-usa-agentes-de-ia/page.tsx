@@ -125,10 +125,10 @@ export default function Page() {
           que más duele. Esa es la pregunta con la que arranca cualquier conversación con nosotros.
         </li>
         <li>
-          <B>Exigí resultados medibles, no conversaciones.</B> Al agente se lo mide como a un
-          empleado: tareas terminadas, horas devueltas. Si en un mes no te ahorró tiempo real, no
-          pagues — así estructuramos nuestros pilotos, y no por generosidad: es la única prueba que
-          importa.
+          <B>Exigí resultados medibles, no conversaciones.</B> A un agente se lo mide como a un
+          empleado: tareas terminadas, horas devueltas. Si en un mes no te ahorró tiempo real,
+          tenés que poder darlo de baja y dejar de pagarlo — por eso cobramos por rol y por mes,
+          sin permanencia. No es generosidad: es la única prueba que importa.
         </li>
         <li>
           <B>El que instala tiene que responder por el resultado.</B> La alternativa a
@@ -142,7 +142,7 @@ export default function Page() {
         incluidos — está explicado sin humo en{" "}
         <PostLink slug="que-es-un-agente-de-ia">qué es un agente de IA</PostLink> y en{" "}
         <PostLink slug="agente-de-ia-vs-chatbot">agente vs chatbot</PostLink>. Y si ya sabés cuál
-        es la tarea que te come las horas, mejor: contánosla, que la demo se hace con tu caso.
+        es la tarea que te come las horas, mejor: contánosla, que el diagnóstico arranca por ahí.
       </P>
     </ArticleLayout>
   );

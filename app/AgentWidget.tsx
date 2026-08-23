@@ -28,7 +28,7 @@ const SECTION_LABEL: Record<string, string> = {
   casos: "Casos",
   "como-funciona": "Cómo funciona",
   control: "Control",
-  planes: "Planes",
+  planes: "Precio",
   faq: "FAQ",
   contacto: "Contacto",
 };
@@ -129,9 +129,9 @@ export default function AgentWidget() {
                 <Bot size={20} />
               </span>
               <div>
-                <p className="text-sm font-extrabold text-ink">Tu agente</p>
+                <p className="text-sm font-extrabold text-ink">Tu equipo</p>
                 <p className="flex items-center gap-1.5 text-xs font-medium text-ink-soft">
-                  <span className="h-2 w-2 rounded-full bg-c-green-ink" /> en línea · demo real
+                  <span className="h-2 w-2 rounded-full bg-c-green-ink" /> en línea · probalo acá
                 </p>
               </div>
             </div>
@@ -210,7 +210,7 @@ export default function AgentWidget() {
             )}
             {capped && (
               <p className="pt-2 text-center text-xs font-medium text-ink-soft">
-                La demo llega hasta acá 😄 Lo que sigue, mejor por WhatsApp.
+                Hasta acá llega la prueba. Lo que sigue, mejor por WhatsApp.
               </p>
             )}
           </div>

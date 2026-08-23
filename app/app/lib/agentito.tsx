@@ -20,6 +20,14 @@ import {
 } from "./agentito-svg.mjs";
 
 export { LOOK_EJES, LOOK_DEFAULT };
+
+// The axes public/agentito.riv can actually DRAW today, and how many variants
+// of each. The baptism dice rolls from THIS table, not LOOK_EJES: an axis the
+// Rive preview cannot show (sombrero; the scarf as traje 3) must never land
+// on a client invisibly. When the .riv learns a trait, raise it here.
+export const EJES_RIVE: Partial<Record<keyof AgentitoLook, number>> = {
+  tono: 6, antena: 6, accesorio: 4, pupila: 3, boca: 4, piel: 2, traje: 3, cejas: 3,
+};
 export type { AgentitoLook };
 
 const LOOK_KEY = "tuagente_agent_look";

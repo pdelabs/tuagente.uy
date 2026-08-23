@@ -181,6 +181,56 @@ contenido, no jefe" (asistente). Los cinco roles vivos ya lo corren
 (99519d5), cableado a build_role: umbrales 15/30 medidos contra el corpus
 (peor par honesto 3,8%, clon real 97%).
 
+## Hecho el 21-22/8: landing a equipo + una firma visual por rol
+
+Landing y blog reposicionados al modelo equipo ($U 1.500/rol publicado,
+diagnóstico USD 200 descontable, sin sumas de "los cinco"): caras reales de
+catálogo vía `agentito-svg.mjs` (geometría única portal/landing/CLI, goldens
+byte a byte). Después, flip de jerarquía pedido por Luis: **custom primero** —
+la sección Equipo dice "Todos los roles se arman a medida" y los cinco quedan
+como puntos de partida (pill + subtítulo + paso 2 "Armamos tu equipo" + sexta
+card "El sexto es el tuyo" + FAQ); Lola dejó de cargar sola con el badge
+"A medida". Y pintas coherentes con el rol, una firma cada uno: Vera espiral +
+chispitas (perdió los lentes), Beto orejas + cachetes (sin moñita), Nina
+rehecha rosada con tirada random pedida por Luis (anillo + cachetes + lengua
++ chispitas + cejas decididas, sin corbata; tint c-rosa nuevo), Tino lentes
++ moñita, Lola rehecha de cero coral (bolita + pecas +
+ojos grandes, sin corbata; su card toma el tint coral que Nina libera).
+Cambió `roles/catalogo.json` (identity.look) + goldens regenerados
+a propósito + landing. Los agentes vivos no cambian de cara (el bautizo pisa
+al catálogo).
+
+Después (22/8): eje nuevo **`sombrero`** (nada/gorra/boina/galera) en el
+módulo SVG, la moñita y la corbata REDIBUJADAS para que se entiendan (la
+moñita era un manchón de 17 unidades al borde del cuerpo; la corbata
+chorreaba 9 unidades fuera), y **bufanda** como `traje: 3` (banda + cola con
+flecos). Regla: el sombrero tapa las antenas de arriba (0/1/4/5); las orejas
+(antena 3) conviven. OJO: el `.riv` NO sabe dibujar nada de esto todavía —
+por eso el dado del bautizo ahora tira de `EJES_RIVE` (app/app/lib/
+agentito.tsx), la tabla de lo que el canvas Rive sí muestra, y nadie del
+catálogo estrena sombrero/bufanda aún. Falta una sesión con rivemcp que meta
+el input `sombrero` + los redibujos de traje en public/agentito.riv y suba
+`EJES_RIVE` a la par de `LOOK_EJES`. Para probar variantes hay playground:
+`node hermes-kit/tools/probar-agentito.mjs` → localhost:8077 (todas las
+variantes de cada eje como thumbnails vivos, dado, y el JSON listo para
+pegar en el catálogo). Mientras tanto la única divergencia
+visible es la moñita/corbata vieja en el canvas Rive del portal de un agente
+contratado que las tenga (hoy: solo Tino, moñita). TODO ESTO SIN COMMITEAR:
+espera el ok de Luis porque el push despliega tuagente.uy a producción.
+
+## Done 2026-08-23: plugin system planned (in English, like everything from now on)
+
+Luis's call: every custom client build must land as a reusable PLUGIN — code
++ MCP + portal tab + agent skills in one package. The plan is agreed and
+landed in **notas/plugin-system-plan.md**: registry at hermes-kit/plugins/,
+plugin.json manifest (id/version/description/requires/surfaces/system),
+fail-loud dependency resolution at build AND boot, system plugins
+kanban→approvals/deliverables/artifacts/flows, install per-agent / expose
+per-role. Phase 1 is NOT started on purpose: Phase 0 is a separate session
+translating the whole codebase to English (file names included — the
+spanglish ends here; new rule: English for everything except client-facing
+copy).
+
 ## Pendiente (en orden)
 
 1. **Costo con imágenes: MEDIDO (19/8, lab real)** — US$0,10 por turno con

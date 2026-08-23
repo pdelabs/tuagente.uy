@@ -23,7 +23,7 @@ import {
   type Connection, type Manifest, type PortalConfig,
 } from "./agent";
 import {
-  AgentitoCargando, LOOK_DEFAULT, LOOK_EJES, hayLookGuardado, loadAgentLook,
+  AgentitoCargando, EJES_RIVE, LOOK_DEFAULT, hayLookGuardado, loadAgentLook,
   lookDesdeAgente, saveAgentLook, type AgentitoLook,
 } from "./agentito";
 
@@ -94,10 +94,10 @@ function capturaDelAgentito(): { avatar_png?: string } {
 export function sortearLook(actual: AgentitoLook): AgentitoLook {
   for (;;) {
     const look = { ...actual };
-    for (const eje of Object.keys(LOOK_EJES) as (keyof AgentitoLook)[]) {
-      look[eje] = Math.floor(Math.random() * LOOK_EJES[eje]);
+    for (const [eje, n] of Object.entries(EJES_RIVE) as [keyof AgentitoLook, number][]) {
+      look[eje] = Math.floor(Math.random() * n);
     }
-    if (Object.keys(LOOK_EJES).some((e) => look[e as keyof AgentitoLook] !== actual[e as keyof AgentitoLook])) {
+    if (Object.keys(EJES_RIVE).some((e) => look[e as keyof AgentitoLook] !== actual[e as keyof AgentitoLook])) {
       return look;
     }
   }

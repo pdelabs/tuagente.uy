@@ -1,7 +1,8 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "tuagente — Agentes de IA que trabajan por vos. La #1 de LATAM.";
+export const alt =
+  "tuagente — Un equipo de IA que trabaja adentro de tu empresa. $U 1.500 por rol, por mes.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -34,15 +35,15 @@ export default function OgImage() {
             fontWeight: 700,
           }}
         >
-          🏆 La #1 en agentes de IA de LATAM
+          Hecho en Uruguay · $U 1.500 por rol, por mes
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <div style={{ display: "flex", fontSize: 84, fontWeight: 800, lineHeight: 1.05 }}>
-            Agentes de IA que trabajan por vos.
+          <div style={{ display: "flex", fontSize: 76, fontWeight: 800, lineHeight: 1.05 }}>
+            Un equipo de IA que trabaja adentro de tu empresa.
           </div>
           <div style={{ display: "flex", fontSize: 34, color: "rgba(255,255,255,0.85)" }}>
-            Conectados a tus sistemas · Operando 24/7 · Listos en semanas
+            Marketing · Soporte · Ventas · Contabilidad · o el rol que te falte
           </div>
         </div>
 

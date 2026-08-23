@@ -11,11 +11,13 @@
 
 /** Axis sizes; each axis is a numeric input of the Rive state machine. */
 export const LOOK_EJES = {
-  tono: 6, antena: 6, accesorio: 4, pupila: 3, boca: 4, piel: 2, traje: 3, cejas: 3,
+  tono: 6, antena: 6, accesorio: 4, pupila: 3, boca: 4, piel: 2, traje: 4, cejas: 3,
+  sombrero: 4,
 };
 
 export const LOOK_DEFAULT = {
   tono: 0, antena: 0, accesorio: 0, pupila: 0, boca: 0, piel: 0, traje: 0, cejas: 0,
+  sombrero: 0,
 };
 
 export const TONOS = ["#5B4BE8", "#00A67E", "#FF7A59", "#F0B429", "#3D8BE8", "#E86BB3"];
@@ -45,8 +47,11 @@ export function renderAgentitoSVG(look = LOOK_DEFAULT, opts = {}) {
     p.push(`<ellipse cx="60" cy="114" rx="26" ry="3.2" fill="${INK}" opacity="0.12"/>`);
   }
 
-  // Antenna (behind the body). Variant 2 is "nothing" on purpose.
-  if (look.antena === 0) {
+  // Antenna (behind the body). Variant 2 is "nothing" on purpose. A hat
+  // owns the roof: the top-mounted variants (0, 1, 4, 5) hide under it, the
+  // side ears (3) do not.
+  const conSombrero = look.sombrero > 0;
+  if (look.antena === 0 && !conSombrero) {
     p.push(
       `<g fill="${tono}">` +
         `<rect x="57.75" y="12.5" width="4.5" height="12" rx="2"/>` +
@@ -54,7 +59,7 @@ export function renderAgentitoSVG(look = LOOK_DEFAULT, opts = {}) {
       `</g>`,
     );
   }
-  if (look.antena === 1) {
+  if (look.antena === 1 && !conSombrero) {
     p.push(
       `<g fill="${tono}">` +
         `<rect x="50.9" y="13.5" width="3.25" height="11" rx="1.5" transform="rotate(-18 52.5 19)"/>` +
@@ -72,7 +77,7 @@ export function renderAgentitoSVG(look = LOOK_DEFAULT, opts = {}) {
       `</g>`,
     );
   }
-  if (look.antena === 4) {
+  if (look.antena === 4 && !conSombrero) {
     p.push(
       `<g>` +
         `<rect x="57.75" y="12.5" width="4.5" height="12" rx="2" fill="${tono}"/>` +
@@ -80,7 +85,7 @@ export function renderAgentitoSVG(look = LOOK_DEFAULT, opts = {}) {
       `</g>`,
     );
   }
-  if (look.antena === 5) {
+  if (look.antena === 5 && !conSombrero) {
     p.push(
       `<path d="M61 18a1 1 0 1 0-2 0a2 2 0 1 0 4 0a3.2 3.2 0 1 0-6.4 0a4.5 4.5 0 1 0 9 0" ` +
         `fill="none" stroke="${tono}" stroke-width="2.25" stroke-linecap="round"/>`,
@@ -140,18 +145,28 @@ export function renderAgentitoSVG(look = LOOK_DEFAULT, opts = {}) {
   if (look.traje === 1) {
     p.push(
       `<g fill="${INK}">` +
-        `<polygon points="51.5,106.2 51.5,112.8 58,109.5"/>` +
-        `<polygon points="68.5,106.2 68.5,112.8 62,109.5"/>` +
-        `<rect x="58" y="107.5" width="4" height="4" rx="1.25"/>` +
+        `<polygon points="45,95.5 45,108.5 56.5,102"/>` +
+        `<polygon points="75,95.5 75,108.5 63.5,102"/>` +
+        `<rect x="56.5" y="98.5" width="7" height="7" rx="2"/>` +
       `</g>`,
     );
   }
   if (look.traje === 2) {
     p.push(
       `<g fill="${INK}">` +
-        `<rect x="56" y="100.25" width="8" height="4.5" rx="1"/>` +
-        `<rect x="56.5" y="105" width="7" height="12" rx="1.75"/>` +
-        `<polygon points="56.5,116.5 63.5,116.5 60,121"/>` +
+        `<polygon points="54.5,96.5 65.5,96.5 62.5,102.5 57.5,102.5"/>` +
+        `<polygon points="57.5,102.5 62.5,102.5 64.5,110 60,114.5 55.5,110"/>` +
+      `</g>`,
+    );
+  }
+  if (look.traje === 3) {
+    p.push(
+      `<g fill="${INK}">` +
+        `<rect x="19" y="92.5" width="82" height="10" rx="5"/>` +
+        `<rect x="42" y="100" width="11" height="14" rx="3.5"/>` +
+        `<rect x="43" y="112" width="2.5" height="6" rx="1.25"/>` +
+        `<rect x="46.5" y="112" width="2.5" height="7.5" rx="1.25"/>` +
+        `<rect x="50" y="112" width="2.5" height="6" rx="1.25"/>` +
       `</g>`,
     );
   }
@@ -195,6 +210,35 @@ export function renderAgentitoSVG(look = LOOK_DEFAULT, opts = {}) {
         `<rect x="41" y="42.25" width="11" height="2.5" rx="1.25"${rot1}/>` +
         `<rect x="68" y="42.25" width="11" height="2.5" rx="1.25"${rot2}/>` +
       `</g>`,
+    );
+  }
+
+  // Hats, above everything: cap (with a body-colored button), beret, top hat
+  // (with a body-colored band).
+  if (look.sombrero === 1) {
+    p.push(
+      `<g>` +
+        `<path d="M32.5 33a30 22 0 0 1 55 0z" fill="${INK}"/>` +
+        `<rect x="80" y="27.5" width="24" height="6" rx="3" fill="${INK}"/>` +
+        `<circle cx="60" cy="19.5" r="2.75" fill="${tono}"/>` +
+      `</g>`,
+    );
+  }
+  if (look.sombrero === 2) {
+    p.push(
+      `<g fill="${INK}">` +
+        `<ellipse cx="57" cy="21.5" rx="24" ry="9.5" transform="rotate(-7 57 21.5)"/>` +
+        `<circle cx="54.5" cy="9.5" r="3"/>` +
+      `</g>`,
+    );
+  }
+  if (look.sombrero === 3) {
+    p.push(
+      `<g fill="${INK}">` +
+        `<rect x="34" y="26" width="52" height="6" rx="3"/>` +
+        `<rect x="44" y="4" width="32" height="24" rx="3"/>` +
+      `</g>` +
+      `<rect x="44" y="20" width="32" height="5" fill="${tono}"/>`,
     );
   }
 

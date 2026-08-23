@@ -1,35 +1,39 @@
 import Image from "next/image";
 import {
   ArrowRight,
+  Ban,
   Bot,
   Check,
   ChevronDown,
   Clock,
   Eye,
-  FileText,
   FolderOpen,
   Hand,
   LayoutDashboard,
   MapPin,
-  Headphones,
-  Megaphone,
   MessageCircle,
-  Package,
   Pause,
+  PhoneCall,
   Plug,
-  Receipt,
+  Puzzle,
   SlidersHorizontal,
-  Rocket,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
+  UserPlus,
+  Users,
   Zap,
 } from "lucide-react";
 import Reveal from "./Reveal";
+import { AgentitoAvatar, type AgentitoLook } from "./app/lib/agentito";
 import CountUp from "./CountUp";
 
 const WHATSAPP = "https://wa.me/59899002835";
 const EMAIL = "mailto:hola@tuagente.uy";
+
+/** El precio, en un solo lugar: se repite en el hero, en los números, en la
+ *  sección de precio, en el FAQ y en los datos estructurados. */
+const PRECIO_ROL = "$U 1.500";
+const PRECIO_DIAGNOSTICO = "USD 200";
 
 export default function Page() {
   return (
@@ -39,7 +43,7 @@ export default function Page() {
       <Cards />
       <Reveal><Stats /></Reveal>
       <Steps />
-      <UseCases />
+      <Equipo />
       <Control />
       <Portal />
       <Integrations />
@@ -72,9 +76,11 @@ function Header() {
       <nav className="hidden items-center gap-1 rounded-pill bg-white/70 px-2 py-1 text-sm font-bold text-ink-soft backdrop-blur md:flex">
         {[
           ["Cómo funciona", "#como-funciona"],
-          ["Casos", "#casos"],
+          ["El equipo", "#equipo"],
           ["Tu portal", "#portal"],
-          ["Planes", "#planes"],
+          // El id de la sección de precio sigue siendo #planes: hay un post del
+          // blog que linkea a /#planes y no se rompe por un cambio de nombre.
+          ["Precio", "#planes"],
           ["FAQ", "#faq"],
           ["Blog", "/blog"],
         ].map(([label, href]) => (
@@ -93,7 +99,7 @@ function Header() {
         rel="noopener noreferrer"
         className="rounded-pill bg-ink px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-primary"
       >
-        Agendá una demo
+        Armá tu equipo
       </a>
     </header>
   );
@@ -109,24 +115,25 @@ function Hero() {
             confianza: la descuenta. Lo que sí es verificable y sí importa a
             quien compra esto en Uruguay es dónde estamos y quién lo hace. */}
         <span className="animate-fadeup inline-flex items-center gap-2 rounded-pill border border-primary/20 bg-white/70 px-4 py-1.5 text-sm font-bold text-primary backdrop-blur">
-          <MapPin size={15} /> Hecho en Uruguay, para empresas de LATAM
+          <MapPin size={15} /> Hecho en Uruguay, para las empresas de acá
         </span>
 
         <h1
           className="animate-fadeup mx-auto mt-7 max-w-4xl text-5xl font-extrabold leading-[1.05] tracking-tight text-ink sm:text-7xl"
           style={{ animationDelay: "80ms" }}
         >
-          Agentes de IA que trabajan{" "}
-          <span className="text-primary">solos</span>, adentro de tu empresa.
+          Un equipo de IA que trabaja{" "}
+          <span className="text-primary">solo</span>, adentro de tu empresa.
         </h1>
 
         <p
           className="animate-fadeup mx-auto mt-6 max-w-2xl text-lg text-ink-soft sm:text-xl"
           style={{ animationDelay: "180ms" }}
         >
-          Los configuramos, los conectamos a tus sistemas y los dejamos corriendo{" "}
-          <strong className="text-ink">24/7</strong>. Sin equipo técnico, sin dolores de cabeza.
-          Vos mirás los resultados.
+          Contratás los roles que te faltan — marketing, soporte, ventas, contabilidad — y
+          trabajan <strong className="text-ink">24/7</strong> adentro de tu empresa.{" "}
+          <strong className="text-ink">{PRECIO_ROL} por rol, por mes.</strong> Nada sale para
+          afuera sin tu ok.
         </p>
 
         <div
@@ -139,14 +146,14 @@ function Hero() {
             rel="noopener noreferrer"
             className="group inline-flex w-full items-center justify-center gap-2 rounded-pill bg-primary px-7 py-4 text-base font-bold text-white shadow-lift transition hover:-translate-y-0.5 hover:bg-primary-dark sm:w-auto"
           >
-            Agendá una demo gratis
+            Armá tu equipo
             <ArrowRight size={19} className="transition group-hover:translate-x-1" />
           </a>
           <a
-            href="#como-funciona"
+            href="#equipo"
             className="inline-flex w-full items-center justify-center gap-2 rounded-pill border border-ink/10 bg-white px-7 py-4 text-base font-bold text-ink shadow-soft transition hover:-translate-y-0.5 sm:w-auto"
           >
-            Ver cómo funciona
+            Conocé a los roles
           </a>
         </div>
 
@@ -154,7 +161,7 @@ function Hero() {
           className="animate-fadeup mt-6 text-sm font-medium text-ink-soft"
           style={{ animationDelay: "380ms" }}
         >
-          Un agente por empresa, aislado y con su propia clave · vos ves todo lo que hace
+          Un equipo por empresa, aislado y con su propia clave · vos ves todo lo que hace cada uno
         </p>
       </div>
     </section>
@@ -165,30 +172,30 @@ function Hero() {
 
 const CARDS = [
   {
-    Icon: Clock,
-    title: "Trabajan 24/7",
-    body: "Tu agente no duerme, no se enferma y no renuncia. Opera en piloto automático mientras vos hacés otra cosa.",
+    Icon: Users,
+    title: "Contratás roles, no proyectos",
+    body: "Cada uno tiene nombre, cara y una ficha con lo que hace. Sumás el que te falta y sacás el que no usás, cuando quieras.",
     bg: "bg-c-violet",
     ink: "text-c-violet-ink",
   },
   {
-    Icon: Plug,
-    title: "Conectados a lo tuyo",
-    body: "Se enchufan a tu CRM, tu base de datos y tus sistemas internos. Actúan de verdad — no solo chatean.",
+    Icon: Clock,
+    title: "Trabajan 24/7",
+    body: "Tu equipo no duerme, no se enferma y no renuncia. Opera en piloto automático mientras vos hacés otra cosa.",
     bg: "bg-c-green",
     ink: "text-c-green-ink",
   },
   {
-    Icon: Rocket,
-    title: "Listos en semanas",
-    body: "De la idea a producción en semanas, no en meses. Nos ocupamos de todo, vos no tocás una línea de código.",
+    Icon: Plug,
+    title: "Conectados a lo tuyo",
+    body: "Se enchufan a tu correo, tus planillas y tus sistemas internos. Actúan de verdad — no solo chatean.",
     bg: "bg-c-coral",
     ink: "text-c-coral-ink",
   },
   {
     Icon: Eye,
     title: "Nada pasa a tus espaldas",
-    body: "Tenés un portal donde ves qué hizo, qué está haciendo y qué produjo. Y lo sensible — un mail a un cliente, un pago — espera tu ok.",
+    body: "Tenés un portal donde ves qué hizo cada uno, qué está haciendo y qué produjo. Y lo que sale para afuera — un mail a un cliente, un posteo — espera tu ok.",
     bg: "bg-c-amber",
     ink: "text-c-amber-ink",
   },
@@ -229,11 +236,12 @@ const STATS: {
   prefix?: string;
   suffix?: string;
   static?: string;
+  size?: string;
 }[] = [
-  { static: "24/7", l: "trabaja sin parar" },
-  { static: "1 a 1", l: "un agente por empresa, aislado" },
-  { static: "Tu ok", l: "para todo lo sensible" },
-  { static: "Semanas", l: "de la charla a producción" },
+  { static: "24/7", l: "tu equipo no para" },
+  { static: PRECIO_ROL, l: "por rol, por mes", size: "text-3xl sm:text-5xl" },
+  { static: "1 a 1", l: "un equipo por empresa, aislado" },
+  { static: "Tu ok", l: "para todo lo que sale para afuera" },
 ];
 
 function Stats() {
@@ -243,7 +251,9 @@ function Stats() {
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           {STATS.map((s) => (
             <div key={s.l} className="text-center">
-              <div className="text-4xl font-extrabold tracking-tight sm:text-6xl">
+              <div
+                className={`font-extrabold tracking-tight ${s.size ?? "text-4xl sm:text-6xl"}`}
+              >
                 {s.static ? (
                   s.static
                 ) : (
@@ -263,19 +273,19 @@ function Stats() {
 
 const STEPS = [
   {
-    Icon: MessageCircle,
-    title: "Nos contás tu proceso",
-    body: "Una sola llamada. Detectamos exactamente dónde un agente te ahorra plata y tiempo.",
+    Icon: PhoneCall,
+    title: "Empezás por el diagnóstico",
+    body: `Una llamada y un informe: qué roles te sirven, cuánto te ahorra cada uno y qué sale ponerlos a trabajar. Son ${PRECIO_DIAGNOSTICO} y se descuentan del setup si seguís.`,
   },
   {
-    Icon: ShieldCheck,
-    title: "Lo construimos y conectamos",
-    body: "Armamos el agente sobre tus sistemas, con controles, permisos y seguridad de verdad.",
+    Icon: UserPlus,
+    title: "Armamos tu equipo",
+    body: "Cada rol se arma a medida: partimos de un ejemplo o lo componemos desde cero. Lo instalamos adentro de tu empresa, conectado a lo que ya usás y con los permisos que vos le des.",
   },
   {
     Icon: Zap,
-    title: "Corre solo",
-    body: "Lo dejamos operando 24/7. Desde ese día, el trabajo pasa sin que nadie lo empuje.",
+    title: "Trabajan solos",
+    body: "Desde ese día el trabajo pasa sin que nadie lo empuje. Vos entrás al portal, mirás lo que hicieron y aprobás lo que sale para afuera.",
   },
 ];
 
@@ -287,7 +297,7 @@ function Steps() {
           <Sparkles size={15} /> Simple de verdad
         </span>
         <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
-          Tu agente, funcionando en 3 pasos
+          Tu equipo, trabajando en 3 pasos
         </h2>
       </div>
 
@@ -311,69 +321,128 @@ function Steps() {
   );
 }
 
-/* ─────────────────────────────────────────── Use cases */
+/* ─────────────────────────────────────────── El equipo (los roles) */
 
-const USE_CASES = [
+// Los cinco que hoy están en el catálogo del kit (hermes-kit/roles/catalogo.json):
+// el "hace", el "nunca" Y el `look` salen de ahí, con las mismas palabras y la
+// misma cara que después ve el cliente adentro del portal. Si el catálogo
+// cambia, esto cambia — acá no se promete un rol que no esté escrito allá.
+const ROLES = [
   {
-    Icon: TrendingUp,
-    title: "Agente de ventas",
-    body: "Califica leads, responde consultas, agenda reuniones y deja tu CRM al día. Solo.",
+    nombre: "Vera",
+    rol: "Marketing",
+    hace: "Escribe y planifica lo que publicás: posteos de Instagram, historias, textos y el kit de marca.",
+    nunca: "publica nada sin tu aprobación.",
+    look: { tono: 0, antena: 5, accesorio: 0, pupila: 1, boca: 1, piel: 1, traje: 0, cejas: 1, sombrero: 0 } as AgentitoLook,
+    bg: "bg-c-violet",
   },
   {
-    Icon: Headphones,
-    title: "Agente de soporte",
-    body: "Atiende WhatsApp y mail las 24 hs. Resuelve lo repetitivo y escala a un humano solo cuando hace falta.",
+    nombre: "Beto",
+    rol: "Soporte",
+    hace: "Contesta los mensajes de tus clientes: horarios, precios y estado de pedidos.",
+    nunca: "manda un mensaje a un cliente tuyo sin tu aprobación.",
+    look: { tono: 1, antena: 3, accesorio: 2, pupila: 0, boca: 1, piel: 0, traje: 0, cejas: 0, sombrero: 0 } as AgentitoLook,
+    bg: "bg-c-green",
   },
   {
-    Icon: Receipt,
-    title: "Agente de cobranzas",
-    body: "Persigue facturas vencidas, manda recordatorios con buena onda y concilia pagos contra tu contabilidad.",
+    nombre: "Nina",
+    rol: "Ventas",
+    hace: "Arma presupuestos y hace el seguimiento de los que no te contestaron.",
+    nunca: "cierra un precio ni promete una entrega sin tu aprobación.",
+    look: { tono: 5, antena: 4, accesorio: 2, pupila: 2, boca: 3, piel: 1, traje: 0, cejas: 2, sombrero: 0 } as AgentitoLook,
+    bg: "bg-c-rosa",
   },
   {
-    Icon: Package,
-    title: "Agente de operaciones",
-    body: "Controla stock, genera órdenes de compra y te avisa antes de que algo se rompa en la logística.",
+    nombre: "Tino",
+    rol: "Contabilidad",
+    hace: "Te arma las planillas de lo que entra y lo que sale, y te avisa lo que vence.",
+    nunca: "factura, paga ni presenta nada. Solo mira, ordena y avisa.",
+    look: { tono: 4, antena: 2, accesorio: 1, pupila: 2, boca: 2, piel: 0, traje: 1, cejas: 1, sombrero: 0 } as AgentitoLook,
+    bg: "bg-c-amber",
   },
   {
-    Icon: FileText,
-    title: "Agente de back-office",
-    body: "Lee PDFs, facturas y mails, extrae los datos y los carga prolijos en tus sistemas. Cero tipeo manual.",
-  },
-  {
-    Icon: Megaphone,
-    title: "Agente de contenido",
-    body: "Redacta publicaciones, responde comentarios y mantiene tus redes y tu blog vivos todos los días.",
+    nombre: "Lola",
+    rol: "Asistente",
+    hace: "Hace los mandados del negocio: averigua lo que le pedís, lee lo que le mandás, escucha los audios y te deja la planilla o el documento armado.",
+    nunca:
+      "promete lo que no puede hacer. Si le falta una herramienta te lo dice y te ofrece la que lo resuelve.",
+    look: { tono: 2, antena: 0, accesorio: 3, pupila: 1, boca: 1, piel: 0, traje: 0, cejas: 0, sombrero: 0 } as AgentitoLook,
+    bg: "bg-c-coral",
   },
 ];
 
-function UseCases() {
+function Equipo() {
   return (
-    <section id="casos" className="mx-auto max-w-7xl px-5 py-6 sm:px-8 sm:py-10">
+    <section id="equipo" className="mx-auto max-w-7xl px-5 py-6 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-2xl text-center">
         <span className="inline-flex items-center gap-2 rounded-pill bg-primary/10 px-4 py-1.5 text-sm font-bold text-primary">
-          <Bot size={15} /> Agentes reales, trabajo real
+          <Users size={15} /> Todos los roles se arman a medida
         </span>
         <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
-          ¿Qué puede hacer tu agente?
+          Conocé a tu equipo
         </h2>
         <p className="mt-4 text-lg text-ink-soft">
-          Cualquier proceso repetitivo que hoy hace una persona con una computadora, lo puede hacer
-          un agente. Estos son los que más pedidos tienen:
+          Acá no hay menú: cada rol se arma para tu empresa, capacidad por capacidad, y estos
+          cinco son puntos de partida que ya existen. El tuyo puede ser uno de estos ajustado o
+          uno nuevo desde cero. Todos llevan nombre, cara, lo que hacen y — esto es lo
+          importante — una línea de lo que <strong className="text-ink">nunca</strong> van a
+          hacer, escrita adentro del rol y no de palabra.
         </p>
       </div>
 
       <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {USE_CASES.map(({ Icon, title, body }, i) => (
-          <Reveal key={title} delay={(i % 3) * 90} className="h-full">
-            <article className="group h-full rounded-card border border-ink/5 bg-white p-7 shadow-soft transition duration-300 hover:-translate-y-1">
-              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-white">
-                <Icon size={23} />
-              </span>
-              <h3 className="mt-5 text-xl font-extrabold tracking-tight text-ink">{title}</h3>
-              <p className="mt-2 text-ink-soft">{body}</p>
+        {ROLES.map((r, i) => (
+          <Reveal key={r.nombre} delay={(i % 3) * 90} className="h-full">
+            <article className="flex h-full flex-col rounded-card border border-ink/5 bg-white p-7 shadow-soft transition duration-300 hover:-translate-y-1">
+              <div className="flex flex-wrap items-center gap-4">
+                <span className={`grid h-16 w-16 shrink-0 place-items-center rounded-2xl ${r.bg}`}>
+                  <AgentitoAvatar look={r.look} className="h-14 w-14" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-2xl font-extrabold tracking-tight text-ink">{r.nombre}</h3>
+                  <p className="text-xs font-bold uppercase tracking-wider text-primary">{r.rol}</p>
+                </div>
+              </div>
+
+              <p className="mt-5 flex-1 text-ink-soft">{r.hace}</p>
+
+              <div className="mt-5 flex items-start gap-2.5 rounded-2xl bg-ink/[0.04] p-4">
+                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-c-coral text-c-coral-ink">
+                  <Ban size={12} />
+                </span>
+                <p className="text-sm text-ink-soft">
+                  <strong className="font-extrabold text-ink">Nunca</strong> {r.nunca}
+                </p>
+              </div>
             </article>
           </Reveal>
         ))}
+
+        {/* El sexto lugar de la grilla es el rol que todavía no existe: el tuyo. */}
+        <Reveal delay={180} className="h-full">
+          <article className="flex h-full flex-col justify-center rounded-card border-2 border-dashed border-primary/25 bg-primary/[0.04] p-7">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-white">
+              <Puzzle size={23} />
+            </span>
+            <h3 className="mt-5 text-2xl font-extrabold tracking-tight text-ink">
+              El sexto es el tuyo
+            </h3>
+            <p className="mt-2 text-ink-soft">
+              Contanos qué necesitás que haga y lo componemos con vos, capacidad por capacidad:
+              leer facturas, buscar en internet, transcribir audios, armar planillas. Sale lo
+              mismo que cualquier otro rol: {PRECIO_ROL} por mes.
+            </p>
+            <a
+              href={WHATSAPP}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group mt-6 inline-flex w-fit items-center gap-2 rounded-pill bg-ink px-5 py-3 text-sm font-extrabold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-primary"
+            >
+              Contanos qué necesitás
+              <ArrowRight size={16} className="transition group-hover:translate-x-1" />
+            </a>
+          </article>
+        </Reveal>
       </div>
     </section>
   );
@@ -384,23 +453,23 @@ function UseCases() {
 const CONTROL_POINTS = [
   {
     Icon: MessageCircle,
-    title: "Chateá con tu agente",
-    body: "Le hablás desde tu portal o desde el celular, como a un empleado más: le pedís tareas, le preguntás qué hizo y te responde al momento.",
+    title: "Le hablás al equipo",
+    body: "Escribís en un solo lugar, desde el portal o desde el celular, y contesta el que corresponde. Le pedís tareas, le preguntás qué hizo y te responde al momento.",
   },
   {
     Icon: SlidersHorizontal,
-    title: "Lo ajustás hablándole",
-    body: "¿Querés que salude distinto o priorice otra cosa? Se lo decís y cambia. Sin proyecto, sin código, sin esperar a nadie.",
+    title: "Los ajustás hablándoles",
+    body: "¿Querés que Beto salude distinto o que Vera priorice otra cosa? Se lo decís y cambia. Sin proyecto, sin código, sin esperar a nadie.",
   },
   {
     Icon: Eye,
-    title: "Ves todo lo que hace",
-    body: "Cada acción queda registrada y te llega un reporte claro. Cero cajas negras: siempre sabés qué hizo y por qué.",
+    title: "Ves todo lo que hace cada uno",
+    body: "Cada acción queda registrada, y con el nombre de quién la hizo. Cero cajas negras: siempre sabés qué pasó y por qué.",
   },
   {
     Icon: Pause,
-    title: "Lo frenás con un botón",
-    body: "Pausa inmediata cuando quieras. Y las acciones sensibles — pagos, mails a clientes — siempre pasan por tu aprobación.",
+    title: "Los frenás con un botón",
+    body: "Pausa inmediata, a uno o a todos. Y lo que sale para afuera — un mail a un cliente, un posteo, un presupuesto — siempre pasa por tu aprobación.",
   },
 ];
 
@@ -415,11 +484,12 @@ function Control() {
                 <ShieldCheck size={15} /> Cero cajas negras
               </span>
               <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-c-amber-ink sm:text-5xl">
-                ¿Y quién controla al agente? <span className="underline decoration-4 underline-offset-4">Vos.</span>
+                ¿Y quién manda acá?{" "}
+                <span className="underline decoration-4 underline-offset-4">Vos.</span>
               </h2>
               <p className="mt-4 max-w-lg text-lg text-c-amber-ink/80">
-                Autónomo no significa descontrolado. Tu agente trabaja solo, pero vos lo dirigís
-                como a cualquier persona de tu equipo — hablándole.
+                Autónomo no significa descontrolado. Tu equipo trabaja solo, pero vos lo dirigís
+                como a cualquier persona que trabaja con vos — hablándole.
               </p>
               <div className="mt-8 grid gap-5 sm:grid-cols-2">
                 {CONTROL_POINTS.map(({ Icon, title, body }) => (
@@ -436,32 +506,42 @@ function Control() {
               </div>
             </div>
 
-            {/* Chat mock: the owner directing their agent */}
+            {/* Chat mock: el dueño le escribe al equipo, y contesta quien corresponde */}
             <div className="mx-auto w-full max-w-md rounded-card bg-white p-5 shadow-lift sm:p-6">
               <div className="flex items-center gap-3 border-b border-ink/5 pb-4">
-                <span className="grid h-10 w-10 place-items-center rounded-2xl bg-primary text-white">
-                  <Bot size={20} />
+                <span className="flex -space-x-3">
+                  <span className="grid h-10 w-10 place-items-center rounded-2xl bg-c-green ring-2 ring-white">
+                    <AgentitoAvatar look={ROLES[1].look} className="h-8 w-8" />
+                  </span>
+                  <span className="grid h-10 w-10 place-items-center rounded-2xl bg-c-violet ring-2 ring-white">
+                    <AgentitoAvatar look={ROLES[0].look} className="h-8 w-8" />
+                  </span>
                 </span>
                 <div>
-                  <p className="text-sm font-extrabold text-ink">Tu agente</p>
+                  <p className="text-sm font-extrabold text-ink">Tu equipo</p>
                   <p className="flex items-center gap-1.5 text-xs font-medium text-ink-soft">
-                    <span className="h-2 w-2 rounded-full bg-c-green-ink" /> en línea · trabajando
+                    <span className="h-2 w-2 rounded-full bg-c-green-ink" /> 4 en línea · trabajando
                   </p>
                 </div>
               </div>
               <div className="mt-4 space-y-3 text-sm">
                 <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 font-medium text-white">
-                  ¿Qué hiciste hoy?
+                  ¿Cómo venimos hoy?
                 </div>
                 <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-ink shadow-soft">
-                  Respondí 34 consultas, agendé 5 reuniones y dejé el CRM al día ✅ Tenés 2
-                  facturas esperando tu aprobación.
+                  <span className="font-extrabold text-c-green-ink">Beto</span> · Contesté 34
+                  consultas y quedan 2 esperando tu ok para salir.
+                </div>
+                <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-ink shadow-soft">
+                  <span className="font-extrabold text-primary">Vera</span> · Dejé los tres posteos
+                  de la semana listos para que los mires.
                 </div>
                 <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 font-medium text-white">
-                  Aprobá la primera. Y de ahora en más contestá más formal, ¿puede ser?
+                  Aprobá la primera, Beto. Y de ahora en más contestá más formal, ¿puede ser?
                 </div>
                 <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-ink shadow-soft">
-                  Hecho: factura aprobada y ya ajusté mi tono. ¿Algo más? 🫡
+                  <span className="font-extrabold text-c-green-ink">Beto</span> · Hecho: salió la
+                  respuesta y ya ajusté mi tono.
                 </div>
               </div>
             </div>
@@ -480,23 +560,23 @@ function Control() {
 const PORTAL_PANTALLAS = [
   {
     Icon: Eye,
-    title: "Qué hizo y qué está haciendo",
-    body: "Entrás a la mañana y ves lo del día: qué terminó, qué está en curso y qué te está esperando a vos.",
+    title: "Qué hizo cada uno",
+    body: "Entrás a la mañana y ves lo del día: qué terminó, quién lo hizo, qué está en curso y qué te está esperando a vos.",
   },
   {
     Icon: Hand,
     title: "Lo que espera tu ok",
-    body: "Antes de mandar un mail o gastar plata, tu agente frena y te muestra el texto completo. Aprobás, lo corregís o lo rechazás.",
+    body: "Antes de mandar un mail o publicar algo, el que lo escribió frena y te muestra el texto completo. Aprobás, lo corregís o lo rechazás.",
+  },
+  {
+    Icon: Users,
+    title: "La ficha de cada rol",
+    body: "Abrís a Vera o a Beto y ahí está: qué hace, qué nunca hace, qué tiene corriendo y todo lo que entregó hasta hoy.",
   },
   {
     Icon: FolderOpen,
-    title: "Lo que produjo",
+    title: "Lo que produjeron",
     body: "Informes, listados y planillas, ordenados por trabajo y con fecha. Se abren ahí mismo, sin bajar nada.",
-  },
-  {
-    Icon: MessageCircle,
-    title: "Hablarle, como a cualquiera",
-    body: "Le pedís algo escrito como te salga. Si le falta un dato o un archivo para hacerlo, te lo pide.",
   },
 ];
 
@@ -508,12 +588,11 @@ function Portal() {
           <LayoutDashboard size={15} /> Tu portal
         </span>
         <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
-          Un lugar donde ver todo lo que hace
+          Un lugar donde ver todo lo que hacen
         </h2>
         <p className="mt-4 text-lg text-ink-soft">
-          Tu agente trabaja solo, pero no a ciegas. Cada empresa tiene su portal: entrás
-          con un link, y ahí está todo lo que pasó — sin instalar nada y sin saber de
-          computación.
+          Tu equipo trabaja solo, pero no a ciegas. Cada empresa tiene su portal: entrás con un
+          link, y ahí está todo lo que pasó — sin instalar nada y sin saber de computación.
         </p>
       </div>
 
@@ -532,7 +611,7 @@ function Portal() {
       </div>
 
       <p className="mx-auto mt-8 max-w-2xl text-center text-sm font-medium text-ink-soft">
-        Te lo mostramos funcionando en la demo, con tu caso adentro.
+        Te lo mostramos funcionando en el diagnóstico, con tu caso adentro.
       </p>
     </section>
   );
@@ -562,7 +641,7 @@ function Integrations() {
       <Reveal>
         <div className="rounded-card bg-c-green px-6 py-10 text-center sm:px-12">
           <p className="text-sm font-bold uppercase tracking-wider text-c-green-ink/60">
-            Se conecta con lo que ya usás
+            Se conectan con lo que ya usás
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
             {INTEGRATIONS.map((x) => (
@@ -575,9 +654,9 @@ function Integrations() {
             ))}
           </div>
           <p className="mx-auto mt-6 max-w-xl text-sm font-medium text-c-green-ink/70">
-            Estas son las que ya vienen listas. ¿Tu sistema no está? Le escribimos la
-            integración a medida — es lo que sabemos hacer. Y te decimos de entrada cuánto
-            lleva: WhatsApp, por ejemplo, depende de un trámite ante Meta y son días, no horas.
+            Estas son las que ya vienen listas. ¿Tu sistema no está? Le escribimos la integración a
+            medida — es lo que sabemos hacer. Y te decimos de entrada cuánto lleva: WhatsApp, por
+            ejemplo, depende de un trámite ante Meta y son días, no horas.
           </p>
         </div>
       </Reveal>
@@ -587,50 +666,15 @@ function Integrations() {
 
 /* ─────────────────────────────────────────── Pricing */
 
-const PLANS = [
-  {
-    name: "Starter",
-    tag: "Tu primer agente",
-    price: "USD 990",
-    period: "setup · desde USD 190/mes",
-    features: [
-      "1 agente con 1 flujo automatizado",
-      "Conectado a WhatsApp o mail",
-      "Reporte semanal de lo que hizo",
-      "Soporte directo por WhatsApp",
-    ],
-    cta: "Empezar con Starter",
-    featured: false,
-  },
-  {
-    name: "Pro",
-    tag: "El más elegido",
-    price: "USD 2.900",
-    period: "setup · desde USD 490/mes",
-    features: [
-      "Agente conectado a tus sistemas (CRM, ERP, base de datos)",
-      "Chat directo con tu agente por WhatsApp o Slack",
-      "Flujos autónomos corriendo 24/7 en cronograma",
-      "Aprobación humana para acciones sensibles",
-      "Monitoreo, ajustes y mejoras todos los meses",
-    ],
-    cta: "Quiero el Pro",
-    featured: true,
-  },
-  {
-    name: "Flota",
-    tag: "Para escalar en serio",
-    price: "A medida",
-    period: "varios agentes orquestados",
-    features: [
-      "Equipo de agentes trabajando en conjunto",
-      "Integraciones ilimitadas",
-      "SLA y soporte prioritario",
-      "Roadmap de automatización trimestral",
-    ],
-    cta: "Hablemos de tu flota",
-    featured: false,
-  },
+// Un solo precio por rol. Los tres planes (Starter / Pro / Flota) se fueron con
+// el pivot: cuando lo que se contrata es gente, el cliente no compra un
+// "paquete", compra el segundo empleado. El id de la sección sigue siendo
+// #planes porque hay un post del blog linkeando ahí.
+const INCLUYE = [
+  "El rol trabajando 24/7, adentro de tu empresa",
+  "Su ficha en el portal: qué hace, qué tiene corriendo y qué entregó",
+  "Aprobación tuya para todo lo que sale para afuera",
+  "Soporte por WhatsApp, con nosotros",
 ];
 
 function Pricing() {
@@ -638,78 +682,92 @@ function Pricing() {
     <section id="planes" className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-24">
       <div className="mx-auto max-w-2xl text-center">
         <span className="inline-flex items-center gap-2 rounded-pill bg-primary/10 px-4 py-1.5 text-sm font-bold text-primary">
-          <Sparkles size={15} /> Sin sorpresas
+          <Sparkles size={15} /> Un precio, sin letra chica
         </span>
         <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
-          Cuánto cuesta tu agente
+          Cuánto sale tu equipo
         </h2>
         <p className="mt-4 text-lg text-ink-soft">
-          Mucho menos que un sueldo — y trabaja las 24 horas. Precios desde, según integraciones.
+          Se paga por rol, como se paga un sueldo — solo que este es el mismo para todos y lo
+          decidís vos mes a mes.
         </p>
       </div>
 
-      <div className="mt-12 grid gap-5 md:grid-cols-3">
-        {PLANS.map((p, i) => (
-          <Reveal key={p.name} delay={i * 110} className="h-full">
-            <article
-              className={
-                p.featured
-                  ? "relative flex h-full flex-col rounded-card bg-primary p-8 text-white shadow-lift"
-                  : "flex h-full flex-col rounded-card border border-ink/5 bg-white p-8 shadow-soft"
-              }
-            >
-              {p.featured && (
-                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-pill bg-ink px-4 py-1.5 text-xs font-extrabold uppercase tracking-wider text-white">
-                  {p.tag}
-                </span>
-              )}
-              <p
-                className={`text-sm font-bold uppercase tracking-wider ${
-                  p.featured ? "text-white/70" : "text-primary"
-                }`}
-              >
-                {p.name}
-              </p>
-              <div className="mt-4 text-4xl font-extrabold tracking-tight">{p.price}</div>
-              <p className={`mt-1 text-sm font-medium ${p.featured ? "text-white/70" : "text-ink-soft"}`}>
-                {p.period}
-              </p>
-              <ul className="mt-6 flex-1 space-y-3">
-                {p.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5">
-                    <span
-                      className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${
-                        p.featured ? "bg-white/20" : "bg-c-green"
-                      }`}
-                    >
-                      <Check size={13} className={p.featured ? "text-white" : "text-c-green-ink"} />
-                    </span>
-                    <span className={p.featured ? "text-white/90" : "text-ink-soft"}>{f}</span>
-                  </li>
-                ))}
-              </ul>
-              <a
-                href={WHATSAPP}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`mt-8 inline-flex items-center justify-center gap-2 rounded-pill px-6 py-3.5 text-sm font-extrabold transition hover:-translate-y-0.5 ${
-                  p.featured
-                    ? "bg-white text-primary shadow-lift"
-                    : "bg-ink text-white shadow-soft hover:bg-primary"
-                }`}
-              >
-                {p.cta}
-                <ArrowRight size={16} />
-              </a>
-            </article>
-          </Reveal>
-        ))}
-      </div>
+      <div className="mt-12 grid gap-5 lg:grid-cols-5">
+        <Reveal className="h-full lg:col-span-3">
+          <article className="flex h-full flex-col rounded-card bg-primary p-8 text-white shadow-lift sm:p-10">
+            <p className="text-sm font-bold uppercase tracking-wider text-white/70">
+              Por cada rol que contratás
+            </p>
+            <div className="mt-4 flex flex-wrap items-baseline gap-x-3">
+              <span className="text-5xl font-extrabold tracking-tight sm:text-6xl">
+                {PRECIO_ROL}
+              </span>
+              <span className="text-lg font-bold text-white/80">por mes</span>
+            </div>
+            <p className="mt-2 text-sm font-medium text-white/70">
+              Pesos uruguayos, por rol. Pagás los que contratás, y nada más.
+            </p>
 
-      <p className="mt-8 text-center text-sm font-medium text-ink-soft">
-        La demo es gratis siempre: te mostramos con tu caso cuánto ahorra un agente antes de que
-        pongas un peso.
-      </p>
+            <ul className="mt-8 flex-1 space-y-3">
+              {INCLUYE.map((f) => (
+                <li key={f} className="flex items-start gap-2.5">
+                  <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/20">
+                    <Check size={13} className="text-white" />
+                  </span>
+                  <span className="text-white/90">{f}</span>
+                </li>
+              ))}
+            </ul>
+
+            <p className="mt-8 rounded-2xl bg-white/10 p-4 text-sm font-semibold text-white/90">
+              Sumás o sacás roles cuando quieras. Si uno no te está sirviendo, lo das de baja y
+              dejás de pagarlo — sin permanencia y sin explicaciones.
+            </p>
+
+            <a
+              href={WHATSAPP}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group mt-6 inline-flex items-center justify-center gap-2 rounded-pill bg-white px-6 py-3.5 text-sm font-extrabold text-primary shadow-lift transition hover:-translate-y-0.5"
+            >
+              Armá tu equipo
+              <ArrowRight size={16} className="transition group-hover:translate-x-1" />
+            </a>
+          </article>
+        </Reveal>
+
+        <Reveal delay={110} className="h-full lg:col-span-2">
+          <article className="flex h-full flex-col rounded-card border border-ink/5 bg-white p-8 shadow-soft sm:p-10">
+            <p className="text-sm font-bold uppercase tracking-wider text-primary">El primer paso</p>
+            <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">El diagnóstico</h3>
+            <div className="mt-3 flex flex-wrap items-baseline gap-x-3">
+              <span className="text-4xl font-extrabold tracking-tight text-ink">
+                {PRECIO_DIAGNOSTICO}
+              </span>
+              <span className="text-sm font-bold text-ink-soft">una sola vez</span>
+            </div>
+            <p className="mt-4 flex-1 text-ink-soft">
+              Una llamada y un informe escrito: dónde un equipo de agentes te ahorra plata y
+              tiempo, qué roles te sirven, en qué orden conviene arrancar y qué sale el setup. Si
+              seguís, los {PRECIO_DIAGNOSTICO} se descuentan del setup.
+            </p>
+            <p className="mt-4 rounded-2xl bg-ink/[0.04] p-4 text-sm font-medium text-ink-soft">
+              El setup se cotiza ahí, con tu caso a la vista: depende de qué haya que conectar.
+              Antes de eso no te tiramos un número al aire.
+            </p>
+            <a
+              href={WHATSAPP}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group mt-6 inline-flex items-center justify-center gap-2 rounded-pill bg-ink px-6 py-3.5 text-sm font-extrabold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-primary"
+            >
+              Quiero el diagnóstico
+              <ArrowRight size={16} className="transition group-hover:translate-x-1" />
+            </a>
+          </article>
+        </Reveal>
+      </div>
     </section>
   );
 }
@@ -718,40 +776,48 @@ function Pricing() {
 
 const FAQS = [
   {
-    q: "¿Qué es un agente de IA?",
-    a: "Es software que usa un modelo de IA (como Claude o GPT) para ejecutar trabajo real: lee tus sistemas, decide qué hacer y lo hace. No es un chat al que hay que hablarle — es un empleado digital que corre solo, 24/7.",
+    q: "¿Qué es un empleado de IA?",
+    a: "Es software que usa un modelo de IA (como Claude o GPT) para ejecutar trabajo real: lee tus sistemas, decide qué hacer y lo hace. No es un chat al que hay que hablarle — es un compañero de trabajo digital que corre solo, 24/7, con un nombre, una lista de lo que hace y un límite escrito de lo que nunca va a hacer.",
   },
   {
     q: "¿En qué se diferencia de un chatbot?",
-    a: "Un chatbot responde preguntas. Un agente actúa: entra a tu CRM, manda mails, genera facturas, actualiza planillas y ejecuta procesos completos con permisos controlados. El chatbot conversa; el agente trabaja.",
+    a: "Un chatbot responde preguntas. Tu equipo actúa: entra a tu correo, arma presupuestos, escribe los posteos, ordena las planillas y ejecuta procesos completos con permisos controlados. El chatbot conversa; el equipo trabaja.",
   },
   {
     q: "¿Por qué no usar ChatGPT o Claude directo?",
-    a: "Porque esas herramientas necesitan que una persona las use: vos escribís, ellas responden. Un agente de tuagente corre flujos autónomos en un cronograma, conectado a tus sistemas con herramientas escritas a medida, sin que nadie lo empuje. Es la diferencia entre tener un asistente y tener un empleado.",
+    a: "Porque esas herramientas necesitan que una persona las use: vos escribís, ellas responden. Tu equipo corre flujos autónomos en un cronograma, conectado a tus sistemas con herramientas escritas a medida, sin que nadie lo empuje. Es la diferencia entre tener un asistente y tener empleados.",
   },
   {
     q: "¿Cuánto cuesta?",
-    a: "El plan Starter arranca en USD 990 de setup más una mensualidad desde USD 190. El Pro, conectado a tus sistemas, desde USD 2.900. Bastante menos que un sueldo — y la demo es gratis: ahí te damos el número exacto para tu caso.",
+    a: `${PRECIO_ROL} por rol, por mes, en pesos uruguayos. Contratás los que necesites y pagás solo esos. Antes va el diagnóstico, ${PRECIO_DIAGNOSTICO}: una llamada y un informe con dónde te ahorra plata cada rol y cuánto sale el setup. Si seguís, esos ${PRECIO_DIAGNOSTICO} se descuentan del setup.`,
+  },
+  {
+    q: "¿Puedo contratar un solo rol?",
+    a: "Sí, y es lo que recomendamos para arrancar. Ponés a trabajar el que más te duele hoy, lo ves andar un mes y recién ahí sumás el segundo. Sumar o sacar roles es una decisión tuya y no lleva un proyecto nuevo.",
+  },
+  {
+    q: "¿Y si ninguno de los cinco es lo que necesito?",
+    a: "Ese es el caso normal: todos los roles se arman a medida, y los cinco que mostramos son puntos de partida, no un menú. El tuyo se compone de capacidades — leer facturas y fotos, buscar en internet, transcribir audios, hacer cuentas y planillas — según lo que nos cuentes que necesitás que haga. Sale lo mismo que cualquier otro rol.",
   },
   {
     q: "¿Cuánto demora estar funcionando?",
-    a: "Entre 2 y 4 semanas para el primer agente, según cuántos sistemas haya que conectar. De la primera llamada a un agente en producción, semanas — no meses.",
+    a: "El primer rol arranca en semanas, no en meses: la mayor parte del tiempo se va en conectar tus sistemas, no en armar el rol. Los que sumes después son bastante más rápidos, porque tu equipo ya está instalado y conectado.",
   },
   {
-    q: "¿A qué sistemas se conecta?",
+    q: "¿A qué sistemas se conectan?",
     a: "Ya vienen listas: Telegram, la casilla de correo de la empresa, y Google Planillas, Drive, Agenda y Documentos. Slack y WhatsApp los conectamos nosotros (WhatsApp lleva días por la verificación de Meta). Para tu CRM, tu ERP o cualquier sistema propio con API escribimos la integración a medida — eso es lo que hacemos. Si te decimos que sí, es porque lo probamos.",
   },
   {
     q: "¿Es seguro? ¿Qué pasa con mis datos?",
-    a: "Cada agente opera con permisos acotados: solo ve y toca lo que le habilitás. Las acciones sensibles (pagos, borrados, mails a clientes) pasan por aprobación humana. Tus datos no se usan para entrenar ningún modelo.",
+    a: "Tu equipo entero vive adentro de un contenedor tuyo, aislado del de cualquier otro cliente y con su propia clave. Cada rol opera con permisos acotados: solo ve y toca lo que le habilitás. Todo lo que sale para afuera pasa por tu aprobación, y hay roles con el límite puesto de fábrica — Contabilidad, por ejemplo, mira y ordena los números pero no factura ni paga nada. Tus datos no se usan para entrenar ningún modelo.",
   },
   {
-    q: "¿Puedo hablar con mi agente y modificarlo?",
-    a: "Sí, y es de lo mejor que tiene. Le hablás desde tu portal y desde el celular por Telegram, que se activa en cinco minutos: le preguntás qué hizo, le pedís tareas nuevas y le cambiás las instrucciones hablándole, como a un empleado. WhatsApp también se puede, pero es el más lento de conectar porque depende de una verificación ante Meta: lo tramitamos nosotros y lleva días. Y si algo no te cierra, lo pausás. Autonomía no significa perder el control.",
+    q: "¿Puedo hablarles y cambiarles las instrucciones?",
+    a: "Sí, y es de lo mejor que tiene. Les hablás desde tu portal y desde el celular por Telegram, que se activa en cinco minutos: preguntás qué hicieron, pedís tareas nuevas y les cambiás las instrucciones hablándoles, como a cualquier empleado. WhatsApp también se puede, pero es el más lento de conectar porque depende de una verificación ante Meta: lo tramitamos nosotros y lleva días. Y si algo no te cierra, los pausás. Autonomía no significa perder el control.",
   },
   {
     q: "¿Dónde trabajan y quién está detrás?",
-    a: "Atendemos toda Latinoamérica de forma remota, con base en Montevideo. tuagente es un producto de pdelabs, un estudio de ingeniería de software con años construyendo sistemas en producción — no somos una agencia de marketing que descubrió la IA el mes pasado. Estamos arrancando con tuagente, y lo decimos de frente: el primer agente que pusimos a trabajar fue el nuestro.",
+    a: "Estamos en Montevideo y trabajamos de forma remota. tuagente es un producto de pdelabs, un estudio de ingeniería de software con años construyendo sistemas en producción — no somos una agencia de marketing que descubrió la IA el mes pasado. Estamos arrancando con tuagente, y lo decimos de frente: el primer equipo que pusimos a trabajar fue el nuestro.",
   },
 ];
 
@@ -797,17 +863,17 @@ const JSON_LD = {
       name: "tuagente.uy",
       url: "https://tuagente.uy",
       description:
-        "Instalamos agentes de IA autónomos para empresas de Latinoamérica: conectados a tus sistemas, operando 24/7, con un portal donde el cliente ve todo lo que hacen y aprueba lo sensible.",
-      slogan: "Agentes de IA que trabajan por vos",
+        "Equipos de IA para empresas uruguayas: contratás roles — marketing, soporte, ventas, contabilidad o uno a medida — que trabajan 24/7 adentro de tu empresa, con un portal donde ves todo lo que hacen y aprobás lo que sale para afuera.",
+      slogan: "Un equipo de IA que trabaja adentro de tu empresa",
       email: "hola@tuagente.uy",
       telephone: "+59899002835",
-      priceRange: "USD 990 – USD 10.000+",
+      priceRange: "UYU 1.500 por rol, por mes",
       address: {
         "@type": "PostalAddress",
         addressLocality: "Montevideo",
         addressCountry: "UY",
       },
-      areaServed: ["Uruguay", "Argentina", "Chile", "México", "Latinoamérica"],
+      areaServed: ["Uruguay"],
       parentOrganization: {
         "@type": "Organization",
         name: "pdelabs",
@@ -815,16 +881,29 @@ const JSON_LD = {
       },
       knowsAbout: [
         "Agentes de IA",
+        "Equipos de agentes de IA",
         "Automatización de procesos",
         "Inteligencia artificial para empresas",
         "Integraciones a medida",
       ],
-      makesOffer: PLANS.filter((p) => p.price.startsWith("USD")).map((p) => ({
-        "@type": "Offer",
-        name: `Plan ${p.name} — ${p.tag}`,
-        price: p.price.replace("USD ", "").replace(".", ""),
-        priceCurrency: "USD",
-      })),
+      makesOffer: [
+        {
+          "@type": "Offer",
+          name: "Un rol del equipo, por mes",
+          description:
+            "Un rol de IA trabajando 24/7 adentro de tu empresa, con su ficha en el portal y aprobación tuya para todo lo que sale para afuera.",
+          price: "1500",
+          priceCurrency: "UYU",
+        },
+        {
+          "@type": "Offer",
+          name: "Diagnóstico",
+          description:
+            "Una llamada y un informe: qué roles te sirven, cuánto te ahorran y qué sale el setup. Se descuenta del setup si seguís.",
+          price: "200",
+          priceCurrency: "USD",
+        },
+      ],
     },
     {
       "@type": "FAQPage",
@@ -849,17 +928,17 @@ function Proof() {
             Somos nuestro propio cliente
           </p>
           <h2 className="mt-4 text-3xl font-extrabold leading-snug tracking-tight text-c-violet-ink sm:text-4xl">
-            El primer agente que pusimos a trabajar fue el nuestro.
+            El primer equipo que pusimos a trabajar fue el nuestro.
           </h2>
           <p className="mt-5 text-lg leading-relaxed text-c-violet-ink/80">
-            Investiga empresas, arma informes, prepara los mails que salen a nombre nuestro
-            y nos los deja esperando aprobación. Todo lo que ves en este sitio lo probamos
-            primero adentro de pdelabs, y el portal que usás vos es el mismo que usamos
-            nosotros todos los días.
+            Investiga empresas, arma informes, prepara los mails que salen a nombre nuestro y nos
+            los deja esperando aprobación. Todo lo que ves en este sitio lo probamos primero
+            adentro de pdelabs, y el portal que usás vos es el mismo que usamos nosotros todos los
+            días.
           </p>
           <p className="mt-6 text-sm font-semibold text-c-violet-ink/70">
-            Estamos arrancando: si buscás una lista larga de logos, todavía no la tenemos.
-            Lo que sí tenemos es un producto andando y la charla es gratis.
+            Estamos arrancando: si buscás una lista larga de logos, todavía no la tenemos. Lo que
+            sí tenemos es un producto andando y la puerta abierta para que lo veas.
           </p>
         </div>
       </div>
@@ -874,13 +953,16 @@ function FinalCta() {
     <section id="contacto" className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-24">
       <div className="relative overflow-hidden rounded-card bg-primary px-6 py-16 text-center text-white sm:px-12 sm:py-24">
         <div className="animate-floaty pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-        <div className="animate-floaty pointer-events-none absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-white/10 blur-2xl" style={{ animationDelay: "-3s" }} />
+        <div
+          className="animate-floaty pointer-events-none absolute -bottom-20 -left-10 h-64 w-64 rounded-full bg-white/10 blur-2xl"
+          style={{ animationDelay: "-3s" }}
+        />
         <h2 className="relative mx-auto max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
-          ¿Listo para tener tu primer agente trabajando?
+          ¿Listo para tener tu equipo trabajando?
         </h2>
         <p className="relative mx-auto mt-5 max-w-xl text-lg text-white/80">
-          Agendá una demo gratis. Te mostramos, con tu caso, cuánto te ahorra un agente — antes de
-          que pongas un peso.
+          Arrancá por el diagnóstico: {PRECIO_DIAGNOSTICO}, una llamada y un informe con lo que te
+          ahorra cada rol. Si seguís, se descuentan del setup. Escribinos y lo agendamos.
         </p>
         <a
           href={WHATSAPP}
@@ -888,7 +970,7 @@ function FinalCta() {
           rel="noopener noreferrer"
           className="group relative mt-9 inline-flex items-center justify-center gap-2 rounded-pill bg-white px-8 py-4 text-base font-extrabold text-primary shadow-lift transition hover:-translate-y-0.5"
         >
-          Quiero mi agente
+          Quiero mi equipo
           <ArrowRight size={19} className="transition group-hover:translate-x-1" />
         </a>
       </div>

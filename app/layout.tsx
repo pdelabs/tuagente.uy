@@ -11,15 +11,16 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://tuagente.uy"),
-  title: "tuagente — Agentes de IA que trabajan dentro de tu empresa",
+  title: "tuagente — Un equipo de IA que trabaja adentro de tu empresa",
   description:
-    "Instalamos agentes de IA autónomos dentro de tu empresa: conectados a tus sistemas, operando 24/7 y con un portal donde ves todo lo que hacen. Lo sensible espera tu aprobación. Un producto de pdelabs, Montevideo, Uruguay.",
+    "Contratás roles de IA — marketing, soporte, ventas, contabilidad o uno a medida — que trabajan 24/7 adentro de tu empresa. $U 1.500 por rol por mes, con un portal donde ves todo lo que hacen y nada sale sin tu aprobación. Un producto de pdelabs, Montevideo, Uruguay.",
   keywords: [
+    "equipo de agentes de IA",
+    "empleados de IA",
     "agentes de IA",
     "agentes de inteligencia artificial",
     "automatización con IA",
-    "agentes autónomos para empresas",
-    "IA para empresas LATAM",
+    "IA para empresas",
     "agentes de IA Uruguay",
     "automatización de procesos",
   ],
@@ -28,17 +29,17 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: "https://tuagente.uy",
-    title: "tuagente — Agentes de IA que trabajan por vos",
+    title: "tuagente — Un equipo de IA que trabaja adentro de tu empresa",
     description:
-      "Agentes de IA autónomos, conectados a tus sistemas, operando 24/7, con un portal donde ves todo lo que hacen.",
+      "Contratás los roles que necesitás y trabajan 24/7 adentro de tu empresa. $U 1.500 por rol por mes, y nada sale para afuera sin tu ok.",
     locale: "es_UY",
     siteName: "tuagente.uy",
   },
   twitter: {
     card: "summary_large_image",
-    title: "tuagente — Agentes de IA que trabajan por vos",
+    title: "tuagente — Un equipo de IA que trabaja adentro de tu empresa",
     description:
-      "Agentes de IA autónomos, conectados a tus sistemas, con un portal donde ves todo lo que hacen.",
+      "Contratás los roles que necesitás y trabajan 24/7 adentro de tu empresa. $U 1.500 por rol por mes, con un portal donde ves todo lo que hacen.",
   },
 };
 

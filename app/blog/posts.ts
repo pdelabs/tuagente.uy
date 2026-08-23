@@ -9,6 +9,15 @@ export type Post = {
 
 export const POSTS: Post[] = [
   {
+    slug: "cuanto-cuesta-un-agente-de-ia",
+    title: "¿Cuánto cuesta un agente de IA en Uruguay? Números reales, sin vueltas",
+    description:
+      "$U 1.500 por rol, por mes, sin permanencia. Qué incluye, por qué se paga por rol y no por proyecto, qué es el diagnóstico de USD 200 — y cómo se compara con un sueldo, con una agencia y con un chatbot.",
+    date: "2026-08-22",
+    dateHuman: "22 de agosto de 2026",
+    readingMin: 7,
+  },
+  {
     slug: "por-que-nadie-usa-agentes-de-ia",
     title: "WIRED tiene razón: la gente normal no usa agentes de IA. Nosotros tampoco esperamos que lo hagas",
     description:
@@ -52,14 +61,5 @@ export const POSTS: Post[] = [
     date: "2026-08-03",
     dateHuman: "3 de agosto de 2026",
     readingMin: 5,
-  },
-  {
-    slug: "cuanto-cuesta-un-agente-de-ia",
-    title: "¿Cuánto cuesta un agente de IA en LATAM? Números reales, sin vueltas",
-    description:
-      "Qué cobra el mercado, qué cobramos nosotros, qué compone el precio de un agente de IA — y cuándo NO te conviene contratar uno.",
-    date: "2026-08-03",
-    dateHuman: "3 de agosto de 2026",
-    readingMin: 6,
   },
 ];

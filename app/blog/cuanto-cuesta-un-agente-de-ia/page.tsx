@@ -16,81 +16,116 @@ export default function Page() {
     <ArticleLayout slug={post.slug}>
       <P>
         Es la primera pregunta de toda reunión y la que casi nadie responde en su página. Nosotros
-        la publicamos con números — los del mercado y los nuestros — porque si el precio te
-        espanta, mejor ahorrarte la reunión, y si te cierra, mejor llegar sabiéndolo.
+        la publicamos con el número al frente: <B>$U 1.500 por rol, por mes</B>. Si te espanta,
+        mejor ahorrarte la reunión; si te cierra, mejor llegar sabiéndolo.
+      </P>
+      <P>
+        Un aviso antes de los números: hoy no vendemos “un agente” por proyecto. Vendemos{" "}
+        <B>roles</B> — un empleado de IA por vez, con nombre y con una lista escrita de lo que hace
+        y de lo que nunca va a hacer — y se pagan como se paga un sueldo.
       </P>
 
-      <H2>Qué cobra el mercado en LATAM</H2>
-      <Ul>
-        <li>
-          <B>Agencias de chatbots:</B> entre USD 1.500 y 3.000 de armado, más mensualidades de
-          USD 100 a 500. Ojo: la mayoría vende{" "}
-          <PostLink slug="agente-de-ia-vs-chatbot">chatbots con etiqueta de agente</PostLink> — leé
-          bien qué te están dando por ese precio.
-        </li>
-        <li>
-          <B>Consultoras enterprise:</B> proyectos de IA a medida desde USD 30.000 hacia arriba,
-          pensados para corporaciones con departamento de IT. Excelente trabajo, otra liga, otro
-          presupuesto.
-        </li>
-        <li>
-          <B>Hacerlo vos con herramientas no-code:</B> barato en licencias, carísimo en tiempo
-          tuyo — y el resultado suele ser frágil: nadie lo monitorea, nadie lo arregla cuando se
-          rompe un martes a las 22.
-        </li>
-      </Ul>
-
-      <H2>Qué cobramos nosotros</H2>
+      <H2>Qué cobramos: $U 1.500 por rol, por mes</H2>
       <P>
-        Nuestros planes están publicados en la <a href="/#planes" className="font-semibold text-primary underline decoration-2 underline-offset-2 hover:text-primary-dark">página principal</a>, pero el resumen:
+        Un solo precio, en pesos uruguayos, el mismo para todos los roles. No hay planes, no hay
+        escalones, no hay cargo por mensaje. Por cada rol que contratás:
       </P>
       <Ul>
         <li>
-          <B>Starter — USD 990 de setup + desde USD 190/mes:</B> tu primer agente, un flujo
-          automatizado, conectado a WhatsApp o mail. La forma de probar esto sin comprometerte.
+          <B>El rol trabajando 24/7</B>, instalado adentro de tu empresa, conectado a lo que ya
+          usás y con los permisos que vos le des.
         </li>
         <li>
-          <B>Pro — USD 2.900 de setup + desde USD 490/mes:</B> el agente conectado a tus sistemas
-          (CRM, ERP, base de datos), corriendo flujos autónomos 24/7, con chat directo para que lo
-          dirijas vos.
+          <B>Su ficha en el portal:</B> qué hace, qué tiene corriendo y qué entregó. Lo mirás como
+          mirás a cualquier empleado.
         </li>
         <li>
-          <B>Flota — a medida:</B> varios agentes trabajando en conjunto. Acá el precio depende de
-          tu operación, por eso no inventamos un número.
+          <B>Tu aprobación</B> para todo lo que sale para afuera: nada le llega a un cliente tuyo
+          sin tu ok.
         </li>
+        <li><B>Soporte por WhatsApp, con nosotros.</B> No con un ticket.</li>
       </Ul>
       <P>
-        Los precios son “desde” porque la variable real es <B>cuántas integraciones</B> hay que
-        escribir: conectar un Google Sheets no cuesta lo mismo que conectar un ERP de 2009 que
-        solo entiende el contador. En la demo te damos el número exacto para tu caso — gratis.
+        Contratás los que necesites y ninguno más: uno son $U 1.500 por mes, y si mañana sumás un
+        segundo son otros $U 1.500. Si uno no te sirve, lo das de baja y dejás de pagarlo —{" "}
+        <B>sin permanencia y sin explicaciones</B>. Lo que recomendamos es arrancar con uno, el que
+        más te duele hoy, y recién después decidir si querés el segundo.
+      </P>
+
+      <H2>Por qué se paga por rol y no por proyecto</H2>
+      <P>
+        Cotizar “un agente a medida” tiene un problema de fondo: te obliga a decidir todo el día
+        cero, que es justo el día en que menos sabés. Pagás una cifra grande por adelantado
+        apostando a que elegiste bien, y si a los dos meses el cuello de botella resulta ser otro,
+        el proyecto ya está pago.
+      </P>
+      <Callout>
+        Un rol es un sueldo que decidís mes a mes: lo contratás, lo ves trabajar y si no rinde lo
+        das de baja. Con un proyecto pago por adelantado eso no lo podés hacer.
+      </Callout>
+      <P>
+        Cobrar así nos pone el riesgo del lado nuestro, que es donde tiene que estar. Por eso
+        preferimos que arranques con uno antes que venderte cinco: cinco roles que no mirás son
+        cinco bajas el mes que viene.
+      </P>
+
+      <H2>El diagnóstico: USD 200, y se descuentan del setup</H2>
+      <P>
+        No hacemos demos gratis — una demo gratis es una presentación de ventas con tu logo puesto
+        arriba. Hacemos un <B>diagnóstico</B>: una llamada y un informe escrito con qué roles te
+        sirven, en qué orden conviene arrancar, dónde te ahorra plata cada uno y qué sale ponerlos
+        a trabajar. Sale <B>USD 200, una sola vez</B>, y si seguís se descuentan del setup. El
+        informe es tuyo aunque no sigas, incluso si la conclusión honesta es que todavía no te
+        conviene.
+      </P>
+      <P>
+        ¿Y el setup? Se cotiza ahí, con tu caso a la vista, porque la variable real es{" "}
+        <B>cuántas integraciones hay que escribir</B>: conectar un Google Sheets no cuesta lo mismo
+        que conectar un ERP de 2009 que solo entiende el contador. Antes de mirar eso, cualquier
+        número es un número al aire — y los números al aire después se cobran igual.
       </P>
 
       <H2>Qué estás pagando, exactamente</H2>
-      <P>El precio de un agente serio se compone de tres cosas:</P>
       <Ul>
         <li>
-          <B>La construcción (el setup):</B> escribir las herramientas que conectan el agente a tus
-          sistemas, diseñar permisos y aprobaciones, y enseñarle tu proceso. Es trabajo de
-          ingeniería de verdad — por eso el que te cobra USD 300 de setup te está vendiendo otra
-          cosa.
+          <B>La construcción (el setup, una sola vez):</B> las herramientas que conectan cada rol
+          con tus sistemas, los permisos, las aprobaciones y tu proceso enseñado. Es ingeniería de
+          verdad — por eso el que te cobra USD 300 de setup te está vendiendo otra cosa.
         </li>
         <li>
-          <B>El combustible (los tokens):</B> el agente le paga a los modelos de IA por cada
-          “pensamiento”. Para un agente típico son decenas de dólares por mes, no cientos — está
-          incluido en la mensualidad.
+          <B>El combustible:</B> cada “pensamiento” del rol se le paga a un modelo de IA. Ya está
+          adentro de los $U 1.500.
         </li>
         <li>
-          <B>La operación:</B> monitoreo, ajustes y mejoras continuas. Un agente sin operación es
-          como un empleado sin jefe: arranca bien y termina quién sabe dónde.
+          <B>La operación:</B> monitoreo, ajustes y mejoras, todos los meses. Un rol sin operación
+          es como un empleado sin jefe: arranca bien y termina quién sabe dónde.
         </li>
       </Ul>
 
       <H2>La comparación que de verdad importa</H2>
+      <Ul>
+        <li>
+          <B>Contra un sueldo.</B> Un administrativo en Uruguay le cuesta a la empresa entre USD
+          800 y 1.200 por mes, trabaja 8 horas, se toma licencia y —con todo derecho— un día
+          renuncia. Un rol sale $U 1.500 y no para nunca. No lo reemplaza: le saca de encima el
+          trabajo que nadie quiere hacer.
+        </li>
+        <li>
+          <B>Contra una agencia.</B> El mercado cobra entre USD 1.500 y 3.000 de armado más USD 100
+          a 500 por mes, y la mayoría instala un{" "}
+          <PostLink slug="agente-de-ia-vs-chatbot">chatbot con etiqueta de agente</PostLink>.
+          Fijate en la moneda, además: esa mensualidad está en dólares.
+        </li>
+        <li>
+          <B>Contra un chatbot SaaS.</B> Entre USD 50 y 200 por mes por una ventanita que contesta
+          preguntas, con el precio atado al volumen de conversaciones. Si tu problema son
+          preguntas, te alcanza. Si son procesos — cobrar, cargar, conciliar, publicar —, no llega.
+        </li>
+      </Ul>
       <Callout>
-        Un administrativo en Uruguay cuesta entre USD 800 y 1.200 por mes, trabaja 8 horas, se
-        toma licencia y — con todo derecho — renuncia. Un agente Pro cuesta desde USD 490 por mes,
-        trabaja 24/7 y hace las tareas repetitivas sin quejarse. No reemplaza a tu equipo: le saca
-        de encima el trabajo que nadie quiere hacer.
+        A nadie se lo contrata por lo que sale, sino por lo que te saca de encima. La pregunta útil
+        no es si $U 1.500 es caro: es cuántas horas por semana te devuelve el rol y cuánto vale tu
+        hora.
       </Callout>
 
       <H2>Cuándo NO te conviene (sí, en serio)</H2>
@@ -101,18 +136,24 @@ export default function Page() {
           nadie — primero ordenalo, después automatizalo.
         </li>
         <li>
-          Si el volumen es muy bajo (cinco facturas por mes se cobran a mano más barato que con
-          cualquier software).
+          Si el volumen es muy bajo: cinco facturas por mes se hacen a mano más barato que con
+          cualquier software.
         </li>
         <li>
-          Si esperás magia: un agente automatiza trabajo real con reglas reales. El que te promete
-          “resultados garantizados sin definir nada” te está vendiendo humo — huí.
+          Si querés <B>los cinco roles el primer mes</B>. Podés, pero nadie incorpora cinco
+          empleados el mismo lunes y les explica el trabajo a todos.
+        </li>
+        <li>
+          Si esperás magia: un rol hace trabajo real con reglas reales. El que promete “resultados
+          garantizados sin definir nada” te está vendiendo humo — huí.
         </li>
       </Ul>
       <P>
-        Si después de leer esto los números te cierran, el siguiente paso es una demo con tu caso
-        concreto. Y si todavía no te queda claro qué es exactamente lo que estarías comprando,
-        empezá por{" "}
+        El precio está publicado, entero, en la{" "}
+        <a href="/#planes" className="font-semibold text-primary underline decoration-2 underline-offset-2 hover:text-primary-dark">página principal</a>;
+        lo único que no publicamos es el setup, y ya sabés por qué. Si los números te cierran, el
+        siguiente paso es el diagnóstico con tu caso adentro. Y si todavía no te queda claro qué es
+        exactamente lo que estarías contratando, empezá por{" "}
         <PostLink slug="que-es-un-agente-de-ia">qué es un agente de IA</PostLink>.
       </P>
     </ArticleLayout>

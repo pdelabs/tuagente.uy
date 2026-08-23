@@ -23,7 +23,7 @@ export function BlogHeader() {
         rel="noopener noreferrer"
         className="rounded-pill bg-ink px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-primary"
       >
-        Agendá una demo
+        Armá tu equipo
       </a>
     </header>
   );
@@ -123,7 +123,8 @@ export function ArticleLayout({ slug, children }: { slug: string; children: Reac
             ¿Querés ver esto funcionando en tu empresa?
           </h2>
           <p className="mx-auto mt-3 max-w-md text-white/80">
-            La demo es gratis: te mostramos con tu caso qué puede hacer un agente, antes de que pongas un peso.
+            Arrancá por el diagnóstico: USD 200, una llamada y un informe con qué roles te sirven,
+            cuánto te ahorra cada uno y qué sale el setup. Si seguís, se descuentan del setup.
           </p>
           <a
             href={WHATSAPP}
@@ -131,7 +132,7 @@ export function ArticleLayout({ slug, children }: { slug: string; children: Reac
             rel="noopener noreferrer"
             className="mt-6 inline-flex items-center gap-2 rounded-pill bg-white px-7 py-3.5 text-sm font-extrabold text-primary shadow-lift transition hover:-translate-y-0.5"
           >
-            Agendá una demo <ArrowRight size={16} />
+            Quiero el diagnóstico <ArrowRight size={16} />
           </a>
         </div>
 
