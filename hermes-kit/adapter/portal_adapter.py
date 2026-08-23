@@ -24,7 +24,7 @@ from kanban import KanbanStore
 from rooms import RoomStore
 from workspace import MAX_FILE_BYTES, WorkspaceStore
 
-VERSION = "0.40.0"
+VERSION = "0.41.0"
 # The gateway answers the session stream WITHOUT CORS headers (it only sends
 # them on the preflight), so the browser discards the response. We proxy it.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -362,7 +362,12 @@ def manifest():
         # data already existed in here and was only used in Connections.
         # None if the agent has no bot: the portal offers mail and that's it.
         "telegram_bot": _telegram_username(),
-        "portal_plugin": f"adapter-{VERSION}",
+        # WHAT VERSION OF THE ADAPTER IS ANSWERING. It was called
+        # `portal_plugin` through 0.40.0, from a time when this sidecar was
+        # going to be a Hermes plugin and never became one. The word means the
+        # kit's plugins now -- see /portal/plugins -- so as of 0.41.0 the field
+        # is named after what it always held.
+        "adapter_version": f"adapter-{VERSION}",
         "modules": {
             "chat": True,  # the gateway (:8642) is part of the Hermes deploy
             "kanban": has_kanban,

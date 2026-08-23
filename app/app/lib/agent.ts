@@ -14,7 +14,11 @@ export type PortalConfig = {
 
 export type Manifest = {
   agent: string;
-  portal_plugin: string;
+  /** Which adapter is answering, as `adapter-<semver>`. Called
+   *  `portal_plugin` up to adapter 0.40.0, from when this sidecar was going
+   *  to be a Hermes plugin and never became one; the word now means the
+   *  kit's plugins (`/portal/plugins`), so the field says what it holds. */
+  adapter_version: string;
   modules: Record<string, boolean>;
   /** Connections the client's flow needs and is missing (adapter >=0.24).
    *  Feeds the home notice and the sidebar's dot. */

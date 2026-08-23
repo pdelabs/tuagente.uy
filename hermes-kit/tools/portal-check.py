@@ -113,12 +113,12 @@ def main():
     def _manifest():
         nonlocal manifest
         manifest, _ = jget(f"{A}/portal/manifest", K)
-        missing = [k for k in ("agent", "portal_plugin", "modules") if k not in manifest]
+        missing = [k for k in ("agent", "adapter_version", "modules") if k not in manifest]
         if missing:
             raise AssertionError(f"manifest is missing keys: {missing}")
         if not str(manifest["agent"]).strip():
             raise AssertionError("the agent has no name (AGENT_NAME)")
-        return f"{manifest['agent']} · {manifest['portal_plugin']}"
+        return f"{manifest['agent']} · {manifest['adapter_version']}"
 
     check("Manifest", _manifest)
     if not manifest:
@@ -308,7 +308,7 @@ def main():
 
         check("Delivery: the agent is at zero", _at_zero)
 
-    print(f"\nAgent: {manifest.get('agent')} — {manifest.get('portal_plugin')}\n")
+    print(f"\nAgent: {manifest.get('agent')} — {manifest.get('adapter_version')}\n")
     for status, name, detail in results:
         print(f"  [{status}] {name}" + (f" — {detail}" if detail else ""))
     failures = [r for r in results if r[0] == FAIL]
