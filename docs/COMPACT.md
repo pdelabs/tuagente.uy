@@ -155,10 +155,14 @@ implementation, just renamed, not the old broken one coming back) ·
 version, description, system, requires, which surfaces are present and the
 tab object verbatim, sorted by id. `/opt/plugins` ships as of the phase-3b
 installer: `install.sh` writes `<agent>/plugins/<id>/` and the compose mounts
-it `:ro`, so a freshly installed agent answers with its computed set — six on
-a solo agent, plus whatever its hired roles declare. Verified over a real
-socket against a freshly installed fixture; not yet against a live agent,
-because no live agent has been reinstalled since. One installed BEFORE that
+it `:ro`, so a freshly installed agent answers with its computed set — **seven**
+on a solo agent, plus whatever its hired roles declare. Seven and not six: the
+six system plugins (`kanban`, `approval`, `artifact`, `deliverable`, `flow`,
+`capability` — the sixth since phase 4) plus `transcribe`, which the
+`transcription` base capability promises as already installed on every agent.
+Measured both ways: a fixture created with `new-agent.sh` comes out with exactly
+those seven, and the live local agent, with marketing and accounting hired,
+serves 11 over a real socket. One installed BEFORE the phase-3b installer
 answers `[]`, which is the tested behaviour and not an outage — and
 `agent-check.py` reports it as pending).
 

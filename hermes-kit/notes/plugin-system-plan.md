@@ -309,9 +309,11 @@ kit skill no role declared, and porting it did not change that.
   behind a `level: base` capability (the catalog promises those as already
   installed — `transcribe`, which no role declares), and what each HIRED role
   declares in the kit's `role.json`, hired meaning `data/profiles/<id>/` exists
-  (the adapter's own test). A solo agent therefore comes out with SIX and not
-  with all seven, even though `install.sh` delivers every skill in the kit to
-  it. That is deliberate: a no-roster agent gets the whole skills catalog
+  (the adapter's own test). A solo agent therefore comes out with SEVEN and not
+  with all thirteen, even though `install.sh` delivers every skill in the kit to
+  it. (Six of the seven are the system plugins and the seventh is `transcribe`.
+  This line said SIX of seven while it was written, before phase 4 made
+  `capability` the sixth system plugin and took the registry to thirteen.) That is deliberate: a no-roster agent gets the whole skills catalog
   because that is the pre-team product, not because it bought
   `invoices-to-data`. The registry describes what the agent HAS; kit-skills/ on
   a solo agent describes what the old installer always copied. If a client
