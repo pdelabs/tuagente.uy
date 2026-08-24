@@ -9,12 +9,15 @@ Produces a directory `hermes profile install` accepts:
       distribution.yaml    manifest the engine reads (version, env, ownership)
       config.yaml          the profile's own config: it does NOT bind a port
       SOUL.md              kit:base block + the role's identity.md
-      skills/              only the skills this role owns, whether they come
-                           from skills/ or from a plugin's skills surface
+      skills/              the role's CRAFT skills only -- the ones that are
+                           not in the shared set, whether they come from
+                           skills/ or from a plugin's skills surface
       cron/                nothing yet; flows land in flows/
       flows/               the curated flows shipped with the role
       role.json            the identity the portal draws (name + face), copied
-                           in from roles/catalog.json, plus the flattened skills
+                           in from roles/catalog.json, plus the flattened
+                           skills -- every one the role works with, shared
+                           included, which is MORE than skills/ carries
 
 WHY A BUILDER AND NOT A COMMITTED DIRECTORY. Three things must exist exactly
 once in this repo or they drift:
@@ -23,7 +26,8 @@ once in this repo or they drift:
   editable copies means that in three months one of them says something else,
   and that shows up as a role publishing without asking.
 * The skills. `brand-kit` belongs to marketing today and may belong to two roles
-  tomorrow; copying it per role guarantees the copies diverge.
+  tomorrow; copying it per role guarantees the copies diverge. And a skill in
+  the SHARED set is not copied here at all -- see `packed_skills`.
 * The name and the face. They live in `roles/catalog.json`, the roster the
   client is shown, and the build injects them. `roles/<id>/role.json` used to
   carry a second copy and both drifted -- see `catalog_identity`.
@@ -118,10 +122,11 @@ def rewrite_kit_paths(dest: Path, role: str, packed: set[str]) -> None:
 
         def cambio(m: "re.Match[str]") -> str:
             name = m.group(1)
-            # Shared wins over packed: the plumbing skills ship BOTH shared and
-            # inside every profile, and their canonical copy is the kit's --
-            # rewriting them per-profile indexes the same skill twice with
-            # diverging texts.
+            # A SHARED SKILL IS ALREADY AT THE PATH IT NAMES and it is the only
+            # copy there is: `packed_skills` keeps it out of the profile, so
+            # /opt/kit/skills/<name>/ is where its files are for every role at
+            # once. Rewriting it would point at a directory the profile does
+            # not have.
             if name in shared:
                 return m.group(0)
             if name in packed:
@@ -150,7 +155,52 @@ def skill_sources(cfg: dict, role: str) -> dict[str, Path]:
     return sources
 
 
+# WHAT THE PROFILE CARRIES IS NOT WHAT THE ROLE USES, and telling the two apart
+# is the whole of this function.
+#
+# THE BUG IT EXISTS FOR. `approval`, `capability`, `deliverable` and `flow` are
+# in the SHARED set -- every role on offer declares them -- so `install.sh`
+# leaves them in <agent>/kit-skills/, mounted read only at /opt/kit/skills for
+# the whole installation. The build ALSO copied them into every profile's own
+# skills/, so each of the four existed twice on a team agent. That was true from
+# the first commit of this kit and it cost nothing while it stayed invisible: a
+# secondary profile declared no `skills.external_dirs`, never saw the kit's copy,
+# and resolved its own.
+#
+# ae377d5 projected the agent's knobs into each profile, `external_dirs:
+# [/opt/kit/skills]` among them -- correctly: without it a teammate cannot read
+# the kit at all. From that moment both copies were visible at once and the
+# engine stopped resolving any of the four:
+#
+#   Ambiguous skill name 'deliverable/SKILL.md': 2 skills match across your
+#   local skills dir and external_dirs. Refusing to guess.
+#
+# (hermes:tools/skills_tool.py:1180-1204 -- it refuses, it does not pick.)
+# Measured on the local agent 2026-08-24: 13 refusals in one day's errors.log,
+# and the roles flail around them -- one marketing turn spent 42 tool calls and
+# US$0.0485, half the tool spend of the whole measurement wave, and never
+# produced the approval it was asked for.
+#
+# THE RULE, and it is the same one `skills_split.py` computes for install.sh: a
+# skill has ONE home. Shared -> /opt/kit/skills, and the profile does not carry
+# it. Role-only -> inside the profile, because kit-skills/ on a team agent holds
+# only the shared ones and nothing else would deliver it.
+#
+# A ROLE WHOSE SKILLS ARE ALL SHARED SHIPS AN EMPTY skills/ ANYWAY (assistant
+# and support today), and the empty directory is load-bearing: `skills/` is
+# `distribution_owned`, and the engine's updater rmtree's a distribution-owned
+# directory before copying it (hermes:hermes_cli/profile_distribution.py:576-579).
+# The empty directory is what REMOVES the four stale copies from an agent hired
+# before this fix. Omitting it would leave them exactly where they are.
+def packed_skills(sources: dict[str, Path]) -> dict[str, Path]:
+    """Of everything the role uses, the subset that travels inside its profile."""
+    import skills_split
+    shared = set(skills_split.shared_skills())
+    return {name: source for name, source in sources.items() if name not in shared}
+
+
 def collect_skills(sources: dict[str, Path], dest: Path, role: str) -> int:
+    """Copy the PACKED skills into the distribution. Empty is a valid answer."""
     dest.mkdir(parents=True, exist_ok=True)
     for name, source in sources.items():
         if not source.is_dir():
@@ -344,8 +394,13 @@ def build(role: str, out_root: Path) -> Path:
     dest.mkdir(parents=True)
 
     (dest / "SOUL.md").write_text(build_base_soul() + "\n\n" + identity, encoding="utf-8")
+    # `sources` is what the role WORKS WITH and `packed` is what the profile
+    # CARRIES; the shared ones are the difference and they come from
+    # /opt/kit/skills. role.json below is written from `sources` on purpose --
+    # the manifest describes the role, the directory describes the payload.
     sources = skill_sources(cfg, role)
-    count = collect_skills(sources, dest / "skills", role)
+    packed = packed_skills(sources)
+    count = collect_skills(packed, dest / "skills", role)
 
     flows_src = role_dir / "flows"
     flows = 0
@@ -361,7 +416,8 @@ def build(role: str, out_root: Path) -> Path:
     soul_bytes = (dest / "SOUL.md").stat().st_size
     print(f"{role} v{cfg['version']}  ->  {dest}")
     print(f"  SOUL.md  {soul_bytes} bytes (base {read_version()} + identity)")
-    print(f"  skills   {count}")
+    print(f"  skills   {count} in the profile "
+          f"+ {len(sources) - count} shared, from /opt/kit/skills")
     print(f"  flows    {flows}")
     print(f"\n  hermes profile install {dest}")
     return dest
