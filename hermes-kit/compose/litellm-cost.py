@@ -78,13 +78,30 @@ class CostLogger(CustomLogger):
         # The REAL cost the provider charged. litellm passes it through as-is
         # from OpenRouter; if it were ever absent, fall back to what litellm
         # itself computes.
+        #
+        # THE FALLBACK'S ZERO IS NOT A PRICE. litellm computes `response_cost`
+        # off its built-in cost map, and our model list is the `*` wildcard, so
+        # the map has no entry for it -- it says so at every boot:
+        #
+        #   register_model: model=openrouter/* not in built-in cost map and no
+        #   prefix/region variant matched
+        #
+        # With no entry it computes 0.0, which passes a `is None` check and
+        # lands in the ledger as a call that cost nothing. Measured 24/8 on the
+        # local agent: 1 row of 28, `source=litellm`, 24,881 in / 46,472 out,
+        # US$ 0.00. That is the exact false zero the docstring below refuses,
+        # arriving through the door that was meant to prevent it. A free model
+        # is unaffected: it reports its zero in `usage.cost` and comes in on
+        # the `upstream` branch, which still takes any number including zero.
         cost = _number(usage.get("cost"))
         source = "upstream"
         if cost is None:
-            cost = _number((kwargs.get("standard_logging_object") or {}).get("response_cost"))
-            source = "litellm"
-        if cost is None:
-            cost = _number(kwargs.get("response_cost"))
+            fallback = _number((kwargs.get("standard_logging_object") or {}).get("response_cost"))
+            if fallback is None:
+                fallback = _number(kwargs.get("response_cost"))
+            # Positive or nothing: from here a zero means "litellm has no price
+            # for this model", never "this call was free".
+            cost = fallback if (fallback or 0) > 0 else None
             source = "litellm"
         if cost is None:
             return  # no number: better nothing than a false zero

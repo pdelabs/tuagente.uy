@@ -15,6 +15,14 @@
 # Phoenix. When off, the agent talks directly to OpenRouter and nothing is
 # kept.
 #
+# "Calls to the model" is THREE routes, not one, and each is wired below with
+# its own reason: the client's chat (data/config.yaml), every teammate's chat
+# (data/profiles/*/config.yaml — the engine merges nothing from the parent
+# home) and image generation (OPENROUTER_BASE_URL in each home's .env — the
+# image plugin resolves its endpoint on its own and ignores the model block).
+# Miss any of the three and the proxy is up, the operator reads "on", and that
+# traffic is neither traced nor priced in costs.jsonl.
+#
 # Do NOT leave it on for a client without telling them: Phoenix stores the
 # prompts, and the prompts are THEIR data. See the notes in
 # compose/docker-compose.observability.yml.
@@ -47,6 +55,16 @@ case "$ACTION" in
   status)
     echo -n "  model's base_url : "
     ssh "$HOST" "grep -A3 '^model:' $DIR/data/config.yaml | grep base_url || echo '(no base_url — straight to OpenRouter)'"
+    # Asked separately because it IS separate: the image plugin resolves its
+    # own endpoint and ignores the model block. A status that only read the
+    # line above said "proxied" while every pixel went around it.
+    echo -n "  image route      : "
+    ssh "$HOST" "grep -h '^OPENROUTER_BASE_URL=' $DIR/data/.env $DIR/data/profiles/*/.env 2>/dev/null | sort -u | tr '\n' ' ' || true"
+    ssh "$HOST" "grep -qh '^OPENROUTER_BASE_URL=' $DIR/data/.env $DIR/data/profiles/*/.env 2>/dev/null" \
+      || echo -n '(straight to OpenRouter — images NOT in costs.jsonl)'
+    echo
+    echo -n "  homes covered    : "
+    ssh "$HOST" "ls -d $DIR/data $DIR/data/profiles/*/ 2>/dev/null | wc -l | tr -d ' '"
     echo -n "  containers       : "
     ssh "$HOST" "docker ps --format '{{.Names}}' | grep -E 'phoenix|litellm' | tr '\n' ' ' || true"
     echo
@@ -123,17 +141,71 @@ REMOTE
     # — the proxy stays up and never sees a single call. The provider for a
     # custom endpoint is `custom` (`openai` doesn't even exist: it throws
     # "Unknown provider").
+    # EVERY HOME, NOT JUST THE AGENT'S. Under `gateway.multiplex_profiles` a
+    # hired role's home is `data/profiles/<role>/` and the engine merges
+    # NOTHING from the parent (tools/profile_config.py): a config.yaml that
+    # only the default profile got left every teammate talking straight to
+    # OpenRouter, untraced and unledgered, while the operator read "the proxy
+    # is in the middle". The role configs are projections of the agent's, so
+    # the same edit on all of them is what keeps them from drifting — which is
+    # what `agent-check.py` compares, key by key.
     echo "→ pointing the model at the proxy"
     ssh "$HOST" "python3 - <<'PY'
 import pathlib, re
-p = pathlib.Path('$DIR/data/config.yaml')
-s = p.read_text()
-if 'base_url' in s.split('toolsets:')[0]:
-    s = re.sub(r'^(\s*)base_url:.*$', r'\1base_url: $PROXY', s, count=1, flags=re.M)
-else:
-    s = s.replace('model:\n', 'model:\n  base_url: $PROXY\n', 1)
-s = re.sub(r'^(\s*)provider:.*$', r'\1provider: custom', s, count=1, flags=re.M)
-p.write_text(s)
+for p in [pathlib.Path('$DIR/data/config.yaml')] + sorted(
+        pathlib.Path('$DIR/data/profiles').glob('*/config.yaml')):
+    s = p.read_text()
+    if 'base_url' in s.split('toolsets:')[0]:
+        s = re.sub(r'^(\s*)base_url:.*$', r'\1base_url: $PROXY', s, count=1, flags=re.M)
+    else:
+        s = s.replace('model:\n', 'model:\n  base_url: $PROXY\n', 1)
+    s = re.sub(r'^(\s*)provider:.*$', r'\1provider: custom', s, count=1, flags=re.M)
+    p.write_text(s)
+PY"
+
+    # THE IMAGE PLUGIN DOES NOT READ model.base_url, and that is why the ledger
+    # was blind to 92% of an image-heavy agent's spend. `image_generate` is an
+    # engine plugin (plugins/image_gen/openrouter) that asks
+    # `resolve_runtime_provider(requested='openrouter')` for its endpoint, and
+    # that path IGNORES the model block whenever the requested provider is not
+    # `custom`/`auto` (hermes:hermes_cli/runtime_provider.py:1192-1207). So the
+    # chat went through the proxy and the pixels went around it: the Uso tab is
+    # right either way (it asks OpenRouter what it charged), but `costs.jsonl`
+    # -- the only per-model, per-call record we have -- never saw an image.
+    #
+    # The ONE seam is OPENROUTER_BASE_URL. `providers.openrouter.base_url`
+    # does not work: `openrouter` is a canonical provider name, so the named
+    # custom-provider lookup returns None for it before ever reading the block
+    # (runtime_provider.py:657-672). With the var set, the same function keeps
+    # picking OPENROUTER_API_KEY, because it treats a configured OpenRouter
+    # mirror as OpenRouter context (:1214-1228).
+    #
+    # AND IT HAS TO BE A `.env` FILE, NOT THE CONTAINER ENVIRONMENT. With
+    # multiplexing on, the engine reads credentials through a per-profile
+    # secret scope built from `<home>/.env`, and a scope miss returns the
+    # default instead of falling through to os.environ -- fail-closed on
+    # purpose, so one client's key cannot leak into another's turn
+    # (hermes:agent/secret_scope.py:123-190). secrets.env reaches the process
+    # and the turn never sees it.
+    #
+    # RE-RUN THIS AFTER EVERY HIRE: `hire-role.sh` writes the role's .env from
+    # scratch with its API_SERVER_KEY, so a role hired later comes up without
+    # this line and its images go around the proxy again.
+    echo "→ pointing image generation at the proxy"
+    ssh "$HOST" "python3 - <<'PY'
+import pathlib
+for home in [pathlib.Path('$DIR/data')] + sorted(
+        d for d in pathlib.Path('$DIR/data/profiles').glob('*') if d.is_dir()):
+    env = home / '.env'
+    fresh = not env.exists()
+    lines = [l for l in env.read_text().splitlines() if not l.startswith('OPENROUTER_BASE_URL=')] \
+        if not fresh else []
+    lines.append('OPENROUTER_BASE_URL=$PROXY')
+    env.write_text('\n'.join(lines) + '\n')
+    if fresh:
+        # It holds a URL, not a credential, and the engine runs as another
+        # user: readable, or the proxy is simply not there for that profile.
+        env.chmod(0o644)
 PY"
     compose "restart hermes" >/dev/null 2>&1
     wait_for_gateway || { echo "the gateway never came back — check the logs" >&2; exit 1; }
@@ -145,13 +217,25 @@ PY"
     ;;
 
   off)
+    # Both halves come back out, and every home: the chat's base_url and the
+    # image plugin's OPENROUTER_BASE_URL. Leaving the second one behind would
+    # point image generation at a container that is about to be stopped, and
+    # the failure reads as "the image tool broke" with no proxy in sight.
     echo "→ taking the proxy out of the middle"
     ssh "$HOST" "python3 - <<'PY'
 import pathlib, re
-p = pathlib.Path('$DIR/data/config.yaml')
-s = re.sub(r'^\s*base_url:.*\n', '', p.read_text(), count=1, flags=re.M)
-s = re.sub(r'^(\s*)provider:\s*custom\s*$', r'\1provider: openrouter', s, count=1, flags=re.M)
-p.write_text(s)
+for p in [pathlib.Path('$DIR/data/config.yaml')] + sorted(
+        pathlib.Path('$DIR/data/profiles').glob('*/config.yaml')):
+    s = re.sub(r'^\s*base_url:.*\n', '', p.read_text(), count=1, flags=re.M)
+    s = re.sub(r'^(\s*)provider:\s*custom\s*$', r'\1provider: openrouter', s, count=1, flags=re.M)
+    p.write_text(s)
+for home in [pathlib.Path('$DIR/data')] + sorted(
+        d for d in pathlib.Path('$DIR/data/profiles').glob('*') if d.is_dir()):
+    env = home / '.env'
+    if not env.exists():
+        continue
+    lines = [l for l in env.read_text().splitlines() if not l.startswith('OPENROUTER_BASE_URL=')]
+    env.write_text(('\n'.join(lines) + '\n') if lines else '')
 PY"
     compose "restart hermes" >/dev/null 2>&1
     wait_for_gateway || { echo "the gateway never came back — check the logs" >&2; exit 1; }

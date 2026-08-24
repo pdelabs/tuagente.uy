@@ -2616,14 +2616,19 @@ def main():
         image. They now go in `<agent>/secrets.env`, root:root 600, which nobody
         mounts.
         """
+        def names(path):
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                return {l.split("=", 1)[0].strip()
+                        for l in fh if "=" in l and not l.startswith("#")}
+
         root = os.path.dirname(os.path.abspath(data))
         new = os.path.join(root, "secrets.env")
         old = os.path.join(data, ".env")
         path = new if os.path.isfile(new) else old
         if not os.path.isfile(path):
             raise AssertionError("there is no secrets.env (nor the old data/.env)")
-        with open(path, encoding="utf-8", errors="replace") as fh:
-            keys = {l.split("=", 1)[0].strip() for l in fh if "=" in l and not l.startswith("#")}
+        keys = names(path)
+        leftover = sorted(names(old)) if path == new and os.path.isfile(old) else []
         if "API_SERVER_KEY" not in keys:
             raise AssertionError("API_SERVER_KEY is missing — the portal has nothing to authenticate with")
         if path == old:
@@ -2633,7 +2638,33 @@ def main():
                 "the adapter. Run install.sh (it moves them to secrets.env) after "
                 "pointing the compose there")
         if os.path.isfile(old):
-            return f"{len(keys)} variables · HEADS UP: a data/.env was left behind that nobody reads any more, delete it"
+            # IT IS NOT DEAD, AND THIS LINE USED TO SAY SO. `<home>/.env` is
+            # the ONLY thing an engine credential read can see once
+            # `gateway.multiplex_profiles` is on: the read goes through a
+            # per-profile secret scope built from that file, and a miss returns
+            # the default instead of falling through to os.environ
+            # (hermes:agent/secret_scope.py:123-190). Measured 24/8 on the
+            # local agent, with OPENROUTER_API_KEY already in the container's
+            # environment through secrets.env: image_generate's gate answered
+            # False on every turn, and answered True the moment the same key
+            # was written into the profile's .env. Nothing else changed.
+            #
+            # So the file is now the only channel for a per-profile runtime
+            # setting — `OPENROUTER_BASE_URL`, which is what routes image
+            # generation through the proxy (tools/observability.sh) — and
+            # telling the operator to delete it deletes that.
+            #
+            # The reason keys left data/ has NOT softened, and that is why the
+            # credential-shaped names get named here: this file is the env_file
+            # of both services and the agent can rewrite it.
+            secretish = sorted(
+                k for k in leftover
+                if k.endswith(("_API_KEY", "_TOKEN", "_SECRET", "_KEY"))
+            )
+            detail = ", ".join(leftover) or "empty"
+            if secretish:
+                detail += f" · {', '.join(secretish)} is a credential in a file the agent can rewrite"
+            return f"{len(keys)} variables · data/.env holds {detail}"
         return f"{len(keys)} variables"  # we never print values
 
     check("workspace", _workspace)
