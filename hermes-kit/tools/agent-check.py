@@ -213,6 +213,16 @@ def plugins_dir(data):
     return os.path.join(os.path.dirname(data), "plugins")
 
 
+# What a hired role's home must have where the engine looks for user plugins.
+# THE SAME STRING IS IN `tools/hire-role.sh`, which writes it, and there is no
+# honest way to share it: one is bash running inside a container, the other is
+# Python on the host. So it is written down here as the expected value and the
+# failure PRINTS both sides -- `support: plugins -> /opt/data/plugins — plugins/
+# must link to ../../plugins` -- which is what keeps a disagreement between the
+# two from being a mystery instead of one line to read.
+PROFILE_PLUGINS_LINK = "../../plugins"
+
+
 def kit_tools():
     """This script's own directory: plugin_registry.py and plugin_set.py live here."""
     return os.path.dirname(os.path.abspath(__file__))
@@ -872,6 +882,77 @@ def main():
                   "Heal: tools/hire-role.sh <role> <agent> --update")
         return f"{len(names)} profile(s) run the agent's model and knobs"
 
+    def _profile_plugins():
+        """Does a teammate's turn resolve the same engine plugins as the client's?
+
+        THE GUARD IS WHAT HANGS ON THIS. The engine discovers user plugins in
+        HERMES_HOME/plugins (`hermes:hermes_cli/plugins.py:1369`), and the
+        compose mounts `policy/plugins/` -- where `promises` lands -- over
+        /opt/data/plugins, which is the DEFAULT profile's home. A hired role's
+        home is data/profiles/<role>/ and had nothing there. Resolved in the
+        container 2026-08-24: 55 plugins under the default home, 54 under a
+        role's, and the missing one is the guard that stops a teammate
+        announcing a flow it never created.
+
+        AND IT IS THE CLIENT'S GUARD TOO, which is why this is a failure and not
+        a team-only nicety. The engine's PluginManager is a process singleton
+        with a `_discovered` latch (`plugins.py:2048-2056`), the gateway serves
+        every profile in ONE process, and it scopes a turn with a context-local
+        HERMES_HOME override (`profiles.py:950-990`) -- so the FIRST turn after
+        a boot decides the plugin set for everyone. Measured the same day: with
+        the first discovery under a role's home, the CLIENT's own turn came back
+        with zero `transform_llm_output` callbacks.
+
+        WHAT IS CHECKED IS THE LINK AND NOT ITS CONTENTS, and that is the honest
+        question from out here. On the host `data/plugins` is the bare mount
+        POINT: the plugin files live in `policy/plugins/`, which the compose
+        mounts on top of it, so an empty directory there is correct. "Does this
+        home resolve the same directory the engine reads for the default
+        profile" is exactly what the engine asks, and it is answerable off disk.
+
+        The link is written by `tools/hire-role.sh`, on every hire and every
+        --update, and it is relative on purpose so that it resolves inside the
+        container AND here. An absolute /opt/data/plugins would dangle on every
+        host and this check would have nothing to read.
+        """
+        root = os.path.join(data, "profiles")
+        names = sorted(n for n in os.listdir(root)
+                       if not n.startswith(".") and os.path.isdir(os.path.join(root, n)))
+        if not names:
+            return "no roles installed"
+        groups = {}
+        for name in names:
+            path = os.path.join(root, name, "plugins")
+            if os.path.islink(path):
+                target = os.readlink(path)
+                if target != PROFILE_PLUGINS_LINK:
+                    # A link pointing elsewhere is not a quieter version of a
+                    # missing one: it names a directory somebody chose, and
+                    # which one is what the operator has to act on.
+                    problem = f"plugins -> {target}"
+                elif not os.path.isdir(path):
+                    problem = "plugins dangles"
+                else:
+                    continue
+            elif os.path.isdir(path):
+                problem = "a real plugins/ dir, not a link"
+            else:
+                problem = "no plugins/"
+            groups.setdefault(problem, []).append(name)
+        if groups:
+            # Grouped and trimmed for the same reason as the knob drift above:
+            # the sentence that says how to fix it has to survive check()'s cut.
+            # Worst case measured: six roles in one clause, 221 of the 300; four
+            # different breakages at once, 290.
+            raise AssertionError(
+                "; ".join(f"{', '.join(roles)}: {problem}"
+                          for problem, roles in sorted(groups.items()))
+                + f" — plugins/ must link to {PROFILE_PLUGINS_LINK} or those "
+                  "turns resolve no engine plugins, the guard included. "
+                  "Heal: tools/hire-role.sh <role> <agent> --update")
+        return (f"{len(names)} profile(s) resolve the agent's plugins, "
+                "so the guard runs on their turns too")
+
     if has_team(data):
         check("roles: roster vs profiles", _roles)
         check("roles: the gateway multiplexes", _multiplex)
@@ -881,6 +962,7 @@ def main():
     if os.path.isdir(os.path.join(data, "profiles")):
         check("roles: no profile binds the shared port", _profile_ports)
         check("roles: profiles inherit the agent's knobs", _profile_knobs)
+        check("roles: profiles see the agent's plugins", _profile_plugins)
 
     # --- the kit is installed ---
     def _kit():
