@@ -198,9 +198,18 @@ services:
     env_file:
       - ./secrets.env
 
-# secrets.env, at the agent's root (never committed, root:root 600):
-#   API_SERVER_KEY=          openssl rand -hex 32, unique per client
-#   OPENROUTER_API_KEY=      or whichever provider's you use
-#   TELEGRAM_BOT_TOKEN=      from @BotFather
-#   TELEGRAM_ALLOWED_USERS=  authorized ids; without this anyone can write to it
-#   SMTP_USER= / SMTP_APP_PASSWORD=   if it sends mail
+# secrets.env, at the agent's root (never committed, root:root 600).
+# EVERY HINT ON ITS OWN LINE, and that is not a style choice: compose reads
+# this as an env_file and strips an inline `#` only when a VALUE comes first,
+# so on an empty `KEY=  # hint` the hint IS the value (fixed in b2dca3e, which
+# is why the shape below is worth copying exactly).
+#
+#   # openssl rand -hex 32, unique per client
+#   API_SERVER_KEY=
+#   # or whichever provider's you use
+#   OPENROUTER_API_KEY=
+#   # from @BotFather
+#   TELEGRAM_BOT_TOKEN=
+#   # authorized ids; without this anyone can write to it
+#   TELEGRAM_ALLOWED_USERS=
+#   # SMTP_USER= / SMTP_APP_PASSWORD=   if it sends mail
