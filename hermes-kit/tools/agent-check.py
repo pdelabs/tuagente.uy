@@ -836,6 +836,14 @@ def main():
         # to fix it, the exact failure that limit's comment warns about. Drift
         # here is per AGENT (nobody hires one role onto a different config), so
         # the common case is one clause naming every role and every knob once.
+        #
+        # AND THE SENTENCE BEFORE `Heal:` IS AS SHORT AS IT IS FOR THE SAME
+        # REASON. Grouped, the worst case is every role in ONE clause with every
+        # knob: the roster's five roles and the twelve projected knobs came to
+        # 278 of the 300, and a sixth role took it to 290 -- ten characters from
+        # eating `--update`, which is the half of the instruction that heals a
+        # role instead of re-hiring it over the client's name. Trimming that
+        # sentence buys 19: 271 at six roles, 282 at seven.
         root = os.path.join(data, "profiles")
         names = sorted(n for n in os.listdir(root)
                        if not n.startswith(".") and os.path.isdir(os.path.join(root, n)))
@@ -860,7 +868,7 @@ def main():
             raise AssertionError(
                 "; ".join(f"{', '.join(roles)}: {', '.join(keys)}"
                           for keys, roles in sorted(groups.items()))
-                + " — the ENGINE answers for those on that role's turns. "
+                + " — the ENGINE answers those turns. "
                   "Heal: tools/hire-role.sh <role> <agent> --update")
         return f"{len(names)} profile(s) run the agent's model and knobs"
 
