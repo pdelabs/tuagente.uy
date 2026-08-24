@@ -30,6 +30,7 @@ import subprocess
 import tempfile
 import sys
 import time
+import types
 
 OK, FAIL, WARN = "OK  ", "FAIL ", "warn "
 results = []
@@ -2115,8 +2116,73 @@ def main():
                 raise AssertionError(
                     "the guard fires with the flow ALREADY created and on schedule: "
                     "it would be contradicting the agent when it is telling the truth")
+        # AND THE FOLDER IT LOOKS IN IS THE TURN'S, NOT THE PROCESS'S. Three
+        # cases above prove the RULES; this proves the plugin points them at the
+        # right disk. The engine imports this module exactly once -- one process
+        # serves every profile and scopes a turn with a context-local HERMES_HOME
+        # override -- so a home read at import time is frozen to whichever
+        # profile discovered first, and every other profile is then judged
+        # against somebody else's flows. On an agent whose client has no flows
+        # and whose marketing role has three, that is the guard contradicting a
+        # teammate that is telling the truth.
+        #
+        # Asked by calling the hook twice with the same text and two different
+        # homes, through a stubbed `hermes_constants`: same process, same
+        # module, opposite answers, which nothing frozen at import can do.
+        stub_home = {"path": ""}
+        stub = types.ModuleType("hermes_constants")
+        stub.get_hermes_home = lambda: stub_home["path"]
+        saved, name = sys.modules.get("hermes_constants"), "promises_pkg_check"
+        sys.modules["hermes_constants"] = stub
+        try:
+            spec = importlib.util.spec_from_file_location(
+                name, os.path.join(plugin_dir, "__init__.py"),
+                submodule_search_locations=[plugin_dir])
+            pkg = importlib.util.module_from_spec(spec)
+            sys.modules[name] = pkg
+            try:
+                spec.loader.exec_module(pkg)
+            except Exception as exc:
+                raise AssertionError(f"the plugin's __init__.py does not import: {exc}")
+            # The plugin logs a WARNING every time it appends a correction, which
+            # is right on an agent and wrong here: half of what follows is
+            # supposed to fire, and a check that passes must not print a line
+            # that reads like an incident.
+            pkg.logger.disabled = True
+            with tempfile.TemporaryDirectory() as bare, \
+                 tempfile.TemporaryDirectory() as armed:
+                os.makedirs(os.path.join(bare, "cron"))
+                with open(os.path.join(bare, "cron", "jobs.json"), "w") as fh:
+                    fh.write('{"jobs": []}')
+                os.makedirs(os.path.join(armed, "cron"))
+                os.makedirs(os.path.join(armed, "flows", "control"))
+                with open(os.path.join(armed, "flows", "control", "FLOW.md"), "w") as fh:
+                    fh.write('---\nname: Control\ntrigger_type: schedule\n'
+                             'trigger_cron: "30 9 * * 5"\ntrigger_job: abc123\n'
+                             'status: active\n---\n\ncuerpo\n')
+                with open(os.path.join(armed, "cron", "jobs.json"), "w") as fh:
+                    fh.write('{"jobs": [{"id": "abc123", "enabled": true, '
+                             '"schedule": {"expr": "30 9 * * 5"}}]}')
+                stub_home["path"] = armed
+                if pkg._review_response(response_text=LIE):
+                    raise AssertionError(
+                        "the guard fires on a home that HAS the flow: it is not "
+                        "reading the home of the turn it is reviewing")
+                stub_home["path"] = bare
+                if not pkg._review_response(response_text=LIE):
+                    raise AssertionError(
+                        "THE GUARD READS ONE FIXED FOLDER: the home changed between "
+                        "the two calls and the answer did not. On a team agent it "
+                        "judges every teammate against the client's own flows")
+        finally:
+            sys.modules.pop(name, None)
+            sys.modules.pop(f"{name}.promises", None)
+            if saved is None:
+                sys.modules.pop("hermes_constants", None)
+            else:
+                sys.modules["hermes_constants"] = saved
         live = mod.live_flows(data)
-        return (f"plugin mounted :ro and turned on · 3 cases tested · "
+        return (f"plugin mounted :ro and turned on · 5 cases tested · "
                 f"{len(live)} live flow(s) today")
 
     def _plugins_installed():
