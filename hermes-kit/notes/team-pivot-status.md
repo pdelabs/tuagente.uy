@@ -236,6 +236,23 @@ on a hired agent's portal Rive canvas if it has them (today: only Tino, the
 bow). ALL OF THIS UNCOMMITTED: waiting on Luis's OK because the push deploys
 tuagente.uy to production.
 
+## Done 2026-08-23 (later): plugin system phases 1-3 SHIPPED and validated
+
+The plan below was executed the same day, after the full-English translation
+landed. Phases 1, 2, 3a and 3b are done — 41 commits on local main, each
+phase implemented by one Opus agent and adversarially validated by another
+(12 defects found and fixed across the four validation waves). Current state:
+registry at hermes-kit/plugins/ with 7 plugins (5 system + transcribe +
+invoices-to-data), dependency graph enforced at build (check-plugins,
+build_role, skills_split, install.sh) AND at boot (adapter refuses to boot on
+a broken /opt/plugins), /opt/plugins ships computed per-agent sets with
+confined loud removal, promises is now plugins/flow/engine/ (first engine
+surface), portal API renames done (engine_plugins, adapter_version — the bare
+word "plugin" is the kit's). See notes/plugin-system-plan.md for the live
+status. NOT PUSHED — awaiting Luis. Phase 4 (webscraping service plugin +
+first guarded third-party MCP) awaits Luis's scope input; phase 5 (dynamic
+portal tab) should ride with phase 4's first tab-bearing plugin.
+
 ## Done 2026-08-23: plugin system planned (in English, like everything from now on)
 
 Luis's call: every custom client build must land as a reusable PLUGIN — code
