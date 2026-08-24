@@ -75,35 +75,11 @@ fi
 [[ -d "$KIT/roles/$ROLE" ]] || { echo "roles/$ROLE doesn't exist" >&2; exit 1; }
 [[ -z "$LOOK_FILE" || -f "$LOOK_FILE" ]] || { echo "$LOOK_FILE doesn't exist" >&2; exit 1; }
 
-# WHICH CONTAINER IS THE ENGINE'S: read off the compose, which is what named it.
-# The compose renders `container_name: <slug>-hermes` from the slug the agent
-# was created with, and this script used to GUESS the same string from the
-# directory's basename -- with a `sed 's/^agente-//'` on it, left over from when
-# every agent directory was called `agente-<slug>`. Two derivations of one fact,
-# and the rename that dropped the prefix made them disagree: a directory called
-# `agente-acme` holds a container called `acme-hermes` only if it was created
-# before the rename. Whatever the compose says is the answer, and it is one
-# `awk` away.
-compose_container() {
-  # stdin: the compose. The engine's service is `hermes:`; `portal-adapter:`
-  # declares a container_name too, and taking the first one in the file would
-  # be right only as long as nobody reorders the services.
-  # THE TWO SUBSTITUTIONS ARE NOT TIDINESS. Anchoring the service header on
-  # "nothing after the colon" made `  hermes:  # the engine` and any CRLF
-  # compose invisible, and an invisible header means `service` never becomes
-  # "hermes" -- so the script refused with "has no container_name under the
-  # hermes service" on a compose that plainly has one. Refusing is safe; saying
-  # something untrue about the file in front of the operator is not.
-  #
-  # The two-space anchor STAYS. Loosening it to any indentation would let a
-  # nested valueless key (volumes:, ports:, deploy:) become `service` and make
-  # the reader confidently WRONG, which is worse than refusing.
-  awk '
-    { sub(/\r$/, "") }
-    /^  [a-z][a-z0-9_-]*:[ \t]*(#.*)?$/ { service = $1; sub(":", "", service) }
-    service == "hermes" && $1 == "container_name:" { print $2; exit }
-  '
-}
+# WHICH CONTAINER IS THE ENGINE'S: read off the compose, which is what named
+# it. The derivation moved to `tools/compose-container.sh` when the two scripts
+# that still guessed it from the directory's basename were fixed -- one fact,
+# one reader, and no way for the three of them to disagree.
+. "$KIT/tools/compose-container.sh"
 
 # Where everything lives, in both modes. Resolved UP HERE because the client's
 # request has to be read before building anything: the name they chose goes
@@ -111,17 +87,7 @@ compose_container() {
 if [[ "$MODE" == local ]]; then
   DIR="$(cd "$DIR" && pwd)"; SLUG="$(basename "$DIR")"
   COMPOSE="$DIR/docker-compose.yml"
-  [[ -f "$COMPOSE" ]] || { echo "$COMPOSE doesn't exist — is that the agent's directory?" >&2; exit 1; }
-  CONT="$(compose_container < "$COMPOSE")"
-  # A QUOTED VALUE IS STILL A VALID COMPOSE, and `docker exec` on the quotes is
-  # not. `container_name: "cliente-hermes"` is what a hand-edited compose looks
-  # like sooner or later, and the quotes come back attached: every `run` below
-  # then dies on `no such object: "cliente-hermes"` -- late, long after the name
-  # was resolved, naming something the compose never said. Stripping here is the
-  # only place that knows the value came out of YAML.
-  CONT="${CONT%\"}"; CONT="${CONT#\"}"
-  CONT="${CONT%\'}"; CONT="${CONT#\'}"
-  [[ -n "$CONT" ]] || { echo "$COMPOSE has no container_name under the hermes service" >&2; exit 1; }
+  CONT="$(compose_container_or_die "$COMPOSE")"
   POLICY_ROLES="$DIR/policy/roles"
   run() { docker exec "$CONT" sh -c "$1"; }
 else

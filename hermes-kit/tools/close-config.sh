@@ -29,6 +29,8 @@
 #   tools/with-config-open.sh <agent> hermes mcp add ...
 set -euo pipefail
 
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/compose-container.sh"
+
 DEST="${1:-}"
 [[ -n "$DEST" ]] || { echo 'usage: ./close-config.sh <ssh-host|local-dir> [slug]' >&2; exit 1; }
 SLUG="${2:-$DEST}"
@@ -36,13 +38,19 @@ SLUG="${2:-$DEST}"
 LINE='      - ./data/config.yaml:/opt/data/config.yaml:ro'
 MARKER='# FIRST BOOT: uncomment with tools/close-config.sh'
 
-# The compose names the containers `<slug>-hermes`. On the VPS we have the
-# slug; on a local agent it has to come out of the directory, which is
-# usually called `agente-<slug>` (with-config-open.sh does the same).
+# WHICH CONTAINER IS THE ENGINE'S. Over ssh the slug is not a guess: the
+# operator typed it, `/opt/agentes/$SLUG` is the directory this is about to
+# write into, and it is the same variable `deploy-remote.sh` rendered the
+# compose from. On a local agent there is no such variable, and this used to
+# GUESS the name from the directory's basename with a `sed 's/^agente-//'` --
+# left over from when every agent directory was called `agente-<slug>`, and
+# wrong for every agent created after that rename: the guess named a container
+# that does not exist and the wait loop below then timed out on nothing.
+# Whatever the compose says is the answer (5738a0d).
 if [[ -d "$DEST" ]]; then
   run() { bash -c "$1"; }
   DIR="$DEST"
-  CONTAINER="$(basename "$DIR" | sed 's/^agente-//')-hermes"
+  CONTAINER="$(compose_container_or_die "$DIR/docker-compose.yml")"
 else
   run() { ssh "$DEST" "$1"; }
   DIR="/opt/agentes/$SLUG"

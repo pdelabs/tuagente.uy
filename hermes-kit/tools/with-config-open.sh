@@ -14,6 +14,8 @@
 # The trap always closes it: Ctrl-C, a command error, or success.
 set -euo pipefail
 
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/compose-container.sh"
+
 DIR="${1:-}"; shift || true
 if [[ -z "$DIR" || $# -eq 0 ]]; then
   echo 'usage: ./with-config-open.sh <agent-dir> <command...>' >&2
@@ -22,17 +24,26 @@ if [[ -z "$DIR" || $# -eq 0 ]]; then
 fi
 
 COMPOSE="$DIR/docker-compose.yml"
-[[ -f "$COMPOSE" ]] || { echo "can't find $COMPOSE" >&2; exit 1; }
+
+# ONE DERIVATION OF THE CONTAINER'S NAME, AND IT IS THE COMPOSE'S. This script
+# had two: `docker compose ps -q hermes` piped through `docker inspect` for the
+# path below, and `basename "$DIR" | sed 's/^agente-//'` for the shortcut --
+# the same guess 5738a0d took out of `hire-role.sh`, left over from when every
+# agent directory was called `agente-<slug>`. A directory called `agente-acme`
+# holds a container called `acme-hermes` only if it was created before the
+# rename, so the shortcut was answering a different question than the four
+# lines under it. Resolved once, up here, before either branch can use it --
+# and off the file that named the container rather than off a container that
+# has to already be running to be asked.
+NAME="$(compose_container_or_die "$COMPOSE")"
 
 MARKER="config.yaml:/opt/data/config.yaml:ro"
 grep -q "$MARKER" "$COMPOSE" || {
   echo "config.yaml isn't mounted :ro — running the command as-is"
-  ( cd "$DIR" && docker exec "$(basename "$DIR" | sed 's/^agente-//')-hermes" "$@" )
+  ( cd "$DIR" && docker exec "$NAME" "$@" )
   exit $?
 }
 
-CONTAINER="$(cd "$DIR" && docker compose ps -q hermes | head -1)"
-NAME="$(docker inspect --format '{{.Name}}' "$CONTAINER" 2>/dev/null | tr -d /)"
 BACKUP="$(mktemp)"
 cp "$COMPOSE" "$BACKUP"
 
