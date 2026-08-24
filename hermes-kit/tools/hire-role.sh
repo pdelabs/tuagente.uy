@@ -86,8 +86,19 @@ compose_container() {
   # stdin: the compose. The engine's service is `hermes:`; `portal-adapter:`
   # declares a container_name too, and taking the first one in the file would
   # be right only as long as nobody reorders the services.
+  # THE TWO SUBSTITUTIONS ARE NOT TIDINESS. Anchoring the service header on
+  # "nothing after the colon" made `  hermes:  # the engine` and any CRLF
+  # compose invisible, and an invisible header means `service` never becomes
+  # "hermes" -- so the script refused with "has no container_name under the
+  # hermes service" on a compose that plainly has one. Refusing is safe; saying
+  # something untrue about the file in front of the operator is not.
+  #
+  # The two-space anchor STAYS. Loosening it to any indentation would let a
+  # nested valueless key (volumes:, ports:, deploy:) become `service` and make
+  # the reader confidently WRONG, which is worse than refusing.
   awk '
-    /^  [a-z][a-z0-9_-]*:[ \t]*$/ { service = $1; sub(":", "", service) }
+    { sub(/\r$/, "") }
+    /^  [a-z][a-z0-9_-]*:[ \t]*(#.*)?$/ { service = $1; sub(":", "", service) }
     service == "hermes" && $1 == "container_name:" { print $2; exit }
   '
 }
