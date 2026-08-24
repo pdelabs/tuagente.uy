@@ -314,6 +314,64 @@ def has_pyyaml():
         return False
 
 
+# Platforms that open a listener of their own -- copied from the engine's
+# `PORT_BINDING_PLATFORM_VALUES` (hermes:gateway/config.py:384-394), which the
+# gateway uses to decide whether a secondary profile is servable at all. Under
+# `gateway.multiplex_profiles` the default profile owns the single HTTP port
+# and every role answers through /p/<role>/, so a profile that enables one of
+# these is a profile the gateway starts NO adapters for.
+# `roles/test_build_role.py` keeps the same list against the same source.
+PORT_BINDING_PLATFORMS = (
+    "api_server", "webhook", "msgraph_webhook", "feishu", "wecom_callback",
+    "bluebubbles", "sms", "whatsapp_cloud", "line",
+)
+
+
+def platform_flags(text):
+    """{platform: enabled} for the port-binding blocks a profile config states.
+
+    Both shapes the engine reads are covered — nested (`platforms:` /
+    `gateway:`) and top-level, which is how the base config writes
+    `api_server:` — because it merges all three into one platform map.
+
+    With PyYAML it is a parse; without it, a scanner that follows indentation.
+    The fallback does not understand flow style (`api_server: {enabled: true}`),
+    which nothing we generate writes; the parsed path does.
+    """
+    if has_pyyaml():
+        import yaml
+        try:
+            data = yaml.safe_load(text)
+        except Exception:
+            data = None
+        if isinstance(data, dict):
+            flags = {}
+            for source in (data.get("platforms"), data.get("gateway"), data):
+                if not isinstance(source, dict):
+                    continue
+                for name in PORT_BINDING_PLATFORMS:
+                    block = source.get(name)
+                    if isinstance(block, dict) and "enabled" in block:
+                        flags.setdefault(name, bool(block["enabled"]))
+            return flags
+    flags, lines = {}, text.splitlines()
+    for i, line in enumerate(lines):
+        opening = re.match(r"^([ \t]*)([a-z0-9_]+):[ \t]*$", line)
+        if not opening or opening.group(2) not in PORT_BINDING_PLATFORMS:
+            continue
+        indent = len(opening.group(1).expandtabs())
+        for below in lines[i + 1:]:
+            if not below.strip() or below.lstrip().startswith("#"):
+                continue
+            if len(below.expandtabs()) - len(below.expandtabs().lstrip()) <= indent:
+                break                                  # the block ended
+            stated = re.match(r"^[ \t]*enabled:[ \t]*(true|false)\b", below, re.I)
+            if stated:
+                flags.setdefault(opening.group(2), stated.group(1).lower() == "true")
+                break
+    return flags
+
+
 def parsed_config(data):
     """config.yaml as a dict, or None if that is not possible (no PyYAML/broken).
 
@@ -676,9 +734,67 @@ def main():
             "data/config.yaml does not have multiplex_profiles: true — the gateway "
             "will install roles it never serves (it comes in compose/config.base.yaml)")
 
+    def _profile_ports():
+        # THE FIFTH CLASSIC, and the quietest of them: a hired role whose
+        # profile declares a port-binding platform. It is not something anyone
+        # writes -- `API_SERVER_KEY` is in the container's environment and the
+        # engine's loader puts env vars above config.yaml, so a profile that
+        # ships no config.yaml (every distribution built before 23/8) comes out
+        # with api_server ON and the gateway logs, at every boot:
+        #
+        #   Skipping secondary profile 'accounting' due to port-binding config
+        #   error: ... Remove these platform entries ...
+        #
+        # and starts none of that profile's adapters. NOTHING ELSE NOTICES:
+        # /p/<role>/ keeps answering (the default profile's listener serves the
+        # prefix off a directory scan), the cron scheduler still lists the
+        # profile, `hermes profile list` shows it. Measured on the local agent
+        # on 23/8/2026 with two roles hired and both skipped for a week.
+        #
+        # The fix is one pin in the distribution's config.yaml
+        # (`roles/build_role.py`); this is what catches an agent that predates
+        # it or a profile someone edited by hand.
+        if not re.search(r"^\s*multiplex_profiles:\s*true\b", conf(data), re.M):
+            # Nothing to conflict over: without multiplex the gateway serves
+            # the active profile and no other. That it does not is what
+            # "roles: the gateway multiplexes" is for.
+            return "multiplex is off — the gateway serves one profile"
+        root = os.path.join(data, "profiles")
+        names = sorted(n for n in os.listdir(root)
+                       if not n.startswith(".") and os.path.isdir(os.path.join(root, n)))
+        if not names:
+            return "no roles installed"
+        wrong = []
+        for name in names:
+            path = os.path.join(root, name, "config.yaml")
+            if not os.path.isfile(path):
+                wrong.append(f"{name} has no config.yaml")
+                continue
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                flags = platform_flags(fh.read())
+            binding = sorted(p for p, on in flags.items() if on)
+            if binding:
+                wrong.append(f"{name} enables {', '.join(binding)}")
+            elif flags.get("api_server") is not False:
+                # Silence is not a pin: without an explicit `enabled: false`
+                # the environment's API_SERVER_KEY turns it back on.
+                wrong.append(f"{name} does not pin api_server: enabled: false")
+        if wrong:
+            raise AssertionError(
+                "; ".join(wrong) + " — the gateway will refuse to start those "
+                "profiles' adapters (only the default profile may bind the port "
+                "under multiplex). Rebuild with roles/build_role.py and re-hire "
+                "with tools/hire-role.sh --update")
+        return f"{len(names)} profile(s) leave the listener to the default one"
+
     if has_team(data):
         check("roles: roster vs profiles", _roles)
         check("roles: the gateway multiplexes", _multiplex)
+    # Not under `has_team`: the roster is written by the hire and the profiles
+    # by the engine, and it is the profiles that break. An agent with one
+    # installed and no roster still gets checked.
+    if os.path.isdir(os.path.join(data, "profiles")):
+        check("roles: no profile binds the shared port", _profile_ports)
 
     # --- the kit is installed ---
     def _kit():
