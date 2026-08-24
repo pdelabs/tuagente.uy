@@ -833,9 +833,48 @@ class FlattenedRoleJson(unittest.TestCase):
                 role_dir, dest, {name: Path(tmp) / name for name in sources})
             return json.loads((dest / "role.json").read_text(encoding="utf-8"))
 
-    def test_a_role_with_no_plugins_travels_untouched(self):
-        cfg = {"id": "sales", "skills": ["approval"]}
-        self.assertEqual(self.flatten(cfg, ["approval"]), cfg)
+    def test_the_identity_comes_from_the_roster_and_not_from_the_source(self):
+        """A role with no plugins is still not copied through: the face is injected.
+
+        `roles/<id>/role.json` used to carry its own `identity` and the build
+        shipped that copy, so a face redrawn in `roles/catalog.json` reached the
+        roster and never reached a hired role. The source has none now, and this
+        is where the one in the distribution comes from.
+        """
+        catalog = {r["id"]: r for r in json.loads(
+            (KIT / "roles" / "catalog.json").read_text(encoding="utf-8"))["roles"]}
+        flat = self.flatten({"id": "sales", "skills": ["approval"]}, ["approval"])
+        self.assertEqual(flat["identity"], catalog["sales"]["identity"])
+        self.assertEqual(flat["skills"], ["approval"])
+
+    def test_a_source_that_carries_an_identity_is_a_build_failure(self):
+        """Two homes for one fact is the bug; refusing is how it stays one."""
+        with self.assertRaises(SystemExit) as raised:
+            self.flatten({"id": "sales", "skills": ["approval"],
+                          "identity": {"name": "Otra", "look": {"tone": 9}}},
+                         ["approval"])
+        message = str(raised.exception)
+        self.assertIn("roles/sales/role.json", message)
+        self.assertIn("roles/catalog.json", message)
+
+    def test_a_role_the_roster_does_not_know_cannot_be_built(self):
+        with self.assertRaises(SystemExit) as raised:
+            self.flatten({"id": "nobody", "skills": ["approval"]}, ["approval"])
+        self.assertIn("roles/catalog.json", str(raised.exception))
+
+    def test_the_kits_five_roles_ship_the_roster_face(self):
+        """The whole point, over the real files rather than a fixture."""
+        catalog = {r["id"]: r for r in json.loads(
+            (KIT / "roles" / "catalog.json").read_text(encoding="utf-8"))["roles"]}
+        for role_id, entry in sorted(catalog.items()):
+            source = json.loads(
+                (KIT / "roles" / role_id / "role.json").read_text(encoding="utf-8"))
+            self.assertNotIn("identity", source, f"{role_id}/role.json has a second copy")
+            names = list(plugin_registry.role_skills(
+                source.get("plugins") or [], role_id, KIT))
+            names += source.get("skills") or []
+            flat = self.flatten(source, names)
+            self.assertEqual(flat["identity"], entry["identity"], role_id)
 
     def test_the_plugins_key_never_reaches_the_agent(self):
         flat = self.flatten(

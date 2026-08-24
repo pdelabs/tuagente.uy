@@ -13,16 +13,20 @@ Produces a directory `hermes profile install` accepts:
                            from skills/ or from a plugin's skills surface
       cron/                nothing yet; flows land in flows/
       flows/               the curated flows shipped with the role
-      role.json            identity (name + face) for the portal
+      role.json            the identity the portal draws (name + face), copied
+                           in from roles/catalog.json, plus the flattened skills
 
-WHY A BUILDER AND NOT A COMMITTED DIRECTORY. Two things must exist exactly once
-in this repo or they drift:
+WHY A BUILDER AND NOT A COMMITTED DIRECTORY. Three things must exist exactly
+once in this repo or they drift:
 
 * The `kit:base` SOUL block. It carries the approval rule. Five roles with five
   editable copies means that in three months one of them says something else,
   and that shows up as a role publishing without asking.
 * The skills. `brand-kit` belongs to marketing today and may belong to two roles
   tomorrow; copying it per role guarantees the copies diverge.
+* The name and the face. They live in `roles/catalog.json`, the roster the
+  client is shown, and the build injects them. `roles/<id>/role.json` used to
+  carry a second copy and both drifted -- see `catalog_identity`.
 
 So roles/<role>/ holds only what is genuinely the role's own — its identity
 block, its flows, its manifest — and everything shared is composed at build
@@ -194,12 +198,38 @@ def write_profile_config(role: str, dest: Path) -> None:
         profile_config.distribution_config(role), encoding="utf-8")
 
 
-def write_role_json(role_dir: Path, dest: Path, sources: dict[str, Path]) -> None:
-    """role.json as the agent reads it: the plugins folded back into `skills`.
+def catalog_identity(role: str) -> dict:
+    """The name and face the roster gives this role. The only copy there is.
 
-    The distribution is today's container layout, and today's container has no
-    /opt/plugins. A role that declares no plugins is copied byte for byte, so
-    the transition cannot move a single distribution it does not have to.
+    THE ROSTER IS THE SOURCE AND role.json USED TO BE A SECOND ONE. Every
+    `roles/<id>/role.json` carried its own `identity` block and the build
+    shipped it, so a face redesigned in `roles/catalog.json` reached the portal
+    for roles ON OFFER and never reached a HIRED one: the adapter's
+    `_role_identity` reads the installed profile's role.json ABOVE the catalog,
+    on purpose. Measured 2026-08-24 on the local agent, months after the
+    redesign -- marketing was still served with Vera's old glasses and no skin
+    specks, accounting without Tino's bow tie, and neither had the `hat` axis at
+    all.
+    """
+    entry = next(
+        (r for r in json.loads((ROLES / "catalog.json").read_text(encoding="utf-8"))["roles"]
+         if r.get("id") == role), None)
+    if entry is None:
+        raise SystemExit(
+            f"{role} is not in roles/catalog.json, so it has no name or face to "
+            "ship. The roster is what the client is shown; a role that is not on "
+            "it cannot be built.")
+    identity = entry.get("identity")
+    if not identity or not identity.get("name") or not identity.get("look"):
+        raise SystemExit(
+            f"roles/catalog.json: {role} has no complete `identity` (name + look). "
+            "The portal draws the face before anybody reads a label -- a role "
+            "without one is a grey shape in the roster.")
+    return identity
+
+
+def write_role_json(role_dir: Path, dest: Path, sources: dict[str, Path]) -> None:
+    """role.json as the agent reads it: the identity injected, the plugins folded in.
 
     THE FLATTENED LIST IS SORTED, and that is a decision, not tidiness. Before
     phase 2 the order was an accident of where each name happened to be
@@ -210,12 +240,25 @@ def write_role_json(role_dir: Path, dest: Path, sources: dict[str, Path]) -> Non
     this order -- the agent indexes the skills/ DIRECTORY, and every consumer of
     role.json reads `identity` or compares sets -- so it is free to be
     canonical, and canonical is what stops the question from coming back.
+
+    THE IDENTITY IS INJECTED, NEVER COPIED, and a source file that carries one
+    is a build failure: two homes for the same fact is what shipped stale faces
+    to every hired role (see `catalog_identity`). It still travels in the
+    DISTRIBUTION because the adapter needs it there -- the profile's role.json
+    is what `_role_identity` reads for a hired role -- and refreshing it cannot
+    overwrite a client's choice: a rename or a redraw from the portal lands in
+    `policy/roles/identities.json`, which sits ABOVE both and is not
+    distribution_owned.
     """
     source = role_dir / "role.json"
     cfg = json.loads(source.read_text(encoding="utf-8"))
-    if "plugins" not in cfg:
-        shutil.copy2(source, dest / "role.json")
-        return
+    if "identity" in cfg:
+        raise SystemExit(
+            f"roles/{cfg.get('id', source.parent.name)}/role.json carries an "
+            "`identity` block. The name and the face live in roles/catalog.json "
+            "and nowhere else: the build injects them from there. Delete the key "
+            "-- if the face in it is the one you want, move it to the catalog "
+            "first, because that is what the portal draws for a role on offer.")
     # `skills` is WRITTEN, not rewritten. A role whose skills all arrive
     # through plugins has no `skills` key of its own, and folding into a key
     # that is not there shipped a distribution whose role.json listed nothing
@@ -223,8 +266,20 @@ def write_role_json(role_dir: Path, dest: Path, sources: dict[str, Path]) -> Non
     # disagreeing, with the build exiting 0.
     flat = {k: v for k, v in cfg.items() if k != "plugins"}
     flat["skills"] = sorted(sources)
+    # Injected where it used to sit -- after `_comment`, or after `version` on a
+    # role that has none. The distribution's role.json is read by people as well
+    # as by the adapter, and a key that moves for no reason is a diff to explain
+    # in every review from here on.
+    anchor = "_comment" if "_comment" in flat else "version"
+    ordered = {}
+    for key, value in flat.items():
+        ordered[key] = value
+        if key == anchor:
+            ordered["identity"] = catalog_identity(cfg["id"])
+    if "identity" not in ordered:
+        ordered["identity"] = catalog_identity(cfg["id"])
     (dest / "role.json").write_text(
-        json.dumps(flat, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        json.dumps(ordered, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def write_manifest(role: str, cfg: dict, dest: Path) -> None:

@@ -15,12 +15,28 @@ asking for its own approval separately.
 ## What's here
 
     roles/
-      catalog.json            the roster: which role exists, what it does, what it costs
+      catalog.json            the roster: which role exists, what it does, what
+                              it costs, AND the name and face it ships with
       build_role.py           builds a role's installable distribution
       <role>/
-        role.json             identity (name and face), skills, plugins, connections
+        role.json             skills, plugins, connections, keys, flows
         identity.md           the role's own SOUL block
         flows/                the curated flows that ship with the role
+
+## The name and the face live in the roster only
+
+`roles/catalog.json` carries each role's `identity` (name + `look` axes) and
+`build_role.py` injects it into the distribution's `role.json`. It used to be in
+BOTH, and both drifted: the 2026-08-22 redesign changed the catalog — Vera lost
+her glasses and gained skin specks, Tino got his bow tie, everyone got the new
+`hat` axis — and every already-hired role kept serving the old face, because the
+adapter reads the installed profile's `role.json` ABOVE the catalog
+(`_role_identity`, and that precedence is correct: a role nobody hired still
+needs a face). An `identity` key in `roles/<id>/role.json` is a build failure now.
+
+Refreshing it never overwrites the client: a rename or a redraw from the portal
+lands in `policy/roles/identities.json`, which sits above both and is not
+`distribution_owned`.
 
 Skills **aren't copied here**. They live once — in `skills/`, or inside a
 plugin's skills surface (`plugins/<id>/skills/<name>/`) — and a role claims

@@ -2,32 +2,25 @@
   "id": "marketing",
   "version": "0.3.0",
   "_comment": [
-    "Identity and packaging for ONE role: what the client sees (name and face)",
-    "and what the role needs to work (skills, connections, keys).",
+    "Packaging for ONE role: what it needs to work (skills, plugins,",
+    "connections, keys) and the flows it ships with.",
     "",
-    "THE NAME AND FACE SHIP PRESET on purpose. Hiring a role has to be one click:",
-    "opening a character editor before the agent does anything puts an aesthetic",
-    "decision in front of the value. Renaming is optional and comes later, once",
-    "the client grows fond of it.",
+    "THE NAME AND FACE ARE NOT HERE. They live once, in roles/catalog.json,",
+    "which is the roster the client is shown -- and `roles/build_role.py`",
+    "injects that entry's `identity` into the distribution's role.json at build",
+    "time. Two copies is what this file used to be, and both drifted: after the",
+    "2026-08-22 redesign the catalog had Vera without her glasses and Tino with",
+    "his bow tie while every hired role kept serving the old face, because the",
+    "installed profile's role.json wins over the catalog in the adapter",
+    "(`_role_identity`). An `identity` key here is now a build failure.",
     "",
-    "`look` are the character axes from app/app/lib/agentito.tsx (tone, antenna,",
-    "accessory, pupil, mouth, skin, suit, brows). Each role starts at a CLEARLY",
-    "different point in that space: the face is how you tell who did what in a",
-    "list of twenty cards."
+    "The name and face still SHIP PRESET, which is the decision that has not",
+    "changed: hiring a role has to be one click, and opening a character editor",
+    "before the agent does anything puts an aesthetic choice in front of the",
+    "value. Renaming comes later, from the portal, and lands in",
+    "policy/roles/identities.json -- above this file, so an update never",
+    "overwrites it."
   ],
-  "identity": {
-    "name": "Vera",
-    "look": {
-      "tone": 0,
-      "antenna": 5,
-      "accessory": 1,
-      "pupil": 1,
-      "mouth": 1,
-      "skin": 0,
-      "suit": 0,
-      "brows": 1
-    }
-  },
   "skills": [],
   "plugins": [
     "deliverable",

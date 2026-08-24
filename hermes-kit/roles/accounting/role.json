@@ -2,30 +2,25 @@
   "id": "accounting",
   "version": "0.2.1",
   "_comment": [
-    "Identity and packaging for ONE role: what the client sees (name and face)",
-    "and what the role needs to work (skills, connections, keys).",
+    "Packaging for ONE role: what it needs to work (skills, plugins,",
+    "connections, keys) and the flows it ships with.",
     "",
-    "THE NAME AND FACE SHIP PRESET on purpose. Hiring a role has to be one click:",
-    "opening a character editor before the agent does anything puts an aesthetic",
-    "decision in front of the value.",
+    "THE NAME AND FACE ARE NOT HERE. They live once, in roles/catalog.json,",
+    "which is the roster the client is shown -- and `roles/build_role.py`",
+    "injects that entry's `identity` into the distribution's role.json at build",
+    "time. Two copies is what this file used to be, and both drifted: after the",
+    "2026-08-22 redesign the catalog had Vera without her glasses and Tino with",
+    "his bow tie while every hired role kept serving the old face, because the",
+    "installed profile's role.json wins over the catalog in the adapter",
+    "(`_role_identity`). An `identity` key here is now a build failure.",
     "",
-    "SKILLS ARE THE EXPENSIVE PART. Every skill's description is loaded on EVERY",
-    "request, so this list is what the role needs and nothing more. A role that",
-    "carries the whole kit is the single fat agent this pivot exists to replace."
+    "The name and face still SHIP PRESET, which is the decision that has not",
+    "changed: hiring a role has to be one click, and opening a character editor",
+    "before the agent does anything puts an aesthetic choice in front of the",
+    "value. Renaming comes later, from the portal, and lands in",
+    "policy/roles/identities.json -- above this file, so an update never",
+    "overwrites it."
   ],
-  "identity": {
-    "name": "Tino",
-    "look": {
-      "tone": 4,
-      "antenna": 2,
-      "accessory": 1,
-      "pupil": 2,
-      "mouth": 2,
-      "skin": 0,
-      "suit": 0,
-      "brows": 1
-    }
-  },
   "skills": [],
   "plugins": [
     "invoices-to-data",
