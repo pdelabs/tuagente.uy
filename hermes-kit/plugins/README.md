@@ -46,11 +46,53 @@ before adding a surface this registry has never shipped.
 hard error, like everywhere else in the kit's closed catalogs. `_comment` (a
 string or a list of strings) is allowed and ignored.
 
+## What is in here
+
+| plugin | system | what it is |
+|---|---|---|
+| `kanban` | yes | the ticket store the other defaults write into; no skills surface |
+| `approval` | yes | nothing sensitive happens without the client's yes |
+| `deliverable` | yes | what the client is meant to read gets saved with a name |
+| `artifact` | yes | data understood by looking at it |
+| `flow` | yes | work left running on its own; carries the `promises` engine surface |
+| `capability` | yes | the only way in for what the agent does not have |
+| `transcribe` | no | audio and video to text — the plugin behind the `transcription` base capability |
+| `invoices-to-data` | no | an invoice becomes one row of data (accounting) |
+| `quotes` | no | a request becomes a priced quote in the client's template (sales) |
+| `brand-kit` | no | what a company looks like, read off its own site (marketing) |
+| `social-content` | no | Instagram posts in the brand's voice (marketing) |
+| `post-image` | no | the image a post needs, and the step that LOOKS at it (marketing) |
+| `drive-inbox` | no | Drive folders as an inbox — **declared by nobody, ships nowhere** |
+
+`drive-inbox` is the honest odd one out and its manifest says so: no role
+declares it, no base capability installs it, and `system` is false, so
+`tools/plugin_set.py` gives it to no agent. It is packaged so the day a client
+needs it the unit is there to declare, and until then `skills_split.py --orphan`
+keeps printing its name, exactly as it did when it was a bare kit skill.
+
+### Harness skills: what `skills/` still holds, and why
+
+Two directories stay outside this registry — `skills/no-images` and
+`skills/no-web-search` — and they are not leftovers. They are FALLBACK NOTES:
+the engine puts them in the index **only when the tool is missing**
+(`metadata.hermes.fallback_for_tools`) and withdraws them on its own once it is
+there. They cost nothing when the capability is present, and when it is absent
+they are the only thing between a missing tool and an agent that fakes the
+result.
+
+That makes them harness, not product, and the distinction is the same one that
+keeps `mcp-guard/` and `connections/` out: a plugin is something a client can
+BUY, depend on, and lose when the role that declared it is let go. These two
+belong to every agent unconditionally and answer to the engine's index, not to
+anybody's roster. Wrapping them in a manifest would invite a role to declare
+them, a capability to install them, and `plugin_set.py` to remove them.
+
 ### `system: true` ships the folder, not the skill
 
-The five defaults — `kanban`, `approval`, `deliverable`, `artifact`, `flow` —
-are on every agent, which is what lets any client plugin depend on them without
-asking whether the client bought them. That is a statement about the FOLDER.
+The six defaults — `kanban`, `approval`, `deliverable`, `artifact`, `flow` and
+`capability` — are on every agent, which is what lets any client plugin depend
+on them without asking whether the client bought them. That is a statement about
+the FOLDER.
 
 THE FOLDER AND THE SKILL ARE TWO DIFFERENT SHIPMENTS, and the distinction runs
 through everything below. The FOLDER is the registry: `plugins/<id>/` copied
@@ -79,6 +121,16 @@ team pivot took it from — every skill's description is loaded on every request
 engine's and its screens are the portal's; the manifest exists so the four that
 write into a ticket can say they need it.
 
+`capability` is the other end of the same idea: it is system because it is the
+PRODUCT'S OWN MACHINERY, not because every role happens to declare it today.
+`capabilities/catalog.json` is the closed list the client buys from, the adapter
+draws the card, and the gate hook in `policy/hooks/` redirects every blocked
+install to this skill by name. A client plugin that has to say "this needs
+something you do not have" depends on it being there. It requires nothing and
+declares no tab: the ask is a `capability:<id>` mention inside the answer the
+agent is already giving, so nothing is blocked, approved or delivered, and there
+is no page to name.
+
 ### The tab surface has two shapes
 
 ```json
@@ -86,7 +138,7 @@ write into a ticket can say they need it.
 "tab": { "builtin": "pipeline" }      a page app/app/ already has
 ```
 
-Exactly one of the two, never both. `label` is client-facing copy: phase 5 draws
+Exactly one of the two, never both. `label` is client-facing copy: phase 6 draws
 the generic plugin page under that word. `builtin` names an existing portal
 page, which is the only honest shape for the system plugins — Pipeline,
 Approvals, Files, Artifacts and Flows were written long before anybody called
@@ -97,6 +149,31 @@ The check stops at the shape. It does not open `app/` to see whether the page
 exists: the kit validates manifests, the portal owns its routes, and a check
 that reached across that line would fail the kit's tests on a portal refactor
 that has nothing to do with plugins.
+
+## The sales layer names the plugin
+
+`capabilities/catalog.json` is what the client BUYS, and its `installs` says
+what we do when they say yes. A capability that installs something we wrote
+names the PLUGIN id when the source lives here, and a bare `kit_skills` name
+only while it still lives in `skills/`:
+
+```json
+"installs": { "plugins": ["transcribe"] }
+"installs": { "plugins": ["brand-kit"], "kit_skills": ["branded-reports"] }
+```
+
+`tools/check-plugins.py` refuses a `kit_skills` entry that names a plugin-owned
+skill and a `plugins` entry that names a plugin nobody wrote, and
+`roles/skills_split.py` runs the same check on every install. It is not
+bookkeeping: `tools/plugin_set.py` reads `installs.plugins` off the `level: base`
+rows to decide what ships on EVERY agent, so a base row pointing at the wrong
+home is a plugin the catalog promises as already installed and the installer
+never copies.
+
+`verifies` did NOT move, on purpose. It describes the agent's DELIVERED layout —
+a plugin's skill is flattened into `kit-skills/` exactly as it always was — so
+`verifies.kit_skills` naming `brand-kit` is still the truth about a running
+agent. `installs` says where the source is; `verifies` says what to find on disk.
 
 ## Where the files actually land
 

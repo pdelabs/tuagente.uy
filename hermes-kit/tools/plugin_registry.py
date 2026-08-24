@@ -160,7 +160,7 @@ def _check_surfaces(path: Path, data: dict, folder_dir: Path) -> None:
                         "discovers a plugin by that file and loads nothing without it")
 
     # TWO SHAPES, NEVER BOTH. `label` is a page the portal does not have yet:
-    # the client reads the word and phase 5 draws the generic plugin page under
+    # the client reads the word and phase 6 draws the generic plugin page under
     # it. `builtin` names a page app/app/ ALREADY has, which is the only shape a
     # system plugin can honestly declare -- its screens were written years before
     # anybody called it a plugin, and inventing a second Pipeline tab next to the

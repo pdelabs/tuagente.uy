@@ -24,7 +24,7 @@
     "NO TAB. There is no Capabilities page in app/app/ and there should not be one",
     "for this: the card is drawn inline in the chat where the agent said what it",
     "could not do, and at hire time by lib/hiring.tsx. A `label` here would have",
-    "phase 5 inventing a page for a plugin whose whole surface is a mention.",
+    "phase 6 inventing a page for a plugin whose whole surface is a mention.",
     "",
     "references/catalog.md IS GENERATED from capabilities/catalog.json by",
     "tools/capability-catalog.py --apply, which now writes into this plugin. The",

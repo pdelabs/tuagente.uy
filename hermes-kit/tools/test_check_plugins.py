@@ -543,7 +543,7 @@ class TheKitsOwnRegistry(unittest.TestCase):
 
     def test_every_system_plugin_with_a_tab_names_a_page_that_already_exists(self):
         """`builtin` is the only honest tab for a screen written long before
-        anybody said the word plugin: a `label` would have phase 5 drawing a
+        anybody said the word plugin: a `label` would have phase 6 drawing a
         second Pipeline next to the real one."""
         plugins = plugin_registry.registry(KIT)
         tabs = {pid: plugins[pid]["surfaces"].get("tab") for pid in SYSTEM}

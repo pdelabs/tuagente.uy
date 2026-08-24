@@ -249,9 +249,22 @@ a broken /opt/plugins), /opt/plugins ships computed per-agent sets with
 confined loud removal, promises is now plugins/flow/engine/ (first engine
 surface), portal API renames done (engine_plugins, adapter_version — the bare
 word "plugin" is the kit's). See notes/plugin-system-plan.md for the live
-status. NOT PUSHED — awaiting Luis. Phase 4 (webscraping service plugin +
-first guarded third-party MCP) awaits Luis's scope input; phase 5 (dynamic
-portal tab) should ride with phase 4's first tab-bearing plugin.
+status. NOT PUSHED — awaiting Luis.
+
+AND THEN PHASE 4 CHANGED SHAPE AND SHIPPED THE SAME DAY. Luis's call: no new
+plugin and no webscraping — PORT WHAT EXISTS and finish the migration. So phase
+4 is the porting wave, not the first new surface: `quotes`, `brand-kit`,
+`social-content`, `post-image` and `drive-inbox` became plugins, `capability`
+became the SIXTH system plugin (it is core product machinery and client plugins
+have to be able to depend on it), and `capabilities/catalog.json` gained
+`installs.plugins` with a check that refuses a row pointing at the wrong home.
+The registry is 13 plugins; `hermes-kit/skills/` is down to `no-images` and
+`no-web-search`, which stay because they are the engine's fallback notes —
+harness, not product. Nothing moved on an agent but `/opt/plugins`: the five
+dists are byte for byte what they were, and a transition fixture installed
+before the wave and updated after it gained exactly the new set members.
+The old phase 4 is now phase 5 and waits for a client to need it; phase 6
+(dynamic portal tab) rides with the first tab-bearing plugin.
 
 ## Done 2026-08-23: plugin system planned (in English, like everything from now on)
 

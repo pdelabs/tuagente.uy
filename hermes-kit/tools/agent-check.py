@@ -1931,7 +1931,7 @@ def main():
             # and an rw registry is the one thing the compose's own comment says
             # it must never be: "what says which plugins are installed cannot be
             # writable by what is installed." The adapter is what holds this
-            # mount, and from phase 4 it starts running plugin-declared adapter
+            # mount, and from phase 5 it starts running plugin-declared adapter
             # and service surfaces — the moment that folder is writable, a
             # surface can add itself to the list of what the agent HAS.
             if "./plugins:/opt/plugins:ro" not in yml:

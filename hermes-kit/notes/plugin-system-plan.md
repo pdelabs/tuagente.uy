@@ -12,7 +12,11 @@ guard moves into `flow`, 70ed713 agent-check reads the registry, c62402d the
 dead `data/scripts` window removed, bd28caf, dcb01df and d86fe86 three small
 fixes found on the way — the last one is worth knowing about: `install.sh
 --diff` was stopping at the first changed file, so a drifted plugin folder
-could be hidden by an edited skill above it in the list). **Phase 4 is next.**
+could be hidden by an edited skill above it in the list), and **Phase 4 DONE**
+2026-08-23 — the PORTING WAVE, redefined by Luis: no new plugin and no
+webscraping, port what exists (ab47fa8, c9c4199, 0ccb4c6). The registry is 13
+plugins and `hermes-kit/skills/` holds only the two shadow notes. **Phase 5
+(first new-surface plugins) is deferred until a client needs one.**
 Plan agreed with Luis on 2026-08-23; v2 only updates paths and ids to the
 translated tree — no decision changed.
 
@@ -133,10 +137,15 @@ kanban           (root: Hermes ticket store /opt/data/kanban/… +
 
 ## Plugin ids (final — they match the translated skill dirs)
 
-kanban, approval, deliverable, artifact, flow (system) · transcribe,
-invoices-to-data, quotes, brand-kit, social-content, post-image, capability
-(leaf/meta). Adapter endpoint names (`/portal/approvals` etc.) do not need to
-match plugin ids and stay as they are.
+kanban, approval, deliverable, artifact, flow, capability (system) ·
+transcribe, invoices-to-data, quotes, brand-kit, social-content, post-image,
+drive-inbox (client). Adapter endpoint names (`/portal/approvals` etc.) do not
+need to match plugin ids and stay as they are.
+
+`capability` ended up SYSTEM and not "leaf/meta" as this list first had it: it
+is core product machinery and client plugins must be able to depend on it
+(phase 4). `drive-inbox` was not on the list at all and is here now — it was a
+kit skill no role declared, and porting it did not change that.
 
 ## Phases
 
@@ -190,7 +199,7 @@ match plugin ids and stay as they are.
        skills and engine surface, mounted `:ro` from `<agent>/plugins/`. It is
        what says the plugin is INSTALLED: what the 3a loader scans, what
        `/portal/plugins` publishes, and what the dependency, tab, adapter and
-       service surfaces are built on from phase 4 onward.
+       service surfaces are built on from phase 5 onward.
      * **The delivery** does not change, on purpose. `build_role.py` still
        flattens a plugin's skills into the distribution, `install.sh` still
        writes the shared ones into `kit-skills/`, and those copies — derived
@@ -224,17 +233,72 @@ match plugin ids and stay as they are.
      `./plugins:/opt/plugins:ro` to its compose — the folder installed without
      the mount is a red line, because installed and unreadable is worse than
      absent.
-4. **First new-surface plugins:** `webscraping` (service + skill) and one
-   third-party MCP behind the guard.
-5. **Dynamic portal tab:** generic plugin page + manifest-driven nav.
-   Riskiest, last.
+4. ~~**Porting wave:** everything that already existed becomes a plugin.~~
+   **DONE 2026-08-23** (ab47fa8 `quotes`, `brand-kit`, `social-content`,
+   `post-image` and `drive-inbox`; c9c4199 `capability` as the SIXTH system
+   plugin; 0ccb4c6 the capabilities catalog's `installs.plugins` and the check
+   that validates it). PHASE 4 WAS REDEFINED HERE, and by Luis: no new plugin
+   and no webscraping until a client needs one — PORT WHAT EXISTS and finish the
+   migration. The registry is 13 plugins and `hermes-kit/skills/` is down to the
+   two shadow notes.
+
+   What the wave settled:
+
+   * **`requires` is a claim about a SKILL.md, and it is now populated.** Each
+     dependency is a sentence in the text: quotes runs `deliver.py` by path and
+     names the `approval` skill for sending; brand-kit pipes into
+     `create_artifact.py` and sends a colour change through approval;
+     social-content and post-image both stop dead without `brand/brand.json`
+     (`new_post.py` even names brand-kit in its `next_steps`); post-image is the
+     one that needs engine toolsets, `image_gen` to generate and `vision` for
+     the step that LOOKS at what came out; drive-inbox needs the
+     `google-workspace` connection and no plugin at all.
+     `tools/test_check_plugins.py` asserts the WHOLE client graph, so a
+     dependency cannot be added without a reason.
+   * **`capability` is system, and not because five roles declare it.** It is
+     the product's own machinery — the closed catalog, the card, the gate hook
+     that redirects every blocked install to it by name — so a client plugin has
+     to be able to depend on it. Its `requires` is empty and it declares no tab:
+     the ask is a mention inside the answer, not a ticket and not a page.
+   * **`drive-inbox` is packaged and ships nowhere.** No role declares it, no
+     base capability installs it, `system` is false. Its description says so in
+     as many words, and `--orphan` still prints it.
+   * **The sales layer is linked.** `capabilities/catalog.json` gained
+     `installs.plugins`; `plugin_set.py` reads it directly off the `level: base`
+     rows instead of inferring the plugin from a skill name that happened to
+     match, and the `--why` line now names the CAPABILITY (`base capability
+     (transcription)`). `plugin_registry.check_capability_installs()` refuses a
+     `kit_skills` entry naming a plugin-owned skill and a `plugins` entry naming
+     an unknown plugin, from `check-plugins.py` at build time and from
+     `skills_split.py` at install time. Not at boot: an agent has no
+     `capabilities/catalog.json` next to its `plugins/`.
+   * **NOTHING MOVED ON AN AGENT except `/opt/plugins`.** The five dists are byte
+     for byte effca09's, the solo agent's install list is identical and the team
+     agent's grows only by plugin FOLDERS. Measured on a transition fixture
+     installed at effca09 and updated with this HEAD: `plugins/` gained the five
+     new set members and exactly three files changed content — the shipped
+     `plugin_registry.py`, `policy/capabilities/catalog.json` and
+     `policy/roles/catalog.json`, all three ours. `agent-check` green with the
+     mount, removal still names the plugin that left ("plugin 'brand-kit' is no
+     longer in this agent's set"), and the installed adapter booted against a
+     fresh fixture serves all 12.
+
+5. **First new-surface plugins:** `webscraping` (service + skill) and one
+   third-party MCP behind the guard. **DEFERRED UNTIL A CLIENT NEEDS ONE** —
+   this is the phase that invents surfaces the registry has never shipped, and
+   inventing them before somebody has paid for one is how a service surface gets
+   designed against an imaginary client.
+6. **Dynamic portal tab:** generic plugin page + manifest-driven nav.
+   Riskiest, last, and it rides with the first tab-bearing plugin: every plugin
+   in the registry today declares either a `builtin` page or no tab at all, so
+   there is nothing for a generic page to draw yet.
 
 ## Open questions (park until their phase)
 
 - Service-surface resource limits — decide with the first service plugin
-  (phase 4).
+  (phase 5 now).
 - Generic-tab security model (what a plugin page may call beyond its own
-  namespace) — phase 5.
+  namespace) — phase 6.
 
 ## Resolved
 
