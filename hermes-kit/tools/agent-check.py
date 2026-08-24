@@ -239,6 +239,24 @@ def installed_registry(data):
         raise AssertionError(str(broken))
 
 
+def projected_knobs(agent_config, role, installed):
+    """Which of the agent's knobs this profile is NOT carrying, by name.
+
+    Through `tools/profile_config.py`, which is also what `tools/hire-role.sh`
+    writes with: one module decides which knobs travel, so the hire and the
+    check cannot disagree about what a correct profile config is. The comparison
+    is per top-level key, because "the config drifted" is not actionable and
+    "this role is on another model" is.
+    """
+    sys.path.insert(0, kit_tools())
+    import profile_config
+    try:
+        expected = profile_config.project(agent_config, role)
+    except SystemExit as broken:
+        raise AssertionError(str(broken))
+    return profile_config.differing_keys(expected, installed)
+
+
 def expected_plugins(data):
     """The set this agent should have, computed the way install.sh computes it."""
     sys.path.insert(0, kit_tools())
@@ -787,6 +805,65 @@ def main():
                 "with tools/hire-role.sh --update")
         return f"{len(names)} profile(s) leave the listener to the default one"
 
+    def _profile_knobs():
+        # THE SIXTH CLASSIC, and the one that made every per-role number wrong.
+        # A secondary profile reads ITS OWN config.yaml over the engine's
+        # defaults and inherits NOTHING from data/config.yaml: that file is the
+        # DEFAULT profile's config, not the agent's
+        # (hermes:hermes_cli/config.py:3263-3330). Measured on the local agent
+        # 2026-08-23 by resolving the engine's own loader under each home, with
+        # both roles hired and both configs holding only the port pin:
+        #
+        #   model                None      -> the live turn ran on z-ai/glm-5.2,
+        #                                     not the gpt-5.6-luna the client pays for
+        #   api_server toolsets  no kanban -> the teammate cannot touch the board,
+        #                                     and browser/cronjob/delegation are back
+        #   hooks                0         -> the gate is not there
+        #   curator              on        -> over profiles/<role>/skills/, the ONLY
+        #                                     copy of that role's craft
+        #   platform_hints       none      -> the engine's "assume plain text"
+        #   skills.disabled      0         -> all 70 engine skills indexed
+        #   skills.external_dirs none      -> /opt/kit/skills unread
+        #
+        # `tools/hire-role.sh` projects the agent's config into the distribution
+        # before installing it; this asks whether that happened and whether it
+        # is still current, through the same module, and names the knob rather
+        # than saying "the config drifted".
+        #
+        # THE ROLES ARE GROUPED BY WHAT THEY MISS, and that is not formatting.
+        # `check()` cuts a message at 300 characters, and five roles times twelve
+        # knob names is well past it -- which would cut the sentence saying how
+        # to fix it, the exact failure that limit's comment warns about. Drift
+        # here is per AGENT (nobody hires one role onto a different config), so
+        # the common case is one clause naming every role and every knob once.
+        root = os.path.join(data, "profiles")
+        names = sorted(n for n in os.listdir(root)
+                       if not n.startswith(".") and os.path.isdir(os.path.join(root, n)))
+        if not names:
+            return "no roles installed"
+        agent_config = conf(data)
+        groups = {}
+        for name in names:
+            path = os.path.join(root, name, "config.yaml")
+            # A profile with no config.yaml at all is not a special case: it
+            # carries none of the knobs, which is what comparing against nothing
+            # says. Its absence has its own line in "no profile binds the
+            # shared port".
+            installed = ""
+            if os.path.isfile(path):
+                with open(path, encoding="utf-8", errors="replace") as fh:
+                    installed = fh.read()
+            drifted = tuple(projected_knobs(agent_config, name, installed))
+            if drifted:
+                groups.setdefault(drifted, []).append(name)
+        if groups:
+            raise AssertionError(
+                "; ".join(f"{', '.join(roles)}: {', '.join(keys)}"
+                          for keys, roles in sorted(groups.items()))
+                + " — the ENGINE answers for those on that role's turns. "
+                  "Heal: tools/hire-role.sh <role> <agent> --update")
+        return f"{len(names)} profile(s) run the agent's model and knobs"
+
     if has_team(data):
         check("roles: roster vs profiles", _roles)
         check("roles: the gateway multiplexes", _multiplex)
@@ -795,6 +872,7 @@ def main():
     # installed and no roster still gets checked.
     if os.path.isdir(os.path.join(data, "profiles")):
         check("roles: no profile binds the shared port", _profile_ports)
+        check("roles: profiles inherit the agent's knobs", _profile_knobs)
 
     # --- the kit is installed ---
     def _kit():

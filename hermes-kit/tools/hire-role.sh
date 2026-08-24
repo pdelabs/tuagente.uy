@@ -20,6 +20,7 @@
 # several things to happen together, and the one everybody forgets is the third:
 #
 #   1. build the distribution        roles/build_role.py
+#   1b. PROJECT THE AGENT'S KNOBS    <- a profile inherits none of them
 #   2. install it                    hermes profile install
 #   3. GIVE IT ITS OWN API KEY       <- without this you cannot talk to it
 #   4. restart the gateway           <- profiles_to_serve runs only at boot
@@ -200,6 +201,30 @@ echo "→ building the distribution"
 # client's agent. The repo's dist/ stays nameless.
 DIST="$TMP/dist/$ROLE"
 python3 "$KIT/roles/build_role.py" "$ROLE" --out "$TMP/dist" >/dev/null
+
+echo "→ projecting this agent's knobs into the profile's config"
+# STEP 1b, AND IT IS THE ONE NOBODY KNEW WAS MISSING. A secondary profile reads
+# ITS OWN config.yaml over the engine's defaults and inherits nothing from
+# data/config.yaml -- that file is the DEFAULT profile's, not the agent's
+# (hermes:hermes_cli/config.py:3263-3330). Measured on the local agent
+# 2026-08-23 by resolving the engine's loader under each home: the hired roles
+# had no kanban toolset, no gate hooks, the curator on over the only copy of
+# their craft skills, the engine's "assume plain text" preamble and a different
+# MODEL -- so every cost and quality number ever measured for a role was
+# measured on something else.
+#
+# The distribution cannot fix that: it is generic and the model is the client's.
+# Here the agent's config is one `docker exec` away, so here is where the copy
+# belongs. `tools/profile_config.py` owns which knobs travel and which four do
+# not; `tools/agent-check.py` fails, naming the knob, when this file and the
+# agent's config drift apart.
+#
+# It is read from INSIDE the container, at the path the engine reads, so the ssh
+# and the local paths ask the same question and neither depends on knowing where
+# the agent's directory lives on that host.
+run "cat /opt/data/config.yaml" > "$TMP/agent-config.yaml"
+python3 "$KIT/tools/profile_config.py" "$ROLE" \
+  --agent-config "$TMP/agent-config.yaml" > "$DIST/config.yaml"
 
 if [[ -n "$NAME" ]]; then
   echo "→ leaving its name in the SOUL"
