@@ -498,8 +498,9 @@ export default function HomePage() {
 function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   // Who works here. Empty on an agent of one -- every one we run today -- and
-  // then this screen says exactly what it always said.
-  const roles = useRoles();
+  // then this screen says exactly what it always said. Until the roster lands
+  // an empty map is not that answer yet, which is what `rolesLoading` is for.
+  const { roles, loading: rolesLoading } = useRoles();
   const [fatal, setFatal] = useState<string | null>(null);
   const [failed, setFailed] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -762,8 +763,15 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   // container the roles run in -- "Agente Local, tu agente" -- to a client who
   // hired people and gave each of them a name. What they have is a team, and
   // those names are the ones they chose.
+  //
+  // AND WHILE THE ROSTER IS IN THE AIR IT SAYS NEITHER. The manifest and the
+  // roster are two requests: the one that gates this render can land first, and
+  // then the line introduced "tu agente" -- the sentence for a client who has
+  // one -- to a client who has a team, before swapping itself out. Saying
+  // nothing about who works here is the only version of it that is never
+  // wrong; the rest of the line still carries what we do know.
   const team = Object.keys(roles).map((id) => roleName(id, roles));
-  const statusLine = [team.length
+  const statusLine = rolesLoading ? [] : [team.length
     ? `Tu equipo: ${outLoud(team)}`
     : `${agentDisplayName(manifest)}, tu agente`];
   if (lastSignal) statusLine.push(`última actividad ${lastSignal}`);

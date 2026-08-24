@@ -145,7 +145,7 @@ export default function ChatPage() {
   const [agentLook] = useState(loadAgentLook);
   // The team, if this agent has one. Empty on every agent running today, so the
   // chat keeps drawing exactly one face: the one the client named.
-  const roles = useRoles();
+  const { roles, loading: rolesLoading } = useRoles();
   /** The face for a message: the role that answered, or the client's own agent. */
   const lookFor = (by?: string): AgentitoLook =>
     by && roles[by]?.look
@@ -774,17 +774,34 @@ export default function ChatPage() {
                     agent's -- it is the room, not a person -- but a room that
                     offers itself in the first person promises one single
                     interlocutor the client does not have: they hired people,
-                    and whoever the message is for takes it. */}
-                <p className="text-base font-bold text-ink">
-                  {roomMode
-                    ? "¿En qué te puede ayudar tu equipo?"
-                    : agentName ? `¿En qué te puede ayudar ${agentName}?` : "¿En qué te puedo ayudar?"}
-                </p>
-                <p className="mt-1 max-w-sm text-sm leading-relaxed text-ink-soft">
-                  {roomMode
-                    ? "Escribí lo que necesitás y lo toma quien corresponda; con @ le hablás a alguien en particular. Las conversaciones anteriores están a la izquierda."
-                    : "Preguntale lo que necesites o encargale una tarea. Las conversaciones anteriores están a la izquierda."}
-                </p>
+                    and whoever the message is for takes it.
+
+                    AND UNTIL THE ROSTER LANDS IT SAYS NEITHER. `roomMode` is
+                    false while that request is in flight, so this greeted every
+                    client with a team by their agent's name first and corrected
+                    itself a round trip later -- the wrong sentence, on the
+                    biggest words on the screen. A placeholder is honest: we do
+                    not know yet who they hired. */}
+                {rolesLoading ? (
+                  <div className="flex w-full max-w-sm flex-col items-center gap-2" aria-hidden>
+                    <div className="h-5 w-56 max-w-full animate-pulse rounded bg-black/[0.06]" />
+                    <div className="mt-1 h-3 w-full animate-pulse rounded bg-black/[0.05]" />
+                    <div className="h-3 w-4/5 animate-pulse rounded bg-black/[0.05]" />
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-base font-bold text-ink">
+                      {roomMode
+                        ? "¿En qué te puede ayudar tu equipo?"
+                        : agentName ? `¿En qué te puede ayudar ${agentName}?` : "¿En qué te puedo ayudar?"}
+                    </p>
+                    <p className="mt-1 max-w-sm text-sm leading-relaxed text-ink-soft">
+                      {roomMode
+                        ? "Escribí lo que necesitás y lo toma quien corresponda; con @ le hablás a alguien en particular. Las conversaciones anteriores están a la izquierda."
+                        : "Preguntale lo que necesites o encargale una tarea. Las conversaciones anteriores están a la izquierda."}
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-5">
@@ -1023,7 +1040,12 @@ export default function ChatPage() {
                   // The field says who is actually going to read it. With a
                   // member selected it said the agent's name anyway, which
                   // quietly contradicted the row right above.
-                  talkingTo
+                  //
+                  // And nothing at all until the roster lands: this is a hint,
+                  // and a hint that names the agent to someone who hired a team
+                  // is the one thing it must not say.
+                  rolesLoading ? ""
+                    : talkingTo
                     ? `Escribile a ${roleName(talkingTo, roles)}…`
                     : roomMode ? "Escribile a tu equipo…"
                     : agentName ? `Escribile a ${agentName}…` : "Escribile a tu agente…"

@@ -35,26 +35,44 @@ export function roleName(id: string | null | undefined, roles: RolesById): strin
   return role?.name || role?.label || id;
 }
 
-/** This agent's hired roles, by id. Empty when the agent has no team. */
-export function useRoles(): RolesById {
+/** This agent's hired roles, by id. Empty when the agent has no team.
+ *
+ *  `loading` IS PART OF THE ANSWER, not bookkeeping. An empty map means two
+ *  different things -- an agent of one, or a team whose roster is still in the
+ *  air -- and the copy hanging off it is not the same sentence. Read as "no
+ *  team" while the request was in flight, it greeted a client who had hired
+ *  three people as if they had one agent, and then corrected itself. Whoever
+ *  chooses words from this waits for `loading` to be false; whoever only draws
+ *  faces and names can ignore it, because there is nothing to draw yet either
+ *  way. */
+export function useRoles(): { roles: RolesById; loading: boolean } {
   const [roles, setRoles] = useState<RolesById>({});
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     const cfg = loadConfig();
-    if (!cfg) return;
+    // No config is not "still looking": there is no agent to ask.
+    if (!cfg) { setLoading(false); return; }
     let alive = true;
     getRoles(cfg)
       .then((r) => {
-        if (!alive) return;
         const byId: RolesById = {};
         for (const role of r?.roles ?? []) if (role.hired) byId[role.id] = role;
-        setRoles(byId);
+        return byId;
       })
       // An agent with no roster answers 404, and that is NOT a failure: it is a
       // single-role agent. It keeps looking the way it always did.
-      .catch(() => {});
+      .catch(() => ({} as RolesById))
+      // Both in one callback, so they land in one render: split across
+      // `.then`/`.finally` there is a paint in between where the roster is
+      // already known and the copy still says it is not.
+      .then((byId) => {
+        if (!alive) return;
+        setRoles(byId);
+        setLoading(false);
+      });
     return () => { alive = false; };
   }, []);
-  return roles;
+  return { roles, loading };
 }
 
 /** Who did this. Drawn next to the work, never as a filter you pass first.

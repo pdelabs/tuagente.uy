@@ -318,7 +318,9 @@ type LocalComment = TicketComment & { local: number };
 
 export default function PipelinePage() {
   // The team, if this agent has one. Empty map on every agent running today.
-  const roles = useRoles();
+  // Nothing here is worded off it -- it puts a face and a name on work that is
+  // already drawn -- so this screen has nothing to wait for.
+  const { roles } = useRoles();
   // The agent's look for the stamp on its comments (lazy: no flash).
   const [agentLook] = useState(loadAgentLook);
   const [cfg] = useState<PortalConfig | null>(() => loadConfig());
