@@ -624,6 +624,72 @@ def expected_skills(data):
     return shared_split()[0]
 
 
+# Where the compose mounts <agent>/kit-skills/ inside the container, and what
+# `skills.external_dirs` therefore names. The string is the one the config has
+# to carry: a profile that does not declare it cannot see the kit at all.
+KIT_SKILLS_MOUNT = "/opt/kit/skills"
+
+
+def profile_skill_collisions(data):
+    """Skill names an installed profile resolves BOTH locally and from the kit.
+
+    Returns `(role, name, local_path, external_path)` per collision, paths
+    relative to the agent's root so the failure names both homes.
+
+    THE ENGINE REFUSES, IT DOES NOT PICK. Two SKILL.md with the same name across
+    a profile's own skills/ and its `external_dirs` and `skill_view` answers:
+
+        Ambiguous skill name 'deliverable/SKILL.md': 2 skills match across your
+        local skills dir and external_dirs. Refusing to guess.
+
+    (hermes:tools/skills_tool.py:1180-1204 -- it collects every candidate and
+    returns the error when there is more than one.) The role then works without
+    the skill it was reaching for: measured on the local agent 2026-08-24, 13
+    refusals in a day, and the turn that hit them hardest spent 42 tool calls
+    and US$0.0485 before giving up on the approval it had been asked to file.
+
+    IT HAD NO OWNER, WHICH IS WHY IT SHIPPED. `roles/build_role.py` packed the
+    four shared plumbing skills into every profile as well as leaving them in
+    kit-skills/, and that was harmless right up until ae377d5 projected
+    `external_dirs` into each profile -- the knob a teammate needs to read the
+    kit at all. One correct change made an old duplicate reachable, and nothing
+    was looking at the pair.
+
+    ONLY THE PROFILES. The DEFAULT profile's half of this -- a copy under
+    data/skills/ shadowing a kit skill -- belongs to «kit skills mounted outside
+    data/», which also knows how to say `install.sh` sets it aside. One owner
+    per case, or one duplicate prints two red lines.
+
+    A PROFILE THAT DOES NOT DECLARE `external_dirs` IS SKIPPED, and that is not
+    a hole: without the declaration the kit's copy is not in scope, so there is
+    nothing to be ambiguous about. That profile is already red in «roles:
+    profiles inherit the agent's knobs», which is where a missing knob is said.
+    """
+    external_dir = kit_skills_dir(data)
+    root = os.path.join(data, "profiles")
+    if not os.path.isdir(external_dir) or not os.path.isdir(root):
+        return []
+    external = dict(indexed_skills(external_dir))
+    if not external:
+        return []
+    found = []
+    for role in sorted(n for n in os.listdir(root)
+                       if not n.startswith(".") and os.path.isdir(os.path.join(root, n))):
+        config = os.path.join(root, role, "config.yaml")
+        if not os.path.isfile(config):
+            continue
+        with open(config, encoding="utf-8", errors="replace") as fh:
+            if KIT_SKILLS_MOUNT not in yaml_list(fh.read(), "skills", "external_dirs"):
+                continue
+        for name, path in sorted(indexed_skills(os.path.join(root, role, "skills"))):
+            if name in external:
+                agent = os.path.dirname(data)
+                found.append((role, name,
+                              os.path.relpath(path, agent),
+                              os.path.relpath(external[name], agent)))
+    return found
+
+
 def soul(data):
     """SOUL.md as text. Four different checks look at it."""
     path = os.path.join(data, "SOUL.md")
@@ -887,6 +953,43 @@ def main():
                   "Heal: tools/hire-role.sh <role> <agent> --update")
         return f"{len(names)} profile(s) run the agent's model and knobs"
 
+    def _profile_skill_homes():
+        """One skill, one home: nothing a profile carries may also be in the kit.
+
+        The whole reasoning is in `profile_skill_collisions`. Here is the shape
+        of the report, and it is decided by `check()`'s 300-character cut. Both
+        homes are named ONCE, as directories, and the roles are grouped by the
+        set of names they double -- the same shape «profiles inherit the agent's
+        knobs» uses, and for the same reason: this drift is per AGENT, nobody
+        delivers one role's skills differently from another's, so the common
+        case is one clause naming every role and every skill once. Written as
+        one line per collision -- eight of them on the local agent, path and
+        path -- the message ran past the limit and lost the sentence saying how
+        to fix it, which is the exact failure that limit's own comment warns
+        about.
+        """
+        clashes = profile_skill_collisions(data)
+        root = os.path.join(data, "profiles")
+        if clashes:
+            agent = os.path.dirname(data)
+            by_role = {}
+            for role, name, _local, _external in clashes:
+                by_role.setdefault(role, []).append(name)
+            groups = {}
+            for role, names in by_role.items():
+                groups.setdefault(tuple(sorted(names)), []).append(role)
+            raise AssertionError(
+                "; ".join(f"{', '.join(sorted(roles))}: {', '.join(names)}"
+                          for names, roles in sorted(groups.items()))
+                + f" — each one is in {os.path.relpath(kit_skills_dir(data), agent)}/ "
+                  f"AND in {os.path.relpath(root, agent)}/<role>/skills/, and the "
+                  "engine refuses a doubled name ('Ambiguous skill name'), so the "
+                  "role goes without it. "
+                  "Heal: tools/hire-role.sh <role> <agent> --update")
+        names = [n for n in os.listdir(root)
+                 if not n.startswith(".") and os.path.isdir(os.path.join(root, n))]
+        return f"{len(names)} profile(s) share no skill name with kit-skills/"
+
     def _profile_plugins():
         """Does a teammate's turn resolve the same engine plugins as the client's?
 
@@ -968,6 +1071,7 @@ def main():
     if os.path.isdir(os.path.join(data, "profiles")):
         check("roles: no profile binds the shared port", _profile_ports)
         check("roles: profiles inherit the agent's knobs", _profile_knobs)
+        check("roles: one skill, one home", _profile_skill_homes)
         check("roles: profiles see the agent's plugins", _profile_plugins)
 
     # --- the kit is installed ---
