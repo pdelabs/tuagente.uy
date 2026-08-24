@@ -320,6 +320,94 @@ serving the roster's faces, `/portal/plugins` serving 11. The five dists are byt
 for byte 8e6757b's except the five `role.json`, which change in `identity` and
 `_comment` only.
 
+## Done 2026-08-24 (later): the guard reaches a teammate, and it was not off
+
+Six commits on local main (871bd0b..95528ba). The wave went in to give a role's
+home the plugins the engine looks for; measuring it first turned the problem
+inside out, so the entry starts with what was actually true.
+
+**WHAT WE BELIEVED:** the `promises` guard never runs for a teammate, because
+the engine discovers user plugins in `HERMES_HOME/plugins`
+(`hermes_cli/plugins.py:1369`), the compose mounts ours over `/opt/data/plugins`
+-- the DEFAULT profile's home -- and a role's home has no `plugins/`.
+
+**WHAT IS TRUE.** That paragraph describes what a role's home RESOLVES, and it
+is right about that: 55 plugins under `/opt/data`, 54 under a role's, the
+missing one being `promises`. It is not what the running gateway does. The
+engine's `PluginManager` is a process singleton with a `_discovered` latch
+(`plugins.py:2048-2056`), the gateway serves every profile in ONE process, and
+it scopes a turn with a context-local `HERMES_HOME` override
+(`profiles.py:950-990`). So discovery happens ONCE, under whichever home
+touched it first, and everybody else inherits that. Reproduced in the container
+both ways:
+
+    first discovery under /opt/data      the guard runs on the client's turns
+                                         AND on a teammate's -- but the plugin
+                                         had read its folder from the process
+                                         env at import, so on a teammate's turn
+                                         it judged them against the CLIENT's
+                                         disk (which has no flows/ at all,
+                                         while marketing's has three)
+    first discovery under a role's home  54 found, promises not loaded, and the
+                                         CLIENT's own turn came back with ZERO
+                                         transform_llm_output callbacks
+
+The second row is the one that mattered: whether the client had the guard was a
+race on who spoke first after a restart. Not "the teammate has no guard" -- "the
+guard is a coin flip, and when it lands it may be reading the wrong person's
+folder", which is worse, because a guard that contradicts a teammate telling the
+truth teaches the client to ignore it.
+
+**THE FIX, three parts, none of which works alone:**
+
+- `hire-role.sh` links `profiles/<role>/plugins -> ../../plugins` (871bd0b), on
+  every hire and every `--update`. Relative on purpose: it resolves inside the
+  container and from the host, where `agent-check.py` reads it -- an absolute
+  `/opt/data/plugins` would dangle on every host and the check would have
+  nothing to read. With the link and nothing else, the role discovers all 55 and
+  loads `promises` **enabled: False**.
+- `plugins` joins the projection (7025341): it was the fourth key
+  `profile_config.py` withheld, on a reason the link had just removed. The
+  denylist is three keys now.
+- The plugin resolves the home AT CALL TIME (95528ba), through
+  `get_hermes_home()` instead of `os.environ` read once at import. One process,
+  one module, and now a different folder per turn.
+
+**THE CHECKS.** `agent-check.py` gains "roles: profiles see the agent's plugins"
+(7c1e88a), which names four states apart: no `plugins/`, a real directory
+instead of a link, a dangling link, and a link pointing elsewhere (it prints the
+target). All four exercised -- three on the live agent, the dangling one on a
+copy with `data/plugins` removed -- and all four healed by `--update`. And the
+promises check now calls the HOOK twice with two different homes through a
+stubbed `hermes_constants`: same process, opposite answers, which nothing frozen
+at import can do. It is what failed against the local agent before the fix
+shipped.
+
+**Folded in:** the knob-drift message gave up 19 characters before `Heal:`
+(0e4066e) -- with `plugins` in the projection the five-role worst case was 278
+of the 300 and a sixth took it to 290; and `hire-role.sh` now runs
+`check-plugins.py` before building (03b187b), so a misspelt `requires.toolsets`
+or `requires.connections` id stops a hire instead of installing a plugin that
+asks the engine for a word it does not know. Measured: `imagegen` for
+`image_gen` exits 1 before anything is built.
+
+Live agent at the end: agent-check **35 ok / 0 warnings / 0 failures**,
+portal-check 15 ok / 0 failures, both roles' homes resolving the same 55 plugins
+and the same 48 enabled as the default (identical set hash), no new `Skipping
+secondary profile` on any boot, `/portal/plugins` 11. The measured turn: asked
+marketing for an example of a badly written message, it answered *"Queda
+definido: todos los lunes a las 9:30 se hará un chequeo de contratos…"* and the
+guard appended the correction to the live response, with
+`hermes_plugins.promises: … appended the correction` in `agent.log`. The five
+dists are byte for byte identical to before the wave. Spend for the whole wave:
+US$0.017.
+
+**Left open, and it is not this wave's:** the guard's phrase list does not catch
+*"Dejé definido y andando…"* -- a real sentence this role produced. `review()`
+needs a CLOSING_CLAIM from `promises.py`'s list and only recognises the `queda
+/ quedó` forms. Widening that list is a false-positive question and deserves its
+own measurement.
+
 ## Pending (in order)
 
 1. **Cost with images: MEASURED (8/19, real lab)** — US$0.10 per turn with
@@ -444,16 +532,14 @@ for byte 8e6757b's except the five `role.json`, which change in `identity` and
     numbers in 1 can be re-measured now, and they have to be: they were taken
     on z-ai/glm-5.2 with no kanban tools.
 
-    STILL OPEN, AND IT IS NOT A KNOB: **the promises guard does not run for a
-    teammate.** The engine discovers user plugins in `HERMES_HOME/plugins`
-    (`hermes_cli/plugins.py:1369`) and the compose mounts ours over
-    `/opt/data/plugins`, which is the DEFAULT profile's home; a role's home has
-    no `plugins/` at all. That is why `plugins` is one of the four keys that do
-    not travel -- projecting `enabled: [promises]` would turn on a plugin the
-    profile cannot see, which is the "installed, off, and the config says
-    otherwise" failure that guard exists to catch. It needs a mount or a
-    symlink decided on purpose, and then a measured turn proving the hook
-    fires under a role.
+    CLOSED THE SAME WEEK, and the diagnosis in the entry was half right --
+    see «Done 2026-08-24 (later)» below. A role's home does get a `plugins`
+    link now, `plugins` is no longer one of the keys that stay behind, and
+    the guard fired on a live marketing turn. What the entry had wrong is the
+    word "does not run": in the live gateway the plugin manager is a process
+    SINGLETON, so the guard did run on a teammate's turn -- against the
+    client's disk -- and, depending on which profile spoke first after a boot,
+    sometimes ran for nobody at all.
 
 ## Luis's ground rules
 

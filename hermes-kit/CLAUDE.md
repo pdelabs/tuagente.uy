@@ -111,7 +111,7 @@ backing it, it appends a correction to the message that **states the fact**
 (what's running and what isn't), never an accusation: detecting the phrase
 is approximate; the state of the disk isn't.
 
-Three formal notes that apply to any guard that comes after this one:
+Five formal notes that apply to any guard that comes after this one:
 
 - **A shell hook wasn't enough.** `agent/shell_hooks.py` can only return
   `block`, `continue`, or `context`; none of them touch the response's text.
@@ -127,9 +127,26 @@ Three formal notes that apply to any guard that comes after this one:
   HERMES_HOME/plugins, so the source moved and the destination did not.
 - **It's turned on with `plugins.enabled`**: user plugins are opt-in, so
   without that list the engine discovers it and doesn't load it.
+- **A teammate reaches it through a link, and the link is half of it.** The
+  engine only ever looks in `HERMES_HOME/plugins`, and a hired role's home is
+  `data/profiles/<role>/`, so `tools/hire-role.sh` leaves
+  `plugins -> ../../plugins` there and projects `plugins.enabled` into the
+  role's config. Both, or nothing: with the link and no key the engine
+  discovers the plugin and loads it turned off, which reads as healthy from
+  every angle except the one that matters. And it is not only the teammate's
+  guard at stake — the engine's plugin manager is a process singleton, the
+  gateway serves every profile in one process, so the first turn after a boot
+  decides the plugin set for EVERYBODY. Measured 24/8: with the first
+  discovery under a role's home, the client's own turns had no guard at all.
+- **The folder it inspects is the turn's**, resolved per call with
+  `get_hermes_home()` and never from the process environment. Read once at
+  import, a teammate's claim gets checked against the client's `flows/` — the
+  guard contradicting somebody who is telling the truth, which teaches the
+  client to ignore it.
 
-`agent-check.py` fails if any of the three is missing, and it also makes the
-bug's exact phrase run through it: "the file is there" isn't "it works."
+`agent-check.py` fails if any of these is missing, and it also makes the bug's
+exact phrase run through it, plus the same hook under two different homes:
+"the file is there" isn't "it works", and neither is "it fires".
 
 ## Kanban tools get enabled with TWO keys
 
