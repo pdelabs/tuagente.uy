@@ -78,9 +78,15 @@ personal account — NOT the orbit one):
 - An agent with no roster ⇒ portal identical to today's (the `roles` module
   set to false).
 
-**Lab**: `scratchpad/agente-lab`, 4 hired roles (Vera/Beto/Nina/Tino), local
-portal `nohup npx next start -p 8090` (8090 is the only port in the lab's
-CORS). OpenRouter key `lab-equipo-spike`, US$5 cap — **revoke when done**.
+**Lab**: ~~`scratchpad/agente-lab`~~ — **deleted 24/8/2026** in the fleet
+cleanup wave, Luis' order. It was 4 hired roles (Vera/Beto/Nina/Tino)
+against a local portal on 8090, in a tmp scratchpad, with no containers
+left running. Nothing in it was a client's: no SOUL, no identity, an empty
+`channel_directory.json`. **Its OpenRouter key `lab-equipo-spike` (US$5
+cap) is still live and now has no user — revoke it** (see pending 14).
+Rebuilding the lab is `new-agent.sh` plus four `hire-role.sh` runs; what
+does not come back is the state those roles had accumulated, which is what
+pending 8 and 9 were going to be measured against.
 
 **Lab quirk (Mac only):** Docker Desktop's file-sharing caches the size of
 bind-mounted files; after rewriting `policy/roles/catalog.json` from the
@@ -130,7 +136,8 @@ via tmp+mv (afde4bf).
 ## Done 8/19, third batch (waves 7-8)
 
 - **Real end-to-end run** with a throwaway agent built from scratch
-  (`scratchpad/agente-e2e`, ports 8652/8653, still running): sign-up → Lola →
+  (`scratchpad/agente-e2e`, ports 8652/8653 — **deleted 24/8/2026**, it had
+  stopped running well before that): sign-up → Lola →
   "¿qué necesitás?" (real matching: it flagged quotes+invoices+tenders for a
   hardware store) → named "Rita" → request with capabilities → hire
   --from-request → `/p/assistant` 200 with its own key and 401 with the
@@ -438,12 +445,37 @@ own measurement.
    `agent-check.py` has "roles: no profile binds the shared port". (032b271, 0e2bf7e) Both roles
    on the local agent were healed with `--update` and the room answered:
    routed to `accounting`, `finish_reason=stop`, 6 API calls.
-4. Mr.Wobble is still pre-pivot; migrate it whenever Luis wants. Merging to
-   main is Luis's call.
+4. **CLOSED 24/8 — Mr.Wobble was decommissioned, not migrated** (Luis'
+   order). The safety check first: it was tuagente.uy's own agent, not a
+   client's — identity `Mr.Wobbly` / empresa "Tu agente", one Telegram DM
+   with Luis as its only channel, and a `workspace/` that held nothing but
+   our own marketing. Then all six containers removed with `compose down`
+   over both compose files, **no `-v`**. `/opt/agentes/tuagente/` (178 MB)
+   and the 13/8 pre-reset tarball stay on that VPS untouched; the runbook
+   to bring it back is in `fleet.md`. **What stopped with it: the daily
+   `contenido-instagram-diario` cron** — nobody produces tuagente.uy's own
+   Instagram content now, and both `*.agentes.tuagente.uy` domains answer
+   nothing.
 5. Orphaned engine sessions (one per room turn) pile up in each profile — we
    decided to leave them and just note it.
-6. Old agents (east, etc.): confirm they aren't client agents and delete
-   them.
+6. **CLOSED 24/8, and the answer was no.** The sweep found exactly two
+   agent trees under `~/Desktop/Luis/Projects/` (every
+   `docker-compose*.yml` pinning `nousresearch/hermes-agent` was checked):
+   `tuagente-local-agent` (live, ours) and `agente-east`.
+   **`agente-east` IS a client agent and was NOT deleted.** It is not the
+   "communications trial" the key name `east-comunicacion` suggests: its
+   `SOUL.md` opens *"Sos el agente de East Comunicación"*, names Cata — a
+   comunicadora in Punta del Este who produces interviews for TV and radio
+   — as the person who directs and approves, and defines her two flows
+   (`entrevistas-tv`, `radio-viva`). The tree holds real interview material
+   and a `google_client_secret.json`, and **the agent is LIVE on its own
+   VPS** (ssh `east`, containers up 13 days, verified the same day). The
+   local directory is a second copy of a client's data, not scratch; it
+   stays until Luis decides otherwise with Cata's agent in mind.
+   Deleted instead, both throwaway and both in tmp scratchpads:
+   `agente-lab` and `agente-e2e`. Nothing else under `Projects/` is an
+   agent — `hermes-kit/` is the archived pre-monorepo kit repo and
+   `_respaldo-lamano/` is La Mano's retirement backup.
 7. Assistant role + expand the capabilities catalog (6 today, ~30 possible;
    add `vision` and `code_execution` first).
 8. **Measure the curator in the lab instead of inferring it.**
@@ -452,13 +484,18 @@ own measurement.
    `data/profiles/<role>/skills/` — which belongs to the agent, is writable,
    and looks to the engine like "agent-created", i.e. archivable after 90
    days unused (`engine-knobs.md:370-388`). The knob is belt and suspenders;
-   the measurement is still missing, and it's two questions: (a) does
+   the measurement is still missing, and **the lab it was going to be
+   measured in was deleted on 24/8** — this now starts with rebuilding a
+   lab. It's two questions: (a) does
    `is_curation_eligible` return True for a skill that `hermes profile
    install` put there?, and (b) can `skill_manage` overwrite a profile's
    skill, or does it hit something? Both get answered in the lab, with the
    four roles already hired.
-9. **The lab's four roles are carrying an old `transcribe` skill inside
-   support.** They were hired with `role.json` v0.1.0, which declared it;
+9. **MOOT as written (24/8): the lab was deleted, so its four roles do not
+   exist any more.** What survives is the lesson, and it applies to any
+   agent hired before v0.1.1 — including the two roles on the local agent.
+   The original entry: **the lab's four roles are carrying an old
+   `transcribe` skill inside support.** They were hired with `role.json` v0.1.0, which declared it;
    today's distribution is v0.1.1 with four skills. `hermes profile install`
    doesn't remove what's already there: they need `hermes profile update`
    (or a reinstall), then verify that support ends up with
@@ -547,6 +584,15 @@ own measurement.
     SINGLETON, so the guard did run on a teammate's turn -- against the
     client's disk -- and, depending on which profile spoke first after a boot,
     sometimes ran for nobody at all.
+
+14. **`lab-equipo-spike` (OpenRouter, US$5 cap) has no user left.** The lab
+    it belonged to was deleted on 24/8; the key was never revoked. Revoke
+    it. Not urgent — it is capped and nothing holds it — but a live key
+    with no owner is exactly the kind of thing nobody finds later.
+    Separately, and checked the same day: `east-comunicacion` is shared
+    between East's agent and `tuagente-local-agent`, which carries its own
+    copy in its own `secrets.env`. Deleting a directory never touched that
+    key anyway — it lives at OpenRouter, not on disk.
 
 ## Luis's ground rules
 
