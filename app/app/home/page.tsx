@@ -43,6 +43,7 @@ import {
 } from "../lib/labels";
 import { humanizeRuns } from "../lib/events";
 import { agentDisplayName } from "../lib/onboarding";
+import { roleName, useRoles } from "../lib/roles";
 import { AgentitoAnimated, loadAgentLook } from "../lib/agentito";
 import type { AgentitoState } from "../lib/AgentitoRive";
 
@@ -120,6 +121,12 @@ const ago = (v: string | number | undefined): string | null => {
 // with a different yardstick. Now it runs on the business's clock, like
 // everything else; the why, at length, is in `greetingOfTheDay` (`lib/labels.ts`).
 const greeting = greetingOfTheDay;
+
+/** The team, said out loud: "Vera", "Vera y Tino", "Vera, Tino y Beto". */
+function outLoud(names: string[]): string {
+  if (names.length < 2) return names.join("");
+  return `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
+}
 
 /** An event's moment: today just the time; before that, with the day up front.
  *
@@ -490,6 +497,9 @@ export default function HomePage() {
 
 function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
+  // Who works here. Empty on an agent of one -- every one we run today -- and
+  // then this screen says exactly what it always said.
+  const roles = useRoles();
   const [fatal, setFatal] = useState<string | null>(null);
   const [failed, setFailed] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -747,7 +757,15 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const nothing = slots.every((s) => s.t === "off" || s.t === "failed");
 
   // Status line: says what we know and nothing more.
-  const statusLine = [`${agentDisplayName(manifest)}, tu agente`];
+  //
+  // AND WITH A TEAM THERE IS NO "tu agente" TO INTRODUCE. The line named the
+  // container the roles run in -- "Agente Local, tu agente" -- to a client who
+  // hired people and gave each of them a name. What they have is a team, and
+  // those names are the ones they chose.
+  const team = Object.keys(roles).map((id) => roleName(id, roles));
+  const statusLine = [team.length
+    ? `Tu equipo: ${outLoud(team)}`
+    : `${agentDisplayName(manifest)}, tu agente`];
   if (lastSignal) statusLine.push(`última actividad ${lastSignal}`);
   else if (waitingForData) statusLine.push("buscando novedades…");
 

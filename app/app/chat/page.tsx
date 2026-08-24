@@ -759,12 +759,20 @@ export default function ChatPage() {
                 <div className="mb-5 h-36 w-36">
                   <AgentitoAnimated celebrations={0} look={agentLook} state="calm" className="h-full w-full" />
                 </div>
+                {/* NOBODY SAYS "yo" WHEN THERE IS A TEAM. The face stays the
+                    agent's -- it is the room, not a person -- but a room that
+                    offers itself in the first person promises one single
+                    interlocutor the client does not have: they hired people,
+                    and whoever the message is for takes it. */}
                 <p className="text-base font-bold text-ink">
-                  {agentName ? `¿En qué te puede ayudar ${agentName}?` : "¿En qué te puedo ayudar?"}
+                  {roomMode
+                    ? "¿En qué te puede ayudar tu equipo?"
+                    : agentName ? `¿En qué te puede ayudar ${agentName}?` : "¿En qué te puedo ayudar?"}
                 </p>
                 <p className="mt-1 max-w-sm text-sm leading-relaxed text-ink-soft">
-                  Preguntale lo que necesites o encargale una tarea. Las conversaciones
-                  anteriores están a la izquierda.
+                  {roomMode
+                    ? "Escribí lo que necesitás y lo toma quien corresponda; con @ le hablás a alguien en particular. Las conversaciones anteriores están a la izquierda."
+                    : "Preguntale lo que necesites o encargale una tarea. Las conversaciones anteriores están a la izquierda."}
                 </p>
               </div>
             ) : (
@@ -1006,6 +1014,7 @@ export default function ChatPage() {
                   // quietly contradicted the row right above.
                   talkingTo
                     ? `Escribile a ${roleName(talkingTo, roles)}…`
+                    : roomMode ? "Escribile a tu equipo…"
                     : agentName ? `Escribile a ${agentName}…` : "Escribile a tu agente…"
                 }
                 disabled={sending}
