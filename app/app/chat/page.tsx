@@ -220,12 +220,23 @@ export default function ChatPage() {
     run(request.trim(), []);
   }, [cfg]);
 
+  // WHICH LISTING THIS ANSWER BELONGS TO. On a client with a team this runs
+  // twice: `roomMode` is false until the roster lands, so the first pass asks
+  // the ENGINE for its sessions and the second asks the adapter for the rooms.
+  // Nothing said which of the two answers was the current one, and the engine
+  // request -- fired first, against the other service -- can perfectly well
+  // land last: then it overwrote the rooms with the engine's session list and
+  // the client with a team was left looking at conversations that are not the
+  // ones they have, until something else refreshed the sidebar. The same
+  // counter `loadThread` uses to know whether the thread it opened is still
+  // the thread on screen; a slower request is ignored, never awaited.
+  const listSeq = useRef(0);
   const refreshSessions = useCallback((c: PortalConfig, rooms: boolean) => {
-    if (rooms) {
+    const seq = ++listSeq.current;
+    const load: Promise<SessionSummary[]> = rooms
       // The adapter already returns them newest first.
-      getRooms(c)
-        .then((r) => {
-          setSessionsErr(null);
+      ? getRooms(c).then((r) => (r.rooms ?? []).map((s): SessionSummary => ({
+          id: s.id,
           // WITH THE CHANNEL THE SIDEBAR READS. The list only shows what it
           // recognizes as somebody's conversation (`isHumanConversation`, by
           // `source`): that is what keeps the engine's crons and workers out
@@ -234,25 +245,25 @@ export default function ChatPage() {
           // "todavía no hay conversaciones" with the room open right next to
           // the list. The channel is `portal` because that is literally where
           // it was written.
-          setSessions((r.rooms ?? []).map((s): SessionSummary => ({
-            id: s.id,
-            source: "portal",
-            title: s.title,
-            preview: null,
-            message_count: s.turns,
-            started_at: s.updated_at,
-            last_active: s.updated_at,
-          })));
-        })
-        .catch((e) => setSessionsErr(e instanceof Error ? e.message : "error de red"));
-      return;
-    }
-    getSessions(c)
-      .then((r: { data?: SessionSummary[] }) => {
+          source: "portal",
+          title: s.title,
+          preview: null,
+          message_count: s.turns,
+          started_at: s.updated_at,
+          last_active: s.updated_at,
+        })))
+      : getSessions(c).then((r: { data?: SessionSummary[] }) =>
+          [...(r.data ?? [])].sort((a, b) => b.last_active - a.last_active));
+    load
+      .then((list) => {
+        if (listSeq.current !== seq) return;
         setSessionsErr(null);
-        setSessions([...(r.data ?? [])].sort((a, b) => b.last_active - a.last_active));
+        setSessions(list);
       })
-      .catch((e) => setSessionsErr(e instanceof Error ? e.message : "error de red"));
+      .catch((e) => {
+        if (listSeq.current !== seq) return;
+        setSessionsErr(e instanceof Error ? e.message : "error de red");
+      });
   }, []);
   useEffect(() => { if (cfg) refreshSessions(cfg, roomMode); }, [cfg, roomMode, refreshSessions]);
 
