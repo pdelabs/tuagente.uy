@@ -524,7 +524,11 @@ own measurement.
    IS THE EXPENSIVE ONE.** Confirmed images still cannot be generated here:
    `check_image_generation_requirements returned False` AND
    `check_bfl_requirements returned False` on every turn, so both image paths
-   are stripped from the index and no image key exists on this agent. The
+   are stripped from the index. (Misread at the time as "no image key exists
+   on this agent" — the key was in secrets.env and the container environment
+   all along; under multiplex secret scoping the role's turn reads only its
+   own profile .env, so it could not see it. Settled the same day: see
+   notes/image-cost-anatomy.md item 6.) The
    proposed rationale was that a placa is priced per-image by the image model,
    independently of the profile knobs that were wrong. **That is true only for
    the generation call itself.** The engine logs, on every single turn:
