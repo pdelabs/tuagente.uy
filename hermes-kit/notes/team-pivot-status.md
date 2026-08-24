@@ -424,14 +424,135 @@ own measurement.
 
 ## Pending (in order)
 
-1. **Cost with images: MEASURED (8/19, real lab)** — US$0.10 per turn with
-   an image (Vera generated a real 1080x1080 graphic); 10 graphics/month ≈
-   US$1. The full mix picture: conversational US$0.006 · with tools US$0.062
-   · image US$0.10. A realistic SMB mix (10 turns/day + 10 graphics/month)
-   comes out to ~US$8-10/month per role against a ~US$25 price; what breaks
-   it is heavy usage (30 heavy turns/day ≈ US$23). The old 9x gap was a
-   MEASUREMENT problem, not an economics one. Only the pricing decision is
-   left (Luis).
+1. **Cost RE-MEASURED on correctly configured roles (2026-08-24, local
+   agent).** The old row — conversational US$0.006 · with tools US$0.062 ·
+   US$0.026 per average turn — is **SUPERSEDED: it was measured on
+   MISCONFIGURED profiles.** Those roles ran `z-ai/glm-5.2`, with no kanban
+   toolset, the engine's default preamble and no gate hooks, because the knob
+   projection did not exist yet (see the 24/8 entry). The numbers below come
+   from the same two roles after that fix.
+
+   Config measured on: `openai/gpt-5.6-luna`, `reasoning_effort: max`,
+   `toolsets: [kanban]` plus the 12-toolset `platform_toolsets` list, the
+   three gate hooks, the `promises` plugin, the portal `platform_hints`
+   preamble, curator off. `agent-check.py` was 35 ok · 0 failures going in.
+   Roles: accounting (Tino) and marketing (Vera).
+
+   METHOD: turns sent the way `chat/page.tsx` sends them in room mode —
+   `POST /portal/chat/stream`, full history, `stream: true`, a pinned `role`,
+   a `sala_…` room id — serialized one at a time, reading the delta off
+   `GET https://openrouter.ai/api/v1/key` (the uncached version of what
+   `/portal/usage` serves) polled until it stopped moving. The per-turn
+   deltas sum EXACTLY to what the key moved, so nothing leaked between turns.
+
+   **THE ENGINE ALREADY KNOWS THE NUMBER, and that is the useful discovery.**
+   `session_model_usage.estimated_cost_usd` (`cost_source=provider_models_api`)
+   matched OpenRouter to the last decimal on every session: 0.01329354 vs
+   0.013293 and 0.06288972 vs 0.062890 for marketing, 0.00832391 vs 0.008324
+   and 0.03609663 vs 0.036097 for accounting. On this configuration the
+   "estimate" IS the charge, per session and per `task`, queryable without
+   asking the provider. Future cost work does not need a key-polling harness.
+
+   | turn | role | tool calls | s | US$ |
+   |---|---|---|---|---|
+   | conv 1 (cold room) | Vera | 1 | 17 | 0.007002 |
+   | conv 2 | Vera | 1 | 15 | 0.002376 |
+   | conv 3 | Vera | 3 | 24 | 0.003915 |
+   | conv 1 (cold room) | Tino | 0 | 9 | 0.006004 |
+   | conv 2 | Tino | 0 | 9 | 0.000982 |
+   | conv 3 | Tino | 0 | 11 | 0.001338 |
+   | tool 1 — deliverable written | Tino | 22 | 94 | 0.023238 |
+   | tool 2 — deliverable written | Tino | 12 | 79 | 0.012859 |
+   | tool 1 — approval, refused for missing data | Vera | 42 | 156 | 0.048492 |
+   | tool 2 — approval, refused for missing data | Vera | 20 | 45 | 0.014397 |
+
+   - **Conversational: US$0.0036/turn** (6 turns, range 0.00098–0.00700).
+   - **With tools: US$0.0247/turn** (4 turns, range 0.0129–0.0485).
+   - **Room router: US$0.000071/turn** (5 routing calls measured directly).
+     A turn nobody `@`-addressed pays this on top; it is 2% of a
+     conversational turn and rounds away.
+   - **Vision: NOT EXERCISED. Zero vision calls in all 10 turns** — no
+     `task='vision'` row in either profile, no vision tool invoked. See the
+     image caveat below for why the log still settles something important.
+   - Image: **US$0.10/placa carried over from 8/19, NOT re-measured**, and
+     the rationale for carrying it does NOT fully hold — see below.
+
+   **THE CONVERSATIONAL WIN IS MOSTLY PROMPT CACHE AND SHOULD NOT BE BANKED.**
+   Split by position in the room: the FIRST turn of a room costs US$0.0065,
+   every turn after it US$0.0022 — with `cache_read_tokens` around 44k per
+   call against `input_tokens` in the single digits. US$0.0065 is essentially
+   the OLD US$0.006. A client who sends ten messages spread across a day pays
+   close to the old number; only a burst of consecutive turns gets the cheap
+   ones. What genuinely moved is the tool path: **US$0.062 → US$0.0247, 2.5x
+   cheaper**, and that does not depend on cache timing.
+
+   **A CONFIG BUG IS INSIDE THE TOOL-HEAVY NUMBER, and it is fixable.** Four
+   skills — `approval`, `capability`, `deliverable`, `flow` — exist BOTH in
+   each profile's own `skills/` and in the read-only `/opt/kit/skills` mount,
+   so the engine refuses to resolve them: *"Ambiguous skill name
+   'deliverable/SKILL.md': 2 skills match across your local skills dir and
+   external_dirs. Refusing to guess."* 13 collisions in today's `errors.log`.
+   The roles then flail — 42 tool calls on Vera's worst turn, five of them
+   `session_search` — and that single turn is US$0.0485, half the tool-heavy
+   spend of the whole wave. Vera never produced the approval at all. **The
+   tool-heavy figure above is therefore an upper bound measured on a broken
+   skills index**, and de-duplicating those four skills should lower it.
+
+   THE MIX MATH, recomputed. Same weighting the old row used (solving
+   `.006w + .062(1-w) = .026` gives w≈2/3 — two conversational turns per turn
+   with tools), 10 placas/month at US$0.10, against ~US$25/role:
+
+   | | blended turn | 10 turns/day | 30 turns/day |
+   |---|---|---|---|
+   | OLD (wrong config) | US$0.0246 | US$8.4/mo — 34% of price | US$23.2/mo — **93%** |
+   | NEW (as measured) | US$0.0107 | US$4.2/mo — 17% of price | US$10.6/mo — 42% |
+   | NEW, cache-pessimistic | US$0.0126 | US$4.8/mo — 19% of price | US$12.3/mo — 49% |
+
+   ("cache-pessimistic" prices every conversational turn at the cold
+   US$0.0065, i.e. a client who never sends two messages in a row.)
+
+   **THE MARGIN STORY CHANGED, at exactly the end that was scary.** At the
+   realistic mix the cost roughly halves (34% → 17-19% of price). What moved
+   is the case the old row flagged as what-breaks-it: 30 turns/day went from
+   US$23/month — eating the entire published $U 1.500 — to US$10.6-12.3,
+   which leaves the price standing. The only shape that still eats it is 30
+   TOOL-HEAVY turns every single day (US$23.3/month, 93%), and that was
+   US$56.8 — 227% of price — on the old numbers. $U 1.500/role/month is no
+   longer backed by numbers from the wrong profile.
+
+   **IMAGE: THE CARRY-OVER RATIONALE IS HALF TRUE, AND THE HALF THAT IS FALSE
+   IS THE EXPENSIVE ONE.** Confirmed images still cannot be generated here:
+   `check_image_generation_requirements returned False` AND
+   `check_bfl_requirements returned False` on every turn, so both image paths
+   are stripped from the index and no image key exists on this agent. The
+   proposed rationale was that a placa is priced per-image by the image model,
+   independently of the profile knobs that were wrong. **That is true only for
+   the generation call itself.** The engine logs, on every single turn:
+
+       agent.auxiliary_client: Vision auto-detect: using main provider
+       openrouter (openai/gpt-5.6-luna)
+
+   Vision resolves to the MAIN chat model on the MAIN key — not a separate
+   vision provider. So the post-image workflow's mandatory LOOK pass is billed
+   as a chat turn at the role's own model and `reasoning_effort`, which are
+   precisely the knobs that were misconfigured. And reasoning dominates output
+   on this config: 18,315 of 21,247 output tokens on marketing's tool session.
+   A task-scoped pass does get its own costed row — the `approval` task showed
+   up as one (5 calls, US$0.00066) — so the LOOK pass IS separately
+   attributable once an image key exists. **Verdict: US$0.10/placa is an
+   unverified carry-over for the raw image call, and the true per-placa
+   composite (generation + LOOK + the conversational turn that decides to call
+   it) has never been measured on a correct profile. Needs a Mr.Wobble-style
+   setup with a real image key.** Note also that 8/19's "one day of images on
+   Mr.Wobble cost US$1.51" is 15 placas at US$0.10, not 10.
+
+   Still open: the pricing decision itself (Luis).
+
+
+   (Since measured: see notes/image-cost-anatomy.md — the per-placa
+   composite came out US$0.357 from Mr.Wobble's ledger, the US$0.10 was
+   the price of a provider the plugin cannot call, and the US$1.51 "day"
+   was the ledger's cumulative total misread as daily.)
 1b. **DONE (23/8, on the local agent).** The "Skipping secondary profile ...
    port-binding api_server" warning was not noise: the gateway starts NO
    adapters for a skipped profile and drops it from `served_profiles`
