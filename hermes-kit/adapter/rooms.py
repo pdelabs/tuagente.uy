@@ -18,6 +18,12 @@ could edit what it was asked to do.
 
 APPEND-ONLY, one JSONL per room. No rewrite path on purpose -- an edited history
 is a history nobody can trust, and the client already has "new conversation".
+
+RENAMING IS NOT AN EDIT. The name of a conversation is not something that was
+said in it, so it lives in a sidecar file next to the transcript and the .jsonl
+is never reopened for writing. Deleting IS the client throwing away their own
+conversation, which they are entitled to do -- that is the one file this module
+removes, name included.
 """
 
 from __future__ import annotations
@@ -35,6 +41,16 @@ ROOM_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 # conversation, and every turn would ship it all upstream.
 MAX_TURNS = 400
 
+# What fits on a sidebar row. The same bound for the name the client typed and
+# for the first line we fall back to, so a renamed room and a fresh one are cut
+# the same way.
+MAX_TITLE_LEN = 80
+
+
+def _one_line(text: str) -> str:
+    """A title: the first line, trimmed, cut to the row."""
+    return (text or "").strip().split("\n", 1)[0].strip()[:MAX_TITLE_LEN]
+
 
 class RoomStore:
     """Append-only transcripts, one file per room."""
@@ -46,6 +62,15 @@ class RoomStore:
         if not ROOM_ID_RE.match(room_id or ""):
             return None
         return self.directory / f"{room_id}.jsonl"
+
+    def _title_path(self, room_id: str) -> Path:
+        """Where the name the client gave the room is kept.
+
+        BESIDE THE TRANSCRIPT AND NOT INSIDE IT. Writing the name as one more
+        line would put something nobody said into the history, and reopening
+        the .jsonl to change a title is the rewrite path this module does not
+        have. `rooms()` only globs `*.jsonl`, so a `.title` is never a room."""
+        return self.directory / f"{room_id}.title"
 
     def append(self, room_id: str, role: str, content: str, by: str | None = None) -> bool:
         """Add one turn. `by` is the teammate who answered, absent for the
@@ -87,20 +112,34 @@ class RoomStore:
                 continue
             first_client_line = next(
                 (t["content"] for t in turns if t.get("role") == "user"), "")
+            named = self._title_path(path.stem)
             out.append({
                 "id": path.stem,
-                # The title is the client's first line, which is what they
-                # remember the conversation by -- not a summary we invent.
-                "title": first_client_line.strip().splitlines()[0][:80] if first_client_line else "",
+                # The title is the name the client gave it, and failing that
+                # their first line -- which is what they remember the
+                # conversation by, not a summary we invent.
+                "title": (named.read_text(encoding="utf-8") if named.is_file()
+                          else _one_line(first_client_line)),
                 "updated_at": turns[-1].get("ts"),
                 "turns": len(turns),
             })
         out.sort(key=lambda r: r.get("updated_at") or 0, reverse=True)
         return out
 
+    def rename(self, room_id: str, title: str) -> bool:
+        """Name the room. False = there is no such room."""
+        path = self._path(room_id)
+        if path is None or not path.is_file():
+            return False
+        self._title_path(room_id).write_text(_one_line(title), encoding="utf-8")
+        return True
+
     def delete(self, room_id: str) -> bool:
         path = self._path(room_id)
         if path is None or not path.is_file():
             return False
         path.unlink()
+        # The name is a separate file: left behind it would end up titling
+        # whatever room is minted with this id next.
+        self._title_path(room_id).unlink(missing_ok=True)
         return True

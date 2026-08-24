@@ -24,7 +24,7 @@ from kanban import KanbanStore
 from rooms import RoomStore
 from workspace import MAX_FILE_BYTES, WorkspaceStore
 
-VERSION = "0.41.0"
+VERSION = "0.42.0"
 # The gateway answers the session stream WITHOUT CORS headers (it only sends
 # them on the preflight), so the browser discards the response. We proxy it.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -2786,15 +2786,29 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed():
             return
         path = unquote(urlparse(self.path).path)
-        m = re.match(r"^/portal/artifacts/([^/]+)$", path)
-        if not m:
-            return self._send(404, {"error": "not found"})
         try:
-            if not WORKSPACE_STORE.delete_artifact(m.group(1)):
-                return self._send(404, {"error": "artifact not found"})
+            m = re.match(r"^/portal/rooms/([^/]+)$", path)
+            if m:
+                # The client throwing away their own conversation. The room is
+                # theirs -- that is why it is stored here and not inside any
+                # one role's profile -- so this is the same gesture the sidebar
+                # already offers over an engine session, on the store that
+                # actually holds it.
+                #
+                # A room that is not there answers 404. A silent 200 would tell
+                # the sidebar a row disappeared that is still on disk, and the
+                # next listing would put it back.
+                if not ROOMS.delete(m.group(1)):
+                    return self._send(404, {"error": "esa conversación no existe"})
+                return self._send(200, {"ok": True})
+            m = re.match(r"^/portal/artifacts/([^/]+)$", path)
+            if m:
+                if not WORKSPACE_STORE.delete_artifact(m.group(1)):
+                    return self._send(404, {"error": "artifact not found"})
+                return self._send(200, {"ok": True})
         except OSError as exc:
             return self._send(500, {"error": str(exc)})
-        return self._send(200, {"ok": True})
+        return self._send(404, {"error": "not found"})
 
     def _read_json_body(self):
         try:
@@ -3151,6 +3165,27 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return self._send(400, {"error": "invalid JSON body"})
             return self._save_skill(m.group(1), body)
+        m = re.match(r"^/portal/rooms/([^/]+)$", path)
+        if m:
+            # Renaming a conversation. It is a POST and not a PATCH because
+            # this door only advertises GET, POST and DELETE in
+            # `Access-Control-Allow-Methods`: a PATCH from the browser dies in
+            # the preflight before any of this runs -- the same wall the
+            # engine's `PATCH /api/jobs/{id}` hits (see docs/PENDING.md). So it
+            # is shaped like every other write the adapter takes: POST on the
+            # thing, the new value in the body.
+            body = self._read_json_body()
+            if body is None:
+                return self._send(400, {"error": "invalid JSON body"})
+            title = str(body.get("title") or "").strip()
+            if not title:
+                return self._send(400, {"error": "title is required"})
+            try:
+                if not ROOMS.rename(m.group(1), title):
+                    return self._send(404, {"error": "esa conversación no existe"})
+            except OSError as exc:
+                return self._send(500, {"error": str(exc)})
+            return self._send(200, {"ok": True})
 
         # --- Google self-service connection ---
         if path == "/portal/connections/google/auth-url":

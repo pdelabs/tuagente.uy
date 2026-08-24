@@ -1036,6 +1036,21 @@ export const getRooms = (c: PortalConfig) =>
   get<{ rooms: RoomSummary[] }>(c.adapter, "/portal/rooms", c);
 export const getRoom = (c: PortalConfig, id: string) =>
   get<{ turns: RoomTurn[] }>(c.adapter, `/portal/rooms/${encodeURIComponent(id)}`, c);
+/** Name a conversation, and throw one away.
+ *
+ *  THE SAME TWO GESTURES THE SIDEBAR OFFERS OVER AN ENGINE SESSION, pointed at
+ *  the store that actually holds a room. They used to go to the engine for
+ *  every row -- `PATCH`/`DELETE /api/sessions/{id}` -- and the engine has never
+ *  heard of a room, so on a client with a team both menu items could only fail.
+ *
+ *  Renaming is a POST because the adapter's door publishes GET, POST and
+ *  DELETE and nothing else: a PATCH from the browser dies in the preflight. */
+export const renameRoom = async (c: PortalConfig, id: string, title: string) => {
+  await post<{ ok: boolean }>(c.adapter, `/portal/rooms/${encodeURIComponent(id)}`, c, { title });
+};
+export const deleteRoom = async (c: PortalConfig, id: string) => {
+  await del<{ ok: boolean }>(c.adapter, `/portal/rooms/${encodeURIComponent(id)}`, c);
+};
 
 /** The client requests a capability. It gets recorded on the agent's side (one
  *  line per request) and WE look at it: nothing turns on by itself. */
