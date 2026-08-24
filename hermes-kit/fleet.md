@@ -13,12 +13,33 @@ old date isn't a problem; a row that says something no longer true is.
 
 | Agent | Host | SOUL | Engine | Last check |
 |---|---|---|---|---|
-| Mr.Wobble | `tuagente` → `/opt/agentes/tuagente` | **v12** (16/8/2026; already named by the portal, the `portal:identity` block exists) | `v2026.7.30` (verified with `docker ps`, not just the compose) | **16/8: SOUL v12 applied, `agent-check` OK on all six SOUL lines.** 14/8: business skills + `portal-check` 15 ok · 0 failures |
-| East Comunicación | `east` → `/opt/agentes/east` | TODO | TODO | TODO |
+| East Comunicación | `east` → `/opt/agentes/east` | **v1** — the bare `<!-- kit:base -->` marker, no version (read over ssh, 24/8/2026) | `v2026.7.30` (24/8: read from that host's `docker ps`, not the compose) | 24/8: alive only. Host up 14 days, `east-hermes` / `east-portal-adapter` / `east-caddy` up 13 days. No `agent-check` run — see below |
+
+**Mr.Wobble is decommissioned — 24/8/2026, Luis' decision.** It left the table
+because the table says what runs where, and nothing runs there any more.
+
+It was never a client's, and that was checked before anything was stopped:
+`portal_identidad.json` said `Mr.Wobbly`, empresa "Tu agente",
+`https://tuagente.uy`; its only channel was a Telegram DM with Luis
+(`channel_directory.json`, one entry); and every deliverable under
+`workspace/` was tuagente.uy's own marketing — the daily Instagram pieces and
+the blog articles about agents.
+
+**What died with it: the `contenido-instagram-diario` cron** (`0 9 * * *`, day
+10 of its run, last fire 24/8 09:21 `ok`). Nobody else produces tuagente.uy's
+daily Instagram content today. Both of its domains
+(`tuagente.agentes.tuagente.uy`, `tuagente-portal.agentes.tuagente.uy`) now
+answer nothing: Caddy went down with the rest.
+
+The six containers — `tuagente-hermes`, `-portal-adapter`, `-caddy`,
+`-litellm`, `-otel`, `-phoenix` — were removed with one `docker compose down`
+over both compose files, **without `-v`**: instances die, data survives. That
+VPS ran nothing else (one compose project, `/opt` had no other service), so
+nothing else was affected.
 
 > **Pending: the plugin registry (phase 3b, 23/8/2026).** `install.sh` now
 > installs `<agent>/plugins/<id>/` and the compose mounts it `:ro` at
-> `/opt/plugins`. NEITHER live agent has it: both still answer `[]` at
+> `/opt/plugins`. East does not have it — it still answers `[]` at
 > `/portal/plugins`, which is the pre-3b behaviour and not an outage.
 > `agent-check.py` reports it as a warning ("PRE-PLUGIN LAYOUT, UPDATE
 > PENDING") until the installer runs, and as a FAILURE if the folder is
@@ -28,18 +49,25 @@ old date isn't a problem; a row that says something no longer true is.
 > `- ./plugins:/opt/plugins:ro` to the portal-adapter service, then
 > `docker compose up -d portal-adapter` (a `restart` is not enough: it is a new
 > mount). Not run against either agent yet — this line says what is pending,
-> not what was done.
+> not what was done. **24/8: with Mr.Wobble gone this concerns East alone**,
+> and East is further behind than 3b.
 
 > **Pending after this translation pass.** This rename introduced new inline
 > chip syntax in the SOUL (`capability:<id>` etc., soul/VERSION → v13) and new
 > on-disk paths (`policy/`, `secrets.env`, …). Neither live agent has received
-> either change yet: both Mr.Wobble and East still need the on-disk
+> either change yet: **24/8, this is East alone** — Mr.Wobble is
+> decommissioned and its disk stays in the old layout on purpose. East
+> still needs the on-disk
 > English-layout migration (`tools/migrate-agent-to-english.sh` — written and
 > unit-tested offline, **never run against a live host**) and a SOUL v13
 > reinstall. The runbook is below, under "Migrating a live agent to the
 > English layout". This is a statement of what's pending, not a report of
 > results — update this table (and the row above) only once each migration
 > has actually run and been checked.
+
+*(Everything about Mr.Wobble from here down is the record of an agent that
+no longer runs — kept because it is where most of the kit's evidence was
+measured, not because it describes the fleet today.)*
 
 **Mr.Wobble was wiped to zero and brought up to date on 13/8/2026** — a FULL
 reset by Luis' decision, so the SOUL went with it, and with it the naming.
@@ -50,16 +78,20 @@ knobs. **That one's closed now**: on 16/8 the SOUL has the `portal:identity`
 block, written by the portal's naming step, and `agent-check` reports it OK.
 It was the only failure still open from that reset.
 
-**East is falling behind, now two versions** (the 13/8/2026 block: the
-phrases you can't write without having done it — *"queda definido"*, *"queda
-armado"*, *"todos los viernes a las 9:30 te dejo X"*; and, since v10,
-rejection that doesn't unblock, plus vocabulary). We don't even know East's
-version, which is worse than knowing it's old: it still doesn't understand
-what a rejection is, so **rejecting from the portal leaves its ticket blocked
-and the agent has no idea what to do with that**. Migrating it is one run of
-`tools/replace-block.py` with `soul/versions/v11.md`, checking the diff of
-whatever was hand-written first. No local client agents today: anything
-created with `new-agent.sh` is born on v12.
+**East is on v1, and that was measured on 24/8** — the bare
+`<!-- kit:base -->` marker, from before versioning. This paragraph used to
+say "two versions behind" and that it was unknown; it is neither. East is
+behind EVERY block: the 13/8 phrases you can't write without having done it
+(*"queda definido"*, *"queda armado"*, *"todos los viernes a las 9:30 te dejo
+X"*), the v10 rejection rules, the v12 "don't say you can't without having
+tried". The rejection one bites in production: **rejecting from the portal
+leaves its ticket blocked and the agent has no idea what to do with that.**
+Migrating it is one run of `tools/replace-block.py`, checking the diff of
+whatever was hand-written first — and East's SOUL is heavily hand-written
+(it names Cata, her programs, her flows), so that check is the whole job.
+**East is now the only agent in the fleet**, and the only live client one.
+No local client agents run today: anything created with `new-agent.sh` is
+born on the current version.
 
 **And East is missing the promises guard** (`policy/plugins/promises/` on the
 agent — in the kit it now lives at `plugins/flow/engine/promises/`, the `flow`
@@ -79,12 +111,62 @@ exists, so `plugins.enabled` — and with it `hooks`, `hooks_auto_accept` and
 It's the step people forget when updating an old client, because the deploy
 finishes without saying anything.
 
+**East has a second copy, on Luis' laptop**, found during the 24/8 sweep:
+`~/Desktop/Luis/Projects/agente-east/` — a full agent tree (its own git
+repo, `data/` with Eco's SOUL, `kanban.db`, `state.db` at 66 MB, real
+interview material under `workspace/interno/`, and
+`google_client_secret.json`). Its containers are gone; the directory is
+not. It was NOT deleted in that sweep and must not be treated as scratch:
+it is a client's data at rest outside the VPS. Whoever disposes of it
+decides that with Cata's agent in mind, not as housekeeping.
+
 **Retirements.** A retired agent leaves the table — the table says what runs
 where — but not the record:
 
 | Agent | Retired | What remains |
 |---|---|---|
 | La Mano (pdelabs, client 0) | 2026-08-12, Luis' decision | backup at `~/Desktop/Luis/Projects/_respaldo-lamano/lamano-final-20260812.tgz`; containers deleted and repo removed |
+| Mr.Wobble (tuagente.uy's own agent) | 2026-08-24, Luis' decision | the whole tree on its VPS, untouched: `/opt/agentes/tuagente/` (178 MB) and `/opt/agentes/wobble-pre-reset-20260813.tgz` (39 MB). Containers removed with `compose down` **without `-v`**; all four volumes kept. Runbook below |
+
+### Mr.Wobble: what remains, and how to bring it back
+
+On the VPS `157.180.73.42`, ssh alias `tuagente` (the box is otherwise
+empty — it existed for this agent):
+
+- `/opt/agentes/tuagente/` — 178 MB, byte for byte as it was. `data/` is
+  the entire agent: SOUL v12 with its `portal:identity` block,
+  `config.yaml` with the four hand-written knobs, `kanban.db`, `state.db`,
+  `cron/jobs.json`, `flujos/contenido-instagram-diario/`, `costos.jsonl`,
+  and `workspace/` with `brand/` (the tuagente.uy kit) and `entregables/`
+  (ten days of Instagram pieces). Alongside it: `politica/`, `kit-skills/`,
+  `kit-adapter/`, `secretos.env`, `.env` and both compose files.
+- `/opt/agentes/wobble-pre-reset-20260813.tgz` — 39 MB, the pre-reset
+  backup from the 13/8 wipe.
+- Docker volumes, all four kept: `tuagente_data`, `tuagente_phoenix_data`,
+  `tuagente_caddy_data`, `tuagente_caddy_config`.
+
+**It is still the OLD Spanish layout** (`politica/`, `secretos.env`,
+`docker-compose.observabilidad.yml`): the English migration never ran
+against it, and now never will. That matters if anyone resurrects it —
+today's `install.sh` would install a second, English-named copy beside the
+old one and the agent would keep reading the old one.
+
+To bring it back:
+
+```bash
+ssh tuagente
+cd /opt/agentes/tuagente
+docker compose -f docker-compose.yml -f docker-compose.observabilidad.yml up -d
+```
+
+`up -d` and not `start`: the containers were removed, not stopped. Nothing
+on disk changed, so it comes back exactly as it was — SOUL v12, pre-pivot,
+pre-English-layout — **with the daily cron still armed and its `next_run_at`
+in the past, so it fires on the first tick.** Pause the job first if that is
+not what you want.
+
+If what you want is the agent and not the archaeology, it is cheaper to
+build a new one with `new-agent.sh` and copy `workspace/` across.
 
 La Mano was client 0 and the test fixture for the whole kit: almost all the
 evidence in `notes/engine-knobs.md` and `notes/knobs-applied.md` was measured
@@ -287,10 +369,19 @@ checks this yet — it's manual and you have to remember.
 
 ## What's left to confirm (needs ssh, doesn't come from the repo)
 
-- **Mr.Wobble: confirmed on 13/8.** It's up and genuinely running
-  `v2026.7.30`, read from the host's `docker ps`, not the compose.
-- Whether East is still up, and what engine tag it's actually on (its row
-  says what the kit's compose pins, not what that VPS's docker is actually
-  running).
-- Whether East ever got a SOUL, and with what marker.
-- Whether there's any other agent that left no trace in this repo.
+- ~~Mr.Wobble~~ — moot: decommissioned 24/8, see the top of this file.
+- **East is up, on `v2026.7.30` — confirmed 24/8**, read from that host's
+  `docker ps` and not the compose. Host up 14 days; `east-hermes`,
+  `east-portal-adapter` and `east-caddy` up 13 days.
+- **East's SOUL is the bare `<!-- kit:base -->` marker — confirmed 24/8**,
+  i.e. v1, from before versioning. It is not "two versions behind" as the
+  note above guesses: it is behind *all* of them, and every rule added
+  since v1 (rejection, promises, "don't say you can't without having
+  tried") is missing.
+- **No other agent left no trace — confirmed 24/8.** Every
+  `docker-compose*.yml` under `~/Desktop/Luis/Projects/` that pins
+  `nousresearch/hermes-agent` belongs to: this kit's templates, the old
+  archived `hermes-kit` repo's templates, `agente-east`, or
+  `tuagente-local-agent`. Nothing else.
+- Still open: `agent-check.py` has never run against East. Its row says it
+  is alive, not that it is healthy.
