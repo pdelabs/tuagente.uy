@@ -24,7 +24,7 @@ from kanban import KanbanStore
 from rooms import RoomStore
 from workspace import MAX_FILE_BYTES, WorkspaceStore
 
-VERSION = "0.42.0"
+VERSION = "0.42.1"
 # The gateway answers the session stream WITHOUT CORS headers (it only sends
 # them on the preflight), so the browser discards the response. We proxy it.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -2661,9 +2661,43 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    # What we are willing to read off a caller we are about to refuse. Draining
+    # is what turns the 401 into an answer instead of a reset (see below), and
+    # an unauthenticated caller does not get to make us read a gigabyte for it.
+    DRAIN_LIMIT = 1 << 20
+
+    def _drain_request_body(self):
+        """Read what they sent, before answering something they did not ask for.
+
+        A REQUEST BODY LEFT IN THE SOCKET COMES BACK AS A RESET, NOT AS A 401.
+        This handler closes the connection after every response, and closing it
+        with bytes still unread makes the kernel send an RST: the caller loses
+        the response it had already started reading and gets a transport error
+        with no status in it. Measured 2026-08-24, wrong key on
+        `POST /portal/rooms/<id>`: the body read blew up with
+        `ConnectionResetError` on 15 of 40 attempts, and the identical call with
+        no body was clean 40 out of 40. It is every POST behind this door, not
+        one route -- and what the client sees for a key that is merely wrong is
+        a network error instead of "unauthorized".
+
+        Past `DRAIN_LIMIT` we stop and let it reset. That is the failure this
+        method exists to avoid, and it is still the right trade for a body
+        nobody is going to look at.
+        """
+        try:
+            remaining = min(int(self.headers.get("Content-Length") or 0), self.DRAIN_LIMIT)
+        except ValueError:
+            return
+        while remaining > 0:
+            chunk = self.rfile.read(min(remaining, 65536))
+            if not chunk:
+                return
+            remaining -= len(chunk)
+
     def _authed(self):
         auth = self.headers.get("Authorization", "")
         if not TOKEN or auth != f"Bearer {TOKEN}":
+            self._drain_request_body()
             self._send(401, {"error": "unauthorized"})
             return False
         return True

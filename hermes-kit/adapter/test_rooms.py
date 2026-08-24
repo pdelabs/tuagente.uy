@@ -226,6 +226,40 @@ class RoomRoutes(unittest.TestCase):
         # And the conversation is untouched: an unauthorized call changes nothing.
         self.assertEqual([r["title"] for r in self.rooms()], ["lo de enero"])
 
+    def test_the_refusal_arrives_as_a_refusal_and_not_as_a_reset(self):
+        """A body we are not going to read still has to be read off the socket.
+
+        The handler closes the connection after every response, and closing it
+        with the request body still unread makes the kernel send an RST: the
+        caller loses the 401 it had already started reading and gets a
+        transport error with no status in it. The case above is the one that
+        caught it -- it was the first refusal in this suite carrying a body,
+        and it failed 4 runs in 10 with `ConnectionResetError`. Measured the
+        same day: 15 of 40 with a body, 0 of 40 without.
+
+        Twenty attempts, because one is a coin flip. Reading the body is the
+        whole assertion: `refused()` fails on the read, not on the status.
+        """
+        for attempt in range(20):
+            code, detail = self.refused(
+                "POST", "/portal/rooms/sala1", {"title": "Algo"}, key="wrong")
+            self.assertEqual((code, detail), (401, {"error": "unauthorized"}), attempt)
+
+    def test_a_body_too_big_to_drain_still_gets_its_status_line(self):
+        """Past the bound we stop reading, and the refusal is still a 401.
+
+        `DRAIN_LIMIT` is there so an unauthenticated caller cannot make this
+        process read a gigabyte to be told no. Over it the connection resets
+        the way it always did -- what must not happen is the door letting the
+        request through, or the handler raising on the way out.
+        """
+        oversized = "x" * (adapter.Handler.DRAIN_LIMIT + 1)
+        try:
+            self.refused("POST", "/portal/rooms/sala1", {"title": oversized}, key="wrong")
+        except urllib.error.URLError:
+            pass  # the reset we accept above the bound
+        self.assertEqual([r["title"] for r in self.rooms()], ["lo de enero"])
+
 
 if __name__ == "__main__":
     unittest.main()
