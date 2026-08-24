@@ -33,9 +33,10 @@ import profile_config  # noqa: E402
 
 BASE_CONFIG = (KIT / "compose" / "config.base.yaml").read_text(encoding="utf-8")
 
-# A config with one key of each kind: a block, a scalar, and three of the four
-# that must stay behind. Written here rather than taken from the kit so the test
-# still says what it means the day config.base.yaml changes shape.
+# A config with one key of each kind: a block, a scalar, all three that must
+# stay behind, and `plugins`, which used to be a fourth and travels now. Written
+# here rather than taken from the kit so the test still says what it means the
+# day config.base.yaml changes shape.
 SAMPLE = """# a header nobody's key owns
 model:
   provider: openrouter
@@ -70,13 +71,25 @@ def parsed(text: str) -> dict:
 
 
 class WhatTravels(unittest.TestCase):
-    def test_the_four_denied_keys_stay_behind(self):
+    def test_the_three_denied_keys_stay_behind(self):
         out = parsed(profile_config.project(SAMPLE, "marketing"))
         self.assertNotIn("api_server", out)
         self.assertNotIn("gateway", out)
-        self.assertNotIn("plugins", out)
         # `platforms` comes back, but as the PIN and not as the agent's channels.
         self.assertEqual(out["platforms"], {"api_server": {"enabled": False}})
+
+    def test_the_guard_travels_because_the_role_can_now_see_it(self):
+        """`plugins.enabled` was the fourth exception until 2026-08-24.
+
+        A profile that does not carry it discovers `promises` -- once
+        `tools/hire-role.sh` links its home's plugins/ at the agent's -- and
+        loads it disabled, because user plugins are opt-in
+        (`hermes:hermes_cli/plugins.py:1471-1487`). Installed, off, and nobody
+        the wiser: the guard that stops a teammate announcing a flow it never
+        created would be missing exactly when it is needed.
+        """
+        out = parsed(profile_config.project(SAMPLE, "marketing"))
+        self.assertEqual(out["plugins"]["enabled"], ["promises"])
 
     def test_everything_else_travels_unchanged(self):
         agent, out = parsed(SAMPLE), parsed(profile_config.project(SAMPLE, "marketing"))
@@ -126,6 +139,11 @@ class WhatTravels(unittest.TestCase):
         # with only one the agent sees no kanban tool at all (notes/native-kanban.md).
         self.assertIn("kanban", out["toolsets"])
         self.assertIn("kanban", out["platform_toolsets"]["api_server"])
+        # And the guard, from the kit's own config and not from a fixture: the
+        # role's home resolves the plugin through the link `tools/hire-role.sh`
+        # leaves, and this list is what turns it on there.
+        self.assertEqual(out["plugins"], agent["plugins"])
+        self.assertIn("promises", out["plugins"]["enabled"])
 
     def test_an_empty_config_is_a_refusal_and_not_an_empty_profile(self):
         with self.assertRaises(SystemExit):
