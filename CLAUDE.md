@@ -114,6 +114,7 @@ npx next start -p 8090          # against the local agent
 # The kit (from the monorepo root)
 python3 -m unittest discover -s hermes-kit/adapter -p "test_*.py"
 python3 -m unittest discover -s hermes-kit/tools -p "test_*.py"
+python3 -m unittest discover -s hermes-kit/roles -p "test_*.py"
 python3 hermes-kit/tools/check-adapter-boundaries.py
 python3 hermes-kit/tools/check-clones.py
 python3 hermes-kit/tools/check-plugins.py
@@ -122,5 +123,9 @@ python3 hermes-kit/tools/check-plugins.py
 python3 hermes-kit/tools/agent-check.py <path>/data
 
 # A running agent: the portal contract. 0 failures or it doesn't ship.
-python3 hermes-kit/tools/portal-check.py --key <API_SERVER_KEY>
+# THE TWO URLS ARE NOT OPTIONAL IN PRACTICE: the script defaults them to
+# 8642/8643, and on a host that already runs an agent the ports move — without
+# them the check greets the OTHER agent and passes green.
+python3 hermes-kit/tools/portal-check.py --key <API_SERVER_KEY> \
+    --endpoint http://127.0.0.1:<port> --adapter http://127.0.0.1:<port+1>
 ```
