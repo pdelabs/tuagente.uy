@@ -311,7 +311,9 @@ local agent or against a fixture, never against reasoning alone.
 - **Five deploy-report bugs** (5738a0d, f98150e, b2dca3e, 9413e6b, 87f7d2e):
   `hire-role.sh` reads the container's name off the compose instead of guessing
   it from the directory (the `sed 's/^agente-//'` is gone; `with-config-open.sh`
-  and `close-config.sh` still carry it); `new-agent.sh` stopped sending the
+  and `close-config.sh` carried it until 80e7489, which moved the reader into
+  `tools/compose-container.sh` and pointed all three at it); `new-agent.sh`
+  stopped sending the
   installer's HEADS UP notices to /dev/null; the `secrets.env` template stopped
   handing the container its own hints as values (measured: all four variables
   came up SET, to prose); `/portal/plugins` answers seven on a solo agent, not
