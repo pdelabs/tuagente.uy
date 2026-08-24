@@ -73,15 +73,40 @@ fi
 [[ -d "$KIT/roles/$ROLE" ]] || { echo "roles/$ROLE doesn't exist" >&2; exit 1; }
 [[ -z "$LOOK_FILE" || -f "$LOOK_FILE" ]] || { echo "$LOOK_FILE doesn't exist" >&2; exit 1; }
 
+# WHICH CONTAINER IS THE ENGINE'S: read off the compose, which is what named it.
+# The compose renders `container_name: <slug>-hermes` from the slug the agent
+# was created with, and this script used to GUESS the same string from the
+# directory's basename -- with a `sed 's/^agente-//'` on it, left over from when
+# every agent directory was called `agente-<slug>`. Two derivations of one fact,
+# and the rename that dropped the prefix made them disagree: a directory called
+# `agente-acme` holds a container called `acme-hermes` only if it was created
+# before the rename. Whatever the compose says is the answer, and it is one
+# `awk` away.
+compose_container() {
+  # stdin: the compose. The engine's service is `hermes:`; `portal-adapter:`
+  # declares a container_name too, and taking the first one in the file would
+  # be right only as long as nobody reorders the services.
+  awk '
+    /^  [a-z][a-z0-9_-]*:[ \t]*$/ { service = $1; sub(":", "", service) }
+    service == "hermes" && $1 == "container_name:" { print $2; exit }
+  '
+}
+
 # Where everything lives, in both modes. Resolved UP HERE because the client's
 # request has to be read before building anything: the name they chose goes
 # into the SOUL, and the SOUL is composed during the build.
 if [[ "$MODE" == local ]]; then
   DIR="$(cd "$DIR" && pwd)"; SLUG="$(basename "$DIR")"
-  CONT="$(basename "$DIR" | sed 's/^agente-//')-hermes"
+  COMPOSE="$DIR/docker-compose.yml"
+  [[ -f "$COMPOSE" ]] || { echo "$COMPOSE doesn't exist — is that the agent's directory?" >&2; exit 1; }
+  CONT="$(compose_container < "$COMPOSE")"
+  [[ -n "$CONT" ]] || { echo "$COMPOSE has no container_name under the hermes service" >&2; exit 1; }
   POLICY_ROLES="$DIR/policy/roles"
   run() { docker exec "$CONT" sh -c "$1"; }
 else
+  # Over ssh the slug is not a guess: the operator typed it, `/opt/agentes/$SLUG`
+  # is the directory this script is about to write into, and it is the same
+  # variable `deploy-remote.sh` rendered the compose from. Nothing to read back.
   CONT="$SLUG-hermes"
   POLICY_ROLES="/opt/agentes/$SLUG/policy/roles"
   run() { ssh "$HOST" "docker exec $CONT sh -c '$1'"; }
