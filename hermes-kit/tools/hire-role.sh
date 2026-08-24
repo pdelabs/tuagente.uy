@@ -355,6 +355,35 @@ echo "→ pointing its workspace at the shared one"
 # cp -rn first: never clobber anything the role already wrote.
 run "w=/opt/data/profiles/$ROLE/workspace; if [ -d \"\$w\" ] && [ ! -L \"\$w\" ]; then cp -rn \"\$w\"/. /opt/data/workspace/ 2>/dev/null || true; rm -rf \"\$w\"; ln -s /opt/data/workspace \"\$w\"; chown -h 10000:10000 \"\$w\"; fi"
 
+echo "→ pointing its plugins at the agent's"
+# ONE PLUGIN DIR, THE AGENT'S, AND THE GUARD IS WHY. The engine discovers user
+# plugins in HERMES_HOME/plugins (`hermes:hermes_cli/plugins.py:1369`), and the
+# compose mounts the kit's engine surface over /opt/data/plugins -- the DEFAULT
+# profile's home. A role's home is /opt/data/profiles/<role>/ and had no
+# plugins/ at all, so `promises` -- the guard that stops a teammate announcing a
+# flow it never created -- is not in the set that home resolves. Measured in the
+# container 2026-08-24: 55 plugins under /opt/data, 54 under a role's home, and
+# `promises` is the one missing.
+#
+# AND IT IS WORSE THAN "THE TEAMMATE HAS NO GUARD". The engine's PluginManager
+# is a process singleton with a `_discovered` latch (`plugins.py:2048-2056`) and
+# the gateway serves every profile in ONE process, scoping a turn with a
+# context-local HERMES_HOME override (`hermes_cli/profiles.py:950-990`). So the
+# FIRST turn to touch the manager decides the plugin set for every profile until
+# the next restart: measured the same day, a role-scoped first discovery left
+# the CLIENT's own turns with zero transform_llm_output callbacks. Whether the
+# guard exists at all was a race on who spoke first after a boot.
+#
+# THE LINK IS RELATIVE ON PURPOSE. `../../plugins` resolves to the agent's own
+# plugins dir from inside the container AND from the host, where
+# `tools/agent-check.py` reads it off `<agent>/data/`: an absolute
+# /opt/data/plugins would dangle on the host and the check could not tell a
+# healthy role from a broken one. It is recreated on every hire and every
+# --update, which is what heals a role hired before this existed. Replacing it
+# loses nothing: the engine never writes into a plugins dir, and the only thing
+# that has ever stood there is this same link.
+run "p=/opt/data/profiles/$ROLE/plugins; rm -rf \"\$p\"; ln -s ../../plugins \"\$p\"; chown -h 10000:10000 \"\$p\""
+
 # The count BEFORE the restart, because gateway.log is append-only across
 # boots and a boot from last week must not fail today's hire. What matters is
 # whether the boot we are about to cause adds one more.
