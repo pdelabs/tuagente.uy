@@ -53,8 +53,11 @@ personal account — NOT the orbit one):
   role).
 - Adapter: `GET /portal/roles`, `assignee` on tickets, `POST
   /portal/chat/stream` (role + room + router), `rooms.py` + `GET
-  /portal/rooms[/id]`, `portal.role` SSE event before the first token. 20
-  tests passing.
+  /portal/rooms[/id]` to read a conversation and `POST`/`DELETE
+  /portal/rooms/<id>` to name one or throw it away (598aa56 — the sidebar's
+  two menu items used to go to the engine, which has never heard of a room),
+  `portal.role` SSE event before the first token. The adapter suite is 81
+  tests.
 - `tools/hire-role.sh <role> <agent>`: build + install + **its own key** (the
   engine fails closed: the portal's key → 401 on `/p/<role>/`) + **gateway
   restart** (`profiles_to_serve` only runs at startup) + **symlink of the
