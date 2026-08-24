@@ -226,12 +226,23 @@ export default function ChatPage() {
       getRooms(c)
         .then((r) => {
           setSessionsErr(null);
-          setSessions((r.rooms ?? []).map((s) => ({
+          // WITH THE CHANNEL THE SIDEBAR READS. The list only shows what it
+          // recognizes as somebody's conversation (`isHumanConversation`, by
+          // `source`): that is what keeps the engine's crons and workers out
+          // of it. A room carries no channel -- the portal mints it itself --
+          // so every one of them got dropped, and a client with a team read
+          // "todavía no hay conversaciones" with the room open right next to
+          // the list. The channel is `portal` because that is literally where
+          // it was written.
+          setSessions((r.rooms ?? []).map((s): SessionSummary => ({
             id: s.id,
+            source: "portal",
             title: s.title,
-            last_active: s.updated_at,
+            preview: null,
             message_count: s.turns,
-          }) as SessionSummary));
+            started_at: s.updated_at,
+            last_active: s.updated_at,
+          })));
         })
         .catch((e) => setSessionsErr(e instanceof Error ? e.message : "error de red"));
       return;
