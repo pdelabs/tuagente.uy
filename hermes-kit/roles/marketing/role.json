@@ -29,16 +29,16 @@
     }
   },
   "skills": [
-    "brand-kit",
-    "social-content",
-    "post-image",
     "capability"
   ],
   "plugins": [
     "deliverable",
     "artifact",
     "approval",
-    "flow"
+    "flow",
+    "brand-kit",
+    "social-content",
+    "post-image"
   ],
   "capabilities": [
     "social-package"

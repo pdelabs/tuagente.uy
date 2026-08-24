@@ -1,0 +1,34 @@
+{
+  "id": "social-content",
+  "version": "1.0.0",
+  "description": "Instagram posts written in the brand's voice: the format and the post type decide the skeleton, today's limits come from the script, and the draft is validated before anybody sees it",
+  "client_copy": "Escribe tus posteos de Instagram con tu voz y con las medidas de hoy: feed, carrusel, reel o historia.",
+  "_comment": [
+    "IT DEPENDS ON brand-kit AND THE SCRIPT ENFORCES IT: «Sin kit de marca no se",
+    "escribe» -- without `brand/brand.json`, `new_post.py` stops with `missing_kit`",
+    "and hands back the question already written, and its own `next_steps` names",
+    "the way out: «si el cliente dice que si: skill brand-kit». A post written with",
+    "an invented tone sounds like any other company's, which is what the client is",
+    "paying not to sound like.",
+    "",
+    "IT DOES NOT DEPEND ON post-image. The SKILL.md points at it -- «Las placas y",
+    "portadas las hace post-image» -- but a caption without a piece is still a",
+    "caption, and marketing declares both anyway. A cross-reference is not a",
+    "dependency.",
+    "",
+    "NOR ON approval. «Publicar no es tu decisión» is the base SOUL block's rule,",
+    "which reaches every role whether or not it carries this plugin; unlike quotes,",
+    "this SKILL.md never tells the agent to run the approval skill."
+  ],
+  "requires": {
+    "plugins": [
+      "brand-kit"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "social-content"
+    ]
+  },
+  "system": false
+}

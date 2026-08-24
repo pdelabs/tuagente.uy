@@ -109,15 +109,20 @@ class BootScan(unittest.TestCase):
             self.assertIn("2 loaded", log)
 
     def test_the_kit_registry_itself_loads(self):
-        """The real seven, read the way an agent will read them after the flip.
+        """The kit's own registry, read the way an agent reads /opt/plugins.
 
         The kit's own `plugins/` is the same shape `/opt/plugins` gets, which is
         the whole reason one validator can serve both.
+
+        THE COUNT IS READ OFF THE DIRECTORY, not written here. Which plugins
+        exist is `tools/test_check_plugins.py`'s assertion, named one by one;
+        repeating the number on this side made porting a skill fail a test about
+        the BOOT, which is not what had changed.
         """
         loaded, log = load(KIT)
         folders = sorted(p.name for p in (KIT / "plugins").iterdir() if p.is_dir())
+        self.assertTrue(folders, "the kit has no plugins/ to load")
         self.assertEqual(sorted(loaded), folders)
-        self.assertEqual(len(loaded), 7)
         self.assertIn(f"{len(folders)} loaded", log)
         # id == folder is a rule of the manifest; here it is also the promise
         # the endpoint's sort order rests on.
@@ -186,9 +191,10 @@ class RefusesToBoot(unittest.TestCase):
 
     def test_a_whole_registry_boots_and_says_so(self):
         """The other half of the same subprocess: it comes up, before any bind."""
+        folders = [p for p in (KIT / "plugins").iterdir() if p.is_dir()]
         code, out = self.boot(KIT)
         self.assertEqual(code, 0, out)
-        self.assertIn("7 loaded", out)
+        self.assertIn(f"{len(folders)} loaded", out)
         self.assertNotIn("refusing to boot", out)
 
 

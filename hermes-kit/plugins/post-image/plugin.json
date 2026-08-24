@@ -1,0 +1,41 @@
+{
+  "id": "post-image",
+  "version": "1.0.0",
+  "description": "The image a post needs, generated with the brand kit and the client's style references, and LOOKED AT against a checklist before it is shown",
+  "client_copy": "Genera las imágenes de tus posteos con tu identidad y con el estilo de las referencias que le pasaste.",
+  "_comment": [
+    "IT DEPENDS ON brand-kit BECAUSE THE BRIEF DOES: «Sin `brand.json` corta y te",
+    "da la pregunta para ofrecerle armar el kit». The exact hexes and the typeface",
+    "come out of the kit, and writing them from memory is how a feed stops looking",
+    "like one brand.",
+    "",
+    "TOOLSETS, BOTH OF THEM NAMED IN THE SKILL. `image_gen` is step 2 -- «Generá",
+    "con `image_generate`», and the SKILL.md says the terminal script is not a way",
+    "out because the engine strips the provider key from the agent's shell, so the",
+    "engine's toolset is the only path. `vision` is step 4 -- «MIRÁ lo que salió.",
+    "Siempre. No muestres una imagen que no miraste» -- and that step is the one",
+    "that catches the misspelled text before it reaches the client's Instagram.",
+    "The toolset names are the engine's own (compose/config.base.yaml lists both",
+    "under platform_toolsets); `image_generate` is the tool, `image_gen` the",
+    "toolset.",
+    "",
+    "IT DOES NOT DEPEND ON deliverable. «Adjuntala al entregable del flujo» is the",
+    "flow's deliverable, made by whoever runs the flow; this skill copies the file",
+    "out of the engine's cache into the workspace and never runs deliver.py."
+  ],
+  "requires": {
+    "plugins": [
+      "brand-kit"
+    ],
+    "toolsets": [
+      "image_gen",
+      "vision"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "post-image"
+    ]
+  },
+  "system": false
+}

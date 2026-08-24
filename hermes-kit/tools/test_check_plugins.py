@@ -341,22 +341,77 @@ class RoleSkillsListIsKitSkillsOnly(unittest.TestCase):
 
 
 SYSTEM = ["approval", "artifact", "deliverable", "flow", "kanban"]
-CLIENT = ["invoices-to-data", "transcribe"]
+CLIENT = ["brand-kit", "drive-inbox", "invoices-to-data", "post-image",
+          "quotes", "social-content", "transcribe"]
 
 
 class TheKitsOwnRegistry(unittest.TestCase):
-    """The five system plugins of phase 2, the two pilots of phase 1, and the
+    """The five system plugins of phase 2, every ported skill, and the
     flattening the rest of the kit relies on."""
 
-    def test_the_registry_is_the_five_defaults_plus_the_two_pilots(self):
+    def test_the_registry_is_the_five_defaults_plus_every_ported_skill(self):
         plugins = plugin_registry.registry(KIT)
         self.assertEqual(sorted(plugins), sorted(SYSTEM + CLIENT))
         for pid in SYSTEM:
             self.assertTrue(plugins[pid]["system"], pid)
         for pid in CLIENT:
             self.assertFalse(plugins[pid]["system"], pid)
-            self.assertEqual(plugins[pid]["surfaces"], {"skills": [pid]})
-            self.assertEqual(plugins[pid]["requires"], {})
+            # A ported leaf skill carries its skills surface AND NOTHING ELSE:
+            # no tab, no adapter, no service. Porting is packaging -- the day one
+            # of these grows a surface the portal has to draw, that is a decision
+            # and this line is where it gets made.
+            self.assertEqual(plugins[pid]["surfaces"], {"skills": [pid]}, pid)
+
+    def test_the_client_graph_is_what_each_SKILL_md_actually_asks_for(self):
+        """Written down whole, because `requires` is a claim about a text.
+
+        Each entry below is a sentence in that plugin's SKILL.md, and the point
+        of asserting the WHOLE map is that adding a dependency to a manifest
+        without one fails here:
+
+          quotes         runs `/opt/kit/skills/deliverable/deliver.py` by path,
+                         and «eso pasa por la skill `approval`» for sending it
+          brand-kit      pipes `render_kit.py` into artifact's
+                         `create_artifact.py`, and a colour change «va como
+                         pedido de aprobación»
+          social-content «Sin kit de marca no se escribe» -- `new_post.py` stops
+                         with `missing_kit` and names brand-kit in `next_steps`
+          post-image     «Sin `brand.json` corta y te da la pregunta para
+                         ofrecerle armar el kit»
+          drive-inbox    nothing: transcribing after the download is «el caso
+                         típico», and what follows «depende del flujo del cliente»
+          transcribe,
+          invoices-to-data
+                         leaves, and they were leaves as pilots too
+        """
+        plugins = plugin_registry.registry(KIT)
+        needs = {pid: plugins[pid]["requires"].get("plugins", []) for pid in CLIENT}
+        self.assertEqual(needs, {
+            "brand-kit": ["artifact", "approval"],
+            "drive-inbox": [],
+            "invoices-to-data": [],
+            "post-image": ["brand-kit"],
+            "quotes": ["deliverable", "approval"],
+            "social-content": ["brand-kit"],
+            "transcribe": [],
+        })
+
+    def test_the_two_requires_that_are_not_plugins_name_real_things(self):
+        """A toolset is the engine's word and a connection is `connections/`'s."""
+        plugins = plugin_registry.registry(KIT)
+        # `image_gen` is step 2 of post-image and `vision` is step 4, the one
+        # that looks at what came out. `image_generate` is the TOOL; the toolset
+        # is what compose/config.base.yaml lists.
+        self.assertEqual(plugins["post-image"]["requires"]["toolsets"],
+                         ["image_gen", "vision"])
+        # watch.py reads /opt/data/google_token.json, which is exactly the file
+        # this connection's `detects.files` names. A plugin declares the
+        # connection and never owns the credential.
+        self.assertEqual(plugins["drive-inbox"]["requires"]["connections"],
+                         ["google-workspace"])
+        catalog = json.loads(
+            (KIT / "connections" / "catalog.json").read_text(encoding="utf-8"))
+        self.assertIn("google-workspace", [c["id"] for c in catalog["connections"]])
 
     def test_the_system_graph_is_the_one_the_plan_drew(self):
         """kanban is the root and everything else hangs off it."""

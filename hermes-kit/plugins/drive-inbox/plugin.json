@@ -1,0 +1,39 @@
+{
+  "id": "drive-inbox",
+  "version": "1.0.0",
+  "description": "Watches the client's Google Drive folders and brings down the new video and audio into the workspace. NO ROLE DECLARES IT AND IT IS NOT A SYSTEM PLUGIN, so it lives in this registry and ships to nobody until some role declares it",
+  "client_copy": "Revisa tus carpetas de Drive y trae los videos y audios nuevos para trabajarlos.",
+  "_comment": [
+    "THE ORPHAN, AND THE MANIFEST SAYS SO OUT LOUD. `roles/skills_split.py",
+    "--orphan` has been printing this name since the team pivot: no role claims",
+    "it, it is not a fallback note, and no `level: base` capability installs it,",
+    "so on a team agent it reaches nobody. Becoming a plugin does not change that",
+    "and is not meant to -- `tools/plugin_set.py` gives every agent the system",
+    "plugins, the ones behind a base capability and the ones a HIRED role",
+    "declares, and this is none of the three. It is packaged so the day a client",
+    "needs Drive as an inbox the unit is already there to declare.",
+    "",
+    "IT DEPENDS ON THE google-workspace CONNECTION AND ON NOTHING ELSE. `watch.py`",
+    "reads `/opt/data/google_token.json` -- the exact file that connection's",
+    "`detects.files` names -- and the SKILL.md sends the client to the tab instead",
+    "of authenticating on its own: «Si dice que falta la conexión, el cliente tiene",
+    "que conectar Google (pestaña Conexiones) — no intentes autenticarte vos». A",
+    "plugin declares the connection; it never owns the credential.",
+    "",
+    "NO PLUGIN DEPENDENCY. «El caso típico: `transcribe` el archivo» is what",
+    "usually comes next, and the SKILL.md says so in the same breath as «Lo que",
+    "sigue depende del flujo del cliente». Downloading is done when the files are",
+    "down."
+  ],
+  "requires": {
+    "connections": [
+      "google-workspace"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "drive-inbox"
+    ]
+  },
+  "system": false
+}

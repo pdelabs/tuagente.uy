@@ -1,0 +1,35 @@
+{
+  "id": "brand-kit",
+  "version": "1.0.0",
+  "description": "What a company looks like, read off its own website and written once to brand/brand.json: colours with their role, typefaces, logo and the measured contrast, plus the gaps only the client can close",
+  "client_copy": "Arma el kit de marca de tu empresa —colores, tipografías y logo— leyéndolo de tu propia web.",
+  "_comment": [
+    "IT DEPENDS ON artifact BECAUSE STEP 2 PIPES INTO IT: `render_kit.py |",
+    "python3 /opt/kit/skills/artifact/create_artifact.py`. Showing the kit before",
+    "asking about it is the step, not a nicety -- «Un kit que nadie miró no es una",
+    "fuente de verdad, es una suposición prolija» -- and without the artifact there",
+    "is nothing to show.",
+    "",
+    "AND ON approval BECAUSE THE SKILL SENDS ONE: «Cambiar un color de marca es una",
+    "decisión de la clienta: va como pedido de aprobación», which is what the skill",
+    "does instead of fixing a failing contrast pair on its own.",
+    "",
+    "NO TOOLSET FOR THE SCAN. `scan_site.py` downloads the site with urllib from",
+    "the terminal and not through the web toolset, so it works the same on an agent",
+    "with search turned off (capabilities/catalog.json says so under social-package).",
+    "What it needs is outbound network from the container, which is the harness's",
+    "business and not a plugin's."
+  ],
+  "requires": {
+    "plugins": [
+      "artifact",
+      "approval"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "brand-kit"
+    ]
+  },
+  "system": false
+}

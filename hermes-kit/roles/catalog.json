@@ -48,16 +48,16 @@
       "routing": "Writes and plans social media content: Instagram posts, stories, carousels, captions and the brand kit. Owns everything the company publishes to an audience. Route here anything about posting, publishing, campaigns, brand identity, visual pieces or editorial calendar.",
       "needs": [],
       "skills": [
-        "brand-kit",
-        "social-content",
-        "post-image",
         "capability"
       ],
       "plugins": [
         "deliverable",
         "artifact",
         "approval",
-        "flow"
+        "flow",
+        "brand-kit",
+        "social-content",
+        "post-image"
       ],
       "flows": [
         "contenido-instagram-diario",
@@ -127,14 +127,14 @@
       "routing": "Prepares quotes and follows up on them: turns an inbound request into a priced proposal, chases the ones with no answer, and keeps the customer list up to date. Route here anything about quoting, pricing a job, proposals or follow-up.",
       "needs": [],
       "skills": [
-        "quotes",
         "capability"
       ],
       "plugins": [
         "approval",
         "deliverable",
         "artifact",
-        "flow"
+        "flow",
+        "quotes"
       ],
       "flows": [
         "presupuesto-nuevo",
