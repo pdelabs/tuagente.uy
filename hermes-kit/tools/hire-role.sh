@@ -19,10 +19,12 @@
 # WHY THIS EXISTS AND IS NOT FOUR COMMANDS IN A RUNBOOK. Hiring a role needs
 # several things to happen together, and the one everybody forgets is the third:
 #
+#   0. check the plugin registry     <- two ids nothing else in here crosses
 #   1. build the distribution        roles/build_role.py
 #   1b. PROJECT THE AGENT'S KNOBS    <- a profile inherits none of them
 #   2. install it                    hermes profile install
 #   3. GIVE IT ITS OWN API KEY       <- without this you cannot talk to it
+#   3b. LINK ITS plugins/ AT THE AGENT'S  <- or its turns resolve no plugins
 #   4. restart the gateway           <- profiles_to_serve runs only at boot
 #   5. leave the baptism             <- the name the client chose, or it is lost
 #   6. leave the roster              <- last on purpose: see it, further down
@@ -235,6 +237,34 @@ if ! run "grep -qE '^[[:space:]]*multiplex_profiles:[[:space:]]*true' /opt/data/
   echo "this agent doesn't have gateway.multiplex_profiles: true in data/config.yaml:" >&2
   echo "the gateway would only serve the active profile and the role would end up" >&2
   echo "installed but unreachable. Add it (it's in compose/config.base.yaml) and retry." >&2
+  exit 1
+fi
+
+echo "→ checking the plugin registry"
+# THE TWO CROSS-CHECKS NOTHING ELSE IN THIS PATH DOES. `roles/build_role.py` and
+# `roles/skills_split.py` both go through `tools/plugin_registry.py`, so a
+# duplicate id, an id that is not its folder name, a dependency on a plugin
+# nobody wrote or a cycle already stops a hire. What the validator CANNOT check
+# is `requires.connections` and `requires.toolsets`: those name ids that live
+# outside plugins/ -- in `connections/catalog.json` and in the
+# `platform_toolsets` block of `compose/config.base.yaml` -- and it also runs at
+# boot over /opt, through `adapter/plugins.py`, where neither file is present.
+# So it shape-checks those two lists and stops, on purpose.
+#
+# `tools/check-plugins.py` is the half that knows it is standing in the repo,
+# and until now nothing in the hire path ran it. A misspelt `imagegen` or
+# `gmail` in a manifest built, installed and served cleanly; the first sign of
+# it is a teammate that does not have the tool it was hired for, weeks later and
+# with the client watching. It is a read of the kit's own files, so it costs
+# nothing and it happens BEFORE the build -- refusing here leaves the agent
+# exactly as it was.
+if ! REGISTRY="$(python3 "$KIT/tools/check-plugins.py" 2>&1)"; then
+  echo >&2
+  echo "$REGISTRY" >&2
+  echo >&2
+  echo "the kit's plugin registry does not hold together, so this hire would" >&2
+  echo "install a plugin that asks the engine for something it does not have." >&2
+  echo "Fix the manifest above and run this again." >&2
   exit 1
 fi
 
