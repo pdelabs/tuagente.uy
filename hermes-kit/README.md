@@ -88,8 +88,15 @@ commit. Then, by hand:
 3. `python3 tools/agent-check.py <path>/data` → **0 failures before powering
    on.**
 4. `docker compose up -d`
-5. `python3 tools/portal-check.py --key <API_SERVER_KEY>` → **0 failures or it
-   doesn't ship.**
+5. ```bash
+   python3 tools/portal-check.py --key <API_SERVER_KEY> \
+       --endpoint http://127.0.0.1:<port> --adapter http://127.0.0.1:<port+1>
+   ```
+   → **0 failures or it doesn't ship.** The two URLs are not optional in
+   practice, even though the script defaults them to 8642/8643: the paragraph
+   right below says the ports move on a host that already runs an agent, and
+   without the flags the check greets the OTHER agent and passes. `--origin
+   <portal>` on top of that if you want the CORS headers checked as well.
 6. `tools/reset-agent.sh --local <path> --delivery` → **leave it at zero**,
    and `portal-check.py --delivery` to verify it (see below).
 
