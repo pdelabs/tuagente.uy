@@ -719,6 +719,38 @@ own measurement.
     in flight). `east-comunicacion` stays alive — but see the note about WHOSE
     key that is in the fleet report.
 
+15. **A client who closes the tab does not stop the turn, and the tail is
+    where the money goes.** Found while measuring the skills-collision fix on
+    the local agent, 2026-08-24, and it is a SEPARATE bug from the collision:
+    it would burn the same way on a turn that never got confused.
+
+    THE EVIDENCE, one accounting turn, prompt "dejame una planilla mínima de
+    prueba como entregable":
+
+    | 19:32:22 | `POST /p/accounting/v1/chat/completions` opens, request id `api-20fc43aef3526b58` |
+    | 19:33:02-19:33:11 | three `Ambiguous skill name` refusals on `deliverable` |
+    | 19:37:41 | the client connection closes with no response — "Remote end closed connection without response", 319s in |
+    | 19:35:50 | `tool image_generate completed (117.57s)` — under a DIFFERENT request id, `api-b45231b0e3013e4d` |
+    | 19:38:13 | `Received SIGTERM` from an unrelated `hire-role.sh --update` restart. THAT is what stopped it |
+
+    Metered off `GET /api/v1/key`: US$0.294 at the moment the client dropped,
+    **US$0.495 by the time SIGTERM landed**. Two thirds of the turn's spend
+    happened with nobody on the other end, and the unrequested image is in it.
+    Nothing in the client's world says the turn is still running: the tab is
+    closed, the portal shows nothing, the bill grows.
+
+    WHY IT IS ODD, and why it is worth an engine answer rather than a shrug:
+    the adapter's own evidence says the engine CAN cancel on disconnect — the
+    SSE path logs `SSE client disconnected; interrupted agent task`. This turn
+    survived anyway, and it survived under a NEW request id, which is the
+    shape of a tool-call continuation re-entering as fresh work that no longer
+    has a client to lose. Not investigated further on purpose.
+
+    WHAT IT NEEDS: either the engine cancels the continuation with the request
+    that started it, or the gateway grows a reaper that kills a turn whose
+    client is gone. A per-turn wall clock or an iteration cap is not the same
+    answer — this turn was inside `max_iterations=500` the whole time.
+
 ## Luis's ground rules
 
 Code AND comments **in English** (client-facing copy in rioplatense
