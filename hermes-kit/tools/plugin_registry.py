@@ -300,6 +300,64 @@ def skill_sources(root: Path = KIT) -> dict[str, Path]:
     return dict(sorted(out.items()))
 
 
+def capability_installs(root: Path = KIT) -> dict[str, dict]:
+    """`capabilities/catalog.json`'s `installs`, keyed by capability id.
+
+    THE SALES LAYER IS THE THIRD READER OF THIS REGISTRY, after the roles and
+    the installer, and it is the one that says what a client BOUGHT. A capability
+    installs a PLUGIN when what it installs lives in `plugins/`, and a bare
+    `kit_skills` name only while it still lives in `skills/`.
+    """
+    catalog = root / "capabilities" / "catalog.json"
+    if not catalog.is_file():
+        fail(str(catalog), "does not exist; the capabilities catalog is part of the kit")
+    data = _read(catalog)
+    entries = data.get("capabilities")
+    if not isinstance(entries, list):
+        fail(str(catalog), "has no `capabilities` list")
+    return {entry.get("id"): (entry.get("installs") or {}) for entry in entries}
+
+
+def check_capability_installs(root: Path = KIT) -> None:
+    """Every id `installs` names is in the home the key says it is.
+
+    THE THIRD HALF OF THE ONE-SOURCE RULE. `_check_skill_slots` stops a skill
+    name from having two homes in the registry and `check_kit_skills` stops a
+    ROLE from asking for a plugin's skill by name; this stops the CATALOG from
+    doing it -- and the catalog is the one that can do real damage, because
+    `tools/plugin_set.py` reads `installs.plugins` off the `level: base` rows to
+    decide what ships on EVERY agent. A base row that still named a skill would
+    promise a plugin ("ya viene puesta") that the installer never copies, and
+    nothing downstream would say a word: the old code inferred the plugin from
+    the skill name, so the wrong key still happened to work, right up until a
+    plugin's id stopped matching its skill's.
+
+    Run at BUILD time (`tools/check-plugins.py`) and at INSTALL time
+    (`roles/skills_split.py`, which needs the base rows anyway). Not at boot:
+    an agent has no `capabilities/catalog.json` next to its `plugins/` -- the
+    catalog it carries is `policy/capabilities/`, which is the text the CLIENT
+    reads, and the registry validator runs over the agent's root.
+    """
+    available = registry(root)
+    owned = {name: pid
+             for pid, data in available.items()
+             for name in data["surfaces"].get("skills") or []}
+    where = str(root / "capabilities" / "catalog.json")
+    for cid, installs in capability_installs(root).items():
+        misplaced = [n for n in installs.get("kit_skills") or [] if n in owned]
+        if misplaced:
+            fail(where, f"capability {cid!r} installs {misplaced} under `kit_skills`, but "
+                        f"they ship inside a plugin "
+                        f"({', '.join(f'{n} -> plugins/{owned[n]}/' for n in misplaced)}). "
+                        "Move the id to `installs.plugins`: the catalog names the plugin "
+                        "when the plugin is where the source lives.")
+        unknown = [p for p in installs.get("plugins") or [] if p not in available]
+        if unknown:
+            fail(where, f"capability {cid!r} installs plugins {unknown}, which are not in "
+                        "the registry (hermes-kit/plugins/). A capability sells something "
+                        "that exists.")
+
+
 def check_kit_skills(names: list[str], owner: str, root: Path = KIT) -> None:
     """A role's `skills:` list may only name skills that live in `skills/`.
 

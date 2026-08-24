@@ -65,12 +65,98 @@ def kit_skill(root, name):
     (skill / "SKILL.md").write_text(f"---\nname: {name}\n---\n", encoding="utf-8")
 
 
+def capabilities(root, *entries):
+    """A `capabilities/catalog.json` with those rows and nothing else."""
+    where = Path(root) / "capabilities"
+    where.mkdir(parents=True, exist_ok=True)
+    (where / "catalog.json").write_text(
+        json.dumps({"version": 2, "capabilities": list(entries)}, ensure_ascii=False),
+        encoding="utf-8")
+
+
 def check(root):
+    # `--root` means ANOTHER COPY OF THE KIT, and a kit has a capabilities
+    # catalog: the command checks the sales layer against the registry, so a
+    # fixture with no catalog is not a kit and would fail for the wrong reason.
+    # A fixture that wrote its own is left alone -- that is the case under test.
+    if not (Path(root) / "capabilities" / "catalog.json").is_file():
+        capabilities(root)
     out = subprocess.run(
         [sys.executable, str(CHECK), "--root", str(root)],
         capture_output=True, text=True,
     )
     return out.returncode, out.stdout + out.stderr
+
+
+class TheSalesLayerPointsAtTheRightHome(unittest.TestCase):
+    """`installs` names a plugin when the thing lives in a plugin.
+
+    THE ONE THAT CAN DO REAL DAMAGE. `tools/plugin_set.py` reads
+    `installs.plugins` off the `level: base` rows to decide what ships on EVERY
+    agent, so a base row naming the wrong key promises a capability as already
+    installed ("ya viene puesta") that the installer never copies. It used to
+    work by accident: the plugin was inferred from the skill name, which is only
+    right while every plugin's id equals its skill's.
+    """
+
+    def test_kit_skills_naming_a_plugin_owned_skill_stops_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "transcribe", manifest("transcribe"))
+            capabilities(tmp, {"id": "transcription", "level": "base",
+                               "installs": {"kit_skills": ["transcribe"]}})
+            with self.assertRaises(SystemExit) as raised:
+                plugin_registry.check_capability_installs(Path(tmp))
+            message = str(raised.exception)
+            self.assertIn("transcription", message)
+            self.assertIn("plugins/transcribe/", message)
+            self.assertIn("installs.plugins", message)
+
+    def test_plugins_naming_something_nobody_wrote_stops_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "transcribe", manifest("transcribe"))
+            capabilities(tmp, {"id": "webscraping", "level": "menu",
+                               "installs": {"plugins": ["scraper"]}})
+            with self.assertRaises(SystemExit) as raised:
+                plugin_registry.check_capability_installs(Path(tmp))
+            message = str(raised.exception)
+            self.assertIn("webscraping", message)
+            self.assertIn("'scraper'", message)
+            self.assertIn("not in the registry", message)
+
+    def test_a_kit_skill_that_is_still_a_kit_skill_is_fine(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "transcribe", manifest("transcribe"))
+            kit_skill(tmp, "social-formats")
+            capabilities(tmp, {"id": "social-package", "level": "menu",
+                               "installs": {"plugins": ["transcribe"],
+                                            "kit_skills": ["social-formats"]}})
+            plugin_registry.check_capability_installs(Path(tmp))
+
+    def test_check_plugins_reports_it_and_exits_one(self):
+        """The registry check is where a drifted catalog gets caught."""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "quotes", manifest("quotes"))
+            capabilities(tmp, {"id": "quotes", "level": "menu",
+                               "installs": {"kit_skills": ["quotes"]}})
+            code, out = check(tmp)
+            self.assertEqual(code, 1, out)
+            self.assertIn("FAIL", out)
+            self.assertIn("plugins/quotes/", out)
+
+    def test_the_kits_own_catalog_passes(self):
+        plugin_registry.check_capability_installs(KIT)
+
+    def test_every_base_row_installs_a_plugin_that_is_really_there(self):
+        """What `tools/plugin_set.py` puts on every agent, read the same way."""
+        available = plugin_registry.registry(KIT)
+        installs = plugin_registry.capability_installs(KIT)
+        catalog = json.loads(
+            (KIT / "capabilities" / "catalog.json").read_text(encoding="utf-8"))
+        base = [c["id"] for c in catalog["capabilities"] if c.get("level") == "base"]
+        promised = {p for cid in base for p in installs[cid].get("plugins") or []}
+        self.assertEqual(promised, {"transcribe"})
+        for pid in promised:
+            self.assertIn(pid, available)
 
 
 class RealRegistry(unittest.TestCase):

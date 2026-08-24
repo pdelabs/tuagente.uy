@@ -18,12 +18,13 @@ comes out of three facts, each read where it already lives:
   system      `"system": true` in the manifest. Every agent, unconditionally --
               that is what lets any client plugin depend on one of the five
               defaults without asking whether this client bought it.
-  base        the plugin that owns a kit skill some `level: base` capability
-              installs. The catalog promises those as already there on every
-              agent ("ya viene puesta"), so the plugin behind one is not
-              optional either. Today: `transcribe`, via `transcription`. It is
-              the same rule `roles/skills_split.py` applies to the SKILL, asked
-              of the plugin that ships it.
+  base        a plugin some `level: base` capability declares under
+              `installs.plugins`. The catalog promises those as already there on
+              every agent ("ya viene puesta"), so they are not optional either.
+              Today: `transcribe`, via `transcription`. It is the same rule
+              `roles/skills_split.py` applies to the SKILL, read off the
+              catalog key that names the plugin instead of guessed from a skill
+              name that happens to match.
   role        what each INSTALLED role declares in `roles/<id>/role.json`. A
               role that is not hired here contributes nothing: `invoices-to-data`
               is accounting's, and an agent without accounting has no reason to
@@ -56,6 +57,7 @@ from pathlib import Path
 
 KIT = Path(__file__).resolve().parents[1]
 ROLES_CATALOG = KIT / "roles" / "catalog.json"
+CAPABILITIES = KIT / "capabilities" / "catalog.json"
 
 sys.path.insert(0, str(KIT / "tools"))
 import plugin_registry
@@ -82,15 +84,29 @@ def installed_roles(data: Path) -> list[str]:
 
 
 def base_capability_plugins() -> dict[str, str]:
-    """Plugin -> the base-capability skill that makes it non-optional."""
-    owner = {name: pid
-             for pid, data in plugin_registry.registry(KIT).items()
-             for name in data["surfaces"].get("skills") or []}
+    """Plugin -> the base capability that makes it non-optional.
+
+    READ STRAIGHT OFF `installs.plugins`, AND IT USED TO BE INFERRED. The old
+    code took the base rows' `kit_skills`, resolved each name to whichever plugin
+    shipped a skill by that name, and called that the reason. It gave the right
+    answer only while every plugin's id equalled its skill's name -- and it made
+    the catalog's own key a lie, since the thing being installed was the plugin.
+    Now the catalog says `plugins` and this reads it; `plugin_registry`
+    guarantees the ids are real (check_capability_installs, which
+    `roles/skills_split.py` runs on the same catalog before the install starts).
+
+    THE REASON PRINTED IS THE CAPABILITY, not a skill: `base capability
+    (transcription)` is the row a client would point at.
+    """
+    plugin_registry.check_capability_installs(KIT)
     out: dict[str, str] = {}
-    for name in sorted(skills_split.base_capability_skills()):
-        if name in owner:
-            out[owner[name]] = name
-    return out
+    catalog = json.loads(CAPABILITIES.read_text(encoding="utf-8"))
+    for entry in catalog["capabilities"]:
+        if entry.get("level") != "base":
+            continue
+        for pid in (entry.get("installs") or {}).get("plugins") or []:
+            out.setdefault(pid, entry["id"])
+    return dict(sorted(out.items()))
 
 
 def plugin_set(data: Path) -> dict[str, list[str]]:
@@ -106,8 +122,8 @@ def plugin_set(data: Path) -> dict[str, list[str]]:
     for pid, manifest in available.items():
         if manifest["system"]:
             add(pid, SYSTEM)
-    for pid, skill in base_capability_plugins().items():
-        add(pid, f"{BASE} ({skill})")
+    for pid, capability in base_capability_plugins().items():
+        add(pid, f"{BASE} ({capability})")
     for rid in installed_roles(data):
         manifest = json.loads(
             (KIT / "roles" / rid / "role.json").read_text(encoding="utf-8"))

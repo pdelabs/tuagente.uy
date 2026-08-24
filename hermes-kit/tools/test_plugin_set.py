@@ -45,7 +45,9 @@ class TheSet(unittest.TestCase):
         found = plugin_set.plugin_set(agent())
         self.assertEqual(set(found), SYSTEM_PLUGINS | {"transcribe"})
         self.assertEqual(found["kanban"], ["system"])
-        self.assertEqual(found["transcribe"], ["base capability (transcribe)"])
+        # THE REASON NAMES THE CAPABILITY, not a skill: `installs.plugins` is
+        # what is read, and `transcription` is the row a client would point at.
+        self.assertEqual(found["transcribe"], ["base capability (transcription)"])
 
     def test_a_hired_role_brings_its_own_plugins(self):
         found = plugin_set.plugin_set(agent("accounting"))
@@ -121,7 +123,7 @@ class TheCommand(unittest.TestCase):
     def test_why_says_where_each_one_comes_from(self):
         rows = dict(line.split("\t", 1) for line in self.run_it(agent(), "--why"))
         self.assertEqual(rows["flow"], "system")
-        self.assertEqual(rows["transcribe"], "base capability (transcribe)")
+        self.assertEqual(rows["transcribe"], "base capability (transcription)")
 
     def test_it_refuses_a_data_directory_that_is_not_there(self):
         done = subprocess.run(

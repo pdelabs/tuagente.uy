@@ -204,16 +204,35 @@ def declared_by_role() -> dict[str, set[str]]:
 
 
 def base_capability_skills() -> set[str]:
-    """Kit skills that `level: base` capabilities install: promised to every agent."""
+    """Skills that `level: base` capabilities install: promised to every agent.
+
+    BOTH HOMES, BECAUSE `installs` NAMES BOTH. A base row installs a PLUGIN when
+    what it installs lives in `plugins/` (today `transcription` -> `transcribe`)
+    and a bare `kit_skills` name while it still lives in `skills/`. What the
+    SPLIT works in is skill names -- kit-skills/ has one directory per name,
+    whoever ships it -- so a declared plugin is expanded into the skills it
+    carries. The row promises "ya viene puesta" on every agent, so a role-only
+    copy would make the base card lie on every teammate without that role.
+
+    The catalog is validated first, loudly: a base row that named a plugin-owned
+    skill under `kit_skills` used to work by accident, and it would stop working
+    the day a plugin id and its skill name diverge.
+    """
+    plugin_registry.check_capability_installs(KIT)
+    available = plugin_registry.registry(KIT)
     catalog = json.loads(CAPABILITIES.read_text(encoding="utf-8"))
     names: set[str] = set()
     for entry in catalog["capabilities"]:
-        if entry.get("level") == "base":
-            names.update(entry.get("installs", {}).get("kit_skills", []))
+        if entry.get("level") != "base":
+            continue
+        installs = entry.get("installs", {})
+        names.update(installs.get("kit_skills", []))
+        for pid in installs.get("plugins", []):
+            names.update(available[pid]["surfaces"].get("skills") or [])
     missing = sorted(names - all_skills())
     if missing:
         raise SystemExit(
-            f"base capabilities install kit skills that do not exist in skills/: {missing}"
+            f"base capabilities install skills that are nowhere in the kit: {missing}"
         )
     return names
 

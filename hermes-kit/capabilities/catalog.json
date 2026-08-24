@@ -66,11 +66,28 @@
     "              kit_skill (ONE) or kit_skills (SEVERAL, list)",
     "              engine_skills (list) · image (bool: ships in the image)",
     "  installs -> toolsets (LIST: go into platform_toolsets)",
-    "              kit_skills (list) · engine_skills (list)",
+    "              plugins (list) · kit_skills (list) · engine_skills (list)",
     "              config (config.yaml keys) · env (variables)",
     "  engine_skills are the ones that ship with the image and stay in the",
     "  allowlist (the four for reading documents: xlsx, docx, pdf,",
     "  ocr-and-documents)",
+    "",
+    "PLUGINS VS KIT_SKILLS, AND THE LINE BETWEEN THEM IS CHECKED. What we write",
+    "lives in one of two places, and `installs` names the one it is really in:",
+    "the PLUGIN id when it lives in hermes-kit/plugins/, the bare skill name",
+    "while it still lives in hermes-kit/skills/. tools/check-plugins.py refuses a",
+    "`kit_skills` entry that names a plugin-owned skill and a `plugins` entry",
+    "that names a plugin nobody wrote, and roles/skills_split.py runs the same",
+    "check on every install. It is not bookkeeping: tools/plugin_set.py reads",
+    "`installs.plugins` off the `level: base` rows to decide what ships on EVERY",
+    "agent, so a base row pointing at the wrong home is a plugin the catalog",
+    "promises as already installed and the installer never copies.",
+    "",
+    "`verifies` DID NOT MOVE, ON PURPOSE. It describes the agent's DELIVERED",
+    "layout, where a plugin's skill is flattened into kit-skills/ exactly as it",
+    "always was, so `verifies.kit_skills` naming brand-kit is still the truth",
+    "about a running agent. installs says where the SOURCE is; verifies says",
+    "what to look for on the disk.",
     "",
     "The list comes from `notes/capabilities-50-verdict.md`: 50 candidates",
     "weighed against three pieces of research (Uruguayan SMBs, global/LATAM",
@@ -152,7 +169,7 @@
       "who": "us",
       "detects": { "kit_skill": "transcribe" },
       "verifies": { "kit_skill": "transcribe" },
-      "installs": { "kit_skills": ["transcribe"] },
+      "installs": { "plugins": ["transcribe"] },
       "internal_note": "PROMOTED from menu to base on 2026-08-19: charging for it separately means selling what others already give away — Meta made it native on WhatsApp (June 2026) and it's Zapia's #1 use case (1M users in LATAM). It's a hook, not a product. The `transcribe` skill is ALREADY written and install.sh ships it to everyone: the script decides provider, model and language (whisper-large-v3-turbo via OpenRouter, US$0.04/hour, verified 2026-08-06 — see notes/auxiliary-models.md) precisely so the cost doesn't depend on what the agent picks. It hangs off the auxiliary-models connection (OPENROUTER_API_KEY), which ships with the agent. WARNING for anything built on top: Whisper makes up phrases in ~1% of silences, so it isn't sold as literal transcription for legal use."
     },
     {
@@ -168,7 +185,7 @@
       "who": "us",
       "detects": { "kit_skill": "quotes" },
       "verifies": { "kit_skill": "quotes" },
-      "installs": { "kit_skills": ["quotes"] },
+      "installs": { "plugins": ["quotes"] },
       "internal_note": "WRITTEN on 2026-08-19: skills/quotes/ (SKILL.md, references/ejemplo.md and two scripts), declared by the sales role (role.json 0.2.0), so it travels inside the role's profile and not in kit-skills/. It's the strongest piece of evidence from the research: quoting by hand takes 2-4 hours, the client expects a reply in under 24, and speed is what closes the sale; there are standalone products at US$30-40/month and ROMA AI (UY) already automates this for 24 SMBs. NON-NEGOTIABLE GUARDRAIL: the client's own template first and the client's own numbers ALWAYS — a quote with a made-up price is worse than not having the capability, because it doesn't just get delayed: it gets charged. That's why the split is the usual one, and here it's real money: the model writes the words and `new_quote.py` resolves each line against `lista-precios.csv`; whatever it can't find comes back under `faltantes` and has no price. Three more things the script refuses to make up: the exchange rate (two currencies = two totals, UYU and USD coexist in Uruguay), the VAT rule (`mas_iva` vs `incluido` is asked ONCE and stored in formato.json) and the sequential number, which is only spent with --numerar and only if nothing is missing. The bootstrap is the same as brand-kit's: with no template or price list there's no quoting — both are requested together, an old quote of the client's and their list however they have it — and they're saved under workspace/presupuestos/ with save_setup.py, which also normalizes the two traps of transcribing Uruguayan prices ($ vs U$S, and 1.250,50). Combines with `vision`: a quote from a photo of what needs pricing. PENDING, same as invoices-to-data: `how` still says 'ships with your agent's next update', true for an agent already installed; the day the fleet gets updated it changes to 'We turn it on for you' and the markdown has to be regenerated with tools/capability-catalog.py --apply, because `how` DOES get rendered (`status` doesn't)."
     },
     {
@@ -185,7 +202,7 @@
       "needs": ["vision", "calc-and-spreadsheets"],
       "detects": { "kit_skill": "invoices-to-data" },
       "verifies": { "kit_skill": "invoices-to-data" },
-      "installs": { "kit_skills": ["invoices-to-data"] },
+      "installs": { "plugins": ["invoices-to-data"] },
       "internal_note": "WRITTEN on 2026-08-19: plugins/invoices-to-data/skills/invoices-to-data/ (SKILL.md, references/cfe.md and scripts/verify_rows.py), declared by the accounting role (role.json 0.2.0), so it travels inside the role's profile and not in kit-skills/. Data entry is 43% of what gets automated in accounting (Intuit) and mandatory e-invoicing in Uruguay since 2026-01-01 is pushing SMBs to digitize. NON-NEGOTIABLE GUARDRAIL: human in the loop ALWAYS — OCR hallucinates plausible amounts in 1-3% of cases and a wrongly-entered amount doesn't get noticed until closing; confirmation is part of the flow, not an option. That got written down for the model as the SKILL.md's honesty contract: whatever couldn't be read comes back EMPTY and flagged, talking about confidence is forbidden, and nothing gets filled in from context or squared against the subtraction. The script checks the only thing arithmetic can verify —the RUT check digit, subtotal + VAT against the total, the rate against 22% and 10%— and does NOT propose corrected values, on purpose. And DGI/electronic invoicing is READ-ONLY, decided and not up for revisiting. PENDING: `how` still says 'ships with your agent's next update', which is true for an agent already installed; the day the fleet gets updated it changes to 'We turn it on for you' and the markdown has to be regenerated with tools/capability-catalog.py --apply, because `how` DOES get rendered (`status` doesn't)."
     },
     {
@@ -220,7 +237,8 @@
       "verifies": { "kit_skills": ["brand-kit", "social-content", "post-image", "social-formats"], "toolset": "image_gen", "image": true },
       "installs": {
         "config": { "image_gen": { "provider": "openrouter" } },
-        "kit_skills": ["brand-kit", "social-content", "post-image", "social-formats"]
+        "plugins": ["brand-kit", "social-content", "post-image"],
+        "kit_skills": ["social-formats"]
       },
       "internal_note": "SOLD AS A PACKAGE AND NOTHING ELSE (verdict from 2026-08-19): the five rows that used to exist —brand-kit, social-content, post-image, images and social-formats— collapsed into this one. It isn't portal cosmetics: there's no row to request 'images' on its own, because a single-verb capability churns (Midjourney -46% in 90 days) and an image with no brand kit is the 'AI slop' that burns the client's brand. The components install TOGETHER and brand-kit goes FIRST: it's the anti-slop moat, the only thing that separates 'your social media with your identity' from the generic template. Below, each component's internal_note AS IT WAS — each one cost real work and none of them gets summarized.\n\n=== brand-kit ===\nDoesn't need the web-search capability: the script downloads the site with urllib from the terminal, not through the web toolset, so it works the same on an agent with search turned off. It does need outbound internet access from the container. It's the raw material for social-content: without brand.json every piece comes out with a different criterion. SOCIAL PACKAGE: goes FIRST in install order — it's the anti-slop moat, the only thing that separates 'your social media with your identity' from the generic image that burns the brand.\n\n=== social-content ===\nDepends on brand-kit and the script checks it itself: without brand/brand.json it stops with missing_kit and the question already written out, instead of writing with a made-up tone. The limits live in scripts/new_post.py and references/formatos.md, verified 2026-08-13 — WATCH OUT, Instagram dropped hashtags from 30 to 5 in December 2025 and the carousel is 20 in the app but 10 via API. Recheck those numbers now and then. SOCIAL PACKAGE: sold inside 'Your social media with your identity', never as 'writing posts' on its own.\n\n=== post-image ===\nGenerative since 2026-08-14, via the engine's image_generate tool. TWO THINGS THAT COST HALF A DAY: (1) aspect_ratio goes as a semantic name (portrait/landscape/square), not as \"9:16\" — with the raw ratio it does NOT fail, it falls back to the default and returns a horizontal image; measured: 9:16 gave 1280x720 and portrait gave 720x1280. (2) the API CANNOT be called from the terminal: the engine strips the environment's keys (hermes_cli/config.py:3982,4026,4084) so the agent's shell doesn't inherit them, so a script of our own dies with \"missing OPENROUTER_API_KEY\". That's correct: that key pays for all the inference. SEEDREAM IS LEFT OUT: $0.045 vs $0.2266 for gpt-5.4-image-2 (measured, 5x cheaper) and it respects the aspect ratio, but the plugin sends modalities image+text over /chat/completions and Seedream only returns image (404). It would qualify if the engine supported POST /api/v1/images. Needs vision for the verification step. SOCIAL PACKAGE.\n\n=== images ===\nVERIFIED on 2026-08-12 on an agent created from scratch: with `image_gen: {provider: openrouter}` in config.yaml, image_generate APPEARS in the tools (check_image_generation_requirements turns True because the plugins/image_gen/openrouter plugin exists in the image and its is_available() only requires OPENROUTER_API_KEY, which every one of our agents has). WHAT STILL ISN'T VERIFIED is the first real render: it wasn't tested with a real key, and the plugin itself warns that openai/* models on OpenRouter may require account activation or BYOK (_FALLBACK_MODEL google/gemini-3-pro-image). That's why `how` promises a test with the client, not that it ships working. Do NOT use bfl: it's video and requires a paid Nous account. On enabling, MANDATORY HARVEST from data/skills/*/social-content-workflows, which hand-canonizes the SVG. SOCIAL PACKAGE, and this is the entry that does NOT get sold on its own under any circumstances: a single-verb capability churns (Midjourney −46% in 90 days) and an image with no brand kit is exactly the 'AI slop' that burns the client's brand.\n\n=== social-formats ===\nNot written yet: it's the entry that proves the catalog also covers capabilities the engine has no concept of. Once it exists, it goes into the kit and reaches everyone via install.sh. SOCIAL PACKAGE: it's the missing piece to close it out — the rest of the package already exists."
     },
@@ -388,7 +406,7 @@
       "needs": ["social-package"],
       "detects": { "kit_skill": "branded-reports" },
       "verifies": { "kit_skill": "branded-reports" },
-      "installs": { "kit_skills": ["branded-reports", "brand-kit"] },
+      "installs": { "plugins": ["brand-kit"], "kit_skills": ["branded-reports"] },
       "internal_note": "Not written yet. Cheap to build and an immediate visual differentiator; needs the brand kit installed, which today comes with social-package — without brand/brand.json every report comes out with a different criterion, the same problem social-content already solved. Once it exists, it goes into the kit and reaches everyone via install.sh."
     },
     {
@@ -438,7 +456,7 @@
       "needs": ["social-package"],
       "detects": { "kit_skill": "linkedin-content" },
       "verifies": { "kit_skill": "linkedin-content" },
-      "installs": { "kit_skills": ["linkedin-content", "brand-kit"] },
+      "installs": { "plugins": ["brand-kit"], "kit_skills": ["linkedin-content"] },
       "internal_note": "Not written yet. Sister of social-content: same structure, different limits, and reuses brand-kit. Niche but real — two thirds of Uruguayan micro-businesses are self-employment and the independent professional lives there. It does NOT enter the social package —it sells on its own, to a different audience— but it DEPENDS on it: the brand kit is no longer its own row, so `needs` points at social-package. Once it exists, it goes into the kit and reaches everyone via install.sh."
     },
     {

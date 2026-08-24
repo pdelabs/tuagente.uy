@@ -73,7 +73,18 @@ def main() -> int:
         after = ("  needs " + ", ".join(needs)) if needs else ""
         print(f"  {pid:<{width}}  {data['version']:<8} {kind}  {describe(data)}{after}")
 
+    # THE SALES LAYER IS CHECKED HERE TOO, because a drifted capability entry is
+    # a broken registry from the client's side: `installs` is what a `level:
+    # base` row promises as already installed, and tools/plugin_set.py reads it.
+    try:
+        plugin_registry.check_capability_installs(root)
+    except SystemExit as exc:
+        print(f"FAIL: {exc}")
+        return 1
+
     print(f"\n{len(plugins)} plugin(s), every dependency present, no cycles.")
+    print("      capabilities/catalog.json installs only ids that exist, "
+          "each from the home it lives in.")
     print("PASS")
     return 0
 
