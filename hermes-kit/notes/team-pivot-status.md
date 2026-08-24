@@ -279,6 +279,47 @@ translating the whole codebase to English (file names included — the
 spanglish ends here; new rule: English for everything except client-facing
 copy).
 
+## Done 2026-08-24: the knobs a role never inherited, and four things nobody read
+
+Eight commits on local main (ae377d5..ca7be15), each proven against the live
+local agent or against a fixture, never against reasoning alone.
+
+- **A hired role now runs the AGENT's knobs** (ae377d5) — item 13, and the gap
+  was bigger than the entry said: no kanban toolset, no gate hooks, the curator
+  loose over the only copy of the role's craft skills, on top of the model, the
+  preamble and the disabled engine skills. `tools/profile_config.py` projects
+  `data/config.yaml` into the profile at hire and at `--update`, minus four keys
+  it names with reasons; `agent-check.py` fails naming the knob. Item 13 above
+  has the whole story and the one thing it does NOT fix.
+- **Two porting-validator escalations closed** (3f32d88, 8487017): a plugin's
+  `requires.connections` / `requires.toolsets` are crossed against the files that
+  own those ids, from `check-plugins.py` (build side, never boot); and a
+  `level: base` capability promising a kit skill nobody wrote now stops the SOLO
+  install too, which used to exit 0 in silence while the team one exited 1.
+  Both written up in `notes/plugin-system-plan.md`, under phase 4.
+- **The name and the face have one home** (ca7be15): `roles/catalog.json`.
+  `roles/<id>/role.json` carried a second copy, the build shipped it, and the
+  adapter reads the installed one ABOVE the catalog — so the 22/8 redesign
+  reached the roster and never reached anybody already hired. All five had
+  drifted and none had the `hat` axis. `build_role.py` injects it now and a
+  source manifest that carries one is a build failure. The client's own rename
+  is untouched by design: it lives in `policy/roles/identities.json`, above both.
+- **Five deploy-report bugs** (5738a0d, f98150e, b2dca3e, 9413e6b, 87f7d2e):
+  `hire-role.sh` reads the container's name off the compose instead of guessing
+  it from the directory (the `sed 's/^agente-//'` is gone; `with-config-open.sh`
+  and `close-config.sh` still carry it); `new-agent.sh` stopped sending the
+  installer's HEADS UP notices to /dev/null; the `secrets.env` template stopped
+  handing the container its own hints as values (measured: all four variables
+  came up SET, to prose); `/portal/plugins` answers seven on a solo agent, not
+  six; and onboarding step 5 passes the ports, because on a shared host the
+  defaults greet somebody else's agent and pass.
+
+Live agent at the end: agent-check 34 ok / 0 warnings / 0 failures, portal-check
+15 ok / 0 failures, both profiles served with the agent's model, `/portal/roles`
+serving the roster's faces, `/portal/plugins` serving 11. The five dists are byte
+for byte 8e6757b's except the five `role.json`, which change in `identity` and
+`_comment` only.
+
 ## Pending (in order)
 
 1. **Cost with images: MEASURED (8/19, real lab)** — US$0.10 per turn with
@@ -370,13 +411,49 @@ copy).
         external_dirs /opt/kit/skills   external_dirs (none)
 
     So every cost and quality number measured for a role was measured on
-    another model with another prompt. Predates the port-binding fix (the
-    profile had no config at all), and the fix is now cheap: the distribution
-    already writes a `config.yaml`. What it cannot decide is WHICH knobs
-    travel — the distribution is generic and the model is the client's — so
-    the copy has to happen where the agent's own config is at hand
-    (`hire-role.sh`, or `install.sh` per hired role). Decide before pricing
-    anything off the numbers in 1.
+    another model with another prompt.
+
+    **DONE (24/8, ae377d5), and the gap was bigger than this entry.** Proving
+    the fix turned up three more, each of them product and not tuning:
+
+        api_server toolsets   the default's twelve, WITHOUT kanban and WITH
+                              browser, cronjob and delegation -- the teammate
+                              cannot touch the board, and the three doors the
+                              kit closes on purpose are open
+        hooks                 0 pre_tool_call against the default's 3: THE GATE
+                              WAS NOT THERE on a teammate's turn (installing
+                              software, signing as `portal`, self-unblocking)
+        curator               ON, over `profiles/<role>/skills/`, which on a
+                              team agent is the only copy of that role's craft
+        display.file_mutation_verifier
+                              ON -- a host path stapled onto the client's answer
+
+    A DENYLIST, NOT AN ALLOWLIST. Every knob in `compose/config.base.yaml` was
+    written as how this PRODUCT behaves, not how the default profile behaves,
+    so the default is that it travels; `tools/profile_config.py` names the four
+    that cannot and why (`api_server`, `platforms`, `gateway`, `plugins`). The
+    copy happens at the hire, where the agent's config is one `docker exec`
+    away: `hire-role.sh` rewrites the built distribution's `config.yaml` before
+    installing, on a first hire and on `--update`. The distribution still ships
+    the pin alone, so the five dists did not change a byte.
+    `agent-check.py` fails naming the knob, through the same module.
+
+    Both roles on the local agent healed with `--update`: identical to the
+    default profile on every projected knob, 34 ok / 0 failures, and a room
+    turn to accounting logged `API call #1: model=openai/gpt-5.6-luna`. The
+    numbers in 1 can be re-measured now, and they have to be: they were taken
+    on z-ai/glm-5.2 with no kanban tools.
+
+    STILL OPEN, AND IT IS NOT A KNOB: **the promises guard does not run for a
+    teammate.** The engine discovers user plugins in `HERMES_HOME/plugins`
+    (`hermes_cli/plugins.py:1369`) and the compose mounts ours over
+    `/opt/data/plugins`, which is the DEFAULT profile's home; a role's home has
+    no `plugins/` at all. That is why `plugins` is one of the four keys that do
+    not travel -- projecting `enabled: [promises]` would turn on a plugin the
+    profile cannot see, which is the "installed, off, and the config says
+    otherwise" failure that guard exists to catch. It needs a mount or a
+    symlink decided on purpose, and then a measured turn proving the hook
+    fires under a role.
 
 ## Luis's ground rules
 

@@ -283,6 +283,27 @@ kit skill no role declared, and porting it did not change that.
      longer in this agent's set"), and the installed adapter booted against a
      fresh fixture serves all 12.
 
+   TWO ESCALATIONS FROM THE PORTING VALIDATOR, CLOSED 2026-08-24 (3f32d88,
+   8487017), both of them a rule that existed and had no reader:
+
+   * **`requires.connections` and `requires.toolsets` were shape-checked and
+     never crossed.** They name ids that live outside `plugins/` --
+     `connections/catalog.json` and the `platform_toolsets` block of
+     `compose/config.base.yaml` -- and `plugin_registry` cannot open either,
+     because it also runs at BOOT over `/opt`. The cross went into
+     `check-plugins.py`, the half that knows it stands in the repo: a misspelt
+     id is exit 1 naming the manifest and the id, every bad one printed.
+     `agent.disabled_toolsets` is deliberately not a source -- a plugin
+     requiring `tts` is requiring something this product switches off.
+   * **A `level: base` capability could promise a kit skill nobody wrote, on a
+     SOLO agent.** The rule lived in `roles/skills_split`, which only a team
+     agent reaches. Measured: promote a menu row to base and the solo install
+     exits 0 in silence while the team one exits 1. It is
+     `plugin_registry.check_capability_installs` now, which `install.sh` reaches
+     on EVERY agent through `plugin_set.py`. Scoped to `base` on purpose: 20 of
+     the 25 menu rows name a skill still to be built, because the menu is what
+     we sell and the work starts when a client buys one.
+
 5. **First new-surface plugins:** `webscraping` (service + skill) and one
    third-party MCP behind the guard. **DEFERRED UNTIL A CLIENT NEEDS ONE** —
    this is the phase that invents surfaces the registry has never shipped, and
