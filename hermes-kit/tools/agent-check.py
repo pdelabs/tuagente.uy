@@ -850,11 +850,15 @@ def main():
         #
         # AND THE SENTENCE BEFORE `Heal:` IS AS SHORT AS IT IS FOR THE SAME
         # REASON. Grouped, the worst case is every role in ONE clause with every
-        # knob: the roster's five roles and the twelve projected knobs came to
-        # 278 of the 300, and a sixth role took it to 290 -- ten characters from
-        # eating `--update`, which is the half of the instruction that heals a
+        # knob, and that is THIRTEEN keys: `plugins` came back into the
+        # projection with 7025341, and `platforms` has always been in it -- as
+        # the pin, but it is a projected key and it drifts like any other.
+        # Measured against a fixture whose profiles have no config.yaml at all,
+        # so every key is missing: untrimmed, the roster's five roles came to
+        # 289 of the 300 and a sixth to 301 -- already over the cut, and what
+        # gets eaten is `--update`, the half of the instruction that heals a
         # role instead of re-hiring it over the client's name. Trimming that
-        # sentence buys 19: 271 at six roles, 282 at seven.
+        # sentence buys 19: 270 at five roles, 282 at six, 294 at seven.
         root = os.path.join(data, "profiles")
         names = sorted(n for n in os.listdir(root)
                        if not n.startswith(".") and os.path.isdir(os.path.join(root, n)))
