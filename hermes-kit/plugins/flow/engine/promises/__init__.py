@@ -52,9 +52,10 @@ def _home():
     """The home of the profile whose turn this is, resolved AT CALL TIME.
 
     NOT `os.environ["HERMES_HOME"]`, which is what this used to read once at
-    import. The engine's PluginManager is a process singleton with a
-    `_discovered` latch (`hermes:hermes_cli/plugins.py:2048-2056`) and the
-    gateway serves every profile in ONE process, scoping a turn with a
+    import. The engine's PluginManager is a process singleton
+    (`hermes:hermes_cli/plugins.py:2048-2056`) whose `_discovered` latch makes
+    the scan happen once (`plugins.py:1279,1305`), and the gateway serves every
+    profile in ONE process, scoping a turn with a
     context-local home override (`hermes_cli/profiles.py:950-990`). So this
     module is imported exactly once, under whichever home discovered first, and
     a frozen path means every profile after that one gets checked against

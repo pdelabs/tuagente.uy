@@ -334,8 +334,9 @@ the engine discovers user plugins in `HERMES_HOME/plugins`
 **WHAT IS TRUE.** That paragraph describes what a role's home RESOLVES, and it
 is right about that: 55 plugins under `/opt/data`, 54 under a role's, the
 missing one being `promises`. It is not what the running gateway does. The
-engine's `PluginManager` is a process singleton with a `_discovered` latch
-(`plugins.py:2048-2056`), the gateway serves every profile in ONE process, and
+engine's `PluginManager` is a process singleton (`plugins.py:2048-2056`)
+whose `_discovered` latch makes the scan happen once (`plugins.py:1279,1305`),
+the gateway serves every profile in ONE process, and
 it scopes a turn with a context-local `HERMES_HOME` override
 (`profiles.py:950-990`). So discovery happens ONCE, under whichever home
 touched it first, and everybody else inherits that. Reproduced in the container

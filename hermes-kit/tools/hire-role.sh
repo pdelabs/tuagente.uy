@@ -362,8 +362,9 @@ echo "→ pointing its plugins at the agent's"
 # `promises` is the one missing.
 #
 # AND IT IS WORSE THAN "THE TEAMMATE HAS NO GUARD". The engine's PluginManager
-# is a process singleton with a `_discovered` latch (`plugins.py:2048-2056`) and
-# the gateway serves every profile in ONE process, scoping a turn with a
+# is a process singleton (`plugins.py:2048-2056`) whose `_discovered` latch
+# makes the scan happen once (`plugins.py:1279,1305`), and the gateway serves
+# every profile in ONE process, scoping a turn with a
 # context-local HERMES_HOME override (`hermes_cli/profiles.py:950-990`). So the
 # FIRST turn to touch the manager decides the plugin set for every profile until
 # the next restart: measured the same day, a role-scoped first discovery left

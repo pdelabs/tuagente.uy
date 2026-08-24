@@ -901,8 +901,9 @@ def main():
 
         AND IT IS THE CLIENT'S GUARD TOO, which is why this is a failure and not
         a team-only nicety. The engine's PluginManager is a process singleton
-        with a `_discovered` latch (`plugins.py:2048-2056`), the gateway serves
-        every profile in ONE process, and it scopes a turn with a context-local
+        (`plugins.py:2048-2056`) whose `_discovered` latch makes the scan happen
+        once (`plugins.py:1279,1305`), the gateway serves every profile in ONE
+        process, and it scopes a turn with a context-local
         HERMES_HOME override (`profiles.py:950-990`) -- so the FIRST turn after
         a boot decides the plugin set for everyone. Measured the same day: with
         the first discovery under a role's home, the CLIENT's own turn came back
