@@ -14,7 +14,6 @@ the registry can be perfect and the role still ask for a plugin that is not
 there, or ask for a plugin's skill by name instead of declaring the plugin.
 """
 import json
-import re
 import subprocess
 import sys
 import tempfile
@@ -75,13 +74,40 @@ def capabilities(root, *entries):
         encoding="utf-8")
 
 
+def connections(root, *ids):
+    """A `connections/catalog.json` offering those connections and no others."""
+    where = Path(root) / "connections"
+    where.mkdir(parents=True, exist_ok=True)
+    (where / "catalog.json").write_text(
+        json.dumps({"version": 1, "connections": [{"id": i} for i in ids]},
+                   ensure_ascii=False),
+        encoding="utf-8")
+
+
+def base_config(root, **platforms):
+    """A `compose/config.base.yaml` whose `platform_toolsets` says exactly this."""
+    where = Path(root) / "compose"
+    where.mkdir(parents=True, exist_ok=True)
+    lines = ["platform_toolsets:"]
+    for platform, toolsets in platforms.items():
+        lines.append(f"  {platform}:")
+        lines.extend(f"    - {name}" for name in toolsets)
+    (where / "config.base.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def check(root):
     # `--root` means ANOTHER COPY OF THE KIT, and a kit has a capabilities
-    # catalog: the command checks the sales layer against the registry, so a
-    # fixture with no catalog is not a kit and would fail for the wrong reason.
-    # A fixture that wrote its own is left alone -- that is the case under test.
+    # catalog, a connections catalog and a base config: the command checks the
+    # sales layer and the two `requires` lists that are not plugins against
+    # those three, so a fixture missing one is not a kit and would fail for the
+    # wrong reason. A fixture that wrote its own is left alone -- that is the
+    # case under test.
     if not (Path(root) / "capabilities" / "catalog.json").is_file():
         capabilities(root)
+    if not (Path(root) / "connections" / "catalog.json").is_file():
+        connections(root)
+    if not (Path(root) / "compose" / "config.base.yaml").is_file():
+        base_config(root, api_server=[])
     out = subprocess.run(
         [sys.executable, str(CHECK), "--root", str(root)],
         capture_output=True, text=True,
@@ -177,6 +203,9 @@ class ValidRegistry(unittest.TestCase):
                 requires={"plugins": ["approval"], "connections": [], "toolsets": ["code_execution"]},
                 surfaces={"skills": ["scrape"], "tab": {"label": "Scrapeos"}}),
                 skills=["scrape"])
+            # The toolset it asks for has to be one the kit turns on somewhere,
+            # which is what `check_requires` crosses.
+            base_config(tmp, api_server=["code_execution"])
             code, out = check(tmp)
             self.assertEqual(code, 0, out)
             self.assertIn("3 plugin(s)", out)
@@ -427,23 +456,91 @@ class RoleSkillsListIsKitSkillsOnly(unittest.TestCase):
             plugin_registry.check_kit_skills(cfg.get("skills") or [], role_id, KIT)
 
 
-def platform_toolsets():
-    """Every toolset `compose/config.base.yaml` turns on, on any platform.
+class TheRequiresThatAreNotPlugins(unittest.TestCase):
+    """A toolset is the engine's word and a connection is `connections/`'s.
 
-    Read without PyYAML, which the kit's tools treat as optional (see
-    `agent-check.py`'s `has_pyyaml`): the block is `platform_toolsets:`, one
-    indented platform per key and one `- name` per line, and it is GENERATED
-    (`tools/skills-knob.py --toolsets`), so its shape does not drift by hand.
-    ANY platform counts, not all three: what a plugin declares is that the
-    engine knows the word, and `agent-check.py` is what holds the three lists
-    to each other.
+    THE RULE MOVED OUT OF THIS FILE AND INTO THE COMMAND, which is why these
+    tests run the command. It used to live here and only here: the connection
+    half was crossed against `connections/catalog.json` and the toolset half
+    against a literal three lines above it, under a comment naming
+    `compose/config.base.yaml` (c92ad0b). A test is not a validator -- nobody
+    runs the suite before hiring a role -- and `plugin_registry` cannot take the
+    rule either, because it also runs at BOOT, over `/opt`, where neither file
+    exists. `check-plugins.py` is the half that knows it stands in the repo.
     """
-    text = (KIT / "compose" / "config.base.yaml").read_text(encoding="utf-8")
-    start = re.search(r"^platform_toolsets:[ \t]*$", text, re.M)
-    rest = text[start.end():]
-    end = re.search(r"^\S", rest, re.M)              # the next top-level key
-    block = rest[: end.start()] if end else rest
-    return set(re.findall(r"^[ \t]+- ([A-Za-z0-9_.-]+)[ \t]*$", block, re.M))
+
+    def bench(self, tmp, **over):
+        """A fixture kit whose registry is one plugin with the given `requires`."""
+        write(tmp, "scraper", manifest("scraper", requires=over))
+        connections(tmp, "google-workspace", "slack")
+        base_config(tmp, api_server=["image_gen", "vision", "web"],
+                    telegram=["image_gen", "vision", "web"])
+        return check(tmp)
+
+    def test_a_connection_nobody_wrote_stops_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.bench(tmp, connections=["gmail"])
+        self.assertEqual(code, 1, out)
+        self.assertIn("plugins/scraper/plugin.json", out)
+        self.assertIn("'gmail'", out)
+        self.assertIn("connections/catalog.json", out)
+
+    def test_a_toolset_no_platform_turns_on_stops_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.bench(tmp, toolsets=["imagegen"])
+        self.assertEqual(code, 1, out)
+        self.assertIn("plugins/scraper/plugin.json", out)
+        self.assertIn("'imagegen'", out)
+        self.assertIn("compose/config.base.yaml", out)
+
+    def test_a_toolset_the_kit_deliberately_switches_off_stops_it_too(self):
+        """`tts` is in `agent.disabled_toolsets`, never in `platform_toolsets`.
+
+        Requiring one of those is requiring something this product turns off on
+        purpose, which is a refusal and not a pass -- so the scan reads the
+        `platform_toolsets` block and nothing else.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            base_config(tmp, api_server=["web"])
+            (Path(tmp) / "compose" / "config.base.yaml").write_text(
+                "agent:\n  disabled_toolsets:\n    - tts\n"
+                "platform_toolsets:\n  api_server:\n    - web\n", encoding="utf-8")
+            write(tmp, "scraper", manifest("scraper", requires={"toolsets": ["tts"]}))
+            connections(tmp)
+            code, out = check(tmp)
+        self.assertEqual(code, 1, out)
+        self.assertIn("'tts'", out)
+
+    def test_ids_that_exist_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.bench(
+                tmp, connections=["slack"], toolsets=["vision", "web"])
+        self.assertEqual(code, 0, out)
+
+    def test_every_bad_id_is_printed_and_not_only_the_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = self.bench(
+                tmp, connections=["gmail"], toolsets=["imagegen"])
+        self.assertEqual(code, 1, out)
+        self.assertIn("'gmail'", out)
+        self.assertIn("'imagegen'", out)
+
+    def test_a_kit_with_no_connections_catalog_is_a_refusal(self):
+        """Not "nothing to check": the catalog is part of the kit."""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "scraper", manifest("scraper",
+                                           requires={"connections": ["slack"]}))
+            base_config(tmp, api_server=["web"])
+            code, out = check(tmp)
+        self.assertEqual(code, 1, out)
+        self.assertIn("connections/catalog.json", out)
+
+    def test_the_kits_own_registry_passes_the_cross(self):
+        """The sweep is over the WHOLE registry, run the way an operator runs it."""
+        code, out = check(KIT)
+        self.assertEqual(code, 0, out)
+        self.assertIn("requires.connections and requires.toolsets name ids that exist",
+                      out)
 
 
 SYSTEM = ["approval", "artifact", "capability", "deliverable", "flow", "kanban"]
@@ -502,21 +599,12 @@ class TheKitsOwnRegistry(unittest.TestCase):
             "transcribe": [],
         })
 
-    def test_the_two_requires_that_are_not_plugins_name_real_things(self):
-        """A toolset is the engine's word and a connection is `connections/`'s.
+    def test_what_the_two_non_plugin_requires_claim(self):
+        """The ids themselves, pinned. That they EXIST is the command's job.
 
-        BOTH HALVES READ THEIR SOURCE, and one of them only used to say it did:
-        the connection was crossed against `connections/catalog.json` while the
-        toolset was crossed against a literal three lines above it, under a
-        comment naming `compose/config.base.yaml`. `plugin_registry` checks the
-        SHAPE of these two lists and nothing else -- ids are not its business
-        and it never opens either file -- so if this test does not cross them,
-        nothing does.
-
-        AND THE SWEEP IS OVER THE WHOLE REGISTRY, not over the two manifests
-        that happen to declare something today. The pair of assertions below
-        pins what post-image and drive-inbox claim; the misspelt id that costs
-        somebody an afternoon is in the plugin nobody has written yet.
+        `TheRequiresThatAreNotPlugins` runs `check-plugins.py` over the whole
+        registry; what is left here is what these two manifests mean, which no
+        cross-check can say.
         """
         plugins = plugin_registry.registry(KIT)
         # `image_gen` is step 2 of post-image and `vision` is step 4, the one
@@ -529,21 +617,6 @@ class TheKitsOwnRegistry(unittest.TestCase):
         # connection and never owns the credential.
         self.assertEqual(plugins["drive-inbox"]["requires"]["connections"],
                          ["google-workspace"])
-
-        catalog = json.loads(
-            (KIT / "connections" / "catalog.json").read_text(encoding="utf-8"))
-        connections = {c["id"] for c in catalog["connections"]}
-        toolsets = platform_toolsets()
-        for pid, data in sorted(plugins.items()):
-            where = f"plugins/{pid}/plugin.json"
-            for cid in data["requires"].get("connections", []):
-                self.assertIn(cid, connections,
-                              f"{where} requires the connection {cid!r}, which "
-                              "connections/catalog.json does not have")
-            for toolset in data["requires"].get("toolsets", []):
-                self.assertIn(toolset, toolsets,
-                              f"{where} requires the toolset {toolset!r}, which no "
-                              "platform in compose/config.base.yaml turns on")
 
     def test_the_system_graph_is_the_one_the_plan_drew(self):
         """kanban is the root of the board half, and capability stands apart.
