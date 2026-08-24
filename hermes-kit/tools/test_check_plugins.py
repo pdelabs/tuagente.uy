@@ -14,6 +14,7 @@ the registry can be perfect and the role still ask for a plugin that is not
 there, or ask for a plugin's skill by name instead of declaring the plugin.
 """
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -426,6 +427,25 @@ class RoleSkillsListIsKitSkillsOnly(unittest.TestCase):
             plugin_registry.check_kit_skills(cfg.get("skills") or [], role_id, KIT)
 
 
+def platform_toolsets():
+    """Every toolset `compose/config.base.yaml` turns on, on any platform.
+
+    Read without PyYAML, which the kit's tools treat as optional (see
+    `agent-check.py`'s `has_pyyaml`): the block is `platform_toolsets:`, one
+    indented platform per key and one `- name` per line, and it is GENERATED
+    (`tools/skills-knob.py --toolsets`), so its shape does not drift by hand.
+    ANY platform counts, not all three: what a plugin declares is that the
+    engine knows the word, and `agent-check.py` is what holds the three lists
+    to each other.
+    """
+    text = (KIT / "compose" / "config.base.yaml").read_text(encoding="utf-8")
+    start = re.search(r"^platform_toolsets:[ \t]*$", text, re.M)
+    rest = text[start.end():]
+    end = re.search(r"^\S", rest, re.M)              # the next top-level key
+    block = rest[: end.start()] if end else rest
+    return set(re.findall(r"^[ \t]+- ([A-Za-z0-9_.-]+)[ \t]*$", block, re.M))
+
+
 SYSTEM = ["approval", "artifact", "capability", "deliverable", "flow", "kanban"]
 CLIENT = ["brand-kit", "drive-inbox", "invoices-to-data", "post-image",
           "quotes", "social-content", "transcribe"]
@@ -483,7 +503,21 @@ class TheKitsOwnRegistry(unittest.TestCase):
         })
 
     def test_the_two_requires_that_are_not_plugins_name_real_things(self):
-        """A toolset is the engine's word and a connection is `connections/`'s."""
+        """A toolset is the engine's word and a connection is `connections/`'s.
+
+        BOTH HALVES READ THEIR SOURCE, and one of them only used to say it did:
+        the connection was crossed against `connections/catalog.json` while the
+        toolset was crossed against a literal three lines above it, under a
+        comment naming `compose/config.base.yaml`. `plugin_registry` checks the
+        SHAPE of these two lists and nothing else -- ids are not its business
+        and it never opens either file -- so if this test does not cross them,
+        nothing does.
+
+        AND THE SWEEP IS OVER THE WHOLE REGISTRY, not over the two manifests
+        that happen to declare something today. The pair of assertions below
+        pins what post-image and drive-inbox claim; the misspelt id that costs
+        somebody an afternoon is in the plugin nobody has written yet.
+        """
         plugins = plugin_registry.registry(KIT)
         # `image_gen` is step 2 of post-image and `vision` is step 4, the one
         # that looks at what came out. `image_generate` is the TOOL; the toolset
@@ -495,9 +529,21 @@ class TheKitsOwnRegistry(unittest.TestCase):
         # connection and never owns the credential.
         self.assertEqual(plugins["drive-inbox"]["requires"]["connections"],
                          ["google-workspace"])
+
         catalog = json.loads(
             (KIT / "connections" / "catalog.json").read_text(encoding="utf-8"))
-        self.assertIn("google-workspace", [c["id"] for c in catalog["connections"]])
+        connections = {c["id"] for c in catalog["connections"]}
+        toolsets = platform_toolsets()
+        for pid, data in sorted(plugins.items()):
+            where = f"plugins/{pid}/plugin.json"
+            for cid in data["requires"].get("connections", []):
+                self.assertIn(cid, connections,
+                              f"{where} requires the connection {cid!r}, which "
+                              "connections/catalog.json does not have")
+            for toolset in data["requires"].get("toolsets", []):
+                self.assertIn(toolset, toolsets,
+                              f"{where} requires the toolset {toolset!r}, which no "
+                              "platform in compose/config.base.yaml turns on")
 
     def test_the_system_graph_is_the_one_the_plan_drew(self):
         """kanban is the root of the board half, and capability stands apart.
