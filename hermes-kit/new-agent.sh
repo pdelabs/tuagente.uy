@@ -196,7 +196,20 @@ docker compose up -d
 \`\`\`
 README
 
-"$KIT/install.sh" "$DEST/data" >/dev/null
+# THE INSTALLER SPEAKS, AND UNTIL TODAY IT DID NOT: its output went to
+# /dev/null. Most of it is a list of files, but its HEADS UP notices are
+# OPERATOR INSTRUCTIONS -- a compose that does not mount the plugin registry, a
+# skill set aside because data/skills/ was shadowing it -- and they are exactly
+# the part this script cannot fix on its own. Swallowing them meant the one
+# thing somebody had to go do was the one thing nobody was told about.
+#
+# The template compose already carries the three mounts those notices are about,
+# so a brand-new agent should print none of them. That is the point: if one
+# shows up here, the template drifted and it is worth reading.
+echo
+echo "──── installing the kit ────"
+"$KIT/install.sh" "$DEST/data"
+echo "──── kit installed ────"
 git init -q && git add -A && git commit -qm "$NAME's agent: skeleton + tuagente kit"
 
 cat <<DONE
@@ -204,7 +217,10 @@ cat <<DONE
 Done: $DEST
 Ports on this host: gateway 127.0.0.1:$PORT · adapter 127.0.0.1:$ADAPTER_PORT
 
-What's left, in order:
+What's left, in order — THIS list, not the installer's above it: install.sh
+speaks to any agent and does not know that the compose, the config and the
+ports were just written for this one. What IS worth reading up there is any
+HEADS UP line.
 
   1. data/SOUL.md — the draft is there with ALL the <ASÍ> placeholders left
      unfilled. This is the real work: who they are, what they do, what they
