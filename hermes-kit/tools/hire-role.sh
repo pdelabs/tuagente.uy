@@ -258,7 +258,14 @@ if [[ "$UPDATE" == 1 ]]; then
   echo "→ updating the profile"
   # update takes the NAME and re-fetches from the recorded source -- which is
   # /tmp/dist-$ROLE from the original install, refreshed by the docker cp above.
-  run "hermes profile update $ROLE -y" | tail -3
+  #
+  # --force-config BECAUSE THE PROFILE'S config.yaml IS OURS. The engine
+  # preserves it on update by default, assuming it holds the operator's
+  # overrides; ours holds the pin that keeps the profile servable at all (see
+  # PROFILE_CONFIG in roles/build_role.py). Without the flag a role hired
+  # before the pin existed would keep its missing config through every update
+  # -- which is exactly how the two roles on the local agent stayed skipped.
+  run "hermes profile update $ROLE -y --force-config" | tail -3
 else
   echo "→ installing the profile"
   run "hermes profile install /tmp/dist-$ROLE -y" | tail -3
@@ -279,6 +286,11 @@ echo "→ pointing its workspace at the shared one"
 # cp -rn first: never clobber anything the role already wrote.
 run "w=/opt/data/profiles/$ROLE/workspace; if [ -d \"\$w\" ] && [ ! -L \"\$w\" ]; then cp -rn \"\$w\"/. /opt/data/workspace/ 2>/dev/null || true; rm -rf \"\$w\"; ln -s /opt/data/workspace \"\$w\"; chown -h 10000:10000 \"\$w\"; fi"
 
+# The count BEFORE the restart, because gateway.log is append-only across
+# boots and a boot from last week must not fail today's hire. What matters is
+# whether the boot we are about to cause adds one more.
+SKIPS_BEFORE="$(run "grep -c \"Skipping secondary profile .$ROLE.\" /opt/data/logs/gateway.log || true" 2>/dev/null || echo 0)"
+
 echo "→ restarting the gateway so it serves it"
 if [[ "$MODE" == local ]]; then docker restart "$CONT" >/dev/null; else ssh "$HOST" "docker restart $CONT" >/dev/null; fi
 
@@ -288,6 +300,29 @@ until run "hermes profile list" >/dev/null 2>&1; do sleep 5; done
 # isn't enough: without this the script showed the OLD set and it looked like
 # the role hadn't gone in.
 until run "grep -q \"multiplex:.*'"'"'$ROLE'"'"'\" /opt/data/logs/gateway.log" 2>/dev/null; do sleep 3; done
+
+# AND THE LINE ABOVE IS NOT PROOF THAT THE ROLE IS SERVED. It comes from the
+# cron scheduler, which lists what `profiles_to_serve` scanned off disk -- the
+# same directory scan that answers /p/<role>/. A profile whose config makes the
+# gateway refuse its adapters is still in that list, so for weeks the hire
+# looked green while every boot logged:
+#
+#   Skipping secondary profile '<role>' due to port-binding config error
+#
+# and started none of that profile's adapters. `roles/build_role.py` ships the
+# config that avoids it; this is what notices when it stops working.
+SKIPS_AFTER="$(run "grep -c \"Skipping secondary profile .$ROLE.\" /opt/data/logs/gateway.log || true" 2>/dev/null || echo 0)"
+if [[ "${SKIPS_AFTER:-0}" -gt "${SKIPS_BEFORE:-0}" ]]; then
+  echo >&2
+  echo "the gateway REFUSED to serve profile '$ROLE' on this boot:" >&2
+  run "grep \"Skipping secondary profile .$ROLE.\" /opt/data/logs/gateway.log | tail -1" >&2 || true
+  echo >&2
+  echo "Its config.yaml declares a platform that binds a port, and under" >&2
+  echo "gateway.multiplex_profiles only the default profile may. Rebuild the" >&2
+  echo "distribution (roles/build_role.py writes the pin) and re-run this with" >&2
+  echo "--update; python3 tools/agent-check.py <agent>/data names it too." >&2
+  exit 1
+fi
 
 # EVERYTHING FROM HERE ON GETS PERSISTED, and not before: the role is already
 # installed and the gateway is already serving it. A hire that failed at
