@@ -9,6 +9,7 @@ Run from the monorepo root:
 """
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -88,20 +89,43 @@ class TheSet(unittest.TestCase):
                         self.assertIn(dependency, found)
 
     def test_a_role_declaring_a_plugin_the_registry_does_not_have_stops_it(self):
-        """The message names the role, because that is the file to fix."""
-        broken = KIT / "roles" / "accounting" / "role.json"
-        original = broken.read_text(encoding="utf-8")
-        cfg = json.loads(original)
+        """The message names the role, because that is the file to fix.
+
+        THE CORRUPTION GOES IN A THROWAWAY KIT, NOT IN THIS ONE. This test used
+        to write the broken `plugins` list straight into
+        `roles/accounting/role.json` and put it back in a `finally`. The tree
+        was clean afterwards and `git status` never noticed -- but for the
+        length of the test the repo really did declare a plugin that does not
+        exist, and anything else reading it in that window (another test, a
+        `check-plugins.py` in a second terminal, an install) saw a broken
+        registry and failed for a reason that was not there a second later.
+        Interrupt it in that window and the corruption is what is left on disk.
+
+        `roles/` is copied because it is the 200 KB being mutated; everything
+        else is symlinked, so this stays cheap and `plugin_registry` still reads
+        the real plugins and capabilities.
+        """
+        kit = Path(tempfile.mkdtemp(prefix="kit-"))
+        for entry in KIT.iterdir():
+            if entry.name != "roles":
+                (kit / entry.name).symlink_to(entry)
+        shutil.copytree(KIT / "roles", kit / "roles")
+        broken = kit / "roles" / "accounting" / "role.json"
+        cfg = json.loads(broken.read_text(encoding="utf-8"))
         cfg["plugins"] = cfg["plugins"] + ["not-a-plugin"]
+        broken.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n",
+                          encoding="utf-8")
+        # `plugin_set` reads `KIT` at call time, so pointing the module at the
+        # throwaway is the whole redirection.
+        original, plugin_set.KIT = plugin_set.KIT, kit
         try:
-            broken.write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n",
-                              encoding="utf-8")
             with self.assertRaises(SystemExit) as refused:
                 plugin_set.plugin_set(agent("accounting"))
             self.assertIn("not-a-plugin", str(refused.exception))
             self.assertIn("accounting", str(refused.exception))
         finally:
-            broken.write_text(original, encoding="utf-8")
+            plugin_set.KIT = original
+            shutil.rmtree(kit, ignore_errors=True)
 
 
 class TheCommand(unittest.TestCase):
