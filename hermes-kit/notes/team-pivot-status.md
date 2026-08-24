@@ -719,37 +719,40 @@ own measurement.
     in flight). `east-comunicacion` stays alive — but see the note about WHOSE
     key that is in the fleet report.
 
-15. **A client who closes the tab does not stop the turn, and the tail is
-    where the money goes.** Found while measuring the skills-collision fix on
-    the local agent, 2026-08-24, and it is a SEPARATE bug from the collision:
-    it would burn the same way on a turn that never got confused.
+15. **A tool-heavy turn can go silent and return NOTHING to the client, and
+    nothing on either side says so.** Seen on the local agent 2026-08-24 while
+    measuring the skills-collision fix, on the accounting role, prompt
+    "dejame una planilla mínima de prueba como entregable".
 
-    THE EVIDENCE, one accounting turn, prompt "dejame una planilla mínima de
-    prueba como entregable":
+    | 19:32:55 | turn starts, request id `api-20fc43aef3526b58` |
+    | 19:33:02-19:33:11 | three `Ambiguous skill name` refusals on `deliverable` (that half is fixed) |
+    | 19:34:20 | API call #18, out=198 |
+    | 19:34:21 | `tool terminal completed (0.77s)` — **the last line this request ever writes** |
+    | ~19:37:41 | the client gives up: "Remote end closed connection without response", 319s in |
+    | 19:38:13 | SIGTERM (an unrelated `hire-role.sh --update`); the drain reports `0 active agent(s) … and 1 api_server run(s)` |
 
-    | 19:32:22 | `POST /p/accounting/v1/chat/completions` opens, request id `api-20fc43aef3526b58` |
-    | 19:33:02-19:33:11 | three `Ambiguous skill name` refusals on `deliverable` |
-    | 19:37:41 | the client connection closes with no response — "Remote end closed connection without response", 319s in |
-    | 19:35:50 | `tool image_generate completed (117.57s)` — under a DIFFERENT request id, `api-b45231b0e3013e4d` |
-    | 19:38:13 | `Received SIGTERM` from an unrelated `hire-role.sh --update` restart. THAT is what stopped it |
+    There is no `Turn ended` line for that request id. The agent stopped
+    between one tool result and the next API call, three minutes before the
+    client hung up, and the gateway did not consider it an active agent while
+    still holding an api_server run open. Whatever happened there, the
+    client's experience is a five-minute wait and an empty response.
 
-    Metered off `GET /api/v1/key`: US$0.294 at the moment the client dropped,
-    **US$0.495 by the time SIGTERM landed**. Two thirds of the turn's spend
-    happened with nobody on the other end, and the unrequested image is in it.
-    Nothing in the client's world says the turn is still running: the tab is
-    closed, the portal shows nothing, the bill grows.
+    Its own LLM cost, priced off its 18 logged calls at gpt-5.6-luna's rates
+    (US$0.2/M prompt, US$1.2/M completion, US$0.02/M cache read), is
+    **US$0.025** -- 506k prompt tokens, 7.3k completion. The healthy turn that
+    replaced it after the fix cost US$0.0031.
 
-    WHY IT IS ODD, and why it is worth an engine answer rather than a shrug:
-    the adapter's own evidence says the engine CAN cancel on disconnect — the
-    SSE path logs `SSE client disconnected; interrupted agent task`. This turn
-    survived anyway, and it survived under a NEW request id, which is the
-    shape of a tool-call continuation re-entering as fresh work that no longer
-    has a client to lose. Not investigated further on purpose.
-
-    WHAT IT NEEDS: either the engine cancels the continuation with the request
-    that started it, or the gateway grows a reaper that kills a turn whose
-    client is gone. A per-turn wall clock or an iteration cap is not the same
-    answer — this turn was inside `max_iterations=500` the whole time.
+    A WARNING FOR WHOEVER MEASURES NEXT, because it cost an hour here: the
+    US$0.29 the key's meter showed across that window was NOT this turn. The
+    OpenRouter key is the whole agent's, and another workstream was driving
+    live image turns through the adapter at the same minutes -- `172.29.0.2 …
+    POST /p/marketing/v1/chat/completions`, two `image_generate` calls,
+    session `api-b45231b0e3013e4d`, in accounting's log file because the
+    multiplexed gateway writes one. **`GET /api/v1/key` deltas are only
+    attributable when nothing else is talking to that agent.** Price the turn
+    off its own `API call #N: … in=/out=/cache=` lines instead; that model
+    reproduces a clean measured turn to within 10% (US$0.0028 modelled vs
+    US$0.0031 metered, the difference being cache writes).
 
 ## Luis's ground rules
 
