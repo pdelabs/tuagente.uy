@@ -75,11 +75,18 @@ The **conformance check already exists**: `tools/portal-check.py`. It hits a
 deployed agent and verifies the manifest, auth, CORS (adapter and gateway),
 that every declared module actually responds, that files get served as
 `text/plain`, that the chat proxy is up, and the workspace conventions. It
-writes nothing. Against the fixture agent: 13 ok, 0 failures.
+writes nothing. Against the local agent (24/8): 15 ok · 2 warnings · 0
+failures — the two warnings are modules this agent does not declare
+(approvals, crons), which is not a failure.
 
 ```bash
-python3 tools/portal-check.py --key <API_SERVER_KEY>
+python3 tools/portal-check.py --key <API_SERVER_KEY> \
+    --endpoint http://127.0.0.1:<port> --adapter http://127.0.0.1:<port+1>
 ```
+
+The two URLs default to 8642/8643, and the ports move on any host that already
+runs an agent: without them the check greets the OTHER agent and passes green
+(87f7d2e).
 
 ## Installing a skill: how it actually works
 

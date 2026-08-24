@@ -244,8 +244,9 @@ tuagente.uy to production.
 The plan below was executed the same day, after the full-English translation
 landed. Phases 1, 2, 3a and 3b are done — 41 commits on local main, each
 phase implemented by one Opus agent and adversarially validated by another
-(12 defects found and fixed across the four validation waves). Current state:
-registry at hermes-kit/plugins/ with 7 plugins (5 system + transcribe +
+(12 defects found and fixed across the four validation waves). State at the
+end of phase 3 — the porting wave below took it to 13: registry at
+hermes-kit/plugins/ with 7 plugins (5 system + transcribe +
 invoices-to-data), dependency graph enforced at build (check-plugins,
 build_role, skills_split, install.sh) AND at boot (adapter refuses to boot on
 a broken /opt/plugins), /opt/plugins ships computed per-agent sets with

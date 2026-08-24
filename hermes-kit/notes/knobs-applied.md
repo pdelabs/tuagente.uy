@@ -580,8 +580,14 @@ docker compose up -d
 curl -s -H "Authorization: Bearer $API_SERVER_KEY" http://127.0.0.1:8642/v1/skills
 #    → has to be 10: the kit's 6 + xlsx, pdf, docx, ocr-and-documents
 #      (plus that client's declared exceptions, if any)
-python3 tools/portal-check.py --key $API_SERVER_KEY
+python3 tools/portal-check.py --key $API_SERVER_KEY \
+    --endpoint http://127.0.0.1:8642 --adapter http://127.0.0.1:8643
 ```
+
+(Those are this agent's ports, spelled out for the same reason the `curl` above
+spells them: the two flags default to 8642/8643, and on a host that already
+runs an agent the ports move — without them the check greets the OTHER agent
+and passes green, 87f7d2e. Change both numbers with the agent.)
 
 `config-backups/` fills up on its own and nobody looks at it: it's copies of
 clients' configs, so check it every once in a while and delete the old ones.

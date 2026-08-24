@@ -19,8 +19,9 @@ flattens alpha against BLACK (measured lesson). Rasterizes with
 `@resvg/resvg-js` (only dep: embedded Rust, prebuilt binaries, zero system
 libs, deterministic bytes). Setup: `cd hermes-kit/tools && npm install`.
 
-**Tests.** `python3 -m unittest discover -s hermes-kit/tools -p "test_*.py"`
-→ 5 tests: byte-for-byte goldens of the catalog's 5 roles + the default
+**Tests.** `python3 -m unittest discover -s hermes-kit/tools -p
+"test_draw_agentito.py"` → 5 tests: byte-for-byte goldens of the catalog's 5
+roles + the default
 (`golden-agentitos/`), invalid axes fall back to the default, the telegram PNG
 is a real 512×512 PNG, and a structural guard that yells if anyone re-inlines
 geometry into `agentito.tsx`. If a face changes on purpose, the goldens get
