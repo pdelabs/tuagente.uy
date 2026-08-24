@@ -110,11 +110,26 @@ type AgentitoAnimatedProps = {
  * runtime arrived, and a reply being written in the chat did the same.
  * Holding the props here is what lets the stand-in wear the right face.
  */
+// ONCE THE RUNTIME HAS LANDED IT STAYS LANDED, and this module-level slot is
+// what `next/dynamic` used to give us for free: it compiles to `React.lazy`,
+// which caches the resolved component on the shared lazy object, so a REMOUNT
+// rendered the real thing synchronously. Holding it in per-instance state
+// instead means every new AgentitoAnimated -- one per reply being written in
+// the chat, one per navigation into /app/home -- awaits `import()` again and
+// shows the still face for a tick, on a module the browser already has.
+let RIVE: ComponentType<AgentitoAnimatedProps> | null = null;
+
 export function AgentitoAnimated(props: AgentitoAnimatedProps) {
-  const [Animated, setAnimated] = useState<ComponentType<AgentitoAnimatedProps> | null>(null);
+  // `() => RIVE` and not `RIVE`: useState calls a bare function argument as a
+  // lazy initializer, and a component IS a function.
+  const [Animated, setAnimated] = useState<ComponentType<AgentitoAnimatedProps> | null>(() => RIVE);
   useEffect(() => {
+    if (RIVE) return;
     let alive = true;
-    import("./AgentitoRive").then((m) => { if (alive) setAnimated(() => m.default); });
+    import("./AgentitoRive").then((m) => {
+      RIVE = m.default;
+      if (alive) setAnimated(() => m.default);
+    });
     return () => { alive = false; };
   }, []);
   if (!Animated) return <AgentitoAvatar look={props.look} alive className={props.className} />;
