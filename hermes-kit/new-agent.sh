@@ -103,12 +103,37 @@ fi
 # the keys in there, the agent could write itself a PYTHONPATH and run its own
 # code inside the adapter. Measured. It lives at the agent's root, which
 # nothing mounts.
+# EVERY HINT ON ITS OWN LINE, NEVER AFTER THE `=`. This file is the `env_file`
+# of both services, and compose only strips an inline comment when there is a
+# VALUE in front of it: on an empty `KEY=   # hint` the hint IS the value.
+# Measured 2026-08-24, with the template exactly as it used to be, read through
+# a compose `env_file` into a container:
+#
+#   API_SERVER_KEY=# openssl rand -hex 32 — unique per client
+#   OPENROUTER_API_KEY=# or whichever model provider's you use
+#   TELEGRAM_BOT_TOKEN=# from @BotFather
+#   TELEGRAM_ALLOWED_USERS=# authorized ids; without this anyone can write to it
+#
+# So a brand-new agent came up with all four SET, to prose. Not a hazard waiting
+# for somebody to type in the wrong place: the state the script shipped.
 cat > secrets.env <<'ENV'
 # The agent's keys. NEVER committed. root:root 600 on the server.
-API_SERVER_KEY=          # openssl rand -hex 32 — unique per client
-OPENROUTER_API_KEY=      # or whichever model provider's you use
-TELEGRAM_BOT_TOKEN=      # from @BotFather
-TELEGRAM_ALLOWED_USERS=  # authorized ids; without this anyone can write to it
+#
+# The hints are on their own lines and they have to stay there: compose reads
+# this as an env_file, and a `#` after an empty `=` is the value, not a comment.
+
+# openssl rand -hex 32 — unique per client
+API_SERVER_KEY=
+
+# or whichever model provider's you use
+OPENROUTER_API_KEY=
+
+# from @BotFather
+TELEGRAM_BOT_TOKEN=
+
+# authorized ids; without this anyone can write to it
+TELEGRAM_ALLOWED_USERS=
+
 # SMTP_USER=
 # SMTP_APP_PASSWORD=
 ENV
