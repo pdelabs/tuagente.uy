@@ -549,10 +549,18 @@ own measurement.
    Still open: the pricing decision itself (Luis).
 
 
-   (Since measured: see notes/image-cost-anatomy.md — the per-placa
-   composite came out US$0.357 from Mr.Wobble's ledger, the US$0.10 was
-   the price of a provider the plugin cannot call, and the US$1.51 "day"
-   was the ledger's cumulative total misread as daily.)
+   (**MEASURED since, on Mr.Wobble's disk — see
+   `notes/image-cost-anatomy.md`.** The composite came out **US$0.357 per
+   finished placa**, 92% of it the pixel: 1.447 attempts per placa at
+   US$0.2266 each, plus US$0.0286 of chat. The US$0.10 was the price of
+   Seedream, the provider the plugin cannot call — quoting the route that
+   does not run. The per-turn numbers in this item hold and the two
+   documents agree where they touch: vision on the main model, and
+   approval at ~US$0.0001 a call. The US$1.51 "day" is REAL and this item's
+   reading of it was the wrong one — it is `docs/PENDING.md:880-885`,
+   OpenRouter's `usage_daily` for 8/16, which no reading of `costs.jsonl`
+   could ever contain; what was wrong is the "15 placas at US$0.10"
+   arithmetic on top of it.)
 1b. **DONE (23/8, on the local agent).** The "Skipping secondary profile ...
    port-binding api_server" warning was not noise: the gateway starts NO
    adapters for a skipped profile and drops it from `served_profiles`
