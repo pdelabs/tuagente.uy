@@ -14,6 +14,7 @@ the registry can be perfect and the role still ask for a plugin that is not
 there, or ask for a plugin's skill by name instead of declaring the plugin.
 """
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -170,6 +171,34 @@ class TheSalesLayerPointsAtTheRightHome(unittest.TestCase):
             self.assertIn("FAIL", out)
             self.assertIn("plugins/quotes/", out)
 
+    def test_a_base_row_naming_a_kit_skill_nobody_wrote_stops_it(self):
+        """"Ya viene puesta" about a directory that is not there."""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "transcribe", manifest("transcribe"))
+            capabilities(tmp, {"id": "meeting-summaries", "level": "base",
+                               "installs": {"kit_skills": ["meeting-summaries"]}})
+            with self.assertRaises(SystemExit) as raised:
+                plugin_registry.check_capability_installs(Path(tmp))
+            message = str(raised.exception)
+            self.assertIn("meeting-summaries", message)
+            self.assertIn("level: base", message)
+
+    def test_a_menu_row_may_name_one_and_most_of_them_do(self):
+        """The menu is what we sell; the work starts when a client buys it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "transcribe", manifest("transcribe"))
+            capabilities(tmp, {"id": "meeting-summaries", "level": "menu",
+                               "installs": {"kit_skills": ["meeting-summaries"]}})
+            plugin_registry.check_capability_installs(Path(tmp))
+
+    def test_a_base_row_whose_kit_skill_is_written_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "transcribe", manifest("transcribe"))
+            kit_skill(tmp, "meeting-summaries")
+            capabilities(tmp, {"id": "meeting-summaries", "level": "base",
+                               "installs": {"kit_skills": ["meeting-summaries"]}})
+            plugin_registry.check_capability_installs(Path(tmp))
+
     def test_the_kits_own_catalog_passes(self):
         plugin_registry.check_capability_installs(KIT)
 
@@ -184,6 +213,79 @@ class TheSalesLayerPointsAtTheRightHome(unittest.TestCase):
         self.assertEqual(promised, {"transcribe"})
         for pid in promised:
             self.assertIn(pid, available)
+
+
+class ABaseRowPromisesSomethingThatExists(unittest.TestCase):
+    """A `level: base` capability whose kit skill nobody wrote, on BOTH paths.
+
+    THE GAP THIS CLOSES. The rule existed and lived in
+    `roles/skills_split.base_capability_skills`, which only a TEAM agent ever
+    reaches: a solo agent gets every skill in the kit and never computes a
+    split. So the same catalog stopped a team install with "nowhere in the kit"
+    and installed on a solo agent with rc=0 and no mention of it -- the client
+    reads "ya viene puesta: no hay que pedirla" on a card behind which there is
+    nothing at all.
+
+    The rule is `plugin_registry.check_capability_installs` now, which
+    `install.sh` reaches on every agent through `tools/plugin_set.py`. These
+    tests run the two entry points install.sh actually calls, over a copy of the
+    kit with one menu row promoted -- the measured repro.
+    """
+
+    # A menu row whose `installs.kit_skills` names a skill nobody has written.
+    # Most menu rows are like this on purpose: the menu is what we SELL, and the
+    # work starts when a client buys one.
+    UNWRITTEN = "meeting-summaries"
+
+    def kit_copy(self, tmp, promote=None):
+        root = Path(tmp) / "kit"
+        shutil.copytree(KIT, root, ignore=shutil.ignore_patterns(
+            "node_modules", "__pycache__", "dist", ".git"))
+        (Path(tmp) / "data").mkdir()
+        if promote:
+            catalog = root / "capabilities" / "catalog.json"
+            data = json.loads(catalog.read_text(encoding="utf-8"))
+            for row in data["capabilities"]:
+                if row["id"] == promote:
+                    row["level"] = "base"
+            catalog.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return root
+
+    def solo(self, tmp, root):
+        """What install.sh asks on EVERY agent."""
+        out = subprocess.run(
+            [sys.executable, str(root / "tools" / "plugin_set.py"), str(Path(tmp) / "data")],
+            capture_output=True, text=True)
+        return out.returncode, out.stdout + out.stderr
+
+    def team(self, root):
+        """What install.sh asks when policy/roles/catalog.json is there."""
+        out = subprocess.run(
+            [sys.executable, str(root / "roles" / "skills_split.py"), "--shared"],
+            capture_output=True, text=True)
+        return out.returncode, out.stdout + out.stderr
+
+    def test_both_paths_refuse_and_say_the_same_thing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.kit_copy(tmp, promote=self.UNWRITTEN)
+            solo_code, solo_out = self.solo(tmp, root)
+            team_code, team_out = self.team(root)
+        self.assertEqual(solo_code, 1, solo_out)
+        self.assertEqual(team_code, 1, team_out)
+        for out in (solo_out, team_out):
+            self.assertIn(f"capability '{self.UNWRITTEN}'", out)
+            self.assertIn("level: base", out)
+        self.assertEqual(solo_out.strip(), team_out.strip())
+
+    def test_the_same_row_on_the_menu_installs_on_both(self):
+        """`base` is the word that turns a row into a promise. `menu` is a plan."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self.kit_copy(tmp)
+            solo_code, solo_out = self.solo(tmp, root)
+            team_code, team_out = self.team(root)
+        self.assertEqual(solo_code, 0, solo_out)
+        self.assertEqual(team_code, 0, team_out)
 
 
 class RealRegistry(unittest.TestCase):

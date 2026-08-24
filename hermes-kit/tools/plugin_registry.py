@@ -300,8 +300,14 @@ def skill_sources(root: Path = KIT) -> dict[str, Path]:
     return dict(sorted(out.items()))
 
 
-def capability_installs(root: Path = KIT) -> dict[str, dict]:
-    """`capabilities/catalog.json`'s `installs`, keyed by capability id.
+# A capability the catalog promises as already installed on every agent: the
+# card says "ya viene puesta: no hay que pedirla". `roles/skills_split.py` and
+# `tools/plugin_set.py` both key off this word.
+BASE = "base"
+
+
+def capability_rows(root: Path = KIT) -> list[dict]:
+    """`capabilities/catalog.json`'s rows, as written.
 
     THE SALES LAYER IS THE THIRD READER OF THIS REGISTRY, after the roles and
     the installer, and it is the one that says what a client BOUGHT. A capability
@@ -315,7 +321,12 @@ def capability_installs(root: Path = KIT) -> dict[str, dict]:
     entries = data.get("capabilities")
     if not isinstance(entries, list):
         fail(str(catalog), "has no `capabilities` list")
-    return {entry.get("id"): (entry.get("installs") or {}) for entry in entries}
+    return entries
+
+
+def capability_installs(root: Path = KIT) -> dict[str, dict]:
+    """Each capability's `installs`, keyed by id."""
+    return {row.get("id"): (row.get("installs") or {}) for row in capability_rows(root)}
 
 
 def check_capability_installs(root: Path = KIT) -> None:
@@ -332,18 +343,33 @@ def check_capability_installs(root: Path = KIT) -> None:
     the skill name, so the wrong key still happened to work, right up until a
     plugin's id stopped matching its skill's.
 
+    AND A `level: base` ROW HAS TO EXIST, WHICH IS THE HALF THE SOLO AGENT WAS
+    MISSING. `roles/skills_split.py` refused a base row whose kit skill nobody
+    had written -- but only a TEAM agent computes the split, so on a solo agent
+    the same catalog installed with rc=0 and said nothing. Measured: promote a
+    menu row to base and `install.sh <solo>/data` exits 0 while the team fixture
+    exits 1 with "nowhere in the kit". Here it is one rule and one message, and
+    both paths reach it: install.sh always asks `tools/plugin_set.py`, which
+    asks this.
+
+    A MENU ROW MAY NAME A SKILL NOBODY HAS WRITTEN and most of them do -- the
+    menu is what we SELL, and the work starts when a client buys one. `base` is
+    the word that turns a row into a promise ("ya viene puesta: no hay que
+    pedirla"), and that promise is checkable.
+
     Run at BUILD time (`tools/check-plugins.py`) and at INSTALL time
-    (`roles/skills_split.py`, which needs the base rows anyway). Not at boot:
-    an agent has no `capabilities/catalog.json` next to its `plugins/` -- the
-    catalog it carries is `policy/capabilities/`, which is the text the CLIENT
-    reads, and the registry validator runs over the agent's root.
+    (`tools/plugin_set.py` on every agent, and `roles/skills_split.py` on a team
+    one). Not at boot: an agent has no `capabilities/catalog.json` next to its
+    `plugins/` -- the catalog it carries is `policy/capabilities/`, which is the
+    text the CLIENT reads, and the registry validator runs over the agent's root.
     """
     available = registry(root)
     owned = {name: pid
              for pid, data in available.items()
              for name in data["surfaces"].get("skills") or []}
     where = str(root / "capabilities" / "catalog.json")
-    for cid, installs in capability_installs(root).items():
+    for row in capability_rows(root):
+        cid, installs = row.get("id"), (row.get("installs") or {})
         misplaced = [n for n in installs.get("kit_skills") or [] if n in owned]
         if misplaced:
             fail(where, f"capability {cid!r} installs {misplaced} under `kit_skills`, but "
@@ -356,6 +382,16 @@ def check_capability_installs(root: Path = KIT) -> None:
             fail(where, f"capability {cid!r} installs plugins {unknown}, which are not in "
                         "the registry (hermes-kit/plugins/). A capability sells something "
                         "that exists.")
+        if row.get("level") != BASE:
+            continue
+        unwritten = [n for n in installs.get("kit_skills") or []
+                     if not (root / "skills" / n / "SKILL.md").is_file()]
+        if unwritten:
+            fail(where, f"capability {cid!r} is `level: {BASE}` and installs kit skills "
+                        f"{unwritten}, which nobody has written (skills/). A base row is a "
+                        "promise that it is already on every agent, so what it installs has "
+                        "to exist before the row says base. A menu row may name a skill "
+                        "still to be built.")
 
 
 def check_kit_skills(names: list[str], owner: str, root: Path = KIT) -> None:

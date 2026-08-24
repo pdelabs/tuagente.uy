@@ -217,6 +217,15 @@ def base_capability_skills() -> set[str]:
     The catalog is validated first, loudly: a base row that named a plugin-owned
     skill under `kit_skills` used to work by accident, and it would stop working
     the day a plugin id and its skill name diverge.
+
+    THAT VALIDATION IS ALSO WHERE "the skill exists" LIVES NOW, and it moved
+    because this function is not on every path. There used to be a check right
+    here for a base row naming a kit skill nobody had written -- correct, and
+    reached only by a TEAM agent, because a solo one never computes a split. The
+    same catalog installed on a solo agent with rc=0 and no mention.
+    `plugin_registry.check_capability_installs` is asked by BOTH (install.sh
+    always runs `tools/plugin_set.py`), so the rule is one rule with one message
+    instead of two paths that disagree about whether it is a failure.
     """
     plugin_registry.check_capability_installs(KIT)
     available = plugin_registry.registry(KIT)
@@ -229,11 +238,6 @@ def base_capability_skills() -> set[str]:
         names.update(installs.get("kit_skills", []))
         for pid in installs.get("plugins", []):
             names.update(available[pid]["surfaces"].get("skills") or [])
-    missing = sorted(names - all_skills())
-    if missing:
-        raise SystemExit(
-            f"base capabilities install skills that are nowhere in the kit: {missing}"
-        )
     return names
 
 
