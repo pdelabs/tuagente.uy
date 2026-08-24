@@ -100,6 +100,14 @@ if [[ "$MODE" == local ]]; then
   COMPOSE="$DIR/docker-compose.yml"
   [[ -f "$COMPOSE" ]] || { echo "$COMPOSE doesn't exist — is that the agent's directory?" >&2; exit 1; }
   CONT="$(compose_container < "$COMPOSE")"
+  # A QUOTED VALUE IS STILL A VALID COMPOSE, and `docker exec` on the quotes is
+  # not. `container_name: "cliente-hermes"` is what a hand-edited compose looks
+  # like sooner or later, and the quotes come back attached: every `run` below
+  # then dies on `no such object: "cliente-hermes"` -- late, long after the name
+  # was resolved, naming something the compose never said. Stripping here is the
+  # only place that knows the value came out of YAML.
+  CONT="${CONT%\"}"; CONT="${CONT#\"}"
+  CONT="${CONT%\'}"; CONT="${CONT#\'}"
   [[ -n "$CONT" ]] || { echo "$COMPOSE has no container_name under the hermes service" >&2; exit 1; }
   POLICY_ROLES="$DIR/policy/roles"
   run() { docker exec "$CONT" sh -c "$1"; }
