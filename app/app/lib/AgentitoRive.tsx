@@ -62,8 +62,12 @@ type Props = {
 };
 
 export default function AgentitoRive(props: Props) {
-  // Safe to read during render: this module only ever loads via next/dynamic
-  // with ssr:false, so it always runs in the browser.
+  // Safe to read during render: the only thing that imports this module for
+  // its VALUE is `AgentitoAnimated`'s effect (lib/agentito.tsx), and an effect
+  // never runs on the server -- everything else imports it `import type`, which
+  // is erased. It therefore always runs in the browser. It used to say
+  // `next/dynamic` with ssr:false; 87cc977 removed that, and the guarantee now
+  // rests on the importer, so a second, SSR-reachable importer would break it.
   const [still] = useState(
     () => typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches,
