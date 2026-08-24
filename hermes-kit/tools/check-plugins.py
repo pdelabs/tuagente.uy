@@ -81,9 +81,8 @@ def platform_toolsets(root: Path) -> set[str]:
     ANY PLATFORM COUNTS, NOT ALL THREE. What a plugin declares is that the
     engine knows the word; that the three lists agree with each other is
     `agent-check.py`'s job, against a real agent. What is NOT here is
-    `agent.disabled_toolsets`: `tts` and `delegation` are named in that file too
-    and a plugin requiring one of them is requiring something this product
-    switches off, which is a refusal and not a pass.
+    `agent.disabled_toolsets` -- that is `disabled_toolsets()` below, and it is
+    a SEPARATE refusal, because a toolset can be on both lists at once.
     """
     base = root / "compose" / "config.base.yaml"
     if not base.is_file():
@@ -100,6 +99,40 @@ def platform_toolsets(root: Path) -> set[str]:
     return set(re.findall(r"^[ \t]+- ([A-Za-z0-9_.-]+)[ \t]*$", block, re.M))
 
 
+def disabled_toolsets(root: Path) -> set[str]:
+    """What `agent.disabled_toolsets` takes back, whatever the platforms say.
+
+    THE TWO LISTS ARE NOT OPPOSITES AND A TOOLSET CAN BE ON BOTH. The engine
+    subtracts a disabled toolset's static catalog at the very END -- "even if a
+    composite toolset is enabled, any tools belonging to a disabled toolset are
+    strictly stripped out" (`model_tools.py:410-441`, quoted in
+    `compose/config.base.yaml` where `browser` is removed by INCLUSION for
+    exactly this reason). So `platform_toolsets` alone answers "is the word
+    spelled right", not "will the tool be there".
+
+    Today the two lists are disjoint -- tts, delegation and cronjob against the
+    twelve -- so a plugin requiring a disabled one is already refused by not
+    being in `platform_toolsets`. That is a coincidence of the current data, not
+    a rule: the day somebody disables a toolset that a platform still lists, a
+    plugin requiring it would pass this check and ship asking for a word the
+    engine strips before the model ever sees it.
+    """
+    base = root / "compose" / "config.base.yaml"
+    text = base.read_text(encoding="utf-8")
+    start = re.search(r"^[ \t]+disabled_toolsets:[ \t]*$", text, re.M)
+    if not start:
+        return set()
+    out = set()
+    for line in text[start.end():].splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        item = re.match(r"^[ \t]+- ([A-Za-z0-9_.-]+)[ \t]*$", line)
+        if not item:
+            break                                 # the next key ends the list
+        out.add(item.group(1))
+    return out
+
+
 def check_requires(root: Path, plugins: dict) -> list[str]:
     """The two `requires` lists that are not plugins, crossed against their source.
 
@@ -110,6 +143,7 @@ def check_requires(root: Path, plugins: dict) -> list[str]:
     """
     connections = connection_ids(root)
     toolsets = platform_toolsets(root)
+    disabled = disabled_toolsets(root)
     bad = []
     for pid, data in sorted(plugins.items()):
         where = f"plugins/{pid}/{plugin_registry.MANIFEST}"
@@ -118,7 +152,12 @@ def check_requires(root: Path, plugins: dict) -> list[str]:
                 bad.append(f"{where}: requires the connection {cid!r}, which "
                            f"connections/catalog.json does not have")
         for toolset in data["requires"].get("toolsets") or []:
-            if toolset not in toolsets:
+            if toolset in disabled:
+                bad.append(f"{where}: requires the toolset {toolset!r}, which "
+                           f"compose/config.base.yaml switches off in "
+                           f"agent.disabled_toolsets — the engine strips its "
+                           f"tools whatever the platforms list")
+            elif toolset not in toolsets:
                 bad.append(f"{where}: requires the toolset {toolset!r}, which no "
                            f"platform in compose/config.base.yaml turns on")
     return bad
