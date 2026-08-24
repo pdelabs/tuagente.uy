@@ -28,9 +28,7 @@
       "brows": 1
     }
   },
-  "skills": [
-    "capability"
-  ],
+  "skills": [],
   "plugins": [
     "deliverable",
     "artifact",
@@ -38,7 +36,8 @@
     "flow",
     "brand-kit",
     "social-content",
-    "post-image"
+    "post-image",
+    "capability"
   ],
   "capabilities": [
     "social-package"

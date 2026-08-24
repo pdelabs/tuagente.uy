@@ -21,7 +21,8 @@ sys.path.insert(0, str(HERE))
 import plugin_registry
 import plugin_set
 
-SYSTEM_PLUGINS = {"kanban", "approval", "deliverable", "artifact", "flow"}
+SYSTEM_PLUGINS = {"kanban", "approval", "deliverable", "artifact", "flow",
+                  "capability"}
 
 
 def agent(*hired):

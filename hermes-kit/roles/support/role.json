@@ -26,13 +26,12 @@
       "brows": 0
     }
   },
-  "skills": [
-    "capability"
-  ],
+  "skills": [],
   "plugins": [
     "approval",
     "deliverable",
-    "flow"
+    "flow",
+    "capability"
   ],
   "capabilities": [],
   "connections": [

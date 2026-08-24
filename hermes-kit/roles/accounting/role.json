@@ -26,15 +26,14 @@
       "brows": 1
     }
   },
-  "skills": [
-    "capability"
-  ],
+  "skills": [],
   "plugins": [
     "invoices-to-data",
     "approval",
     "deliverable",
     "artifact",
-    "flow"
+    "flow",
+    "capability"
   ],
   "capabilities": [],
   "connections": [],

@@ -35,13 +35,12 @@
       "brows": 1
     }
   },
-  "skills": [
-    "capability"
-  ],
+  "skills": [],
   "plugins": [
     "approval",
     "deliverable",
-    "flow"
+    "flow",
+    "capability"
   ],
   "capabilities": [
     "web-search",

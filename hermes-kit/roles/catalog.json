@@ -47,9 +47,7 @@
       "never": "Publica nada sin tu aprobación.",
       "routing": "Writes and plans social media content: Instagram posts, stories, carousels, captions and the brand kit. Owns everything the company publishes to an audience. Route here anything about posting, publishing, campaigns, brand identity, visual pieces or editorial calendar.",
       "needs": [],
-      "skills": [
-        "capability"
-      ],
+      "skills": [],
       "plugins": [
         "deliverable",
         "artifact",
@@ -57,7 +55,8 @@
         "flow",
         "brand-kit",
         "social-content",
-        "post-image"
+        "post-image",
+        "capability"
       ],
       "flows": [
         "contenido-instagram-diario",
@@ -89,13 +88,12 @@
       "needs": [
         "whatsapp"
       ],
-      "skills": [
-        "capability"
-      ],
+      "skills": [],
       "plugins": [
         "approval",
         "deliverable",
-        "flow"
+        "flow",
+        "capability"
       ],
       "flows": [
         "fuera-de-hora",
@@ -126,15 +124,14 @@
       "never": "Cierra un precio ni promete una entrega sin tu aprobación.",
       "routing": "Prepares quotes and follows up on them: turns an inbound request into a priced proposal, chases the ones with no answer, and keeps the customer list up to date. Route here anything about quoting, pricing a job, proposals or follow-up.",
       "needs": [],
-      "skills": [
-        "capability"
-      ],
+      "skills": [],
       "plugins": [
         "approval",
         "deliverable",
         "artifact",
         "flow",
-        "quotes"
+        "quotes",
+        "capability"
       ],
       "flows": [
         "presupuesto-nuevo",
@@ -164,15 +161,14 @@
       "never": "Factura, paga ni presenta nada. Solo mira, ordena y avisa.",
       "routing": "Builds spreadsheets from financial records and flags what needs attention: income and expense sheets, reconciling what was charged against what was invoiced, and overdue invoice alerts. READ-ONLY: never files, pays or issues anything. Route here anything about numbers, invoices, spreadsheets or what is owed.",
       "needs": [],
-      "skills": [
-        "capability"
-      ],
+      "skills": [],
       "plugins": [
         "invoices-to-data",
         "approval",
         "deliverable",
         "artifact",
-        "flow"
+        "flow",
+        "capability"
       ],
       "flows": [
         "planilla-del-mes",
@@ -203,13 +199,12 @@
       "never": "Promete lo que no puede hacer. Si le falta una herramienta te lo dice y te ofrece la que lo resuelve.",
       "routing": "THE FALLBACK OF THE ROSTER, and it is meant to be reached often. The generalist: looks things up on the internet and writes a report with its sources, reads photos, screenshots and scanned PDFs, transcribes audio, does the calculations and turns any pile of material into a spreadsheet or a document. Route here EVERY work request that is not clearly publishing, answering a customer, quoting a price or arranging the numbers: research, errands, paperwork, file work, and anything the client asks for that has no craft name. It never takes work off a hired specialist: when a request belongs to one of the other roles it goes there even though this one could do it. When in doubt between this role and a craft role, the craft role wins; when in doubt between this role and nobody, and it is a work request, this role wins.",
       "needs": [],
-      "skills": [
-        "capability"
-      ],
+      "skills": [],
       "plugins": [
         "approval",
         "deliverable",
-        "flow"
+        "flow",
+        "capability"
       ],
       "flows": [
         "informe-con-fuentes",

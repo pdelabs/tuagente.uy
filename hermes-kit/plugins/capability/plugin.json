@@ -1,0 +1,42 @@
+{
+  "id": "capability",
+  "version": "1.0.0",
+  "description": "The only way in for anything the agent does not have: it delivers what it can, says what is missing, and offers the capability by id instead of improvising it or installing it",
+  "client_copy": "Cuando a tu agente le falta con qué hacer algo, te lo dice y te ofrece la capacidad que lo resuelve.",
+  "_comment": [
+    "SYSTEM, AND NOT BECAUSE ALL FIVE ROLES DECLARE IT. That they do is a fact",
+    "about today's roster; what makes this one a default is that it is the",
+    "product's own machinery. `capabilities/catalog.json` is the closed list the",
+    "client buys from, the adapter draws the card and logs the ask in",
+    "requests.jsonl, and the gate hook in policy/hooks/ redirects every blocked",
+    "install here BY NAME. A client plugin that wants to say «this needs",
+    "something you do not have» has to be able to depend on that being present,",
+    "and `system: true` is what lets it.",
+    "",
+    "IT REQUIRES NOTHING, AND THE SKILL.md IS WHY. The ask is not a ticket: it is",
+    "a `capability:<id>` mention alone on a line, inside the answer the agent is",
+    "already giving -- «El portal la convierte en una tarjeta con el texto ya",
+    "escrito y un botón». Nothing is blocked, nothing is approved, nothing is",
+    "delivered, so there is no kanban, approval or deliverable in this graph.",
+    "That also keeps the system rule satisfiable in the honest direction: a",
+    "default may only lean on defaults, and this one leans on none.",
+    "",
+    "NO TAB. There is no Capabilities page in app/app/ and there should not be one",
+    "for this: the card is drawn inline in the chat where the agent said what it",
+    "could not do, and at hire time by lib/hiring.tsx. A `label` here would have",
+    "phase 5 inventing a page for a plugin whose whole surface is a mention.",
+    "",
+    "references/catalog.md IS GENERATED from capabilities/catalog.json by",
+    "tools/capability-catalog.py --apply, which now writes into this plugin. The",
+    "JSON is the source -- the adapter reads it to draw the card -- and the",
+    "markdown is what the agent opens; hand-written twice they drift, and the day",
+    "they do the agent asks for an id the portal cannot draw."
+  ],
+  "requires": {},
+  "surfaces": {
+    "skills": [
+      "capability"
+    ]
+  },
+  "system": true
+}

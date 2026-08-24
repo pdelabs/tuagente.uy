@@ -20,7 +20,8 @@ import sys
 
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CATALOG = os.path.join(KIT, "capabilities", "catalog.json")
-DESTINATION = os.path.join(KIT, "skills", "capability", "references", "catalog.md")
+DESTINATION = os.path.join(KIT, "plugins", "capability", "skills", "capability",
+                           "references", "catalog.md")
 
 HEADER = """# Catálogo de capacidades
 
@@ -76,7 +77,7 @@ def render(data):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--apply", action="store_true",
-                    help="write it into skills/capability/references/catalog.md")
+                    help="write it into the capability plugin's references/catalog.md")
     args = ap.parse_args()
     with open(CATALOG, encoding="utf-8") as fh:
         data = json.load(fh)

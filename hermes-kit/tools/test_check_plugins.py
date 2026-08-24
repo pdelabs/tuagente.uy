@@ -340,7 +340,7 @@ class RoleSkillsListIsKitSkillsOnly(unittest.TestCase):
             plugin_registry.check_kit_skills(cfg.get("skills") or [], role_id, KIT)
 
 
-SYSTEM = ["approval", "artifact", "deliverable", "flow", "kanban"]
+SYSTEM = ["approval", "artifact", "capability", "deliverable", "flow", "kanban"]
 CLIENT = ["brand-kit", "drive-inbox", "invoices-to-data", "post-image",
           "quotes", "social-content", "transcribe"]
 
@@ -414,7 +414,14 @@ class TheKitsOwnRegistry(unittest.TestCase):
         self.assertIn("google-workspace", [c["id"] for c in catalog["connections"]])
 
     def test_the_system_graph_is_the_one_the_plan_drew(self):
-        """kanban is the root and everything else hangs off it."""
+        """kanban is the root of the board half, and capability stands apart.
+
+        The four that write into a TICKET hang off kanban. `capability` does
+        not: the ask is a `capability:<id>` mention inside the answer the agent
+        is already giving, so nothing is blocked, approved or delivered. It is
+        system for the other reason a plugin can be -- it is the product's own
+        machinery, and a client plugin has to be able to depend on it.
+        """
         plugins = plugin_registry.registry(KIT)
         needs = {pid: plugins[pid]["requires"].get("plugins", []) for pid in SYSTEM}
         self.assertEqual(needs, {
@@ -423,6 +430,7 @@ class TheKitsOwnRegistry(unittest.TestCase):
             "deliverable": ["kanban"],
             "artifact": ["kanban"],
             "flow": ["kanban", "approval"],
+            "capability": [],
         })
 
     def test_flow_carries_the_promises_guard_as_its_engine_surface(self):
@@ -447,14 +455,24 @@ class TheKitsOwnRegistry(unittest.TestCase):
         self.assertEqual(kanban["surfaces"]["tab"], {"builtin": "pipeline"})
         self.assertTrue(kanban["_comment"])
 
-    def test_every_system_plugin_names_a_portal_page_that_already_exists(self):
+    def test_every_system_plugin_with_a_tab_names_a_page_that_already_exists(self):
+        """`builtin` is the only honest tab for a screen written long before
+        anybody said the word plugin: a `label` would have phase 5 drawing a
+        second Pipeline next to the real one."""
         plugins = plugin_registry.registry(KIT)
-        self.assertEqual({pid: plugins[pid]["surfaces"]["tab"] for pid in SYSTEM}, {
+        tabs = {pid: plugins[pid]["surfaces"].get("tab") for pid in SYSTEM}
+        self.assertEqual(tabs, {
             "kanban": {"builtin": "pipeline"},
             "approval": {"builtin": "approvals"},
             "deliverable": {"builtin": "files"},
             "artifact": {"builtin": "artifacts"},
             "flow": {"builtin": "flows"},
+            # THE ONE SYSTEM PLUGIN WITH NO PAGE, and that is the honest answer:
+            # there is no Capabilities tab in app/app/ and there should not be
+            # one. The card is drawn inline in the chat where the agent said what
+            # it could not do, out of a `capability:<id>` mention, and at hire
+            # time by lib/hiring.tsx.
+            "capability": None,
         })
 
     def test_their_skills_resolve_to_the_directory_that_holds_the_skill_md(self):
@@ -472,7 +490,8 @@ class TheKitsOwnRegistry(unittest.TestCase):
         dirs = skills_split.skill_dirs()
         self.assertEqual(dirs["transcribe"], KIT / "plugins/transcribe/skills/transcribe")
         self.assertEqual(dirs["approval"], KIT / "plugins/approval/skills/approval")
-        self.assertEqual(dirs["capability"], KIT / "skills/capability")
+        self.assertEqual(dirs["capability"],
+                         KIT / "plugins/capability/skills/capability")
         self.assertEqual(len(dirs), len(set(dirs)))
 
 
