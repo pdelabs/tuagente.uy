@@ -690,8 +690,11 @@ Installed. What's left to do by hand:
      anything up.
   4. docker compose up -d
   5. Check the contract with the portal, now that it's running:
-       python3 tools/portal-check.py --key <API_SERVER_KEY>
-     0 failures or it doesn't ship.
+       python3 tools/portal-check.py --key <API_SERVER_KEY> \
+           --endpoint http://127.0.0.1:<port> --adapter http://127.0.0.1:<port+1>
+     0 failures or it doesn't ship. The two URLs default to 8642/8643 and the
+     ports move on a host that already runs an agent: without them this greets
+     the OTHER agent and passes green.
 
 Skills take a few minutes to show up in the agent's index: that's normal,
 Hermes reindexes on its own once it sees the new files.
