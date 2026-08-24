@@ -11,17 +11,11 @@
 // Entered via the normal magic link (#key=...): with no key it shows nothing.
 
 import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
 import { getManifest, loadConfig } from "../lib/agent";
 import {
-  AgentitoLoading, LOOK_DEFAULT, hasSavedLook, loadAgentLook,
+  AgentitoAnimated, LOOK_DEFAULT, hasSavedLook, loadAgentLook,
   lookFromAgent, type AgentitoLook,
 } from "../lib/agentito";
-
-const AgentitoRive = dynamic(() => import("../lib/AgentitoRive"), {
-  ssr: false,
-  loading: () => <AgentitoLoading />,
-});
 
 // CANONICAL order of the axes for the #look= parameter (comma-separated).
 const AXES_ORDER = ["tone", "antenna", "accessory", "pupil", "mouth", "skin", "suit", "brows"] as const;
@@ -65,7 +59,7 @@ export default function AvatarPage() {
       }}
     >
       <div style={{ width: 560, height: 560 }}>
-        <AgentitoRive celebrations={0} look={look} state="normal" className="h-full w-full" />
+        <AgentitoAnimated celebrations={0} look={look} state="normal" className="h-full w-full" />
       </div>
     </div>
   );

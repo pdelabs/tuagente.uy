@@ -22,18 +22,12 @@ import {
 import { EntityProvider } from "../lib/EntityViewer";
 import Markdown from "../lib/Markdown";
 import ArtifactPreview, { artifactIdsIn } from "../lib/ArtifactPreview";
-import dynamic from "next/dynamic";
 import { loadAgentName } from "../lib/onboarding";
-import { AgentitoAvatar, AgentitoLoading, LOOK_DEFAULT, loadAgentLook, type AgentitoLook } from "../lib/agentito";
+import {
+  AgentitoAnimated, AgentitoAvatar, LOOK_DEFAULT, loadAgentLook, type AgentitoLook,
+} from "../lib/agentito";
 import { roleName, useRoles } from "../lib/roles";
 import type { AgentitoState } from "../lib/AgentitoRive";
-
-// The animated character is only pulled in once the chat shows; until then,
-// the static face. Same pattern as onboarding.
-const AgentitoRive = dynamic(() => import("../lib/AgentitoRive"), {
-  ssr: false,
-  loading: () => <AgentitoLoading />,
-});
 import { actionFor, summarizeActions } from "../lib/labels";
 import Sessions, { sessionTitle, type SessionSummary } from "./Sessions";
 import {
@@ -752,7 +746,7 @@ export default function ChatPage() {
                 {/* The agentito greets you — the ANIMATED one: while you're
                     not asking for anything, it sips some mate (calm state). */}
                 <div className="mb-5 h-36 w-36">
-                  <AgentitoRive celebrations={0} look={agentLook} state="calm" className="h-full w-full" />
+                  <AgentitoAnimated celebrations={0} look={agentLook} state="calm" className="h-full w-full" />
                 </div>
                 <p className="text-base font-bold text-ink">
                   {agentName ? `¿En qué te puede ayudar ${agentName}?` : "¿En qué te puedo ayudar?"}
@@ -815,7 +809,7 @@ export default function ChatPage() {
                           "who did this" reads the same everywhere. */}
                       <div className="mt-0.5 h-7 w-7 shrink-0">
                         {sending && i === lastIdx ? (
-                          <AgentitoRive
+                          <AgentitoAnimated
                             celebrations={0}
                             look={lookFor(m.by)}
                             state={gestureFor(liveTools[liveTools.length - 1])}

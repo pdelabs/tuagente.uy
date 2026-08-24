@@ -12,7 +12,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { ArrowRight, BellOff, Columns3, Dices, Hand, MessageSquare, X } from "lucide-react";
 import { Btn, inputCls } from "./ui";
 import { ExampleCarousel } from "./flowExamples";
@@ -23,16 +22,9 @@ import {
   type Connection, type Manifest, type PortalConfig,
 } from "./agent";
 import {
-  AgentitoLoading, RIVE_AXES, LOOK_DEFAULT, hasSavedLook, loadAgentLook,
+  AgentitoAnimated, RIVE_AXES, LOOK_DEFAULT, hasSavedLook, loadAgentLook,
   lookFromAgent, saveAgentLook, type AgentitoLook,
 } from "./agentito";
-
-// Rive's runtime (~330 KB gz) only gets brought in when onboarding shows; the
-// rest of the portal doesn't pay for it. Meanwhile, the static face.
-const AgentitoRive = dynamic(() => import("./AgentitoRive"), {
-  ssr: false,
-  loading: () => <AgentitoLoading />,
-});
 
 const NAME_KEY = "tuagente_agent_name";
 
@@ -625,7 +617,7 @@ export default function Onboarding({ manifest, cfg, onDone, team }: {
           {/* If it was handed the site, the agentito isn't idle: it's really
               reading it -- the adapter already created the brief's ticket.
               The gesture isn't decorative, it shows what's actually happening. */}
-          <AgentitoRive
+          <AgentitoAnimated
             celebrations={celebrations}
             look={look}
             state={posing ? "normal" : readingWeb ? gesture : "calm"}

@@ -20,7 +20,6 @@ import {
   type Dispatch, type ReactNode, type SetStateAction,
 } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import {
   Activity, ArrowRight, CheckCircle2, ChevronRight, Clock, Columns3,
   FolderOpen, Hand, LayoutDashboard, MessageSquare, Plug, Plus, RefreshCw, Workflow,
@@ -44,16 +43,8 @@ import {
 } from "../lib/labels";
 import { humanizeRuns } from "../lib/events";
 import { agentDisplayName } from "../lib/onboarding";
-import { AgentitoLoading, loadAgentLook } from "../lib/agentito";
+import { AgentitoAnimated, loadAgentLook } from "../lib/agentito";
 import type { AgentitoState } from "../lib/AgentitoRive";
-
-// The animated character is only fetched here and in onboarding; the rest
-// of the portal doesn't pay for the runtime. While it loads, the same
-// face shows, still.
-const AgentitoRive = dynamic(() => import("../lib/AgentitoRive"), {
-  ssr: false,
-  loading: () => <AgentitoLoading />,
-});
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
@@ -771,10 +762,10 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
           If something's waiting for your ok it looks toward the badge; if
           there's nothing, it pours itself some mate. */}
       <div className="mb-6 flex items-start gap-3 sm:gap-4">
-        {/* The size goes out here, not in the component: next/dynamic's
-            placeholder doesn't take a className and would end up full-screen. */}
+        {/* The size goes out here, not in the component: the character fills
+            whatever box it is put in. */}
         <div className="-mt-1 h-16 w-16 shrink-0 sm:h-[72px] sm:w-[72px]">
-          <AgentitoRive
+          <AgentitoAnimated
             celebrations={celebrations}
             look={look}
             state={agentState}

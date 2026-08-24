@@ -35,7 +35,6 @@
 // `layout.tsx` builds it using this same hook's `hired` state.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import dynamic from "next/dynamic";
 import { ArrowRight, ChevronLeft, Dices, Workflow } from "lucide-react";
 import {
   createRoleRequest, suggestCapabilities, getRoles,
@@ -43,20 +42,12 @@ import {
   type PortalConfig, type Role,
 } from "./agent";
 import {
-  AgentitoAvatar, AgentitoLoading, LOOK_DEFAULT, type AgentitoLook,
+  AgentitoAnimated, AgentitoAvatar, LOOK_DEFAULT, type AgentitoLook,
 } from "./agentito";
 import { capabilityCatalog, byGroup } from "./capabilities";
 import { randomizeLook } from "./onboarding";
 import { channelLabel } from "./labels";
 import { Btn, Card, Chip, inputCls, Support, Spinner } from "./ui";
-
-// Rive's runtime only gets brought in here, same as in onboarding: the rest
-// of the portal doesn't pay for the ~330 KB. While it loads, the same static
-// face.
-const AgentitoRive = dynamic(() => import("./AgentitoRive"), {
-  ssr: false,
-  loading: () => <AgentitoLoading />,
-});
 
 // How often to check whether the role is already there. It's the wait of
 // someone who knows a person on the other end is doing this: checking every
@@ -593,7 +584,7 @@ export function RoleNaming({ cfg, role, capabilities, onDone, onBack, backLabel 
             but here the next screen is the wait and the character unmounts on
             the same tick. A counter nobody's watching is a promised animation
             that never happens. */}
-        <AgentitoRive celebrations={0} look={look} state="normal" className="h-full w-full" />
+        <AgentitoAnimated celebrations={0} look={look} state="normal" className="h-full w-full" />
         <button
           onClick={() => setLook(randomizeLook(look))}
           title="Otro look"

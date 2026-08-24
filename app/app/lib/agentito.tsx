@@ -9,9 +9,12 @@
 // React-free module that hermes-kit/tools/draw-agentito.mjs (the headless
 // SVG/PNG generator) also consumes. This component only injects that string --
 // by construction it can never diverge from the tool. If you touch a trait,
-// touch it there. Rive's runtime is NOT imported here: this module ships in
-// the common bundle and has to stay lightweight.
+// touch it there. Rive's runtime is NOT imported here either: it travels as
+// its own chunk, asked for by `AgentitoAnimated` when the character is drawn,
+// because this module ships in the common bundle and has to stay lightweight.
 
+import { useEffect, useState, type ComponentType } from "react";
+import type { AgentitoState } from "./AgentitoRive";
 import {
   LOOK_AXES,
   LOOK_DEFAULT,
@@ -86,17 +89,36 @@ export function lookFromAgent(raw: unknown): AgentitoLook | null {
   return any ? look : null;
 }
 
+type AgentitoAnimatedProps = {
+  /** Counter: each increment fires the celebration trigger. */
+  celebrations: number;
+  look: AgentitoLook;
+  state?: AgentitoState;
+  className?: string;
+};
+
 /**
- * Placeholder while `next/dynamic` brings in Rive's runtime.
+ * The animated character, WEARING THE LOOK IT WAS GIVEN FROM THE FIRST FRAME.
  *
- * HEADS UP: `next/dynamic`'s `loading` replaces the whole component, so it
- * receives NOTHING that's passed to AgentitoRive -- not the size, not the
- * look. Hence: it fills its container (the size lives in an outer div) and
- * reads the look from localStorage. Without this, a giant violet agentito
- * flashes for a moment.
+ * Rive's runtime (~330 KB plus its wasm) is its own chunk and only travels
+ * when the character is actually drawn; until it lands, the still agentito
+ * stands in. It used to stand in through `next/dynamic`'s `loading`, which
+ * receives NONE of the props -- not the size, not the look -- so the only
+ * face it could read was the agent's own, out of the browser. ON A TEAM THAT
+ * FACE BELONGS TO NOBODY: the greeter introduced the teammate the client had
+ * just hired, by their name, wearing the agent's default violet until the
+ * runtime arrived, and a reply being written in the chat did the same.
+ * Holding the props here is what lets the stand-in wear the right face.
  */
-export function AgentitoLoading() {
-  return <AgentitoAvatar look={loadAgentLook()} alive className="h-full w-full" />;
+export function AgentitoAnimated(props: AgentitoAnimatedProps) {
+  const [Animated, setAnimated] = useState<ComponentType<AgentitoAnimatedProps> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    import("./AgentitoRive").then((m) => { if (alive) setAnimated(() => m.default); });
+    return () => { alive = false; };
+  }, []);
+  if (!Animated) return <AgentitoAvatar look={props.look} alive className={props.className} />;
+  return <Animated {...props} />;
 }
 
 /**
