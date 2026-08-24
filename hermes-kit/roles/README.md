@@ -47,6 +47,41 @@ both lists and flattens them into one `skills/` directory in the
 distribution, which is the only layout the agent has until phase 3
 (`../notes/plugin-system-plan.md`).
 
+## One skill, one home
+
+**A skill the split calls SHARED does not travel inside the profile.** It is
+installed once, in `<agent>/kit-skills/`, mounted `:ro` at `/opt/kit/skills`
+for the whole installation, and every role reads it from there. Only the
+role-only ones are packed into the distribution's `skills/` — on a team agent
+kit-skills/ holds the shared set and nothing else, so nothing else would
+deliver `brand-kit` or `invoices-to-data`.
+
+It used to be both, and that was harmless until each profile got
+`skills.external_dirs` (`ae377d5`) and could finally see the kit's copy next to
+its own. The engine does not pick a winner: it refuses the name.
+
+    Ambiguous skill name 'deliverable/SKILL.md': 2 skills match across your
+    local skills dir and external_dirs. Refusing to guess.
+
+Thirteen of those in one day on the local agent, and the roles flail around
+them — 42 tool calls on the worst turn, and the approval it had been asked for
+never got filed.
+
+Two consequences worth knowing about:
+
+* **`assistant` and `support` ship an EMPTY `skills/`**, and the empty
+  directory is load-bearing. `skills/` is `distribution_owned` and the engine
+  wipes a distribution-owned directory before copying it, so shipping it empty
+  is what removes the stale copies from an agent hired before this. Leaving
+  the directory out would leave them there.
+* **`role.json` still lists every skill the role works with**, shared included.
+  The manifest describes the role; the directory describes the payload. A
+  marketing `role.json` that stopped mentioning `deliverable` would say the
+  role cannot leave a file, which is false — the file it reads is the kit's.
+
+`tools/agent-check.py` («roles: one skill, one home») fails over an installed
+agent that has both copies, naming the skill and both directories.
+
 ## The rule that can't be broken
 
 **The SOUL's `kit:base` block is the same for every role, byte for byte.**
