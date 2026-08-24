@@ -585,14 +585,10 @@ own measurement.
     client's disk -- and, depending on which profile spoke first after a boot,
     sometimes ran for nobody at all.
 
-14. **`lab-equipo-spike` (OpenRouter, US$5 cap) has no user left.** The lab
-    it belonged to was deleted on 24/8; the key was never revoked. Revoke
-    it. Not urgent — it is capped and nothing holds it — but a live key
-    with no owner is exactly the kind of thing nobody finds later.
-    Separately, and checked the same day: `east-comunicacion` is shared
-    between East's agent and `tuagente-local-agent`, which carries its own
-    copy in its own `secrets.env`. Deleting a directory never touched that
-    key anyway — it lives at OpenRouter, not on disk.
+14. ~~Revoke `lab-equipo-spike`~~ **DONE 2026-08-24**: disabled via the
+    provisioning API the same day this pending was written (the sweeps crossed
+    in flight). `east-comunicacion` stays alive — but see the note about WHOSE
+    key that is in the fleet report.
 
 ## Luis's ground rules
 
