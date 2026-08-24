@@ -289,10 +289,19 @@ copy).
    it is heavy usage (30 heavy turns/day ≈ US$23). The old 9x gap was a
    MEASUREMENT problem, not an economics one. Only the pricing decision is
    left (Luis).
-1b. The "Skipping secondary profile ... port-binding api_server" warning on
-   every boot with multiplex is benign (measured: `/p/<role>/` answers the
-   same either way) but noisy; see if the dist can avoid declaring
-   api_server on the profile.
+1b. **DONE (23/8, on the local agent).** The "Skipping secondary profile ...
+   port-binding api_server" warning was not noise: the gateway starts NO
+   adapters for a skipped profile and drops it from `served_profiles`
+   (measured by pulling accounting's config.yaml back out and rebooting:
+   `['default', 'marketing']`). It only LOOKED benign because /p/<role>/ is
+   answered off a directory scan the skip never touches. The cause was the distribution
+   shipping no `config.yaml` at all: the container's `API_SERVER_KEY` then
+   turns api_server on for every profile from the environment. Now
+   `roles/build_role.py` ships the pin, `hire-role.sh --update` passes
+   `--force-config` and fails if the boot it caused logs a new skip, and
+   `agent-check.py` has "roles: no profile binds the shared port". (032b271, 0e2bf7e) Both roles
+   on the local agent were healed with `--update` and the room answered:
+   routed to `accounting`, `finish_reason=stop`, 6 API calls.
 4. Mr.Wobble is still pre-pivot; migrate it whenever Luis wants. Merging to
    main is Luis's call.
 5. Orphaned engine sessions (one per room turn) pile up in each profile — we
@@ -339,6 +348,35 @@ copy).
     the file is append-only and the portal reads the catalog — but any
     historical analysis of what clients requested won't line up before and
     after. An analysis note, not a task.
+
+13. **A role inherits NONE of the agent's config knobs, and that is
+    measured, not feared** (23/8, local agent, resolving the engine's own
+    loader under each home). `data/config.yaml` belongs to the DEFAULT
+    profile; a secondary profile reads its own, and ours carries one line.
+    Side by side:
+
+        default profile           accounting
+        model    gpt-5.6-luna     model    None  -> engine default, and the
+                                                    live turn ran on
+                                                    z-ai/glm-5.2
+        toolsets [kanban]         toolsets [hermes-cli]
+        platform_hints api_server platform_hints (none) -> the role gets the
+                                                    engine's "assume plain
+                                                    text, no markdown"
+                                                    preamble, the one the kit
+                                                    replaces on purpose
+        skills.disabled 66        skills.disabled 0     -> all 70 engine
+                                                    skills indexed for the role
+        external_dirs /opt/kit/skills   external_dirs (none)
+
+    So every cost and quality number measured for a role was measured on
+    another model with another prompt. Predates the port-binding fix (the
+    profile had no config at all), and the fix is now cheap: the distribution
+    already writes a `config.yaml`. What it cannot decide is WHICH knobs
+    travel — the distribution is generic and the model is the client's — so
+    the copy has to happen where the agent's own config is at hand
+    (`hire-role.sh`, or `install.sh` per hired role). Decide before pricing
+    anything off the numbers in 1.
 
 ## Luis's ground rules
 
