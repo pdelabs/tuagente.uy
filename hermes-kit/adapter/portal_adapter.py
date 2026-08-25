@@ -24,7 +24,7 @@ from kanban import KanbanStore
 from rooms import RoomStore
 from workspace import MAX_FILE_BYTES, WorkspaceStore
 
-VERSION = "0.42.1"
+VERSION = "0.42.2"
 # The gateway answers the session stream WITHOUT CORS headers (it only sends
 # them on the preflight), so the browser discards the response. We proxy it.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
@@ -217,6 +217,13 @@ def _soul_block(name, company="", url=""):
     tell it about their business during onboarding and the agent would still
     ask "what do you sell?" on the first flow. Seen on 11/8: it asked to
     track competitors and the agent did not know which company it meant.
+
+    EACH PARAGRAPH ONLY EXISTS IF ITS DATUM DOES. The baptism used to be
+    emitted unconditionally, and a team client -- whose onboarding starts at
+    the business step, because nobody names a team's solo agent -- got
+    "te bautizo **** desde el portal. Ese es tu nombre" in their prompt: the
+    first thing the portal told their agent was to introduce itself as the
+    empty string.
     """
     name = _clean_for_soul(name)
     company = _clean_for_soul(company)
@@ -225,12 +232,15 @@ def _soul_block(name, company="", url=""):
     parts = [
         SOUL_START,
         "## Quien sos y para quien trabajas",
-        "",
-        f"Tu cliente te bautizo **{name}** desde el portal. Ese es tu nombre:",
-        "presentate asi cuando saludes, cuando te pregunten quien sos y en",
-        "todos los canales. Si el resto de este documento te llama de otra",
-        "forma, vale este.",
     ]
+    if name:
+        parts += [
+            "",
+            f"Tu cliente te bautizo **{name}** desde el portal. Ese es tu nombre:",
+            "presentate asi cuando saludes, cuando te pregunten quien sos y en",
+            "todos los canales. Si el resto de este documento te llama de otra",
+            "forma, vale este.",
+        ]
     if company:
         where = f" Su sitio es {url}." if url else ""
         parts += [

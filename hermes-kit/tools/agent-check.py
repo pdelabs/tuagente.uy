@@ -69,6 +69,12 @@ PORTAL_IDENTITY = re.compile(
     r"<!--\s*portal:identity\s*-->(.*?)<!--\s*/portal:identity\s*-->", re.S
 )
 IDENTITY_H1 = re.compile(r"^#\s+\S", re.M)
+# INSIDE the portal block, the two things that make it an identity: the
+# baptism (naming step) and the company (business step). The block existing is
+# not enough — until adapter 0.42.2 it was written even with an empty name and
+# this check went green on «te bautizo **** desde el portal».
+PORTAL_NAME = re.compile(r"te bautiz[oó]\s+\*\*([^*]+)\*\*")
+PORTAL_COMPANY = re.compile(r"[Tt]rabaj[aá]s para\s+\*\*([^*]+)\*\*")
 
 # The only engine skills left on. The real list is in
 # compose/skills-allowed.txt; this is the fallback in case someone runs the
@@ -1382,11 +1388,37 @@ def main():
         introduces itself as the generic assistant of whoever built it instead
         of the agent of the company paying for it. Verified with the remote
         agents, which were running on 800 bytes of preamble and nothing else.
+
+        WHAT COUNTS AS AN IDENTITY DEPENDS ON THE SHAPE, and the portal decides
+        it (`app/app/lib/onboarding.tsx`): a solo client is asked for a NAME
+        first and then for their business; a team client is never asked for a
+        name — the roster's roles are named one by one when they are hired —
+        and their onboarding opens at the business step. So a name is not
+        required: WHO IT WORKS FOR is enough, and it is the only identity a
+        team's shared agent legitimately has. What is never enough is the
+        block being present: an empty baptism is not a name.
         """
         text = soul(data)
         portal = PORTAL_IDENTITY.search(text)
-        if portal and portal.group(1).strip():
-            return "portal:identity block (written by the portal's naming step)"
+        if portal:
+            block = portal.group(1)
+            name = PORTAL_NAME.search(block)
+            company = PORTAL_COMPANY.search(block)
+            name = name.group(1).strip() if name else ""
+            company = company.group(1).strip() if company else ""
+            if name:
+                return f"portal:identity block — it is «{name}»"
+            if company:
+                return (f"portal:identity block — with no name of its own "
+                        f"(a team client never names theirs), works for «{company}»")
+            raise AssertionError(
+                "the portal:identity block is there but says NOTHING: no name "
+                "and no company. Either the client abandoned onboarding before "
+                "answering, or an adapter older than 0.42.2 wrote the baptism "
+                "with an empty name («te bautizo **** desde el portal»). Have "
+                "them finish onboarding, or write the identity by hand from "
+                "soul/00-identity.md"
+            )
         # Its own is looked for OUTSIDE the generic block: there are no
         # first-level headings inside it, so a "# …" out there is the identity
         # block.
@@ -1399,7 +1431,11 @@ def main():
         raise AssertionError(
             "the SOUL does not say who it is or who it works for: there is no "
             "identity block (a first-level heading, '# Sos …, el agente de …') and "
-            "no portal:identity block — it is written by hand from soul/00-identity.md"
+            "no portal:identity block. The portal writes that block on the first "
+            "onboarding — the naming step for a solo agent, the business step for "
+            "a team one — so a brand-new agent fails this until the client goes "
+            "through it; to power one on before that, write it by hand from "
+            "soul/00-identity.md"
         )
 
     def _kit_version():
