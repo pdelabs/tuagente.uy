@@ -1056,3 +1056,62 @@ left `.kit-installed.new` unconsumed, one obsolete craft skill still mounted
 `:ro`, and the final `chown` never run — so the freshly uploaded files stayed
 `501:staff` on the VPS. The pipe masked the exit status. Redirect to a file;
 re-running the deploy converged everything.
+
+## The first hire, on a real client's request (25/8)
+
+Luis onboarded through the portal as a new client and hired `support` from
+Equipo; the request landed in `policy/roles/requests.jsonl` with the
+catalog's Beto and the look he kept. Fulfilled with `tools/hire-role.sh
+support tuagente --from-request`, `deploy-remote.sh`, `observability.sh
+tuagente on` — 82 s of hire, 5 min from the request line to `hired`, 0
+failures on both checks and **US$0.00 for the hire chain**. Five more things
+the runbook does not say, numbered on from the 24/8 nine.
+
+**10. Nothing documents that a hire is THREE commands, not one.**
+`client-onboarding.md` Phase 3b ends at `hire-role.sh`. The installer re-run
+is printed by the script itself; the observability re-run lives **only in a
+comment inside `observability.sh`** ("RE-RUN THIS AFTER EVERY HIRE"), where no
+operator reads it. It is not cosmetic: right after the hire,
+`data/profiles/support/.env` held `API_SERVER_KEY` and nothing else, so
+Beto's image generation would have gone around litellm — untraced and absent
+from `costs.jsonl`, which is the exact failure the three-route note in that
+script was written about. Phase 3b has to carry the sequence.
+
+**11. `install.sh` tells you to delete the file `observability.sh` needs.**
+Every deploy prints «there are keys in secrets.env AND in data/.env […]
+delete the data/ one by hand». There is no key in `data/.env`: it holds
+`OPENROUTER_BASE_URL=http://litellm:4000`, put there on purpose (a profile's
+secret scope does not fall through to the environment), and `agent-check`
+reports the same file as OK — «credentials — 4 variables · data/.env holds
+OPENROUTER_BASE_URL». Two kit tools, opposite instructions about one file.
+The warning should read what is in it instead of that it exists.
+
+**12. The ledger is stamped by two clocks and can read backwards.** The
+adapter writes `requested_at` in the agent's TZ; `hire-role.sh` writes
+`hired_at` and `named_at` with `time.strftime` on the OPERATOR's machine.
+Both naive, no offset. This hire, six minutes after the request, landed as
+`requested_at 2026-08-25T12:13:17` (UTC-3) and `hired_at
+2026-08-25T09:19:49` (the operator's UTC-6) — the fulfilment three hours
+before the request that caused it. Only a human reads those fields today;
+the first screen that sorts or subtracts them will lie. Both should be UTC
+with the offset written down.
+
+**13. The mirror does not version a hired role.** `tuagente-agent/.gitignore`
+keeps `data/*` out except `SOUL.md`, `config.yaml`, `connections/` and the
+skills manifest — so `data/profiles/support/` (its projected `config.yaml`,
+its `role.json`, its SOUL with the baptism) is in the working tree and in no
+commit. That directory is precisely what six of `agent-check`'s checks read,
+and the mirror exists to be what the checks read. Decide whether the profile
+is versioned or the README says it is deliberately not.
+
+**14. And the day-one spend is the brief, not the hire.** The pristine
+agent's US$0.00 survived the hire, the redeploy and the observability re-run
+untouched; the first charge — US$0.0165 over 12 calls at ~22 k input tokens
+— is the `Conocer <empresa>` ticket that onboarding's business step spawns
+one minute later. Worth pinning because "hiring a teammate costs nothing" and
+"onboarding costs a turn" are two different sentences, and only the second is
+what a client's first minute actually charges.
+
+**Bug 3 is still exactly as reported**: `deploy-remote.sh`'s closing step 3
+printed the `rsync -a … /data/` + `agent-check` instruction again, verbatim.
+The whole tree gave 35 ok · 1 warn · 0 failures.

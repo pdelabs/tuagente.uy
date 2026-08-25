@@ -14,7 +14,7 @@ old date isn't a problem; a row that says something no longer true is.
 | Agent | Host | SOUL | Engine | Last check |
 |---|---|---|---|---|
 | East Comunicación | `east` → `/opt/agentes/east` | **v1** — the bare `<!-- kit:base -->` marker, no version (read over ssh, 24/8/2026) | `v2026.7.30` (24/8: read from that host's `docker ps`, not the compose) | 24/8: alive only. Host up 14 days, `east-hermes` / `east-portal-adapter` / `east-caddy` up 13 days. No `agent-check` run — see below |
-| tuagente.uy (our own) | `tuagente` → `/opt/agentes/tuagente` | **v13** — installed 24/8 by `deploy-remote.sh`, marker read back off disk | `v2026.7.30` (24/8: `docker inspect tuagente-hermes`) | 24/8, the day it was built: `agent-check` **30 ok · 1 warn · 1 failure**, and the failure is the identity, which is the pristine state (see below); `portal-check` **13 ok · 2 warn · 0 failures** through both HTTPS hostnames. 25/8, redeployed for adapter **0.42.2** (the empty-baptism fix) and `observability.sh tuagente on` re-run because the redeploy rewrites the root `.env`: `agent-check` **30 ok · 1 warn · 1 failure** over the WHOLE tree — still the identity, still the pristine state, now failing with the true reason (no block at all, nobody has onboarded it); `portal-check` **13 ok · 2 warn · 0 failures**, 0 sessions · 0 tickets · 0 hired · US$0.0000 |
+| tuagente.uy (our own) | `tuagente` → `/opt/agentes/tuagente` | **v13** — installed 24/8 by `deploy-remote.sh`, marker read back off disk | `v2026.7.30` (24/8: `docker inspect tuagente-hermes`) | 24/8, the day it was built: `agent-check` **30 ok · 1 warn · 1 failure**, and the failure is the identity, which is the pristine state (see below); `portal-check` **13 ok · 2 warn · 0 failures** through both HTTPS hostnames. 25/8, redeployed for adapter **0.42.2** (the empty-baptism fix) and `observability.sh tuagente on` re-run because the redeploy rewrites the root `.env`: `agent-check` **30 ok · 1 warn · 1 failure** over the WHOLE tree — still the identity, still the pristine state, now failing with the true reason (no block at all, nobody has onboarded it); `portal-check` **13 ok · 2 warn · 0 failures**, 0 sessions · 0 tickets · 0 hired · US$0.0000. **25/8, no longer pristine**: Luis onboarded through the portal as a client and hired `support` (Beto) from the request — `agent-check` over the whole tree **35 ok · 1 warn · 0 failures** (the identity closed itself: the business step wrote «Tu Agente»), `portal-check` **13 ok · 2 warn · 0 failures**, multiplex `['default', 'support']`, 1 session · 1 ticket · 1 hired · US$0.0165 — the onboarding brief, not the hire |
 
 **Mr.Wobble is decommissioned — 24/8/2026, Luis' decision.** It left the table
 because the table says what runs where, and nothing runs there any more.
@@ -94,14 +94,29 @@ one is ours and invisible to the client: the chat and the image route both go
 through litellm (`base_url` and `OPENROUTER_BASE_URL`, the two halves), so
 `costs.jsonl` will hold the client's very first turn.
 
-**Its `agent-check` failure is the product's, not this build's.** The one
-failure is `SOUL: identity`, and on a TEAM agent nothing ever closes it: the
-portal skips the naming step when a roster is present (`onboarding.tsx`:
-`team ? "business" : …`), so `POST /portal/identity` never carries a `name`,
-and no runbook step writes `00-identity.md` for a team client. Worse, the step
-the client DOES answer makes it wrong rather than absent — see `docs/PENDING.md`,
-"What the fresh deploy of 24/8 exposed". Left as-is on purpose: writing an
-identity here would have hidden exactly the thing this agent was built to show.
+**And it stopped being pristine on 25/8, which is what it was built for**:
+Luis walked in as a client — hired `support` (Beto) off the roster and
+answered the business step. The day-one path is now measured instead of
+assumed: `hire-role.sh --from-request` + `deploy-remote.sh` +
+`observability.sh on` cost **US$0.00** and took 5 minutes from the request
+line to `hired`; the first charge on the key, US$0.0165, is the
+`Conocer <empresa>` ticket the business step spawns a minute later. Five more
+runbook gaps came out of it — `docs/PENDING.md`, items 10 to 14.
+
+**Its `agent-check` failure was the product's, not this build's — and 25/8
+closed it.** The one failure was `SOUL: identity`, and on a TEAM agent nothing
+ever closed it: the portal skips the naming step when a roster is present
+(`onboarding.tsx`: `team ? "business" : …`), so `POST /portal/identity` never
+carries a `name`, and no runbook step writes `00-identity.md` for a team
+client. Worse, the step the client DOES answer made it wrong rather than
+absent — see `docs/PENDING.md`, "What the fresh deploy of 24/8 exposed". Left
+as-is on purpose: writing an identity here would have hidden exactly the thing
+this agent was built to show — and it paid off. Adapter 0.42.2 stopped
+`_soul_block` from emitting a paragraph whose datum is missing and made the
+check read INSIDE the block;
+Luis' business step then wrote «Trabajás para **Tu Agente**» with no baptism
+paragraph at all, and the check went green on the identity a team's shared
+agent legitimately has.
 
 *(Everything about Mr.Wobble from here down is the record of an agent that
 no longer runs — kept because it is where most of the kit's evidence was
