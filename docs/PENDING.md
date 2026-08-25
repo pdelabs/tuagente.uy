@@ -960,6 +960,17 @@ place the runbook made us deviate. It came out working — `portal-check` 13 ok
 · 0 failures through both HTTPS hostnames — and it exposed nine things. The
 first two are live bugs a client hits; the rest are the runbook lying.
 
+**1 and 2 are FIXED (25/8, adapter 0.42.2).** `_soul_block` no longer emits a
+paragraph whose datum is missing, and `agent-check`'s «SOUL: identity» now
+reads INSIDE the block instead of just finding it: a name passes, and so does
+a company with no name — that is the only identity a team's shared agent
+legitimately has, and it is what the business step writes. A block with
+neither fails, with the reason named. Verified on both agents: the local demo
+(which had the empty baptism in its live prompt, healed by rewriting the block)
+now reads «works for «Ferretería Demo»» and gives 36 ok · 0 failures. The two
+reports stay below because the shape they describe is the product's flagship
+one.
+
 **1. A team agent can never satisfy `agent-check.py`'s identity check.** The
 check is the one every runbook calls mandatory ("0 failures BEFORE starting it
 up"), and it wants either a hand-written `00-identity.md` heading or the

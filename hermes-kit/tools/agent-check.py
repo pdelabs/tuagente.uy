@@ -1411,13 +1411,13 @@ def main():
             if company:
                 return (f"portal:identity block — with no name of its own "
                         f"(a team client never names theirs), works for «{company}»")
+            # Under 300 characters on purpose: `check` cuts them there.
             raise AssertionError(
-                "the portal:identity block is there but says NOTHING: no name "
-                "and no company. Either the client abandoned onboarding before "
-                "answering, or an adapter older than 0.42.2 wrote the baptism "
-                "with an empty name («te bautizo **** desde el portal»). Have "
-                "them finish onboarding, or write the identity by hand from "
-                "soul/00-identity.md"
+                "the portal:identity block is there and says NOTHING: no name, "
+                "no company. Either onboarding was abandoned before the business "
+                "step, or an adapter older than 0.42.2 wrote a baptism with an "
+                "empty name («te bautizo ****»). Finish onboarding, or write "
+                "soul/00-identity.md by hand"
             )
         # Its own is looked for OUTSIDE the generic block: there are no
         # first-level headings inside it, so a "# …" out there is the identity
@@ -1429,13 +1429,11 @@ def main():
         if IDENTITY_H1.search(outside):
             return "its own identity block (00-identity composed)"
         raise AssertionError(
-            "the SOUL does not say who it is or who it works for: there is no "
-            "identity block (a first-level heading, '# Sos …, el agente de …') and "
-            "no portal:identity block. The portal writes that block on the first "
-            "onboarding — the naming step for a solo agent, the business step for "
-            "a team one — so a brand-new agent fails this until the client goes "
-            "through it; to power one on before that, write it by hand from "
-            "soul/00-identity.md"
+            "the SOUL does not say who it is or who it works for: no identity "
+            "block ('# Sos …, el agente de …') and no portal:identity block. The "
+            "portal writes that one on the first onboarding (the naming step if "
+            "solo, the business step if team); before that, it is written by hand "
+            "from soul/00-identity.md"
         )
 
     def _kit_version():
