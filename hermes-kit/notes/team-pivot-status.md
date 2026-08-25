@@ -424,6 +424,14 @@ own measurement.
 
 ## Pending (in order)
 
+0. **Engine upgrade to v2026.8.19 — parked by Luis on 2026-08-25, not yet.**
+   Bot Mode is a Desktop UI over profiles (convergent with our pivot; its
+   open-roster delegation is what we rejected) — nothing to adopt. The
+   upgrade itself is worth it later (signed webhooks, keyless web search,
+   per-role model pinning, cron memory) but the kit couples to engine
+   internals at line level. Plan, couplings and gate: notes/engine-upgrade-plan.md.
+
+
 1. **Cost RE-MEASURED on correctly configured roles (2026-08-24, local
    agent).** The old row — conversational US$0.006 · with tools US$0.062 ·
    US$0.026 per average turn — is **SUPERSEDED: it was measured on
