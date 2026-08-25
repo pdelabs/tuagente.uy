@@ -27,9 +27,12 @@ the blog articles about agents.
 
 **What died with it: the `contenido-instagram-diario` cron** (`0 9 * * *`, day
 10 of its run, last fire 24/8 09:21 `ok`). Nobody else produces tuagente.uy's
-daily Instagram content today. Both of its domains
-(`tuagente.agentes.tuagente.uy`, `tuagente-portal.agentes.tuagente.uy`) now
-answer nothing: Caddy went down with the rest.
+daily Instagram content today, and the successor does not either: it was born
+solo, with the roster on offer and nobody hired. Its two domains
+(`tuagente.agentes.tuagente.uy`, `tuagente-portal.agentes.tuagente.uy`)
+answered nothing for eight hours and now answer the SUCCESSOR — same
+hostnames, same certificates, a different agent. See "tuagente.uy's own agent,
+rebuilt from zero" below.
 
 The six containers — `tuagente-hermes`, `-portal-adapter`, `-caddy`,
 `-litellm`, `-otel`, `-phoenix` — were removed with one `docker compose down`
@@ -126,24 +129,39 @@ where — but not the record:
 | Agent | Retired | What remains |
 |---|---|---|
 | La Mano (pdelabs, client 0) | 2026-08-12, Luis' decision | backup at `~/Desktop/Luis/Projects/_respaldo-lamano/lamano-final-20260812.tgz`; containers deleted and repo removed |
-| Mr.Wobble (tuagente.uy's own agent) | 2026-08-24, Luis' decision | the whole tree on its VPS, untouched: `/opt/agentes/tuagente/` (178 MB) and `/opt/agentes/wobble-pre-reset-20260813.tgz` (39 MB). Containers removed with `compose down` **without `-v`**; all four volumes kept. Runbook below |
+| Mr.Wobble (tuagente.uy's own agent) | 2026-08-24, Luis' decision | the tree on its VPS, moved aside and otherwise byte for byte: `/opt/agentes/retired-tuagente-20260824/` (178 MB — it WAS `/opt/agentes/tuagente/`, renamed the same day to free the slug for its successor) and `/opt/agentes/wobble-pre-reset-20260813.tgz` (39 MB). Containers removed with `compose down` **without `-v`**; the four volumes were kept, but three of them now belong to the successor — see the runbook below. Runbook below |
 
 ### Mr.Wobble: what remains, and how to bring it back
 
-On the VPS `157.180.73.42`, ssh alias `tuagente` (the box is otherwise
-empty — it existed for this agent):
+On the VPS `157.180.73.42`, ssh alias `tuagente`. **The box is no longer
+empty**: since 24/8 its successor runs at `/opt/agentes/tuagente`, which is
+why the retired tree was renamed out of that path.
 
-- `/opt/agentes/tuagente/` — 178 MB, byte for byte as it was. `data/` is
+- `/opt/agentes/retired-tuagente-20260824/` — 178 MB, byte for byte as it
+  was, only moved (`mv`, 24/8). `data/` is
   the entire agent: SOUL v12 with its `portal:identity` block,
   `config.yaml` with the four hand-written knobs, `kanban.db`, `state.db`,
   `cron/jobs.json`, `flujos/contenido-instagram-diario/`, `costos.jsonl`,
   and `workspace/` with `brand/` (the tuagente.uy kit) and `entregables/`
   (ten days of Instagram pieces). Alongside it: `politica/`, `kit-skills/`,
-  `kit-adapter/`, `secretos.env`, `.env` and both compose files.
+  `kit-adapter/`, `secretos.env` (its Telegram bot token included), `.env`
+  and both compose files.
 - `/opt/agentes/wobble-pre-reset-20260813.tgz` — 39 MB, the pre-reset
   backup from the 13/8 wipe.
-- Docker volumes, all four kept: `tuagente_data`, `tuagente_phoenix_data`,
-  `tuagente_caddy_data`, `tuagente_caddy_config`.
+- Docker volumes: all four were kept, and **three of them are no longer
+  only its own.** A compose project is named after its directory, the
+  successor's directory is also `tuagente`, so `docker compose up -d` on
+  24/8 attached `tuagente_caddy_data`, `tuagente_caddy_config` and
+  `tuagente_phoenix_data` to the NEW containers. Only `tuagente_data` —
+  orphaned from an older compose, referenced by neither — is untouched.
+  That was not an accident and one half of it is a saving:
+  `tuagente_caddy_data` still holds the Let's Encrypt certificates for
+  those two hostnames (issued 10/8, good to 8/11), so the new agent came up
+  on HTTPS without spending a single issuance against the weekly cap. The
+  other half is a decision to make: `tuagente_phoenix_data` holds
+  **Mr.Wobble's prompts**, and Phoenix now shows them next to the
+  successor's. Nothing reads them today; deleting that volume is a
+  one-liner whenever it is decided that the record has been kept long enough.
 
 **It is still the OLD Spanish layout** (`politica/`, `secretos.env`,
 `docker-compose.observabilidad.yml`): the English migration never ran
@@ -151,16 +169,25 @@ against it, and now never will. That matters if anyone resurrects it —
 today's `install.sh` would install a second, English-named copy beside the
 old one and the agent would keep reading the old one.
 
-To bring it back:
+**And it can no longer be brought back where it stood.** Its compose
+publishes 80 and 443 and its Caddyfile claims the same two hostnames the
+successor now serves, so bringing it up as-is collides with a live agent on
+both ports and both domains. Resurrecting it means stopping the successor
+first, or giving the old tree different domains and ports. What used to be a
+three-line runbook is now a decision:
 
 ```bash
 ssh tuagente
-cd /opt/agentes/tuagente
+cd /opt/agentes/tuagente && docker compose down          # the SUCCESSOR, first
+cd /opt/agentes/retired-tuagente-20260824
 docker compose -f docker-compose.yml -f docker-compose.observabilidad.yml up -d
 ```
 
-`up -d` and not `start`: the containers were removed, not stopped. Nothing
-on disk changed, so it comes back exactly as it was — SOUL v12, pre-pivot,
+`up -d` and not `start`: the containers were removed, not stopped. **The
+compose project name changed with the directory**, so this comes up as
+`retired-tuagente-20260824-*` with FRESH, empty volumes — its old
+`tuagente_caddy_*` now belong to the successor. Nothing on disk changed, so
+the agent itself comes back exactly as it was — SOUL v12, pre-pivot,
 pre-English-layout — **with the daily cron still armed and its `next_run_at`
 in the past, so it fires on the first tick.** Pause the job first if that is
 not what you want.
