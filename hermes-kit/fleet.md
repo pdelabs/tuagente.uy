@@ -14,6 +14,7 @@ old date isn't a problem; a row that says something no longer true is.
 | Agent | Host | SOUL | Engine | Last check |
 |---|---|---|---|---|
 | East Comunicación | `east` → `/opt/agentes/east` | **v1** — the bare `<!-- kit:base -->` marker, no version (read over ssh, 24/8/2026) | `v2026.7.30` (24/8: read from that host's `docker ps`, not the compose) | 24/8: alive only. Host up 14 days, `east-hermes` / `east-portal-adapter` / `east-caddy` up 13 days. No `agent-check` run — see below |
+| tuagente.uy (our own) | `tuagente` → `/opt/agentes/tuagente` | **v13** — installed 24/8 by `deploy-remote.sh`, marker read back off disk | `v2026.7.30` (24/8: `docker inspect tuagente-hermes`) | 24/8, the day it was built: `agent-check` **30 ok · 1 warn · 1 failure**, and the failure is the identity, which is the pristine state (see below); `portal-check` **13 ok · 2 warn · 0 failures** through both HTTPS hostnames |
 
 **Mr.Wobble is decommissioned — 24/8/2026, Luis' decision.** It left the table
 because the table says what runs where, and nothing runs there any more.
@@ -67,6 +68,40 @@ nothing else was affected.
 > English layout". This is a statement of what's pending, not a report of
 > results — update this table (and the row above) only once each migration
 > has actually run and been checked.
+
+## tuagente.uy's own agent, rebuilt from zero (24/8/2026)
+
+**Mr.Wobble's successor, and NOT its continuation**: same VPS, same two
+hostnames, same Telegram-less start, nothing of Wobble's on disk. No SOUL, no
+workspace, no state, no bot token was carried across — the retired tree sits
+next to it, read by nobody. Built the canonical way, `deploy-remote.sh tuagente
+tuagente agentes.tuagente.uy`, off the kit at 29b961d.
+
+It runs at `/opt/agentes/tuagente`, six containers: `tuagente-hermes`,
+`-portal-adapter`, `-caddy`, `-litellm`, `-otel`, `-phoenix`. Only Caddy
+publishes anything (80, 443). Its local mirror is
+`~/Desktop/Luis/Projects/tuagente-agent`, its own git repo — the WHOLE tree
+and not just `data/`, for the reason in the 14/8 note below.
+
+**It is deliberately PRISTINE, which is the point of this build**: it exists
+so we can watch what a brand-new client actually sees on day one. Nothing was
+configured that a client would not find themselves. No role hired (the roster
+is on offer, `GET /portal/roles` answers 5 available and 0 hired), no Telegram
+token, no business name, no identity, zero sessions, zero tickets, zero
+deliverables, and **US$0.00 charged to its OpenRouter key** — a fresh one
+named `tuagente`, limit 10, minted for it. Observability is on, because that
+one is ours and invisible to the client: the chat and the image route both go
+through litellm (`base_url` and `OPENROUTER_BASE_URL`, the two halves), so
+`costs.jsonl` will hold the client's very first turn.
+
+**Its `agent-check` failure is the product's, not this build's.** The one
+failure is `SOUL: identity`, and on a TEAM agent nothing ever closes it: the
+portal skips the naming step when a roster is present (`onboarding.tsx`:
+`team ? "business" : …`), so `POST /portal/identity` never carries a `name`,
+and no runbook step writes `00-identity.md` for a team client. Worse, the step
+the client DOES answer makes it wrong rather than absent — see `docs/PENDING.md`,
+"What the fresh deploy of 24/8 exposed". Left as-is on purpose: writing an
+identity here would have hidden exactly the thing this agent was built to show.
 
 *(Everything about Mr.Wobble from here down is the record of an agent that
 no longer runs — kept because it is where most of the kit's evidence was
