@@ -82,7 +82,9 @@ the chat.
 `new-agent.sh` (creates the client's repo: compose, `config.yaml` with the
 kanban recipe and the expensive toolsets turned off, draft SOUL, skills,
 adapter) · `install.sh` (installs/updates; `--diff` against drift) ·
-`adapter/` · `skills/` (artifact, deliverable, approval) · `connections/`
+`adapter/` · `skills/` (the two shadow notes: no-images, no-web-search) ·
+`plugins/` (the registry — 6 system + 7 client; a plugin owns its skills,
+its flows and its tab) · `connections/`
 (curated catalog + Google runbook) · `soul/` (5 blocks with placeholders) ·
 `onboarding/company-brief.md` · `tools/portal-check.py` (**0 failures or it
 doesn't ship**) and `tools/agent-check.py` (offline, before powering on:
