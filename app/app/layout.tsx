@@ -257,15 +257,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     learnAgentUtcOffset(c, m).catch(() => { /* with no offset, it carries on as before */ });
   };
 
+  // DOES THIS AGENT STILL OWE ONBOARDING? Decided ONCE, with the first
+  // manifest of the session; `null` while it hasn't arrived.
+  //
+  // It used to be read straight off `manifest` in the gate below -- the same
+  // `manifest` the poll refreshes every minute. And onboarding WRITES to the
+  // agent as it advances: naming saves the name, the channel step saves
+  // `contact`. One minute in, the poll brought back a manifest that already
+  // said `named` + `notify_channel`, the gate closed, and <Onboarding>
+  // UNMOUNTED mid-flow: the client lost the automations carousel and the chat
+  // step, and `onDone` never ran, so no welcome screen was ever marked as
+  // seen. A slow client lost the last two screens; a fast one never noticed.
+  //
+  // Onboarding owns its own completion: it calls `onDone` when ITS flow ends
+  // and only then does the layout put it away.
+  const [agentNeedsOnboarding, setAgentNeedsOnboarding] = useState<boolean | null>(null);
+
+  // The first manifest of the session: everything the portal decides on
+  // arrival, in one place, because two paths get here (startup and the manual
+  // retry from the error screen).
+  const arrived = (c: PortalConfig, m: Manifest) => {
+    setManifest(m); learnFromAgent(m); learnTheClock(c, m);
+    setOnline(true); setState("ok");
+    // The first manifest decides; one arriving after it never re-decides.
+    setAgentNeedsOnboarding((decided) => decided ?? !onboardingAlreadyAnswered(m));
+  };
+
   const boot = () => {
     const c = loadConfig();
     if (!c) { setState("login"); return; }
     setCfg(c);
     getManifest(c)
-      .then((m) => {
-        setManifest(m); learnFromAgent(m); learnTheClock(c, m);
-        setOnline(true); setState("ok");
-      })
+      .then((m) => arrived(c, m))
       .catch(() => setState("error"));
   };
   useEffect(boot, []);
@@ -282,10 +305,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!c) { setState("login"); done(); return; }
     setCfg(c);
     getManifest(c)
-      .then((m) => {
-        setManifest(m); learnFromAgent(m); learnTheClock(c, m);
-        setOnline(true); setState("ok");
-      })
+      .then((m) => arrived(c, m))
       .catch(() => setState("error"))
       .finally(done);
   };
@@ -403,7 +423,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // again. A brand-new (unnamed) agent still sees the full flow, and a named
   // one missing a channel sees it starting from the overview -- which is
   // where `Onboarding` starts when `named` is true.
-  if (seen && !seen.onboarding && !onboardingAlreadyAnswered(manifest)) {
+  //
+  // THE AGENT DECIDES ONCE, ON ARRIVAL (`agentNeedsOnboarding`), and not on
+  // every poll: the flow answers those very questions as it runs. What closes
+  // this gate is the browser's `seen.onboarding`, which only `onDone` sets.
+  if (seen && !seen.onboarding && agentNeedsOnboarding) {
     return (
       <Onboarding
         manifest={manifest}
