@@ -80,19 +80,22 @@ ALLOWED_PREFIXES=(
   "policy/pairing-patch.py"           # the pairing message patch
   "policy/cont-init-patches.sh"       # the cont-init that triggers it
   "policy/capabilities/catalog.json"  # HEADS UP: requests.jsonl, right next to it, is the client's
-  # The roster: which roles exist and what each one does. Ours and closed --
-  # the client never writes it (the name they chose lives in identities.json)
-  # -- and it is only installed on an agent that ALREADY has a team. The exact
-  # file and not `policy/roles/`: whatever the client decides will live next
-  # to it.
+  # The roster: which roles a client could hire. NOT INSTALLED ANY MORE -- one
+  # baptized agent per client, so there is no team to offer -- and on this list
+  # for exactly the reason `data/scripts/portal_adapter.py` is: it is in the old
+  # manifest and no longer shipped, so an agent that has one gets it removed on
+  # the next install, if it is still byte for byte what we wrote. The exact file
+  # and not `policy/roles/`: what the client decided lives next to it
+  # (identities.json, requests.jsonl) and is theirs. Once no agent is left with
+  # a roster, this line goes away.
   "policy/roles/catalog.json"
   "policy/hooks/"                     # the gate, in code
   "policy/plugins/"                   # the engine's plugins (the promises guard)
   # THE KIT'S PLUGIN REGISTRY, mounted :ro at /opt/plugins. The whole folder is
   # ours: nobody else writes into it and the adapter only reads it. It is a
   # folder and not a list of files because a plugin that LEAVES this agent's
-  # set -- the role that declared it was let go -- has to be able to leave the
-  # disk with it, and that is exactly what the manifest does: those files were
+  # set -- the capability that installed it came off purchased.json -- has to be
+  # able to leave the disk with it, and that is what the manifest does: those files were
   # ours, they are no longer shipped, and only the ones still byte for byte
   # what we wrote get deleted.
   "plugins/"

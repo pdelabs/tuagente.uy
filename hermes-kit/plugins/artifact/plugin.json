@@ -7,12 +7,13 @@
     "IT DEPENDS ON kanban for the same reason deliverable does: an artifact is",
     "produced BY a ticket and cited FROM it.",
     "",
-    "NOT EVERY ROLE DECLARES IT, and that asymmetry is deliberate and older than",
-    "this plugin: marketing, sales and accounting have things worth drawing;",
-    "support and assistant do not. `system: true` ships the FOLDER to every",
-    "agent so anything may depend on it -- it does not put the skill in every",
-    "role's index. roles/skills_split.py is what governs exposure, and it still",
-    "calls this one role-only."
+    "IT WAS NOT ON EVERY ROLE, and that asymmetry died with the roster: marketing,",
+    "sales and accounting had things worth drawing and support and assistant did",
+    "not, so `roles/skills_split.py` kept this skill out of two teammates'",
+    "indexes. One baptized agent per client has one index and it is the client's,",
+    "so the distinction has nowhere left to live: `system: true` ships the FOLDER",
+    "to every agent so anything may depend on it, and the skill is delivered like",
+    "every other one in the kit."
   ],
   "requires": {
     "plugins": [
