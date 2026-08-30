@@ -293,8 +293,8 @@ both ways.
 
 `0c80296` `647330f` `9daf466` `35098cc`. One agent per company instead of the
 roster, plugins instead of hired roles, the metadata and OG card rewritten,
-the demo widget's header degreeted, and the price post rewritten to
-diagnóstico + plugin + mensual. This was the wave that
+the demo widget's header no longer greeting a team, and the price post
+rewritten to «diagnóstico + plugin + mensual». This was the wave that
 had been pricing-gated; it stopped being gated when the price stopped being
 per role.
 

@@ -218,7 +218,7 @@ they paid for. That is **one file, and it goes in before the installer runs**:
 
 ```json
 {
-  "_comment": "Lo que este cliente compró. Ids de capabilities/catalog.json.",
+  "_comment": "What this client bought. Ids from capabilities/catalog.json.",
   "capabilities": ["quotes", "invoices-to-data"]
 }
 ```
