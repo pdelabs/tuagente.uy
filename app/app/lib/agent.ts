@@ -65,9 +65,10 @@ export type Ticket = {
   body: string | null;
   status: string;
   tenant: string | null;
-  /** Which role holds this task. The kanban is one board shared across every
-   *  Hermes profile, and this is where it records the owner. `null` on an agent
-   *  that never had a team: the ticket is simply drawn without a chip. */
+  /** Who holds this task, as the kanban records it. NOTHING IN THE PORTAL
+   *  DRAWS IT TODAY: the chip that did belonged to the team tab. The field is
+   *  described here because the adapter still sends it, not because it is
+   *  read — whoever removes it there removes this line too. */
   assignee: string | null;
   created_at: string | number; // Hermes emits it as an epoch in seconds
 };
@@ -947,111 +948,6 @@ export const suggestCapabilities = (c: PortalConfig, text: string) =>
   post<{ suggested: string[]; no_match?: boolean }>(
     c.adapter, "/portal/capabilities/suggest", c, { text });
 
-/** What the client requested for a role that isn't running yet: what name and
- *  what look they gave it when they picked it. A REQUESTED role still serves
- *  the CATALOG'S name and look (only once it's installed does the profile
- *  become its own), so what the client chose travels here and is the only
- *  thing the portal can show them while they wait. */
-export type RoleRequest = {
-  name: string;
-  /** The mascot's look, exactly as the naming step saved it. */
-  look?: Record<string, number> | null;
-  /** When it was requested, as the agent recorded it (ISO). */
-  requested_at: string;
-  /** The capabilities the client chose when requesting it, if the role asked
-   *  (today only the assistant, which doesn't ship pre-built). They don't turn
-   *  anything on by themselves: they're what the client expects, and whoever
-   *  sets it up reads them to know what to give it. */
-  capabilities?: string[];
-};
-
-/** One member of the team -- hired or on offer.
- *
- *  A role is a Hermes profile with its own SOUL, skills and memory. `name` and
- *  `look` only come back for hired ones: they are read from the profile the
- *  client owns, so a rename survives. */
-export type Role = {
-  id: string;
-  label: string;
-  /** What it does, in the client's words. */
-  does: string;
-  /** Its hard limit, also in their words. The same sentence lives in its SOUL. */
-  never?: string;
-  hired: boolean;
-  name?: string;
-  look?: Record<string, number>;
-  /** Connections it cannot start without. */
-  needs?: string[];
-  flows?: string[];
-  state?: string;
-  /** Requested and not installed yet. It's what separates "you can hire it"
-   *  from "you already requested it and it's on its way" -- without this, a
-   *  waiting client sees the role offered again and requests it a second
-   *  time. */
-  request?: RoleRequest | null;
-};
-export const getRoles = (c: PortalConfig) =>
-  get<{ available: boolean; roles: Role[] }>(c.adapter, "/portal/roles", c);
-
-/** The client picks a role from the catalog, names it and leaves it requested.
- *
- *  IT TURNS NOTHING ON BY ITSELF: installing a profile is our own work (SOUL,
- *  skills, permissions, restarting the gateway). This just records it on the
- *  agent's side and the portal waits for the role to show up hired in the
- *  roster.
- *
- *  The adapter answers 409 with two different reasons -- you already
- *  requested it, or you already have it -- and 400 if the name comes in
- *  empty. The text travels in `{error}`, which is what `failure` leaves in
- *  the error's message. */
-export const createRoleRequest = (
-  c: PortalConfig, role: string, name: string, look: Record<string, number> | null,
-  /** Only for the role made up of capabilities: the ids the client left
-   *  checked. The adapter validates them against the catalog and answers 400
-   *  if any of them can't be requested. */
-  capabilities?: string[],
-) => post<{ request: RoleRequest & { role: string } }>(
-  c.adapter, "/portal/roles/request", c,
-  capabilities?.length ? { role, name, look, capabilities } : { role, name, look });
-
-/** One turn of a room, as the adapter stored it. */
-export type RoomTurn = {
-  ts: number;
-  role: "user" | "assistant";
-  content: string;
-  /** Which teammate answered. Absent = the agent the client named. */
-  by?: string;
-};
-export type RoomSummary = { id: string; title: string; updated_at: number; turns: number };
-
-/** The rooms this client has.
- *
- *  A room is ONE conversation the whole team shares, and it is stored by the
- *  adapter rather than the engine: its turns are answered by different profiles,
- *  each of which persists into its own store, so an engine-side conversation
- *  would end up scattered with no way to reassemble it. Measured 2026-08-17 --
- *  pinning every turn to one `session_id` does not work either, the engine mints
- *  its own per turn. */
-export const getRooms = (c: PortalConfig) =>
-  get<{ rooms: RoomSummary[] }>(c.adapter, "/portal/rooms", c);
-export const getRoom = (c: PortalConfig, id: string) =>
-  get<{ turns: RoomTurn[] }>(c.adapter, `/portal/rooms/${encodeURIComponent(id)}`, c);
-/** Name a conversation, and throw one away.
- *
- *  THE SAME TWO GESTURES THE SIDEBAR OFFERS OVER AN ENGINE SESSION, pointed at
- *  the store that actually holds a room. They used to go to the engine for
- *  every row -- `PATCH`/`DELETE /api/sessions/{id}` -- and the engine has never
- *  heard of a room, so on a client with a team both menu items could only fail.
- *
- *  Renaming is a POST because the adapter's door publishes GET, POST and
- *  DELETE and nothing else: a PATCH from the browser dies in the preflight. */
-export const renameRoom = async (c: PortalConfig, id: string, title: string) => {
-  await post<{ ok: boolean }>(c.adapter, `/portal/rooms/${encodeURIComponent(id)}`, c, { title });
-};
-export const deleteRoom = async (c: PortalConfig, id: string) => {
-  await del<{ ok: boolean }>(c.adapter, `/portal/rooms/${encodeURIComponent(id)}`, c);
-};
-
 /** The client requests a capability. It gets recorded on the agent's side (one
  *  line per request) and WE look at it: nothing turns on by itself. */
 export const requestCapability = async (c: PortalConfig, id: string | null, text: string) => {
@@ -1220,18 +1116,13 @@ export async function sessionChatStream(
   message: string,
   h: SessionStreamHandlers,
   signal?: AbortSignal,
-  /** Which member of the team answers. Absent = the agent the client named.
-   *  It travels in the body and the client's key never changes: the adapter
-   *  holds the per-role credential, because the engine fails a named profile
-   *  closed rather than let it inherit the listener's key. */
-  role?: string | null,
 ): Promise<void> {
   const res = await fetch(
     `${cfg.adapter}/portal/sessions/${encodeURIComponent(sessionId)}/chat/stream`,
     {
       method: "POST",
       headers: { ...headers(cfg), "Content-Type": "application/json" },
-      body: JSON.stringify(role ? { message, role } : { message }),
+      body: JSON.stringify({ message }),
       signal,
     },
   );
@@ -1316,34 +1207,16 @@ export async function chatStream(
    *  gateway doesn't even send through here. */
   onTool?: (tool: string) => void,
   signal?: AbortSignal,
-  /** Which member of the team answers, when the client named someone. */
-  role?: string | null,
-  /** True when this agent has a team, so the room can route a message nobody
-   *  addressed. Without it we would pay the adapter hop on every single-role
-   *  agent for a routing decision that has nothing to decide. */
-  hasTeam?: boolean,
-  /** Who ended up taking the turn. Only the adapter knows when the room routed
-   *  it, and it arrives before the first token so the reply is drawn with the
-   *  right face from the start. */
-  onRole?: (role: string) => void,
-  /** Which room to record this turn in. Without it nothing is stored, which is
-   *  what the chat did until rooms existed. */
-  room?: string | null,
 ): Promise<string> {
-  // The ADAPTER, not the gateway, whenever a role could be involved: addressing
-  // one needs that profile's own key and the browser only ever holds one.
-  const url = role || hasTeam
-    ? cfg.adapter + "/portal/chat/stream"
-    : cfg.endpoint + "/v1/chat/completions";
-  const res = await fetch(url, {
+  // THROUGH THE ADAPTER, NOT THE GATEWAY, and it stays that way now that there
+  // are no roles: the adapter proxies `/v1/chat/completions` on the agent
+  // itself, with the client's own key and no prefix. Going straight to the
+  // gateway would work too and it is not worth the churn -- one door for the
+  // chat is one place to add CORS, a timeout or a log to.
+  const res = await fetch(cfg.adapter + "/portal/chat/stream", {
     method: "POST",
     headers: { ...headers(cfg), "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messages,
-      stream: true,
-      ...(role ? { role } : {}),
-      ...(room ? { room } : {}),
-    }),
+    body: JSON.stringify({ messages, stream: true }),
     signal,
   });
   if (!res.ok || !res.body) throw new Error(`${res.status} at chat`);
@@ -1371,10 +1244,6 @@ export async function chatStream(
       try {
         payload = JSON.parse(line.slice(6));
       } catch { continue; /* partial chunk */ }
-      if (eventName === "portal.role") {
-        if (typeof payload?.role === "string") onRole?.(payload.role);
-        continue;
-      }
       if (eventName === "hermes.tool.progress") {
         // Only the start: the `completed` that comes after would duplicate it.
         if (payload?.status !== "completed" && typeof payload?.tool === "string") {
