@@ -2,7 +2,7 @@
   "id": "kanban",
   "version": "1.0.0",
   "description": "The ticket store the other system plugins write into: the engine's own kanban, the Pipeline and Tasks pages over it, and the dispatcher that turns a client request into a ticket",
-  "client_copy": "El tablero donde ves en qué está trabajando tu equipo y cómo va cada pedido.",
+  "client_copy": "El tablero donde ves en qué está trabajando tu agente y cómo va cada pedido.",
   "_comment": [
     "THE ROOT OF THE SYSTEM GRAPH, AND THE ONE PLUGIN WITH NO SKILLS SURFACE.",
     "There is no SKILL.md to ship because there is nothing to teach: the store",
