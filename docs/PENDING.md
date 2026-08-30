@@ -1101,10 +1101,20 @@ a turn.
 printed the `rsync -a … /data/` + `agent-check` instruction again, verbatim.
 The whole tree gave 35 ok · 1 warn · 0 failures.
 
-## The portal, 30/8 — onboarding can be cut short by a background poll
+## The portal, 30/8 — onboarding was cut short by a background poll (CLOSED)
 
-**IN PROGRESS** (a portal agent is on it). Found in wave 1 of the team-pivot
-removal and **pre-existing**: the gate condition is unchanged, wave 1 only
+**CLOSED the same day, `3163a62`.** The gate reads the agent's answer ONCE,
+with the session's first manifest, and onboarding owns its own completion: it
+calls `onDone` when ITS flow ends and only then does the layout put it away.
+Reproduced in jsdom against the real layout and the real onboarding, with a
+mock agent that mutates its identity the way the adapter does — on the previous
+HEAD the flow died at notify → carousel when the poll landed; now the five
+steps survive a poll on every one of them. Kept written down because the shape
+is general: anything long-lived that re-reads a value one of its own steps
+writes has this bug.
+
+The report, as found. Found in wave 1 of the team-pivot removal and
+**pre-existing**: the gate condition is unchanged, wave 1 only
 removed the `modules.roles` conjunct from it, which makes onboarding MORE
 likely to render, not less. The pivot hid it, because on a team agent that gate
 never fired at all.
@@ -1119,6 +1129,6 @@ Reproduced by contrast on the demo agent, same build, same agent: a slow run
 through the flow landed on `/app/home` straight after the channel question; a
 fast one reached «¿Qué te saco de encima?» normally.
 
-It is a decision about onboarding, not a one-line guard: either onboarding
+It was a decision about onboarding, not a one-line guard: either onboarding
 reads the manifest once at mount, or it holds its own completion flag and the
-poll stops being able to speak for it.
+poll stops being able to speak for it. Both, in the end.

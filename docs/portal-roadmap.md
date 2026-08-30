@@ -167,10 +167,11 @@ link (`docs/client-onboarding.md`, Phase 8).
 - [ui] The suggestion has to be **an offer, not an install**. Nothing
   self-installs: a pick writes a request to `policy/capabilities/requests.jsonl`
   and we sell it. The card copy already exists in `capabilities/catalog.json`.
-- [ui] **Onboarding can be cut short by a background poll** — the layout
-  refetches the manifest every 60 s and the channel step makes
-  `onboardingAlreadyAnswered()` true, so the next poll can unmount the flow
-  mid-way. Pre-existing, being fixed; see `docs/PENDING.md`.
+- [done 30/8] **Onboarding could be cut short by a background poll** — the
+  layout refetches the manifest every 60 s and the channel step made
+  `onboardingAlreadyAnswered()` true, so the next poll unmounted the flow
+  mid-way. The gate reads the agent's answer once now, and onboarding owns its
+  own completion (`3163a62`).
 - [ui] Change the name and the look **after** onboarding. There is nowhere to
   do it today, and it belongs with the customization tab rather than in its own
   screen.

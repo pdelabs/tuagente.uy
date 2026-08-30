@@ -283,11 +283,12 @@ running the check against it.
    /portal/identity` that would leave the agent nameless is a 400 — which is
    the shape to copy, not another check.
 11. **A layout's background poll can unmount a flow the client is still in.**
-   Live and pre-existing: the manifest refetch every 60 s makes
-   `onboardingAlreadyAnswered()` true as soon as the channel step writes
-   `contact.channel`, and the next tick drops the client into the portal
-   mid-onboarding. Anything long-lived that reads a value a step of its own
-   writes has this bug. See `docs/PENDING.md`.
+   The manifest refetch every 60 s made `onboardingAlreadyAnswered()` true as
+   soon as the channel step wrote `contact.channel`, and the next tick dropped
+   the client into the portal mid-onboarding. Fixed 30/8: the answer is read
+   once, and onboarding owns its own completion. **Anything long-lived that
+   re-reads a value one of its own steps writes has this bug**, which is why it
+   is here and not only in `docs/PENDING.md`.
 
 ## Aesthetics
 M3 expressive from `tailwind.config.ts`: primary #5B4BE8, surface #FBFAFF,

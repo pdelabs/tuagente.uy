@@ -412,11 +412,11 @@ reaches a client nameless is the failure the check exists to catch. As of
 adapter 0.43.0 a `POST /portal/identity` that would leave the agent nameless is
 a **400**: the name comes first, the business and the channel after.
 
-**Known, being fixed in parallel:** the layout refetches the manifest every
-60 s, and once the channel step has written `contact.channel` that poll can
-unmount onboarding mid-flow — dropping the client into the portal without the
-automations carousel or the chat step. If it happens, nothing is lost but the
-welcome screens; see `docs/PENDING.md`.
+**Fixed 30/8, and worth knowing it existed:** the layout refetches the manifest
+every 60 s, and once the channel step had written `contact.channel` that poll
+unmounted onboarding mid-flow — dropping the client into the portal without the
+automations carousel or the chat step. The gate reads the agent's answer once
+now, at the start of the session; see `docs/PENDING.md`.
 
 ---
 
