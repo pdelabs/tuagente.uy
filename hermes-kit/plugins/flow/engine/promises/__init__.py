@@ -21,14 +21,6 @@ the agent) and lives in `policy/plugins/`, mounted :ro at
 `/opt/data/plugins`: a guardrail that whatever gets saved could change
 isn't a guardrail.
 
-A HIRED ROLE REACHES THE SAME DIRECTORY THROUGH A LINK, and it has to: the
-engine only ever looks in HERMES_HOME/plugins, and a role's home is
-`/opt/data/profiles/<role>/`. `tools/hire-role.sh` leaves
-`plugins -> ../../plugins` there and projects `plugins.enabled` into the
-role's config; `tools/agent-check.py` fails, naming the role, when either
-half is missing. It takes both — with the link and no key the engine
-discovers this plugin and loads it turned off.
-
 THE LIMIT, MEASURED: what we add does NOT stay in the history. `finalize_turn`
 persists the session at its line 352 and only transforms at line 485, so
 `state.db` keeps the original text. Verified against an agent on 8/13: the
@@ -49,25 +41,19 @@ logger = logging.getLogger(__name__)
 
 
 def _home():
-    """The home of the profile whose turn this is, resolved AT CALL TIME.
+    """The home of the turn being reviewed, resolved AT CALL TIME.
 
     NOT `os.environ["HERMES_HOME"]`, which is what this used to read once at
     import. The engine's PluginManager is a process singleton
     (`hermes:hermes_cli/plugins.py:2048-2056`) whose `_discovered` latch makes
-    the scan happen once (`plugins.py:1279,1305`), and the gateway serves every
-    profile in ONE process, scoping a turn with a
-    context-local home override (`hermes_cli/profiles.py:950-990`). So this
-    module is imported exactly once, under whichever home discovered first, and
-    a frozen path means every profile after that one gets checked against
+    the scan happen once (`plugins.py:1279,1305`), and a turn runs under a
+    context-local home override. So this module is imported exactly once, and a
+    path frozen at import means the guard checks every claim against whatever
+    folder the environment named at boot -- telling the client the truth about
     somebody else's disk.
 
-    On this agent that was not hypothetical: the client's own home has no
-    `flows/` at all and marketing's has three. Read from the environment, a
-    teammate saying "queda armado: todos los lunes" was contradicted by a
-    correction that had gone looking in the client's folder -- the guard
-    telling the client the truth about the wrong person. `get_hermes_home()`
-    returns the override when there is one and the process env when there is
-    not, which is exactly the home the turn is running under.
+    `get_hermes_home()` returns the override when there is one and the process
+    env when there is not, which is exactly the home the turn is running under.
     """
     return str(get_hermes_home())
 
