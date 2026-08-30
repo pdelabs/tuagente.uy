@@ -15,17 +15,35 @@ Fixed decisions:
   infinite wake-ups.
 - The cron's prompt is always the same: "trabaja el flujo <slug>" -- the logic
   lives in the FLOW.md, which the client can see and the agent can edit.
+- `--trigger drive` REQUIRES `--folders`, the same way a non-`request` trigger
+  requires `--cron`. A drive trigger with no folder ids is a flow the portal
+  draws as active that can never fire: it was written that way once, on the
+  flow a SOUL called "el principal", and it never ran (see `--rearm` below).
 
 Usage:
     python3 create_flow.py --slug entrevistas-tv --name "Entrevistas → zócalos" \
         --client-summary "Cada entrevista termina en..." \
-        --trigger drive --detail "Mira tu Drive cada 15 minutos" \
+        --trigger drive --detail "Mira tus carpetas de Drive cada 15 minutos" \
         --cron "*/15 * * * *" --folders id1,id2 \
-        --connections google-workspace,auxiliary-models \
-        --skills drive-inbox,transcribe,frases-zocalo,deliverable <<'MD'
+        --connections google-workspace \
+        --skills drive-inbox,transcribe,lower-thirds,deliverable <<'MD'
     # Cómo trabajo este flujo
     1. ...
     MD
+
+    # arm a flow that already exists -- a curated one, or one written earlier --
+    # without touching a word the client reads:
+    python3 create_flow.py --slug entrevistas-tv --rearm \
+        --trigger drive --detail "Mira tus carpetas de Drive cada 15 minutos" \
+        --cron "*/15 * * * *" --folders id1,id2 --connections google-workspace
+
+REARMING IS THE HALF THIS SCRIPT PROMISED AND DID NOT HAVE. The docstring said
+"create (or update the trigger of)" from the first day and the code refused any
+slug that already existed, so the only way to arm a flow was to edit its
+FLOW.md by hand -- the one thing this kit does not rely on. It matters now
+because a plugin's CURATED flow ships with `trigger_type: request` (a kit file
+cannot carry one client's folder ids or a per-agent cron job id), so arming it
+at onboarding is not an edge case: it is the step.
 """
 import argparse
 import json
@@ -138,12 +156,166 @@ def _too_frequent(cron_expr):
     return cron_expr.strip().startswith("* ")  # every minute
 
 
+def schedule(slug, cron_expr):
+    """Create the cron job that wakes this flow up. Returns (job_id, error).
+
+    Shared by creating a flow and by re-arming one, so a flow armed later gets
+    the same prompt, the same `--deliver local` and the same "did it stick?"
+    check as one armed at birth. Two copies of this would be two answers to
+    "what does a flow's cron say", and the prompt below is the one that stops a
+    failed run from looking like a quiet one.
+    """
+    binary = hermes_binary()
+    if not binary:
+        return "", ("no encontré el CLI de Hermes (busqué en "
+                    + ", ".join(HERMES_CANDIDATES)
+                    + " y en el PATH). Sin eso no puedo programar nada: NO cuentes "
+                      "que el flujo quedó andando")
+    # SILENCE ONLY COUNTS FOR "THERE WAS NOTHING TO DO". This prompt used to say
+    # only "if the trigger finds nothing new, end in silence", and a run that
+    # COULD NOT work -- the weekly price flow with email unconnected -- fell into
+    # that same phrase: it ran, could not read the inbox, and stayed quiet. To
+    # the client that is indistinguishable from "no price changes this week": it
+    # is the worst possible failure, the one that looks like success. (Conduct QA
+    # on 12/8.)
+    prompt = (
+        f"Trabaja el flujo {slug}: abri /opt/data/flows/{slug}/FLOW.md "
+        "y segui sus instrucciones tal cual. "
+        "Si lo trabajaste y no habia nada nuevo que hacer, termina en silencio. "
+        "PERO si NO PUDISTE trabajarlo —falta una conexion, una credencial "
+        "vencio, no tenes una herramienta—, NO termines en silencio: crea un "
+        "ticket en el tablero que diga que no pudiste, que falta y que se "
+        "pierde mientras tanto, y pedi lo que falte con la skill capability. "
+        "El cliente lee el silencio como 'no hubo novedades', asi que una "
+        "corrida que no pudo hacer su trabajo SIEMPRE deja rastro visible."
+    )
+    # The `flujo-<slug>` cron job-name prefix STAYS in Spanish on purpose: it is
+    # a compatibility key the portal matches by string prefix
+    # (app/app/lib/events.ts) against cron jobs already created on deployed
+    # agents, and renaming it here would orphan every flow created before this
+    # rename. Comment mirrored on the portal side.
+    output, error = cron(binary, "create", cron_expr, prompt,
+                         f"--name=flujo-{slug}", "--deliver=local")
+    m = re.search(r"Created job:\s*([0-9a-f]+)", output)
+    if not m:
+        return "", f"el cron no se creo: {(error or output).strip()[:200]}"
+    job_id = m.group(1)
+
+    # AND NOW WE VERIFY IT STUCK. The create command printing an id is not
+    # enough: what we tell the client is "this is going to run on its own", and
+    # that gets asserted only after seeing it in the list, not before. Compared
+    # by ID, NOT by name: if a `flujo-<slug>` already existed from before and the
+    # new one did not persist, the name would be the same and we would call a job
+    # created that is not the one we just asked for.
+    list_output, list_error = cron(binary, "list")
+    if job_id not in list_output:
+        return "", (f"el cron dijo que creó {job_id} pero ese id no aparece en "
+                    f"`hermes cron list` ({(list_error or list_output).strip()[:120]}) — "
+                    "no lo des por creado")
+    return job_id, ""
+
+
+# The frontmatter keys that describe WHEN a flow runs. Everything else in there
+# is the client's text or the flow's own wiring, and `--rearm` does not touch it.
+TRIGGER_KEYS = ("trigger_type", "trigger_detail", "trigger_cron",
+                "trigger_folders", "trigger_job")
+
+
+def rearm(args):
+    """Change ONLY the trigger of a flow that already exists.
+
+    The case this is for: a plugin's curated flow ships with `trigger_type:
+    request`, because a file in the kit cannot carry one client's Drive folder
+    ids or a cron job id that only exists on their agent. Arming it is a step at
+    onboarding -- the day Google is actually connected and the folder ids are
+    written down -- and until now the only way to do it was to edit the FLOW.md
+    by hand, which is the one thing this kit refuses to depend on.
+
+    WHAT IT WILL NOT DO: touch `name`, `client_summary`, `skills`, `results`,
+    `status` or a single line of the body. Those are what the client reads and
+    may have edited themselves. It rewrites the five trigger keys and nothing
+    else, and the old cron job is removed only after the new one is verified --
+    a flow that ends up with two jobs runs twice.
+    """
+    path = FLOWS / args.slug / "FLOW.md"
+    if not path.is_file():
+        return fail(f"no existe el flujo {args.slug}: --rearm cambia el gatillo de "
+                    "uno que ya está, no crea ninguno")
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return fail(f"{path} no arranca con frontmatter: no lo toco")
+    _, front, body = text.split("---", 2)
+
+    previous = ""
+    for line in front.splitlines():
+        if line.startswith("trigger_job:"):
+            previous = line.split(":", 1)[1].strip()
+
+    job_id = ""
+    if args.cron:
+        job_id, error = schedule(args.slug, args.cron)
+        if not job_id:
+            return fail(error)
+
+    kept = [l for l in front.strip("\n").splitlines()
+            if not any(l.startswith(k + ":") for k in TRIGGER_KEYS)]
+    added = [f"trigger_type: {args.trigger}", f"trigger_detail: {args.detail}"]
+    if args.cron:
+        added.append(f'trigger_cron: "{args.cron}"')
+    if args.folders:
+        added.append(f"trigger_folders: {args.folders}")
+    if job_id:
+        added.append(f"trigger_job: {job_id}")
+    # The trigger goes back where the portal's readers expect it: right after
+    # `client_summary`, which is where create_flow.py writes it.
+    at = next((i for i, l in enumerate(kept)
+               if l.startswith("client_summary:")), len(kept) - 1) + 1
+    path.write_text("---\n" + "\n".join(kept[:at] + added + kept[at:])
+                    + "\n---" + body, encoding="utf-8")
+
+    # ONLY NOW does the old job go, and only if there is a new one: removing it
+    # first and failing to create the replacement leaves a flow the portal still
+    # calls active with nothing waking it up.
+    removed = ""
+    if previous and job_id and previous != job_id:
+        binary = hermes_binary()
+        out, err = cron(binary, "remove", previous)
+        removed = previous if "error" not in (err or "").lower() else ""
+
+    missing = missing_connections(
+        [c.strip() for c in args.connections.split(",")]
+        if args.connections.strip().lower() not in ("ninguna", "-") else [])
+    result = {
+        "ok": True,
+        "flow": str(path),
+        "rearmed": args.trigger,
+        "cron_job": job_id or None,
+        "removed_job": removed or None,
+        "missing_connections": missing,
+        "note": ("Cambié SOLO el gatillo: el nombre, el resumen y los pasos que "
+                 "lee el cliente quedaron como estaban."),
+    }
+    if missing:
+        result["tell_the_client"] = (
+            "El gatillo quedó armado, pero HOY no puede dispararse: falta "
+            + ", ".join(missing) + ". Decíselo al cliente y pedí la conexión con "
+            "la skill capability. No le digas que quedó andando.")
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--slug", required=True)
-    ap.add_argument("--name", required=True)
-    ap.add_argument("--client-summary", required=True, dest="client_summary",
+    # NOT `required=True` ANY MORE, and checked below instead: on `--rearm` the
+    # name, the summary and the body are the CLIENT'S text, already on disk and
+    # possibly edited by them. Making the operator retype them to arm a trigger
+    # is how a client's own wording gets quietly replaced by ours.
+    ap.add_argument("--name", default="")
+    ap.add_argument("--client-summary", default="", dest="client_summary",
                     help="que hace el flujo, dicho AL CLIENTE (sin jerga)")
+    ap.add_argument("--rearm", action="store_true",
+                    help="cambiar SOLO el gatillo de un flujo que ya existe")
     ap.add_argument("--trigger", required=True, choices=TRIGGERS)
     ap.add_argument("--detail", required=True,
                     help='el gatillo en criollo: "Mira tu Drive cada 15 minutos"')
@@ -164,8 +336,25 @@ def main():
         return fail("slug invalido: minusculas, numeros y guiones")
     if args.trigger != "request" and not args.cron:
         return fail(f"gatillo {args.trigger} necesita --cron")
+    # THE SAME RULE AS --cron, AND IT COST A CLIENT THEIR MAIN FLOW. `drive` with
+    # no folder ids writes `trigger_folders:` empty, the portal draws the flow as
+    # active, and `watch.py` has nothing to look at: it can never fire. That is
+    # not a hypothetical -- it is what the flow a SOUL called "el principal"
+    # shipped as, and it ran exactly once, by hand.
+    if args.trigger == "drive" and not args.folders.strip():
+        return fail("gatillo drive necesita --folders con los ids de carpeta que "
+                    "dejó el alta. Sin carpetas el flujo se ve activo y no se "
+                    "puede disparar nunca: si todavía no los tenés, dejalo en "
+                    "--trigger request y pedilos.")
     if args.cron and _too_frequent(args.cron):
         return fail(f"frecuencia minima: cada {MIN_MINUTES} minutos")
+
+    if args.rearm:
+        return rearm(args)
+    for flag, value in (("--name", args.name),
+                        ("--client-summary", args.client_summary)):
+        if not value.strip():
+            return fail(f"falta {flag} (solo se puede omitir con --rearm)")
 
     body = sys.stdin.read().strip()
 
@@ -193,57 +382,9 @@ def main():
 
     job_id = ""
     if args.cron:
-        binary = hermes_binary()
-        if not binary:
-            return fail(
-                "no encontré el CLI de Hermes (busqué en " + ", ".join(HERMES_CANDIDATES)
-                + " y en el PATH). Sin eso no puedo programar nada: NO cuentes que el "
-                "flujo quedó andando"
-            )
-        # SILENCE ONLY COUNTS FOR "THERE WAS NOTHING TO DO". This prompt used
-        # to say only "if the trigger finds nothing new, end in silence", and a
-        # run that COULD NOT work -- the weekly price flow with email
-        # unconnected -- fell into that same phrase: it ran, could not read the
-        # inbox, and stayed quiet. To the client that is indistinguishable from
-        # "no price changes this week": it is the worst possible failure, the
-        # one that looks like success. (Conduct QA on 12/8.)
-        prompt = (
-            f"Trabaja el flujo {args.slug}: abri /opt/data/flows/{args.slug}/FLOW.md "
-            "y segui sus instrucciones tal cual. "
-            "Si lo trabajaste y no habia nada nuevo que hacer, termina en silencio. "
-            "PERO si NO PUDISTE trabajarlo —falta una conexion, una credencial "
-            "vencio, no tenes una herramienta—, NO termines en silencio: crea un "
-            "ticket en el tablero que diga que no pudiste, que falta y que se "
-            "pierde mientras tanto, y pedi lo que falte con la skill capability. "
-            "El cliente lee el silencio como 'no hubo novedades', asi que una "
-            "corrida que no pudo hacer su trabajo SIEMPRE deja rastro visible."
-        )
-        # The `flujo-<slug>` cron job-name prefix STAYS in Spanish on purpose:
-        # it is a compatibility key the portal matches by string prefix
-        # (app/app/lib/events.ts) against cron jobs already created on
-        # deployed agents, and renaming it here would orphan every flow
-        # created before this rename. Comment mirrored on the portal side.
-        output, error = cron(binary, "create", args.cron, prompt,
-                             f"--name=flujo-{args.slug}", "--deliver=local")
-        m = re.search(r"Created job:\s*([0-9a-f]+)", output)
-        if not m:
-            return fail(f"el cron no se creo: {(error or output).strip()[:200]}")
-        job_id = m.group(1)
-
-        # AND NOW WE VERIFY IT STUCK. The create command printing an id is not
-        # enough: what we tell the client is "this is going to run on its
-        # own", and that gets asserted only after seeing it in the list, not
-        # before. Compared by ID, NOT by name: if a `flujo-<slug>` already
-        # existed from before and the new one did not persist, the name would
-        # be the same and we would call a job created that is not the one we
-        # just asked for.
-        list_output, list_error = cron(binary, "list")
-        if job_id not in list_output:
-            return fail(
-                f"el cron dijo que creó {job_id} pero ese id no aparece en "
-                f"`hermes cron list` ({(list_error or list_output).strip()[:120]}) — "
-                "no lo des por creado"
-            )
+        job_id, error = schedule(args.slug, args.cron)
+        if not job_id:
+            return fail(error)
 
     front = [
         "---",

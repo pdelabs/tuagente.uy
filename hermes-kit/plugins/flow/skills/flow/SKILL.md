@@ -106,6 +106,10 @@ MD
 - `--trigger`: `schedule` (un cron), `drive` (mirar carpetas, lleva
   `--folders`), `request` (sin automatización: arranca cuando el cliente lo
   pide; sin `--cron`).
+  **`drive` sin `--folders` el script lo rechaza**, igual que rechaza un gatillo
+  con cron y sin `--cron`. Un gatillo de carpetas sin ids se ve activo en el
+  portal y no se puede disparar nunca. Los ids los dejó el alta: si no los
+  tenés, dejá el flujo en `request` y pedilos.
 - `--client-summary` y `--detail` los lee EL CLIENTE: sin jerga, sin "cron",
   sin ids.
 - `--connections` es OBLIGATORIO. Si el trabajo no toca ninguna, poné
@@ -132,6 +136,19 @@ MD
   cliente sos VOS, siguiendo el cuerpo del flujo.
 - Un flujo existente no se recrea: editá su FLOW.md directamente (podés — es
   tuyo), anotando al final qué cambiaste y cuándo.
+- **Salvo el gatillo, que tiene su propio comando.** Cambiar `trigger_*` a mano
+  deja el cron viejo andando o el nuevo sin crear. Para eso está `--rearm`, que
+  toca SOLO el gatillo y no roza el nombre, el resumen ni los pasos:
+
+  ```bash
+  python3 /opt/kit/skills/flow/create_flow.py --slug entrevistas-tv --rearm \
+    --trigger drive --detail "Mira tus carpetas de Drive cada 15 minutos" \
+    --cron "*/15 * * * *" --folders <ids> --connections google-workspace
+  ```
+
+  Es el paso típico de un flujo que vino con el plugin: esos llegan en
+  `request`, porque una carpeta de Drive es de este cliente y el kit no la
+  conoce. El cron viejo se borra recién cuando el nuevo quedó verificado.
 
 ## Cuando trabajás un flujo
 

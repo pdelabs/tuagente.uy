@@ -1,6 +1,6 @@
 {
   "id": "flow",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "The only way to leave work running on its own: a named client flow with a trigger and results, and the cron that actually delivers it",
   "client_copy": "Lo que se repite queda armado como un flujo y anda solo.",
   "_comment": [
