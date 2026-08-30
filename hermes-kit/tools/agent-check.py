@@ -2391,14 +2391,15 @@ def main():
             raise AssertionError(
                 "missing from plugins/: " + ", ".join(
                     f"{pid} ({', '.join(expected[pid])})" for pid in missing)
-                + " — run install.sh; after hiring a role it is what brings the "
-                "plugins that role declares")
+                + " — run install.sh; after a client buys a capability it is what "
+                "brings the plugins that capability installs")
         if extra:
             raise AssertionError(
                 "plugins/ carries " + ", ".join(extra) + ", which this agent's set "
-                "does not include — a role was let go and its plugin stayed, or "
-                "somebody copied a folder in by hand. install.sh removes what it "
-                "installed; anything else has to go by hand")
+                "does not include — a capability came off policy/capabilities/"
+                "purchased.json and its plugin stayed, or somebody copied a folder "
+                "in by hand. install.sh removes what it installed; anything else "
+                "has to go by hand")
         drifted = []
         for pid, manifest in sorted(installed.items()):
             ours = os.path.join(kit_tools(), "..", "plugins", pid, "plugin.json")

@@ -276,7 +276,12 @@ class ABaseRowPromisesSomethingThatExists(unittest.TestCase):
         for out in (solo_out, team_out):
             self.assertIn(f"capability '{self.UNWRITTEN}'", out)
             self.assertIn("level: base", out)
-        self.assertEqual(solo_out.strip(), team_out.strip())
+        # THE REFUSAL, WHICH IS THE LAST LINE AND NOT THE WHOLE STREAM.
+        # `plugin_set.py` also says on stderr when this agent has bought nothing
+        # yet -- a state, printed before the refusal -- and the rule under test
+        # is that the two paths refuse with the SAME sentence.
+        self.assertEqual(solo_out.strip().splitlines()[-1],
+                         team_out.strip().splitlines()[-1])
 
     def test_the_same_row_on_the_menu_installs_on_both(self):
         """`base` is the word that turns a row into a promise. `menu` is a plan."""
