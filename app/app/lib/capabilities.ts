@@ -2,19 +2,22 @@
 
 // The capability catalog and what this browser already requested, shared.
 //
-// Used to live inside `CapabilityChip.tsx` while the chat was the only thing
-// reading it. Now each teammate's profile reads it too ("What it can do"),
-// and the two screens HAVE TO look at the same thing:
+// It used to live inside `CapabilityChip.tsx`, back when the chat was the only
+// thing reading it. It was pulled out here when a second screen started
+// reading it as well, and the reason to keep it out survives that screen:
 //
 //   - the catalog, because `active` is computed on the agent's side and two
 //     copies drifting apart would be two different answers to "does it
 //     already have this?";
-//   - what's requested, because a request made from the chat can't be
-//     offered again on the profile as if nothing happened.
+//   - what's requested, because a request made on one screen can't be offered
+//     again on another as if nothing happened.
 //
 // No UI lives here: just the two pieces of state, and how the catalog gets
-// grouped for display -- which two screens also read (a teammate's profile
-// and the role-hiring flow built out of capabilities) and also have to agree.
+// grouped for display. TODAY THE CHAT'S CARD IS THE ONLY READER — the other
+// two, a teammate's profile and the role-hiring flow, went with the team
+// pivot (30/8/2026). This stays a shared module rather than folding back into
+// the chip, because the next screen that draws capabilities has to agree with
+// the chip and not re-decide.
 
 import { getCapabilities, loadConfig, type Capability } from "./agent";
 
@@ -76,9 +79,9 @@ export function groupLabel(g: string): string {
 
 /** The catalog split into groups, IN THE ORDER IT ARRIVES. The order is the
  *  catalog's own decision, and reordering it here would be a second opinion
- *  on the same thing. It's a function and not a per-screen copy because the
- *  portal's two capability lists -- a teammate's profile and the hiring flow
- *  -- have to read it identically: it's the same catalog. */
+ *  on the same thing. It is a function and not a per-screen copy so that
+ *  every list drawn off this catalog groups it identically: it is the same
+ *  catalog. */
 export function byGroup(caps: Capability[]): {
   group: string; label: string; capabilities: Capability[];
 }[] {

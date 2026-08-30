@@ -23,8 +23,8 @@ const KEY = "tuagente_intro_v2";
 export const INTROS: Record<string, ComponentType<IntroProps>> = {
   home: HomeIntro,
   chat: ChatIntro,
-  // The key is the MODULE's, not the tab's: the manifest declares `roles` and
-  // the nav labels it "Equipo".
+  // The key is the MODULE's, not the tab's: the manifest declares `kanban`
+  // and the nav labels it "Tablero".
   kanban: PipelineIntro,
   approvals: ApprovalsIntro,
   artifacts: ArtifactsIntro,

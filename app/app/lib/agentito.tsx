@@ -104,11 +104,10 @@ type AgentitoAnimatedProps = {
  * when the character is actually drawn; until it lands, the still agentito
  * stands in. It used to stand in through `next/dynamic`'s `loading`, which
  * receives NONE of the props -- not the size, not the look -- so the only
- * face it could read was the agent's own, out of the browser. ON A TEAM THAT
- * FACE BELONGS TO NOBODY: the greeter introduced the teammate the client had
- * just hired, by their name, wearing the agent's default violet until the
- * runtime arrived, and a reply being written in the chat did the same.
- * Holding the props here is what lets the stand-in wear the right face.
+ * face it could read was whatever the browser had cached, at the default
+ * size. A client who had just picked a face watched the violet default stand
+ * in for it until the runtime arrived. Holding the props here is what lets
+ * the stand-in wear the right face from the first frame.
  */
 // ONCE THE RUNTIME HAS LANDED IT STAYS LANDED, and this module-level slot is
 // what `next/dynamic` used to give us for free: it compiles to `React.lazy`,

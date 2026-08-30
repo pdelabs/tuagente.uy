@@ -32,10 +32,9 @@ import { useEffect, useState } from "react";
 import { Check, Sparkles } from "lucide-react";
 import { loadConfig, requestCapability, type Capability } from "./agent";
 // The catalog and the memory of what's been requested live in
-// `lib/capabilities.ts` ever since each teammate's profile started reading
-// them too: they're the same two pieces of state, and two copies would
-// answer "does it already have this?" and "did I already ask for it?"
-// differently.
+// `lib/capabilities.ts`, so that any screen drawing capabilities reads the
+// same two pieces of state: two copies would answer "does it already have
+// this?" and "did I already ask for it?" differently.
 import { capabilityCatalog, readRequested, markRequested } from "./capabilities";
 
 function Fact({ label, children }: { label: string; children: string }) {
