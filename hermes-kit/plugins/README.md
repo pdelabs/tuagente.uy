@@ -4,7 +4,7 @@ One directory per plugin, `plugins/<id>/`, with a `plugin.json` manifest at its
 root. A plugin is the reusable unit of custom work: whatever a client pays us
 to build lands here so the second client who asks for it gets it off the shelf.
 
-The full design, the six surfaces and the phase plan are in
+The full design, the seven surfaces and the phase plan are in
 [`../notes/plugin-system-plan.md`](../notes/plugin-system-plan.md). Read that
 before adding a surface this registry has never shipped.
 
@@ -62,13 +62,15 @@ string or a list of strings) is allowed and ignored.
 | `brand-kit` | no | what a company looks like, read off its own site (marketing) |
 | `social-content` | no | Instagram posts in the brand's voice (marketing) |
 | `post-image` | no | the image a post needs, and the step that LOOKS at it (marketing) |
-| `drive-inbox` | no | Drive folders as an inbox — **declared by nobody, ships nowhere** |
+| `drive-inbox` | no | Drive folders as an inbox — **sold by nobody, its folder ships nowhere** |
 
-`drive-inbox` is the honest odd one out and its manifest says so: no role
-declares it, no base capability installs it, and `system` is false, so
-`tools/plugin_set.py` gives it to no agent. It is packaged so the day a client
-needs it the unit is there to declare, and until then `skills_split.py --orphan`
-keeps printing its name, exactly as it did when it was a bare kit skill.
+`drive-inbox` is the honest odd one out and its manifest says so: no capability
+sells it, no base capability installs it, and `system` is false, so
+`tools/plugin_set.py` gives its FOLDER to no agent. It is packaged so the day a
+client needs it the unit is there to sell. Its SKILL is delivered like every
+other one — kit-skills/ is the whole catalog — which is exactly the split the
+rest of this file insists on: the delivery is what the engine indexes, the
+folder is what says the plugin is installed.
 
 ### Harness skills: what `skills/` still holds, and why
 
@@ -82,10 +84,10 @@ result.
 
 That makes them harness, not product, and the distinction is the same one that
 keeps `mcp-guard/` and `connections/` out: a plugin is something a client can
-BUY, depend on, and lose when the role that declared it is let go. These two
-belong to every agent unconditionally and answer to the engine's index, not to
-anybody's roster. Wrapping them in a manifest would invite a role to declare
-them, a capability to install them, and `plugin_set.py` to remove them.
+BUY, depend on, and lose when the capability that installed it is dropped. These
+two belong to every agent unconditionally and answer to the engine's index, not
+to anything anybody bought. Wrapping them in a manifest would invite a capability
+to install them and `plugin_set.py` to remove them.
 
 ### `system: true` ships the folder, not the skill
 
@@ -99,30 +101,32 @@ through everything below. The FOLDER is the registry: `plugins/<id>/` copied
 whole to `<agent>/plugins/<id>/`, mounted `:ro` at `/opt/plugins`, which is what
 says the plugin is installed — the adapter scans it at boot and publishes it at
 `/portal/plugins`. The SKILL is the delivery: the same files flattened into
-`kit-skills/<name>/` or into a role's profile, which is what the ENGINE indexes.
-Both are on the agent, both are load-bearing, and `tools/agent-check.py`
-compares them byte for byte — the delivered copy is the one that RUNS, so a
-stale one is a skill running old code under a manifest that says otherwise.
+`kit-skills/<name>/`, which is what the ENGINE indexes. Both are on the agent,
+both are load-bearing, and `tools/agent-check.py` compares them byte for byte —
+the delivered copy is the one that RUNS, so a stale one is a skill running old
+code under a manifest that says otherwise.
 
 Which plugins a given agent gets is computed by `tools/plugin_set.py`: system,
-plus the plugin behind a `level: base` capability, plus what each hired role
-declares. `install.sh` ships exactly that set and removes the folder of a
-plugin that leaves it.
+plus the plugin behind a `level: base` capability, plus what the capabilities
+this client bought install (`policy/capabilities/purchased.json`). `install.sh`
+ships exactly that set — the folder, the engine surface and the curated flows —
+and removes what leaves it.
 
-Shipping the folder says nothing about which roles see the skills inside.
-Exposure is still whatever each role declares in `roles/catalog.json` and
-`roles/<id>/role.json`, computed by `roles/skills_split.py`, and it is not
-uniform: `artifact` is declared by marketing, sales and accounting and not by
-support or assistant, so it is a role-only skill and stays one. A system plugin
-whose skill was suddenly in every role's index would put the cost back where the
-team pivot took it from — every skill's description is loaded on every request.
+WHAT THE FOLDER DOES NOT DECIDE IS THE SKILL INDEX, and that is one agent's
+whole catalog. Until the team pivot came off, exposure was per ROLE: kit-skills/
+is mounted for the whole installation, so a teammate paid prompt for the other
+teammates' craft and `roles/skills_split.py` computed who saw what. One baptized
+agent per client has nobody else to pay for it, so every skill in the kit is
+delivered and indexed — a plugin whose folder this agent does not have still
+leaves its SKILL.md in the index, and what the client does not get is the
+tab, the adapter routes, the flows and the right to depend on it.
 
 `kanban` is the extreme case: it has no skills surface at all. Its store is the
 engine's and its screens are the portal's; the manifest exists so the four that
 write into a ticket can say they need it.
 
 `capability` is the other end of the same idea: it is system because it is the
-PRODUCT'S OWN MACHINERY, not because every role happens to declare it today.
+PRODUCT'S OWN MACHINERY, not because it happens to be on every agent today.
 `capabilities/catalog.json` is the closed list the client buys from, the adapter
 draws the card, and the gate hook in `policy/hooks/` redirects every blocked
 install to this skill by name. A client plugin that has to say "this needs
@@ -130,6 +134,32 @@ something you do not have" depends on it being there. It requires nothing and
 declares no tab: the ask is a `capability:<id>` mention inside the answer the
 agent is already giving, so nothing is blocked, approved or delivered, and there
 is no page to name.
+
+### The flows surface: what a plugin's work makes possible
+
+```json
+"flows": ["flows/presupuesto-nuevo", "flows/seguimiento-de-presupuestos"]
+```
+
+Directories inside the plugin, each holding a `FLOW.md`. `install.sh` delivers
+the ones belonging to THIS agent's plugin set to `data/flows/<slug>/` — where
+the `flow` skill's `create_flow.py` writes, where the adapter's FlowStore reads,
+and where the client can edit one exactly like a flow the agent wrote for them.
+So a flow about quotes never lands on an agent that cannot write a quote.
+
+THEY USED TO TRAVEL INSIDE A ROLE (`roles/<id>/flows/`, packed into the profile
+distribution), and ownership is now about the WORK, not the frontmatter.
+`seguimiento-de-presupuestos` names only `approval` and `deliverable` under
+`skills:` and belongs to `quotes`, because the quotes it chases only exist if
+the quote writer made them. The seven that no plugin owns — they exercise system
+skills or a base capability only — are the system `flow` plugin's catalog, under
+`plugins/flow/curated/`, and they stay there until somebody writes a plugin that
+earns them: a manifest invented to hold a FLOW.md is a plugin with nothing
+behind it.
+
+The slug has ONE source, like a skill name. Two plugins claiming
+`presupuesto-nuevo` install into one directory and one of them silently wins, so
+the validator refuses it.
 
 ### The tab surface has two shapes
 
@@ -164,11 +194,17 @@ only while it still lives in `skills/`:
 
 `tools/check-plugins.py` refuses a `kit_skills` entry that names a plugin-owned
 skill and a `plugins` entry that names a plugin nobody wrote, and
-`roles/skills_split.py` runs the same check on every install. It is not
-bookkeeping: `tools/plugin_set.py` reads `installs.plugins` off the `level: base`
-rows to decide what ships on EVERY agent, so a base row pointing at the wrong
-home is a plugin the catalog promises as already installed and the installer
-never copies.
+`tools/plugin_set.py` runs the same check on every install. It is not
+bookkeeping: `plugin_set.py` reads `installs.plugins` off the `level: base` rows
+to decide what ships on EVERY agent, and off the rows in `purchased.json` to
+decide what ships on THIS one, so a row pointing at the wrong home is a plugin
+the catalog promises and the installer never copies.
+
+A ROW HAS TO BE CLOSED ON ITS OWN, because a row is what a client buys on its
+own. `check-plugins.py` refuses a row whose plugin requires a non-system plugin
+that same row does not install — `social-package` selling `post-image` without
+`brand-kit` is an image generator with no hexes to read. Another row installing
+the dependency is another purchase, not this one.
 
 `verifies` did NOT move, on purpose. It describes the agent's DELIVERED layout —
 a plugin's skill is flattened into `kit-skills/` exactly as it always was — so
@@ -178,19 +214,29 @@ agent. `installs` says where the source is; `verifies` says what to find on disk
 ## Where the files actually land
 
 **The folder ships whole** (phase 3b). `plugins/<id>/` is copied to
-`<agent>/plugins/<id>/` — manifest, skills, engine surface — and the compose
-mounts that at `/opt/plugins:ro` for the adapter. `install.sh` decides WHICH
-folders travel with `tools/plugin_set.py` and removes the ones that stop
-belonging to the agent; `deploy-remote.sh` does the same by running the same
-installer against a staging tree.
+`<agent>/plugins/<id>/` — manifest, skills, engine surface, curated flows — and
+the compose mounts that at `/opt/plugins:ro` for the adapter. `install.sh`
+decides WHICH folders travel with `tools/plugin_set.py` and removes the ones
+that stop belonging to the agent; `deploy-remote.sh` does the same by running
+the same installer against a staging tree, after pulling that agent's
+`purchased.json` so it computes the same answer there as here.
 
-**The skills keep being delivered flattened, and that did not change.** At
-dist-assembly time a plugin's skills are copied into the layout the agent has
-always had, so `plugins/transcribe/skills/transcribe/` installs at
+**The skills keep being delivered flattened, and that did not change.** A
+plugin's skills are copied into the layout the agent has always had, so
+`plugins/transcribe/skills/transcribe/` installs at
 `/opt/kit/skills/transcribe/` exactly like `skills/transcribe/` used to, and
 every `SKILL.md` keeps the paths it already had. The registry copy is not a
-replacement for that one: the engine indexes `skills.external_dirs` and the
-profiles, never `/opt/plugins`.
+replacement for that one: the engine indexes `skills.external_dirs`, never
+`/opt/plugins`.
+
+**The curated flows land in `data/flows/<slug>/`**, which is the only place a
+flow exists on an agent: what `create_flow.py` writes, what the adapter lists
+and what the portal draws. Like the engine surface below, they are on the agent
+twice — inside the registry folder and at their working destination — and the
+working copy is the one that counts. It is in `data/`, which belongs to the
+agent, on purpose: a client edits a curated flow the same way they edit one the
+agent wrote, and `install.sh --diff` is what says so before an update overwrites
+the edit.
 
 **The engine surface is the exception to "whole folder, one place".** It ships
 to the agent TWICE: inside the registry folder like everything else, and to
@@ -209,8 +255,8 @@ serves an empty list, and `agent-check.py` reports it as a pending warning. A
 directory that IS there and does not validate stops the adapter from booting at
 all.
 
-That flattening is what `roles/build_role.py` and `install.sh` do, both through
-the one resolver in `tools/plugin_registry.py`. A skill name may exist in
+That flattening is what `install.sh` does, through the one resolver in
+`tools/plugin_registry.py` (via `tools/skill_sources.py`). A skill name may exist in
 `skills/` **or** in one plugin's skills surface, never in two places: the
 flattened layout has one slot per name and the validator says so.
 
@@ -227,25 +273,39 @@ there by the installer on purpose. A boot check that read them would find
 `transcribe` in `/opt/plugins/transcribe/skills/` and in `/opt/kit/skills/` and
 refuse to start — on every correctly installed agent. The kit-vs-plugin half
 belongs to build time, where both homes are real and there is no delivery to
-confuse it with: `check-plugins.py` and `build_role.py`, over the repo, before
-any agent has the plugin at all.
+confuse it with: `check-plugins.py`, over the repo, before any agent has the
+plugin at all.
 
-## What the plugin set is NOT read from
+## What the plugin set IS read from, and what it is not
 
-**A profile's `role.json` is non-semantic, permanently.** Everything that
-resolves plugins reads manifests and directories and nothing else: this
-registry in the repo, `/opt/plugins/<id>/plugin.json` on the agent, and the
-skill directories a manifest declares. Which plugins an agent has is a fact
-about its filesystem, never a claim in a profile, and no phase of this plan
-changes that.
+**`policy/capabilities/purchased.json`, and nothing else about the client.** It
+is a list of capability ids from `capabilities/catalog.json` — the same ids the
+adapter draws the card from and `requests.jsonl` records the ask in:
 
-What the distribution's `role.json` carries is `identity` — the name and face
-the portal draws — plus a flattened `skills` list that nothing compares against
-anything: the engine indexes the `skills/` DIRECTORY, and the adapter's
-`_role_identity`, `agent-check.py` and `skills_split.py` read `identity` or
-compare sets. That is why `tools/migrate-agent-to-english.sh` rewriting a live
-agent's `role.json` id and look but NOT the skill ids inside it is harmless for
-good, and not just until something starts reading them.
+```json
+{ "capabilities": ["quotes", "invoices-to-data"] }
+```
+
+No file is a fresh client and installs: the six defaults plus the plugin behind
+`transcription`, seven in all, and `install.sh` says so in one line. A file that
+IS there and is malformed, names a capability the catalog does not have, or
+names a `level: base` row — already on every agent, not sold — stops the install
+by name. It lives in `policy/` and not in `data/` for the same reason the
+capabilities catalog does: what the client bought decides what code reaches the
+agent, and `data/` belongs to the agent.
+
+IT USED TO BE THE ROSTER. Until 2026-08-30 the third source was what each HIRED
+role declared, read off `data/profiles/<id>/`, because the product sold a team
+and a role was the unit a client bought. The question did not change — which of
+the things we sell did this client say yes to — only the vocabulary, into the
+one the client already reads.
+
+**A profile, a role.json, or anything else on the agent's disk is not a source.**
+Everything that resolves plugins reads manifests and directories and nothing
+else: this registry in the repo, `/opt/plugins/<id>/plugin.json` on the agent,
+and the skill and flow directories a manifest declares. Which plugins an agent
+has is a fact about its filesystem plus one purchase record, never a claim
+inside a distribution.
 
 ## Verify
 

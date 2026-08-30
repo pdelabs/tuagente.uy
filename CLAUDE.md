@@ -114,7 +114,6 @@ npx next start -p 8090          # against the local agent
 # The kit (from the monorepo root)
 python3 -m unittest discover -s hermes-kit/adapter -p "test_*.py"
 python3 -m unittest discover -s hermes-kit/tools -p "test_*.py"
-python3 -m unittest discover -s hermes-kit/roles -p "test_*.py"
 python3 hermes-kit/tools/check-adapter-boundaries.py
 python3 hermes-kit/tools/check-clones.py
 python3 hermes-kit/tools/check-plugins.py
