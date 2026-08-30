@@ -8,7 +8,7 @@
 // what every surface draws. Each click re-renders everything server-side:
 // the big preview plus one thumbnail per variant per axis, always against
 // the look you are building. The JSON under the preview pastes straight into
-// roles/catalog.json (identity.look) or the CLI's --look.
+// the CLI's --look, or into an agent's `data/portal_identity.json`.`look`.
 
 import { createServer } from "node:http";
 import { LOOK_DEFAULT, LOOK_AXES, renderAgentitoSVG } from "../../app/app/lib/agentito-svg.mjs";
@@ -65,7 +65,7 @@ const PAGE = `<!doctype html>
 </main>
 <div class="snippets">
   <span class="hint">Click a snippet to copy it:</span>
-  <code id="json" title="identity.look for roles/catalog.json"></code>
+  <code id="json" title="the look, as portal_identity.json stores it"></code>
   <code id="cli" title="the same look via CLI"></code>
 </div>
 <script>

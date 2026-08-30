@@ -24,9 +24,11 @@ Usage — with a PNG already captured (the portal's):
 
 Usage — drawing it on its own, with no portal or browser (draw-agentito.mjs):
     ~/.tuagente-tools/bin/python3 avatar-bot.py \
-        --role assistant --agent /path/agent \
+        --look "$(jq -c .look /path/agent/data/portal_identity.json)" \
         --env /path/agent/data/.env
-    # --role alone: the catalog's face. --agent too: the client's naming.
+    # The look is the client's own, from the portal. It used to be --role/--agent,
+    # reading the roster catalog and policy/roles/identities.json; there is no
+    # roster, and one agent has one face.
 """
 import argparse
 import asyncio
@@ -93,22 +95,19 @@ def _has_alpha(png: Path) -> bool:
         return False
 
 
-def draw(role, agent, dest):
+def draw(look, dest):
     """Draw the face with the headless tool: the telegram preset already lands
     on 512px with a solid background, so the alpha warning below never fires."""
-    cmd = ["node", str(DRAW), "--for", "telegram", "--png", str(dest)]
-    if role:
-        cmd += ["--role", role]
-    if agent:
-        cmd += ["--agent", agent]
-    subprocess.run(cmd, check=True)
+    subprocess.run(
+        ["node", str(DRAW), "--look", look, "--for", "telegram", "--png", str(dest)],
+        check=True)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--png", help="PNG already ready (the one the portal captured)")
-    ap.add_argument("--role", help="draws that role's face with draw-agentito.mjs")
-    ap.add_argument("--agent", help="agent path: uses the naming from policy/roles/identities.json")
+    ap.add_argument("--look", help="the look JSON (data/portal_identity.json's "
+                                   "`look`): draws it with draw-agentito.mjs")
     ap.add_argument("--env", required=True, help="the agent's .env (for the token)")
     args = ap.parse_args()
 
@@ -119,11 +118,11 @@ def main():
 
     if args.png:
         png = Path(args.png)
-    elif args.role or args.agent:
+    elif args.look:
         png = Path(tempfile.mkdtemp()) / "agentito.png"
-        draw(args.role, args.agent, png)
+        draw(args.look, png)
     else:
-        sys.exit("missing the face: --png <file>, or --role/--agent to draw it on its own")
+        sys.exit("missing the face: --png <file>, or --look '{json}' to draw it on its own")
 
     if _has_alpha(png):
         print("WARNING: the PNG has transparency. Telegram flattens it against "
