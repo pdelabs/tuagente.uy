@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home,
-  LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Plug, Puzzle, Users, Workflow,
+  LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Plug, Puzzle, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -24,9 +24,8 @@ import {
 } from "./lib/routes";
 import { INTROS, useIntroGate } from "./lib/intros";
 import Onboarding, {
-  NoChannelNotice, hiringAlreadyAnswered, channelAlreadyAnswered, loadAgentName, saveAgentName,
+  NoChannelNotice, hiringAlreadyAnswered, loadAgentName, saveAgentName,
 } from "./lib/onboarding";
-import TeamHiring, { useTeamHiring } from "./lib/hiring";
 import {
   AgentitoAvatar, hasSavedLook, loadAgentLook, lookFromAgent, saveAgentLook,
 } from "./lib/agentito";
@@ -53,10 +52,6 @@ export const HIDDEN_MODULES = new Set<string>([]);
 export const MODULES: { key: string; path: string; label: string; icon: LucideIcon; sec?: boolean }[] = [
   { key: "home", path: "/app/home", label: "Inicio", icon: Home },
   { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
-  // WHO works for you comes before WHAT they are doing, so this sits high and
-  // never under "Más". It only appears on an agent that has a team: the module
-  // is false on every single-role agent, which is all of them today.
-  { key: "roles", path: "/app/team", label: "Equipo", icon: Users },
   { key: "flows", path: "/app/flows", label: "Flujos", icon: Workflow },
   // Actividad left "Más" (8/13) and sits right next to Flujos. Both blind-QA
   // clients went looking for it and both said the same thing: "it's where the
@@ -156,9 +151,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [showMore, setShowMore] = useState(false);
   useEffect(() => { setName(loadAgentName()); }, []);
   const { seen, dismiss } = useIntroGate();
-  // Has this client not hired anyone yet? Only actually asks if the agent
-  // declares a team; on a single agent it steps aside without asking anything.
-  const hiring = useTeamHiring(manifest, cfg);
 
   // ALL HOOKS GO UP HERE, before any conditional `return`. Placed further
   // down -- after the loading/login/error returns -- the number of hooks
@@ -395,55 +387,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // TEAM HIRING, BEFORE A SINGLE AGENT'S ONBOARDING. On an agent with a team,
-  // the client has nobody to name yet: the first thing they do is hire their
-  // first role. Naming "your agent" there would mean giving a name to
-  // somebody they didn't choose, and the portal would end up full of tabs for
-  // an empty team.
-  //
-  // The whole precedence lives in `useTeamHiring` and is decided by THE
-  // ROSTER, not the browser: if the agent doesn't declare a team, or if the
-  // roster doesn't answer, this steps aside and everything carries on as before.
-  if (hiring.state === "loading") {
-    return <main className="app-shell min-h-screen bg-surface"><Spinner /></main>;
-  }
-  if (hiring.state === "hiring" || hiring.state === "pending") {
-    return (
-      <TeamHiring cfg={cfg} roles={hiring.roles} onHired={hiring.markHired} />
-    );
-  }
-
-  // AND AS SOON AS THE FIRST ONE ARRIVES, WHAT TEAM HIRING DOESN'T ASK. Picking
-  // and naming don't say what the business is -- which is what triggers the
-  // brief -- or where to notify them. They're the same two questions a single
-  // agent's onboarding always asks, and here they're asked by the teammate the
-  // client just hired, with no naming step: that one already got named when
-  // they picked it.
-  //
-  // Remembered THE SAME WAY AS ONBOARDING (the same browser key): if the
-  // client abandons it halfway, the next time they enter the roster already
-  // says "hired" and there's nothing pending, so it falls back here and not
-  // into hiring. What doesn't get asked again is whoever already answered the
-  // channel question on another machine: the agent says so
-  // (`channelAlreadyAnswered`), and asking again would overwrite the channel
-  // it already has.
-  if (hiring.state === "hired" && seen && !seen.onboarding && !channelAlreadyAnswered(manifest)) {
-    return (
-      <Onboarding
-        manifest={manifest}
-        cfg={cfg}
-        team={hiring.team ?? { name: manifest.agent, look: agentLook }}
-        onDone={() => {
-          // The name and the look are the teammate's, not the agent's: they
-          // don't get copied to the browser. All that stays marked is that
-          // the welcome screen already happened.
-          dismiss("onboarding");
-          dismiss("home");
-        }}
-      />
-    );
-  }
-
   // Onboarding: before any module, the client names their agent and the agent
   // introduces itself. It completes the general welcome screen, so it also
   // marks the "home" intro (otherwise there'd be two welcome screens back to back).
@@ -460,17 +403,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // again. A brand-new (unnamed) agent still sees the full flow, and a named
   // one missing a channel sees it starting from the overview -- which is
   // where `Onboarding` starts when `named` is true.
-  //
-  // AND NEVER ON A TEAM AGENT (`modules.roles`). There's no "your agent" to
-  // name there: the client hires people, and the naming happens for each one
-  // when they pick it. Without this condition, a team client on a virgin
-  // browser -- they logged out, went incognito, switched machines -- used to
-  // fall into a single agent's naming step whenever the roster didn't arrive
-  // in time or was out of the picture, and answering it WRITES to the agent
-  // (`POST /portal/identity`): it gave a name and a face to an agent that
-  // isn't any of its teammates. What a team client gets is decided by the two
-  // gates above.
-  if (seen && !seen.onboarding && !hiringAlreadyAnswered(manifest) && !manifest.modules.roles) {
+  if (seen && !seen.onboarding && !hiringAlreadyAnswered(manifest)) {
     return (
       <Onboarding
         manifest={manifest}

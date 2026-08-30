@@ -68,7 +68,6 @@ import {
 import Markdown from "../lib/Markdown";
 import { EntityProvider } from "../lib/EntityViewer";
 import { EntityChip } from "../lib/entities";
-import { RoleChip, useRoles } from "../lib/roles";
 
 const REFRESH_MS = 30_000;
 const NO_TENANT = "__sin_tenant__"; // sentinel for tickets with a null tenant
@@ -317,10 +316,6 @@ function Label({ children, optional }: { children: string; optional?: boolean })
 type LocalComment = TicketComment & { local: number };
 
 export default function PipelinePage() {
-  // The team, if this agent has one. Empty map on every agent running today.
-  // Nothing here is worded off it -- it puts a face and a name on work that is
-  // already drawn -- so this screen has nothing to wait for.
-  const { roles } = useRoles();
   // The agent's look for the stamp on its comments (lazy: no flash).
   const [agentLook] = useState(loadAgentLook);
   const [cfg] = useState<PortalConfig | null>(() => loadConfig());
@@ -746,10 +741,6 @@ export default function PipelinePage() {
                               {t.title}
                             </p>
                             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                              {/* Who holds this task. Draws nothing on an agent
-                                  with no team, so a single-role board is
-                                  unchanged. */}
-                              <RoleChip id={t.assignee} roles={roles} />
                               {t.tenant && <Chip tone="neutral">{t.tenant}</Chip>}
                               <span className="ml-auto text-[11px] text-ink-soft">
                                 {formatRelative(t.created_at)}

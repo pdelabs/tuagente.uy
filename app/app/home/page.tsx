@@ -43,7 +43,6 @@ import {
 } from "../lib/labels";
 import { humanizeRuns } from "../lib/events";
 import { agentDisplayName } from "../lib/onboarding";
-import { roleName, useRoles } from "../lib/roles";
 import { AgentitoAnimated, loadAgentLook } from "../lib/agentito";
 import type { AgentitoState } from "../lib/AgentitoRive";
 
@@ -121,12 +120,6 @@ const ago = (v: string | number | undefined): string | null => {
 // with a different yardstick. Now it runs on the business's clock, like
 // everything else; the why, at length, is in `greetingOfTheDay` (`lib/labels.ts`).
 const greeting = greetingOfTheDay;
-
-/** The team, said out loud: "Vera", "Vera y Tino", "Vera, Tino y Beto". */
-function outLoud(names: string[]): string {
-  if (names.length < 2) return names.join("");
-  return `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`;
-}
 
 /** An event's moment: today just the time; before that, with the day up front.
  *
@@ -497,10 +490,6 @@ export default function HomePage() {
 
 function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
-  // Who works here. Empty on an agent of one -- every one we run today -- and
-  // then this screen says exactly what it always said. Until the roster lands
-  // an empty map is not that answer yet, which is what `rolesLoading` is for.
-  const { roles, loading: rolesLoading } = useRoles();
   const [fatal, setFatal] = useState<string | null>(null);
   const [failed, setFailed] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -757,23 +746,11 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const waitingForData = slots.some((s) => s.t === "loading") || chats.t === "loading";
   const nothing = slots.every((s) => s.t === "off" || s.t === "failed");
 
-  // Status line: says what we know and nothing more.
-  //
-  // AND WITH A TEAM THERE IS NO "tu agente" TO INTRODUCE. The line named the
-  // container the roles run in -- "Agente Local, tu agente" -- to a client who
-  // hired people and gave each of them a name. What they have is a team, and
-  // those names are the ones they chose.
-  //
-  // AND WHILE THE ROSTER IS IN THE AIR IT SAYS NEITHER. The manifest and the
-  // roster are two requests: the one that gates this render can land first, and
-  // then the line introduced "tu agente" -- the sentence for a client who has
-  // one -- to a client who has a team, before swapping itself out. Saying
-  // nothing about who works here is the only version of it that is never
-  // wrong; the rest of the line still carries what we do know.
-  const team = Object.keys(roles).map((id) => roleName(id, roles));
-  const statusLine = rolesLoading ? [] : [team.length
-    ? `Tu equipo: ${outLoud(team)}`
-    : `${agentDisplayName(manifest)}, tu agente`];
+  // Status line: says what we know and nothing more. It opens by introducing
+  // the agent by the name the client gave it, and it paints on the FIRST
+  // render -- the manifest is the only thing it waits for, and that is the
+  // same request that gates this whole screen.
+  const statusLine = [`${agentDisplayName(manifest)}, tu agente`];
   if (lastSignal) statusLine.push(`última actividad ${lastSignal}`);
   else if (waitingForData) statusLine.push("buscando novedades…");
 
