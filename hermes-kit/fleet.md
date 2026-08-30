@@ -268,9 +268,10 @@ leaves its ticket blocked and the agent has no idea what to do with that.**
 Migrating it is one run of `tools/replace-block.py`, checking the diff of
 whatever was hand-written first — and East's SOUL is heavily hand-written
 (it names Cata, her programs, her flows), so that check is the whole job.
-**East is now the only agent in the fleet**, and the only live client one.
-No local client agents run today: anything created with `new-agent.sh` is
-born on the current version.
+**East is the only live CLIENT agent** — the table at the top of this file
+lists three agents alive, and the other two are ours. No other client agent
+runs today: anything created with `new-agent.sh` is born on the current
+version.
 
 **And East is missing the promises guard** (`policy/plugins/promises/` on the
 agent — in the kit it now lives at `plugins/flow/engine/promises/`, the `flow`
