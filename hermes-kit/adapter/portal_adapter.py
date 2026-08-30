@@ -2911,6 +2911,20 @@ class Handler(BaseHTTPRequestHandler):
 
         m = re.match(r"^/portal/approvals/([^/]+)/(approve|reject)$", path)
         if not m:
+            # A POST TO A PATH THAT IS NOT HERE STILL ARRIVED WITH A BODY, and
+            # this is the one 404 that never reads one. Closing the socket on
+            # unread bytes makes the kernel send an RST, so the caller gets the
+            # status line and then loses the connection while reading the body:
+            # a transport error where a 404 was already on the wire. Exactly
+            # the failure `_drain_request_body` was written for on the 401.
+            #
+            # 0.43.0 IS WHAT MADE IT REACHABLE. Until now every POST the portal
+            # sends matched something; `/portal/roles/request` and
+            # `/portal/rooms/<id>` are the first routes a shipped portal knows
+            # about and this door does not have. Measured on the fixture, 20
+            # calls each: 6/20 reset with a 27-byte body and 10/20 with 60KB,
+            # 0/20 after this line.
+            self._drain_request_body()
             return self._send(404, {"error": "not found"})
         task_id, action = m.group(1), m.group(2)
         if not TASK_ID_RE.match(task_id):
