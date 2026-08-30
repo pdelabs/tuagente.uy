@@ -207,7 +207,7 @@ Against `199b6b4`, the last commit before wave 0:
 |---|---|
 | files deleted outright | **50** |
 | of them `hermes-kit/roles/` | 32 |
-| `hermes-kit/tools/` | 8 (`hire-role.sh`, `profile_config.py` + its test, the five role goldens) |
+| `hermes-kit/tools/` | 8 — `hire-role.sh`, `profile_config.py` + its test, five role goldens |
 | `app/app/team/` | 4 |
 | `hermes-kit/adapter/` | 3 (`rooms.py` and two test suites) |
 | `app/app/lib/` | 3 (`roles.tsx`, `hiring.tsx`, `intros/team.tsx`) |
@@ -274,8 +274,8 @@ the same day: the under-skilling by `15d833a` (above), and the check that
 ## Wave 1, outcome — the portal
 
 `02665aa` `428c4fc` `ef6c3fb` `184223f` `a8e5e50` `e6ddcea` `ebd2423`, logged
-in `94d08c0`. `app/app/` only, in an order where every commit compiles, with `agent.ts` last
-on purpose — the portal's only network entry point, so nothing comes out of it
+in `94d08c0`. `app/app/` only, in an order where every commit compiles, with
+`agent.ts` last on purpose — the portal's only network entry point, so nothing comes out of it
 until nothing calls it. Closed green: `tsc --noEmit` and `npm run build` clean,
 and the whole browser session touching `/portal/manifest`, `/portal/activity`,
 `/portal/approvals`, `/portal/chat/stream`, `/api/sessions` and `/api/jobs` and
@@ -291,17 +291,19 @@ both ways.
 
 ## Wave 2, outcome — the landing and the blog
 
-`0c80296` `647330f` `9daf466` `35098cc`. One agent per company instead of the roster, plugins instead of hired roles,
-the metadata and OG card rewritten, the demo widget's header degreeted, and the
-price post rewritten to diagnóstico + plugin + mensual. This was the wave that
+`0c80296` `647330f` `9daf466` `35098cc`. One agent per company instead of the
+roster, plugins instead of hired roles, the metadata and OG card rewritten,
+the demo widget's header degreeted, and the price post rewritten to
+diagnóstico + plugin + mensual. This was the wave that
 had been pricing-gated; it stopped being gated when the price stopped being
 per role.
 
 ## Wave 3, outcome — the adapter
 
-`2b817bd` `fb31719` `41a1ed9` `9112761` `9c4e6cb` `97462d9`. The room's store, its four routes and its transcript; the chat stream unforked
-onto one agent, one key, one prefix; the roster, the hire and the router; the
-nameless identity write. **Adapter 0.43.0, a minor because it is a contract
+`2b817bd` `fb31719` `41a1ed9` `9112761` `9c4e6cb` `97462d9`. The room's store,
+its four routes and its transcript; the chat stream unforked onto one agent,
+one key, one prefix; the roster, the hire and the router; the nameless
+identity write. **Adapter 0.43.0, a minor because it is a contract
 break** — `GET /portal/roles`, `POST /portal/roles/request`,
 `GET/POST/DELETE /portal/rooms(/{id})`, the manifest's `roles` flag and the
 `role`/`room` fields on both stream routes are gone, and a POST that still
@@ -311,9 +313,10 @@ stale portal hears about it instead of quietly getting the agent's own answer.
 ## Wave 4, outcome — the kit
 
 `24ecccb` `9fc93e2` `6da3081` `184223f` `6c1343f` `d8522b0` `077c5d7`
-`048eee4` `15d833a`. `roles/` and the hire deleted whole. What replaced the roster as the record of
-what a client has is `policy/capabilities/purchased.json`, computed into a
-plugin set and a skill index by one function everything asks (`24ecccb`,
+`048eee4` `15d833a`. `roles/` and the hire deleted whole. What replaced the
+roster as the record of what a client has is
+`policy/capabilities/purchased.json`, computed into a plugin set and a skill
+index by one function everything asks (`24ecccb`,
 `15d833a`). Curated flows moved to the plugin whose work they are
 (`surfaces.flows`, `9fc93e2`) and land in `data/flows/<slug>/`, where the
 client can edit them like the ones the agent wrote.
