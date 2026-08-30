@@ -80,15 +80,6 @@ ALLOWED_PREFIXES=(
   "policy/pairing-patch.py"           # the pairing message patch
   "policy/cont-init-patches.sh"       # the cont-init that triggers it
   "policy/capabilities/catalog.json"  # HEADS UP: requests.jsonl, right next to it, is the client's
-  # The roster: which roles a client could hire. NOT INSTALLED ANY MORE -- one
-  # baptized agent per client, so there is no team to offer -- and on this list
-  # for exactly the reason `data/scripts/portal_adapter.py` is: it is in the old
-  # manifest and no longer shipped, so an agent that has one gets it removed on
-  # the next install, if it is still byte for byte what we wrote. The exact file
-  # and not `policy/roles/`: what the client decided lives next to it
-  # (identities.json, requests.jsonl) and is theirs. Once no agent is left with
-  # a roster, this line goes away.
-  "policy/roles/catalog.json"
   "policy/hooks/"                     # the gate, in code
   "policy/plugins/"                   # the engine's plugins (the promises guard)
   # THE KIT'S PLUGIN REGISTRY, mounted :ro at /opt/plugins. The whole folder is
