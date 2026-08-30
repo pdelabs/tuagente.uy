@@ -19,7 +19,7 @@ for the URL contract.
 | | What | Status |
 |---|---|---|
 | 0 | The two live agents: roster, hired profiles, rooms | **done** 30/8 |
-| 1 | The portal (`app/app/`) | in progress |
+| 1 | The portal (`app/app/`) | **done** 30/8 |
 | 2 | The landing and the blog — pricing-gated | open |
 | 3–6 | The kit: adapter, roles/, tools, checks | open |
 
@@ -64,6 +64,96 @@ lost its two roles:
 that shaped wave 1: removing the pivot from the portal is deleting dead
 branches, not rebuilding a path that was lost. Every solo screen was still
 there under a condition.
+
+## Wave 1 — the portal
+
+`app/app/` only. The landing, the blog and the root metadata are wave 2 and
+pricing-gated; the adapter and the kit are waves 3–6, so the portal now talks
+to an adapter that still serves `/portal/roles` and `/portal/rooms`. It simply
+never asks — measured in the browser: the whole session touches
+`/portal/manifest`, `/portal/activity`, `/portal/approvals`,
+`/portal/chat/stream`, `/api/sessions` and `/api/jobs`, and nothing else.
+
+Six commits, in an order where every one of them compiles: the chat unfork,
+layout/home/pipeline, the onboarding unfork, the last references to the team
+tab, `agent.ts`, and a comment pass. `agent.ts` went last on purpose — it is
+the portal's only network entry point, so nothing comes out of it until
+nothing calls it.
+
+### Decisions carried out
+
+- **`@` goes back to files.** The pivot gave `@` to roles and pushed files
+  onto `/`. `#` is tickets, `@` is files, `/` is nothing — which is what the
+  hint under the composer said all along («escribí # para nombrar una tarea o
+  @ para un archivo»). That line was never updated for the pivot, so this
+  makes the code agree with the screen rather than the other way round.
+- **`/portal/chat/stream` keeps its path**, minus `role` and `room`. With no
+  role, the adapter proxies `/v1/chat/completions` on the agent itself with
+  the client's own key and no `/p/<role>` prefix, so a turn lands as an engine
+  session exactly as before — verified: `api-32aae8f771b8a3d2`, source
+  `api_server`. And `route_message()` returns None immediately with no roster,
+  so a solo turn does not pay for a routing call.
+- **`suggest-capabilities` stays in the adapter.** Its only caller was hiring.
+  It loses its caller, not its reason.
+- **Kept because they only look like pivot copy**: «Hablame como a cualquiera
+  del equipo» (the client's own staff) and «avisale al equipo de tuagente»
+  (us). Both predate the pivot.
+
+### The three-zone capability rendering, parked
+
+`team/knowHow.tsx` grouped capabilities into three zones — «Incluido»
+(`level: "base"`, no button, which paid off a real debt: the portal used to
+offer a button for something the client already had), what is active, and
+«Se puede sumar» collapsed behind one row and grouped by `byGroup()`. Plus
+one rule: `active === null` means DON'T KNOW and is offered exactly like
+`false`.
+
+It is NOT ported. No solo screen asks for it today, and porting a layout with
+no caller is how the pivot got big in the first place. It is written down in
+full in the delete commit and here. Whoever redesigns Conexiones or the
+capability card starts from this paragraph.
+
+### What wave 1 restored
+
+The baptism, and it is the whole point. `layout.tsx` carried
+`&& !manifest.modules.roles` on the onboarding gate, so on an agent with a
+roster the naming step never rendered, `POST /portal/identity` never carried a
+`name`, and no runbook step wrote one either. That is exactly the
+`SOUL: identity` failure fleet.md records against our own agent on 24–25/8 —
+a failure nobody could close from the portal.
+
+Walked end to end against the demo agent after the change: naming → business →
+overview → channel, the SOUL gained «Tu cliente te bautizo **Tuca** desde el
+portal», the manifest went `named: false → true`, `agent-check` went from the
+team sentence to «portal:identity block — it is «Tuca»», and one chat turn
+asked the agent its name and got «Tuca» back. US$0.0056376 for that turn
+(22,359 in / 40 out), the only spend of the verification.
+
+Also restored: home's status line («<nombre>, tu agente») **paints on the
+first render again** — the pivot made it wait for the roster, so the screen
+the client opens every day had a hole where its first sentence goes until a
+second request landed.
+
+### Found on the way out, NOT fixed: onboarding can be cut short
+
+**A client can lose the last two onboarding steps to a background poll.** The
+layout refetches the manifest every 60 s. The channel step writes
+`contact.channel`, which makes `onboardingAlreadyAnswered()` true, and the
+next poll then unmounts `<Onboarding>` mid-flow — the client is dropped into
+the portal without ever seeing the automations carousel or the chat step, and
+`onDone` never runs, so the welcome screens are not marked seen either.
+
+Reproduced by contrast on the demo agent, same build, same agent: a slow run
+through the flow landed on `/app/home` straight after the channel question; a
+fast one reached «¿Qué te saco de encima?» normally.
+
+**It is not this wave's doing** — the gate condition is unchanged, wave 1 only
+removed the `modules.roles` conjunct from it, which makes onboarding MORE
+likely to render, not less. It is a pre-existing solo bug that the pivot hid,
+because on a team agent that gate never fired at all. Left alone deliberately:
+fixing it means deciding whether onboarding should read the manifest once at
+mount or hold its own completion flag, and that is a decision about
+onboarding, not about the pivot.
 
 ## What wave 0 left broken, and for whom
 
