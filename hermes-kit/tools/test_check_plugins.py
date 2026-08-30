@@ -543,7 +543,7 @@ class TheFlowsSurface(unittest.TestCase):
             write(tmp, "alpha", manifest("alpha"))
             self.assertEqual(plugin_registry.flow_sources(["alpha"], Path(tmp)), {})
 
-    def test_the_kits_sixteen_curated_flows_all_have_an_owner(self):
+    def test_the_kits_eighteen_curated_flows_all_have_an_owner(self):
         """The real files: every FLOW.md under plugins/ is declared by one.
 
         A FLOW.md sitting in a plugin that does not declare it is a flow nobody
@@ -553,7 +553,7 @@ class TheFlowsSurface(unittest.TestCase):
         declared = plugin_registry.flow_sources(None, KIT)
         on_disk = sorted(p.parent for p in KIT.glob("plugins/*/*/*/FLOW.md"))
         self.assertEqual(sorted(declared.values()), on_disk)
-        self.assertEqual(len(declared), 16)
+        self.assertEqual(len(declared), 18)
 
     def test_each_of_them_carries_the_frontmatter_the_portal_reads(self):
         """`name` and `trigger_type` are what the Flows page draws the card from."""
@@ -615,6 +615,49 @@ class ACapabilityInstallsAClosedSet(unittest.TestCase):
             plugin_registry.check_capability_installs(self.catalog(
                 tmp, {"id": "quotes", "level": "menu",
                       "installs": {"plugins": ["quotes"]}}))
+
+    def test_a_base_capabilitys_plugin_needs_no_declaring_either(self):
+        """`level: base` is on every agent too, and the rule has to know it.
+
+        `tools/plugin_set.py` adds what a base row installs unconditionally, next
+        to the system plugins, so a menu row leaning on one is not selling a
+        client something with nothing behind it. Before this, `interview-production`
+        -- which runs `transcribe.py` by path -- was refused, and the message told
+        the author to add `transcribe` to `installs.plugins`: that "fix" writes a
+        purchase for something nobody buys, and the same client's plugin_set would
+        then report it as bought AND included.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "interview-production", manifest(
+                "interview-production", requires={"plugins": ["transcribe"]}))
+            write(tmp, "transcribe", manifest("transcribe"))
+            plugin_registry.check_capability_installs(self.catalog(
+                tmp,
+                {"id": "transcription", "level": "base",
+                 "installs": {"plugins": ["transcribe"]}},
+                {"id": "interview-production", "level": "menu",
+                 "installs": {"plugins": ["interview-production"]}}))
+
+    def test_and_a_menu_row_is_not_a_base_row(self):
+        """The exemption is the word `base` and nothing else.
+
+        Same two plugins, same two rows, and `transcription` demoted to menu: now
+        a client can buy the interview row and not the other one, so the set is
+        open and this has to stop.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "interview-production", manifest(
+                "interview-production", requires={"plugins": ["transcribe"]}))
+            write(tmp, "transcribe", manifest("transcribe"))
+            root = self.catalog(
+                tmp,
+                {"id": "transcription", "level": "menu",
+                 "installs": {"plugins": ["transcribe"]}},
+                {"id": "interview-production", "level": "menu",
+                 "installs": {"plugins": ["interview-production"]}})
+            with self.assertRaises(SystemExit) as raised:
+                plugin_registry.check_capability_installs(root)
+            self.assertIn("transcribe", str(raised.exception))
 
     def test_another_row_installing_it_is_not_enough(self):
         """Two rows are two purchases, and a client may make only one."""
@@ -723,8 +766,18 @@ class TheRequiresThatAreNotPlugins(unittest.TestCase):
 
 
 SYSTEM = ["approval", "artifact", "capability", "deliverable", "flow", "kanban"]
-CLIENT = ["brand-kit", "drive-inbox", "invoices-to-data", "post-image",
+# The PORTED ones: a skill that already lived in `skills/` and got a manifest.
+# Their shape is the packaging shape -- one skill, named after the plugin.
+PORTED = ["brand-kit", "drive-inbox", "invoices-to-data", "post-image",
           "quotes", "social-content", "transcribe"]
+# WRITTEN AS PLUGINS, WHICH IS THE OTHER HALF AND IT STARTS HERE. A plugin
+# commissioned by a client is not a port: `interview-production` carries TWO
+# skills and neither is called after it, because the unit is the WORK (an
+# interview becoming what goes on air) and the crafts inside it have their own
+# names. The registry always allowed this; until 2026-08-30 nothing used it, and
+# these lists are what say which shape a given plugin is claiming.
+WRITTEN = ["interview-production"]
+CLIENT = sorted(PORTED + WRITTEN)
 
 
 class TheKitsOwnRegistry(unittest.TestCase):
@@ -738,15 +791,24 @@ class TheKitsOwnRegistry(unittest.TestCase):
             self.assertTrue(plugins[pid]["system"], pid)
         for pid in CLIENT:
             self.assertFalse(plugins[pid]["system"], pid)
-            # A ported leaf skill carries its skills surface, the curated flows
-            # that are its own work, AND NOTHING ELSE: no tab, no adapter, no
-            # service. Porting is packaging -- the day one of these grows a
-            # surface the portal has to draw, that is a decision and this line is
-            # where it gets made.
+            # A client plugin carries its skills surface, the curated flows that
+            # are its own work, AND NOTHING ELSE: no tab, no adapter, no service.
+            # The day one of these grows a surface the portal has to draw, that
+            # is a decision and this line is where it gets made.
             self.assertEqual(sorted(plugins[pid]["surfaces"]),
                              ["flows", "skills"] if plugins[pid]["surfaces"].get("flows")
                              else ["skills"], pid)
+        # A PORT IS ONE SKILL WITH THE PLUGIN'S NAME, because that is what it was
+        # before it had a manifest: `skills/transcribe/` became
+        # `plugins/transcribe/skills/transcribe/` and every path in its SKILL.md
+        # stayed true.
+        for pid in PORTED:
             self.assertEqual(plugins[pid]["surfaces"]["skills"], [pid], pid)
+        # A PLUGIN WRITTEN AS A PLUGIN NAMES ITS CRAFTS, and the slot rule is
+        # what keeps that honest: whatever it calls them, no other plugin and no
+        # kit skill may claim the same name (`_check_skill_slots`).
+        self.assertEqual(plugins["interview-production"]["surfaces"]["skills"],
+                         ["lower-thirds", "news-copy"])
 
     def test_the_client_graph_is_what_each_SKILL_md_actually_asks_for(self):
         """Written down whole, because `requires` is a claim about a text.
@@ -766,6 +828,11 @@ class TheKitsOwnRegistry(unittest.TestCase):
                          ofrecerle armar el kit»
           drive-inbox    nothing: transcribing after the download is «el caso
                          típico», and what follows «depende del flujo del cliente»
+          interview-production
+                         runs `/opt/kit/skills/transcribe/transcribe.py` by path
+                         («nunca con los subtítulos automáticos»), saves both
+                         documents with `deliverable`, and «te pido el sí sobre
+                         la lista antes de que vaya a la edición» is `approval`
           transcribe,
           invoices-to-data
                          leaves, and they were leaves as pilots too
@@ -775,6 +842,7 @@ class TheKitsOwnRegistry(unittest.TestCase):
         self.assertEqual(needs, {
             "brand-kit": ["artifact", "approval"],
             "drive-inbox": [],
+            "interview-production": ["transcribe", "deliverable", "approval"],
             "invoices-to-data": [],
             "post-image": ["brand-kit"],
             "quotes": ["deliverable", "approval"],
@@ -865,10 +933,16 @@ class TheKitsOwnRegistry(unittest.TestCase):
 
     def test_their_skills_resolve_to_the_directory_that_holds_the_skill_md(self):
         sources = plugin_registry.skill_sources(KIT)
-        # kanban is the one with nothing to ship.
-        self.assertEqual(sorted(sources), sorted(set(SYSTEM + CLIENT) - {"kanban"}))
+        # kanban is the one with nothing to ship; interview-production is the
+        # first whose skills are not named after it.
+        self.assertEqual(
+            sorted(sources),
+            sorted((set(SYSTEM + PORTED) - {"kanban"}) | {"lower-thirds", "news-copy"}))
+        registry = plugin_registry.registry(KIT)
         for name, where in sources.items():
-            self.assertEqual(where, KIT / "plugins" / name / "skills" / name)
+            owner = next(pid for pid, data in registry.items()
+                         if name in (data["surfaces"].get("skills") or []))
+            self.assertEqual(where, KIT / "plugins" / owner / "skills" / name)
             self.assertTrue((where / "SKILL.md").is_file())
 
     def test_the_flattened_layout_still_has_one_directory_per_skill(self):

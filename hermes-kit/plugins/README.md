@@ -63,6 +63,7 @@ string or a list of strings) is allowed and ignored.
 | `social-content` | no | Instagram posts in the brand's voice (marketing) |
 | `post-image` | no | the image a post needs, and the step that LOOKS at it (marketing) |
 | `drive-inbox` | no | Drive folders as an inbox: the agent's front door for material |
+| `interview-production` | no | an interview becomes what goes on air — ten lower-thirds, or a news item |
 
 `drive-inbox` was the honest odd one out until 2026-08-30 and the manifest said
 so: no capability sold it, no base capability installed it, and `system` is
@@ -71,6 +72,14 @@ reached anybody, not the folder and not the skill. **That is what a plugin with
 no row is: a plugin that does not exist.** The row (`drive-inbox`, `level:
 menu`, group `information`) is what fixed it, and the general lesson is the
 line below about the sales layer: writing the plugin is half the shipment.
+
+`interview-production` is the first plugin **written as a plugin** rather than
+ported from `skills/`, and its shape is the one that difference produces: two
+skills, neither named after the plugin (`lower-thirds`, `news-copy`), because
+the unit is the WORK and the crafts inside it have their own names. It was
+commissioned by one client; the client is named in the catalog row's
+`internal_note` and nowhere else, which is what PRINCIPLE ZERO means in
+practice — the folder holds a TV-production shape, not a company.
 
 ### Harness skills: what `skills/` still holds, and why
 
@@ -206,10 +215,25 @@ decide what ships on THIS one, so a row pointing at the wrong home is a plugin
 the catalog promises and the installer never copies.
 
 A ROW HAS TO BE CLOSED ON ITS OWN, because a row is what a client buys on its
-own. `check-plugins.py` refuses a row whose plugin requires a non-system plugin
-that same row does not install — `social-package` selling `post-image` without `brand-kit`
+own. `check-plugins.py` refuses a row whose plugin requires a plugin that same
+row does not install — `social-package` selling `post-image` without `brand-kit`
 is an image generator with no hexes to read. Another row installing the
 dependency is another purchase, not this one.
+
+**Two kinds of dependency need no declaring, and they are the two that are on
+every agent already**: a `system` plugin, and one a `level: base` row installs
+(today `transcribe`, via `transcription`). `tools/plugin_set.py` adds both
+unconditionally, so a menu row leaning on one is not selling a client something
+with nothing behind it. The base half arrived with `interview-production`, which
+runs `transcribe.py` by path: the rule read `system` alone and refused it,
+advising a "fix" that would have written a purchase for a plugin nobody buys.
+
+A ROW IS ALSO HOW A BESPOKE PLUGIN GETS SOLD, and there is no second mechanism
+for that. Custom work commissioned by one client is an ordinary `level: menu`
+row with honest `cost` and `effort`; being commissioned is a fact about its
+history and lives in `internal_note`. No third `level`: `level` is read by code
+in three places, and a row that hid behind a special one would be a plugin
+nobody else could ever buy — the opposite of why this registry exists.
 
 `verifies` did NOT move, on purpose. It describes the agent's DELIVERED layout —
 a plugin's skill is flattened into `kit-skills/` exactly as it always was — so

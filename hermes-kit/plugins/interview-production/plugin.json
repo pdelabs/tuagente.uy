@@ -1,0 +1,68 @@
+{
+  "id": "interview-production",
+  "version": "1.0.0",
+  "description": "An interview becomes what has to go on air: ten timecoded lower-thirds for the TV edit, or a headline-and-copy news item",
+  "client_copy": "De cada entrevista te deja lo que va al aire: los diez zócalos para la edición, o la noticia lista para publicar.",
+  "_comment": [
+    "THE FIRST CUSTOM PLUGIN OF THE NEW MODEL, and it is here instead of in one",
+    "agent's data/ for the reason plugins/README.md gives: lower-thirds for a TV",
+    "edit is not one company's shape, it is TV-PRODUCTION's shape, and the second",
+    "production company that walks in should get it off the shelf. The client it",
+    "was commissioned by is in the catalog row's internal_note, never in here:",
+    "nothing in this folder names a client, a channel or a programme.",
+    "",
+    "WHY A PLUGIN AND NOT TWO CLIENT-WRITTEN FLOWS. `create_flow.py` caps a flow",
+    "body at 7 steps x 320 characters and the portal shows it to the client. The",
+    "craft in `lower-thirds` and `news-copy` -- what counts as a zócalo, what a",
+    "headline may not do -- does not fit in that budget and should not be shown",
+    "as steps. A skill is the surface for a craft; a flow is the surface for when",
+    "it runs. And a flow written into an agent's data/ dies with the agent, which",
+    "is exactly what happened to the originals (docs/east-requirements.md).",
+    "",
+    "THE VIDEO SOURCE LIVES IN `lower-thirds`, NOT IN `transcribe`, and this is a",
+    "decision the dossier's 4.5 left open. `transcribe` is a `level: base` plugin",
+    "-- on EVERY agent, in every prompt -- and its contract is FILE -> TEXT.",
+    "Teaching it about URLs would put a video downloader and its prose on every",
+    "client who never sends one. Sources are their own unit: `drive-inbox` is a",
+    "source, `fetch_video.py` is a source, and both hand `transcribe` a file. The",
+    "rule that MUST not move is the other half of 4.5: the transcript comes from",
+    "the model connection, never from the platform's automatic captions.",
+    "",
+    "APPROVAL IS ONE GATE PER UNIT OF WORK, not per action. A zócalo is a quote",
+    "attributed to somebody on screen and a wrong one is a correction on air, so",
+    "the list goes to the client's yes before it is handed to the edit; the news",
+    "item goes to their yes before anything is published anywhere. One approval",
+    "per interview and one per note, on the ticket that work already has -- what",
+    "the `approval` skill asks for, and not the 'ask for everything' that teaches",
+    "a client to approve without reading.",
+    "",
+    "THE SECOND FLOW IS NOT CALLED `radio-viva`, AND THE DOSSIER SAID IT WOULD BE.",
+    "Radio Viva is the outlet one client publishes into -- naming a slug after it",
+    "would put a third party's brand in every agent that ever buys this row, which",
+    "is what PRINCIPLE ZERO forbids. The work is `noticia-para-publicar`; who it",
+    "gets published by is the client's business, not the kit's."
+  ],
+  "requires": {
+    "plugins": [
+      "transcribe",
+      "deliverable",
+      "approval"
+    ],
+    "connections": [],
+    "toolsets": [
+      "terminal",
+      "web"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "lower-thirds",
+      "news-copy"
+    ],
+    "flows": [
+      "flows/entrevistas-tv",
+      "flows/noticia-para-publicar"
+    ]
+  },
+  "system": false
+}

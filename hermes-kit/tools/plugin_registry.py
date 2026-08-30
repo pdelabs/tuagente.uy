@@ -436,7 +436,21 @@ def check_capability_installs(root: Path = KIT) -> None:
              for pid, data in available.items()
              for name in data["surfaces"].get("skills") or []}
     where = str(root / "capabilities" / "catalog.json")
-    for row in capability_rows(root):
+    rows = capability_rows(root)
+    # WHAT A `level: base` ROW INSTALLS IS ON EVERY AGENT, exactly like a system
+    # plugin, and the closure rule below has to know it. `tools/plugin_set.py`
+    # adds these unconditionally -- `transcribe`, via `transcription` -- so a menu
+    # row leaning on one is not selling a client something with nothing behind it.
+    # Before this, the rule read `system` alone and refused the first row that
+    # needed `transcribe`, with a message telling the author to add it to
+    # `installs.plugins`: that "fix" would have written a purchase for a plugin
+    # nobody buys, and `plugin_set.py` would then report it as bought AND
+    # included. The two lists that decide what ships are system and base; this is
+    # the same pair, asked at build time.
+    base_installed = {pid
+                      for row in rows if row.get("level") == BASE
+                      for pid in (row.get("installs") or {}).get("plugins") or []}
+    for row in rows:
         cid, installs = row.get("id"), (row.get("installs") or {})
         misplaced = [n for n in installs.get("kit_skills") or [] if n in owned]
         if misplaced:
@@ -456,7 +470,8 @@ def check_capability_installs(root: Path = KIT) -> None:
         # `post-image` sold without `brand-kit` arrives with no hexes to read and
         # `tools/plugin_set.py` refuses the set on that agent, at install time,
         # naming a file the operator cannot fix from there. A system plugin is on
-        # every agent by definition, so leaning on one needs no declaring.
+        # every agent by definition, and so is one a `level: base` row installs,
+        # so leaning on either needs no declaring.
         #
         # THIS IS WHERE THE ROLE'S HALF OF THE RULE WENT. `role_skills` asked it
         # of `roles/<id>/role.json` -- "this role declares a plugin, so it
@@ -464,7 +479,9 @@ def check_capability_installs(root: Path = KIT) -> None:
         # more. The capability is, and it is the only declaration left.
         for pid in declared:
             for dependency in available[pid]["requires"].get("plugins") or []:
-                if available[dependency]["system"] or dependency in declared:
+                if (available[dependency]["system"]
+                        or dependency in base_installed
+                        or dependency in declared):
                     continue
                 fail(where, f"capability {cid!r} installs {pid!r}, which requires "
                             f"{dependency!r}, and this row does not install it. A client "

@@ -114,6 +114,13 @@ Que tus redes salgan como tu empresa y no como cualquiera: los posteos escritos 
 - Cómo se consigue: La prendemos nosotros. Lo primero que hace el agente es leer tu sitio y armarte el kit de marca —colores, tipografías y logo—; después te pregunta lo que no se puede deducir: cuál es el logo oficial y cómo le hablás a tu cliente. Con eso ya escribe y arma el resto; antes de darla por buena hacemos una prueba de imagen con vos.
 - Costo: Por imagen generada, dentro de tu cuota de modelos; el resto sin costo.
 
+### `interview-production` — Tus entrevistas, listas para el aire
+
+Que de cada entrevista salga lo que va al aire sin que lo escribas vos: los diez zócalos para la edición —en mayúsculas, con el minuto de cada frase y la transcripción completa al lado— o el titular y el copy de la noticia, listos para publicar.
+
+- Cómo se consigue: La prendemos nosotros y no hay nada que cargar: el formato ya está escrito. Le pasás la entrevista —el link o el archivo— y te devuelve los zócalos; la primera la miramos con vos contra tu material para ajustar el corte de las frases.
+- Costo: La transcripción se cobra por hora de audio, centavos, dentro de tu cuota de modelos. El resto sin costo aparte.
+
 ### `product-catalog` — Tu catálogo en tus canales
 
 Que tengas el catálogo armado y al día donde vendés —WhatsApp, Instagram y tus otros canales—: fotos, precios y descripciones que no se contradicen entre un canal y otro.
