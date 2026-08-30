@@ -1,6 +1,6 @@
 {
   "id": "flow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "The only way to leave work running on its own: a named client flow with a trigger and results, and the cron that actually delivers it",
   "client_copy": "Lo que se repite queda armado como un flujo y anda solo.",
   "_comment": [
@@ -16,7 +16,18 @@
     "policy/plugins/promises/, the compose still mounts that at /opt/data/plugins",
     "read only, and config.yaml's `plugins.enabled` still names it. The engine",
     "reads its plugins from HERMES_HOME/plugins and knows nothing about this",
-    "registry; what moved is where the kit keeps the source."
+    "registry; what moved is where the kit keeps the source.",
+    "",
+    "THE CURATED FLOWS NOBODY ELSE OWNS LIVE HERE, under curated/ and not under",
+    "flows/, because they are not this plugin's own work: they are the catalog",
+    "of flows the product ships, and `flow` is the plugin that makes a flow a",
+    "thing at all. Each of the seven exercises only system skills -- approval,",
+    "deliverable, artifact -- or a base capability every agent has: answering",
+    "out of hours, the inbox summary, cases left open, a complaint, loading a",
+    "new customer, a report with its sources, the Monday web round-up. There is",
+    "no whatsapp-support or research plugin for them to belong to, and inventing",
+    "one to hold a FLOW.md would be a manifest with nothing behind it. If one is",
+    "ever written, the flow moves into it and this list gets shorter."
   ],
   "requires": {
     "plugins": [
@@ -27,6 +38,15 @@
   "surfaces": {
     "skills": [
       "flow"
+    ],
+    "flows": [
+      "curated/alta-de-cliente",
+      "curated/casos-sin-cerrar",
+      "curated/fuera-de-hora",
+      "curated/informe-con-fuentes",
+      "curated/queja-de-cliente",
+      "curated/repaso-de-internet",
+      "curated/resumen-de-la-bandeja"
     ],
     "engine": "engine/promises",
     "tab": {

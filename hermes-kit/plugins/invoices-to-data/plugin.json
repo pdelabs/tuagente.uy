@@ -1,12 +1,25 @@
 {
   "id": "invoices-to-data",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "An invoice — photo, PDF or the CFE's XML — becomes one row of data; whatever could not be read comes back empty and flagged",
   "client_copy": "Pasa la foto o el PDF de tus facturas a la planilla —fecha, proveedor, número y monto— y te muestra lo que no pudo leer antes de que cuente.",
+  "_comment": [
+    "THE THREE ACCOUNTING FLOWS ARE THIS PLUGIN'S, and only the first one names",
+    "the skill in its frontmatter. `planilla-del-mes` runs it; `conciliar-cobros`",
+    "crosses what was invoiced against what came in and `facturas-vencidas`",
+    "reads the due dates -- both over the ROWS this skill produces (fecha,",
+    "proveedor, número, monto). Without it there is no table to reconcile or to",
+    "read a due date off, so the ownership is the data's and not the frontmatter's."
+  ],
   "requires": {},
   "surfaces": {
     "skills": [
       "invoices-to-data"
+    ],
+    "flows": [
+      "flows/planilla-del-mes",
+      "flows/conciliar-cobros",
+      "flows/facturas-vencidas"
     ]
   },
   "system": false

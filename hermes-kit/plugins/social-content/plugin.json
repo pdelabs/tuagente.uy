@@ -1,6 +1,6 @@
 {
   "id": "social-content",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Instagram posts written in the brand's voice: the format and the post type decide the skeleton, today's limits come from the script, and the draft is validated before anybody sees it",
   "client_copy": "Escribe tus posteos de Instagram con tu voz y con las medidas de hoy: feed, carrusel, reel o historia.",
   "_comment": [
@@ -18,7 +18,15 @@
     "",
     "NOR ON approval. «Publicar no es tu decisión» is the base SOUL block's rule,",
     "which reaches every role whether or not it carries this plugin; unlike quotes,",
-    "this SKILL.md never tells the agent to run the approval skill."
+    "this SKILL.md never tells the agent to run the approval skill.",
+    "",
+    "THE THREE MARKETING FLOWS ARE THIS PLUGIN'S. `contenido-instagram-diario`",
+    "exercises this skill AND post-image, and it lands here because the post is",
+    "what gets delivered and the piece is what this skill asks for; both travel",
+    "on the same `social-package` capability, so the flow can never arrive with",
+    "half its work missing. `calendario-del-mes` decides what to post and",
+    "`reporte-de-lo-publicado` counts what went out and what is still waiting for",
+    "a yes: neither is work for a client who does not publish."
   ],
   "requires": {
     "plugins": [
@@ -28,6 +36,11 @@
   "surfaces": {
     "skills": [
       "social-content"
+    ],
+    "flows": [
+      "flows/contenido-instagram-diario",
+      "flows/calendario-del-mes",
+      "flows/reporte-de-lo-publicado"
     ]
   },
   "system": false

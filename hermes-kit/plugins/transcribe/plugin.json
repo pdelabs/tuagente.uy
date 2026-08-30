@@ -1,12 +1,23 @@
 {
   "id": "transcribe",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Audio and video to text, on the client's model connection",
   "client_copy": "Convierte una entrevista, reunión o nota de voz en texto.",
+  "_comment": [
+    "THE FLOW IS THIS PLUGIN'S BECAUSE THE AUDIO IS THE HARD HALF. «Leo las",
+    "imágenes y los PDF, y TRANSCRIBO los audios» is step 2, and the reading is",
+    "a base capability every agent has while the transcription is this skill.",
+    "It reaches every agent anyway -- `transcription` is a `level: base` row --",
+    "and that is the point: the flow follows the plugin, and this plugin is on",
+    "everyone."
+  ],
   "requires": {},
   "surfaces": {
     "skills": [
       "transcribe"
+    ],
+    "flows": [
+      "flows/de-fotos-y-audios-a-documento"
     ]
   },
   "system": false

@@ -48,8 +48,16 @@ REQUIRED_KEYS = ("id", "version", "description", "client_copy", "requires", "sur
 # `_comment` is how every closed catalog in this kit carries its reasoning.
 ALLOWED_KEYS = REQUIRED_KEYS + ("_comment",)
 REQUIRES_KEYS = ("plugins", "connections", "toolsets")
-# The six surfaces, in the order notes/plugin-system-plan.md lists them.
-SURFACE_KEYS = ("skills", "engine", "mcp", "service", "adapter", "tab")
+# The seven surfaces, in the order notes/plugin-system-plan.md lists them.
+# `flows` is the one the team pivot left behind: a curated flow used to travel
+# inside the role that claimed it (`roles/<id>/flows/`, packed by
+# `build_role.py`), and with one agent per client the plugin whose skill the
+# flow exercises is what owns it.
+SURFACE_KEYS = ("skills", "flows", "engine", "mcp", "service", "adapter", "tab")
+# The name of the directory a flow lands in on the agent, which the portal reads
+# and the agent edits. The shape is the adapter's (`adapter/flows.py`,
+# FLOW_SLUG_RE): a slug it cannot match is a flow the client will never see.
+FLOW_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,48}$")
 
 
 def fail(where: str, message: str) -> None:
@@ -132,6 +140,26 @@ def _check_surfaces(path: Path, data: dict, folder_dir: Path) -> None:
         if not (folder_dir / "skills" / name / "SKILL.md").is_file():
             fail(where, f"surfaces.skills declares {name!r} but there is no "
                         f"skills/{name}/SKILL.md in the plugin")
+
+    # THE FLOWS SURFACE IS A LIST OF DIRECTORIES, and each one has to hold a
+    # FLOW.md, because that file IS the flow: the frontmatter is what the portal
+    # draws the card from and the body is what the agent follows. A directory
+    # without it installs a folder the client sees nothing of.
+    flows = surfaces.get("flows")
+    if flows is None:
+        flows = []
+    if not isinstance(flows, list) or not all(isinstance(f, str) for f in flows):
+        fail(where, f"surfaces.flows must be a list of directories inside the "
+                    f"plugin, not {flows!r}")
+    for rel in flows:
+        if not (folder_dir / rel / "FLOW.md").is_file():
+            fail(where, f"surfaces.flows declares {rel!r} but there is no "
+                        f"{rel}/FLOW.md in the plugin")
+        slug = rel.rstrip("/").rsplit("/", 1)[-1]
+        if not FLOW_SLUG.match(slug):
+            fail(where, f"surfaces.flows declares {rel!r}, whose directory name "
+                        f"{slug!r} is not a flow slug — it installs at "
+                        "data/flows/<slug>/ and the portal skips what it cannot match")
 
     for key in ("engine", "mcp", "service", "adapter"):
         value = surfaces.get(key)
@@ -258,6 +286,31 @@ def _check_skill_slots(root: Path, plugins: dict[str, dict]) -> None:
             seen[name] = here
 
 
+def _check_flow_slots(plugins: dict[str, dict]) -> None:
+    """One slug, one flow. `data/flows/` has a single directory per name.
+
+    The same rule as `_check_skill_slots` and for the same reason: two plugins
+    declaring `presupuesto-nuevo` install into one directory on the agent, which
+    is not a merge -- it is one of the two silently winning, and which one
+    depends on the order `install.sh` happened to walk the set in.
+
+    PLUGIN AGAINST PLUGIN AND NOTHING ELSE. The other thing in `data/flows/` is
+    the CLIENT's own flows, written by the `flow` skill, and a slug of theirs
+    that collides with a curated one is a fact about their disk at install time,
+    not about this registry -- `install.sh --diff` is what says it, next to
+    every other file the kit is about to overwrite.
+    """
+    seen: dict[str, str] = {}
+    for pid, data in sorted(plugins.items()):
+        for rel in data["surfaces"].get("flows") or []:
+            slug = rel.rstrip("/").rsplit("/", 1)[-1]
+            if slug in seen:
+                fail(str(data["_dir"] / MANIFEST),
+                     f"flow {slug!r} also ships as {seen[slug]}; a flow slug has one "
+                     "source, because the installed layout has one directory for it")
+            seen[slug] = f"plugins/{pid}/{rel}/"
+
+
 def registry(root: Path = KIT) -> dict[str, dict]:
     """Every plugin in `<root>/plugins/`, validated. Keyed by id.
 
@@ -288,6 +341,7 @@ def registry(root: Path = KIT) -> dict[str, dict]:
 
     _check_graph(by_id)
     _check_skill_slots(root, by_id)
+    _check_flow_slots(by_id)
     return by_id
 
 
@@ -297,6 +351,21 @@ def skill_sources(root: Path = KIT) -> dict[str, Path]:
     for data in registry(root).values():
         for name in data["surfaces"].get("skills") or []:
             out[name] = data["_dir"] / "skills" / name
+    return dict(sorted(out.items()))
+
+
+def flow_sources(ids: list[str] | None = None, root: Path = KIT) -> dict[str, Path]:
+    """Flow slug -> the directory holding its FLOW.md, for those plugins.
+
+    `None` means the whole registry. What `install.sh` passes is THIS AGENT'S
+    plugin set, so a curated flow reaches the client who bought the plugin whose
+    work it is and nobody else -- the same rule the folder itself follows.
+    """
+    available = registry(root)
+    out: dict[str, Path] = {}
+    for pid in sorted(available if ids is None else ids):
+        for rel in available[pid]["surfaces"].get("flows") or []:
+            out[rel.rstrip("/").rsplit("/", 1)[-1]] = available[pid]["_dir"] / rel
     return dict(sorted(out.items()))
 
 

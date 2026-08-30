@@ -286,6 +286,41 @@ print(json.load(open(sys.argv[1]))["surfaces"].get("engine") or "")' \
              ! -path "*/__pycache__/*" | sort)
 done
 
+# THE CURATED FLOWS, WHICH ARE THE OTHER THING A PLUGIN OWNS THAT DOES NOT LIVE
+# UNDER ITS OWN ROOF ON THE AGENT. A flow is `data/flows/<slug>/FLOW.md` and
+# nowhere else: that is where `create_flow.py` writes the ones the agent makes,
+# what the adapter's FlowStore lists, and what the portal's Flows page draws. So
+# the plugin's copy is delivered there, exactly like a plugin's skill is
+# delivered flattened into kit-skills/.
+#
+# THEY USED TO TRAVEL INSIDE A ROLE. `roles/<id>/flows/` was packed into the
+# profile distribution by `roles/build_role.py`; with one agent per client the
+# owner is the plugin whose work the flow is -- the quote chaser is the quote
+# writer's, the reconciliation is the invoice reader's -- and the ones no plugin
+# owns are the system `flow` plugin's catalog (`plugins/flow/curated/`).
+#
+# IT FOLLOWS THIS AGENT'S SET, so a flow about quotes never lands on an agent
+# whose client did not buy them. And it lands in data/, which belongs to the
+# agent: a client can edit a curated flow and the agent can retire it, the same
+# way they can with one they wrote. `--diff` is what says so before an install
+# overwrites the edit -- the same protection every other file in the kit has.
+while IFS=$'\t' read -r slug rel_dir; do
+  [[ -n "$slug" ]] || continue
+  source_dir="$KIT/$rel_dir"
+  while IFS= read -r f; do
+    inner="${f#"$source_dir"/}"                  # FLOW.md
+    FILES+=("$rel_dir/$inner:$DATA/flows/$slug/$inner")
+  done < <(find "$source_dir" -type f ! -path "*/__pycache__/*" ! -name "*.pyc" | sort)
+done < <(python3 -c '
+import sys
+from pathlib import Path
+tools = Path(sys.argv[1])
+sys.path.insert(0, str(tools))
+import plugin_registry
+for slug, directory in plugin_registry.flow_sources(sys.argv[2:], tools.parent).items():
+    print(f"{slug}\t{directory.relative_to(tools.parent)}")' \
+  "$KIT/tools" "${PLUGIN_IDS[@]}")
+
 shorten() { echo "${1#"$AGENT"/}"; }        # readable paths in the messages
 
 # The manifest of what got installed: <path relative to the agent><TAB><sha256>.

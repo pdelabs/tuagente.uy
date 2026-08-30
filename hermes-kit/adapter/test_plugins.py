@@ -260,7 +260,10 @@ class PluginsEndpoint(unittest.TestCase):
         self.assertEqual(kanban["surfaces"]["present"], ["tab"])
         self.assertEqual(kanban["requires"]["toolsets"], ["kanban"])
         transcribe = next(p for p in body["plugins"] if p["id"] == "transcribe")
-        self.assertEqual(transcribe["surfaces"]["present"], ["skills"])
+        # A skill and the curated flow that exercises it, and no tab: the flows
+        # this plugin ships are drawn by the Flows page the `flow` plugin owns,
+        # from data/flows/ where they install, not by a page of its own.
+        self.assertEqual(transcribe["surfaces"]["present"], ["skills", "flows"])
         self.assertIsNone(transcribe["surfaces"]["tab"])
         self.assertFalse(transcribe["system"])
 

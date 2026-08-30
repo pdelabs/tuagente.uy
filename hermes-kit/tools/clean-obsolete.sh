@@ -64,6 +64,17 @@ ALLOWED_PREFIXES=(
   # agent is left with an adapter in data/scripts/, this line goes away.
   "data/scripts/portal_adapter.py"
   "data/connections/catalog.json"     # the connections catalog
+  # THE CURATED FLOWS a plugin ships. A folder and not a list of files because
+  # the slugs come from this agent's plugin set: buy the quote writer and
+  # `data/flows/presupuesto-nuevo/` appears, drop it and the folder has to be
+  # able to leave with the plugin.
+  #
+  # HEADS UP: the CLIENT's own flows live in the same directory, written by the
+  # `flow` skill. They are safe for the same reason `policy/policy.json` is —
+  # nothing the kit did not install is ever in the manifest, so it can never
+  # become a deletion candidate — and an installed one that somebody edited is
+  # reported and left alone, like every other file whose sha stopped matching.
+  "data/flows/"
   "data/skills/.kit_manifest"         # which skills belong to the product
   "policy/guard.py"                   # the MCP guard
   "policy/pairing-patch.py"           # the pairing message patch

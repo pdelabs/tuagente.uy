@@ -52,6 +52,13 @@ def describe(data: dict) -> str:
             continue
         if key == "skills":
             parts.append("skills:" + ",".join(value))
+        elif key == "flows":
+            # BY SLUG, WHICH IS WHAT THE CLIENT SEES. The manifest writes the
+            # path inside the plugin (`flows/presupuesto-nuevo`,
+            # `curated/fuera-de-hora`); what lands on the agent, and what the
+            # portal draws, is the last segment.
+            parts.append("flows:" + ",".join(
+                rel.rstrip("/").rsplit("/", 1)[-1] for rel in value))
         elif key == "tab":
             parts.append("tab:" + value["label"] if "label" in value
                          else "tab:builtin/" + value["builtin"])

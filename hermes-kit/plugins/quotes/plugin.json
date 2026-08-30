@@ -1,6 +1,6 @@
 {
   "id": "quotes",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A request becomes a priced quote in the client's own template: what was asked for is crossed against their price list, the arithmetic is the script's, and whatever is not on the list comes back with no price",
   "client_copy": "Arma el presupuesto con tu formato y tus precios, listo para que lo mandes.",
   "_comment": [
@@ -16,7 +16,14 @@
     "",
     "NO TOOLSET IS DECLARED. Reading an Excel or a photo of what has to be priced",
     "is the base capabilities every agent already has -- the SKILL.md says «las",
-    "podés leer con lo que ya tenés» -- not something this plugin turns on."
+    "podés leer con lo que ya tenés» -- not something this plugin turns on.",
+    "",
+    "THE TWO QUOTE FLOWS ARE THIS PLUGIN'S, and the second one does not run",
+    "the skill. `presupuesto-nuevo` is step for step what SKILL.md does;",
+    "`seguimiento-de-presupuestos` chases the quotes that got no answer, which",
+    "only exists as work if the quotes do. A client who never bought this has",
+    "nothing to follow up, so shipping them anywhere else is shipping a flow",
+    "about a thing the agent cannot make."
   ],
   "requires": {
     "plugins": [
@@ -27,6 +34,10 @@
   "surfaces": {
     "skills": [
       "quotes"
+    ],
+    "flows": [
+      "flows/presupuesto-nuevo",
+      "flows/seguimiento-de-presupuestos"
     ]
   },
   "system": false

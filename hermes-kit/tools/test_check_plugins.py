@@ -60,6 +60,15 @@ def write(root, folder, data, skills=None, text=None):
     return where
 
 
+def flow(where, rel):
+    """One curated flow inside a plugin: the directory and its FLOW.md."""
+    directory = Path(where) / rel
+    directory.mkdir(parents=True)
+    (directory / "FLOW.md").write_text(
+        f"---\nname: {directory.name}\nstatus: active\n---\n", encoding="utf-8")
+    return directory
+
+
 def kit_skill(root, name):
     skill = Path(root) / "skills" / name
     skill.mkdir(parents=True)
@@ -484,6 +493,95 @@ class BrokenRegistry(unittest.TestCase):
             write(tmp, "transcribe", manifest("transcribe"))
             self.fails_with(tmp, "also ships as skills/transcribe/")
 
+    def test_a_flows_surface_with_no_flow_md(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            where = write(tmp, "alpha", manifest(
+                "alpha", surfaces={"skills": ["alpha"], "flows": ["flows/uno"]}))
+            (where / "flows" / "uno").mkdir(parents=True)
+            self.fails_with(tmp, "declares 'flows/uno' but there is no "
+                                 "flows/uno/FLOW.md")
+
+    def test_a_flows_surface_that_is_not_a_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "alpha", manifest(
+                "alpha", surfaces={"skills": ["alpha"], "flows": "flows/uno"}))
+            self.fails_with(tmp, "surfaces.flows must be a list of directories")
+
+    def test_a_flow_directory_the_portal_could_not_draw(self):
+        """The slug is the adapter's shape: what it cannot match, it skips."""
+        with tempfile.TemporaryDirectory() as tmp:
+            where = write(tmp, "alpha", manifest(
+                "alpha", surfaces={"skills": ["alpha"], "flows": ["flows/Un Flujo"]}))
+            flow(where, "flows/Un Flujo")
+            self.fails_with(tmp, "is not a flow slug")
+
+    def test_two_plugins_claiming_one_slug(self):
+        """They install into one directory: one of them would silently win."""
+        with tempfile.TemporaryDirectory() as tmp:
+            for pid in ("alpha", "beta"):
+                where = write(tmp, pid, manifest(
+                    pid, surfaces={"skills": [pid], "flows": ["flows/presupuesto-nuevo"]}))
+                flow(where, "flows/presupuesto-nuevo")
+            self.fails_with(tmp, "flow 'presupuesto-nuevo' also ships as")
+
+
+class TheFlowsSurface(unittest.TestCase):
+    """A curated flow belongs to a plugin, and reaches the agents that have it.
+
+    It used to belong to a ROLE — `roles/<id>/flows/`, packed into the profile
+    distribution — because a role was what a client hired. With one agent per
+    client the owner is the plugin whose work the flow is, and `flow_sources`
+    is what `install.sh` asks so a flow about quotes never lands on an agent
+    whose client did not buy them.
+    """
+
+    def test_the_whole_registry_by_slug(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            where = write(tmp, "alpha", manifest(
+                "alpha", surfaces={"skills": ["alpha"],
+                                   "flows": ["flows/uno", "curated/dos"]}))
+            flow(where, "flows/uno")
+            flow(where, "curated/dos")
+            got = plugin_registry.flow_sources(None, Path(tmp))
+            self.assertEqual(sorted(got), ["dos", "uno"])
+            self.assertTrue(got["uno"].joinpath("FLOW.md").is_file())
+
+    def test_only_the_plugins_asked_for(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for pid, slug in (("alpha", "uno"), ("beta", "dos")):
+                where = write(tmp, pid, manifest(
+                    pid, surfaces={"skills": [pid], "flows": [f"flows/{slug}"]}))
+                flow(where, f"flows/{slug}")
+            self.assertEqual(sorted(plugin_registry.flow_sources(["alpha"], Path(tmp))),
+                             ["uno"])
+
+    def test_a_plugin_with_no_flows_contributes_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "alpha", manifest("alpha"))
+            self.assertEqual(plugin_registry.flow_sources(["alpha"], Path(tmp)), {})
+
+    def test_the_kits_sixteen_curated_flows_all_have_an_owner(self):
+        """The real files: every FLOW.md under plugins/ is declared by one.
+
+        A FLOW.md sitting in a plugin that does not declare it is a flow nobody
+        installs — which is exactly how the four that moved out of `support`
+        would have been lost.
+        """
+        declared = plugin_registry.flow_sources(None, KIT)
+        on_disk = sorted(p.parent for p in KIT.glob("plugins/*/*/*/FLOW.md"))
+        self.assertEqual(sorted(declared.values()), on_disk)
+        self.assertEqual(len(declared), 16)
+
+    def test_each_of_them_carries_the_frontmatter_the_portal_reads(self):
+        """`name` and `trigger_type` are what the Flows page draws the card from."""
+        for slug, directory in plugin_registry.flow_sources(None, KIT).items():
+            with self.subTest(flow=slug):
+                text = (directory / "FLOW.md").read_text(encoding="utf-8")
+                self.assertTrue(text.startswith("---\n"), slug)
+                head = text.split("---", 2)[1]
+                for key in ("name:", "client_summary:", "trigger_type:", "status:"):
+                    self.assertIn(key, head, slug)
+
 
 class RoleResolution(unittest.TestCase):
     """What a role's `plugins:` list is allowed to say."""
@@ -666,11 +764,15 @@ class TheKitsOwnRegistry(unittest.TestCase):
             self.assertTrue(plugins[pid]["system"], pid)
         for pid in CLIENT:
             self.assertFalse(plugins[pid]["system"], pid)
-            # A ported leaf skill carries its skills surface AND NOTHING ELSE:
-            # no tab, no adapter, no service. Porting is packaging -- the day one
-            # of these grows a surface the portal has to draw, that is a decision
-            # and this line is where it gets made.
-            self.assertEqual(plugins[pid]["surfaces"], {"skills": [pid]}, pid)
+            # A ported leaf skill carries its skills surface, the curated flows
+            # that are its own work, AND NOTHING ELSE: no tab, no adapter, no
+            # service. Porting is packaging -- the day one of these grows a
+            # surface the portal has to draw, that is a decision and this line is
+            # where it gets made.
+            self.assertEqual(sorted(plugins[pid]["surfaces"]),
+                             ["flows", "skills"] if plugins[pid]["surfaces"].get("flows")
+                             else ["skills"], pid)
+            self.assertEqual(plugins[pid]["surfaces"]["skills"], [pid], pid)
 
     def test_the_client_graph_is_what_each_SKILL_md_actually_asks_for(self):
         """Written down whole, because `requires` is a claim about a text.
