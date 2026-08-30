@@ -8,7 +8,7 @@ One repo with the three pieces of the product:
 | `app/app/` | **the client portal** — the interface a client uses to see and direct their agent. Static; all the logic lives in the browser |
 | `hermes-kit/` | **what gets installed on each client's agent** — portal adapter, skills, plugins, SOULs, capabilities, compose and conformance checks. Has its own `CLAUDE.md` with the deep context: read it before touching the kit |
 | `docs/` | the project's memory (portal + client onboarding) |
-| `hermes-kit/notes/` | the kit's memory (measurements, engine knobs, pivot status) |
+| `hermes-kit/notes/` | the kit's memory (measurements, engine knobs, the plugin plan) |
 
 It used to be two repos (`tuagente.uy` and `hermes-kit`); since 22/8/2026 it's
 this monorepo. The old `hermes-kit` repo is now archived. Vercel builds the
