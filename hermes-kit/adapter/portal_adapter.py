@@ -217,29 +217,39 @@ def _soul_block(name, company="", url=""):
     ask "what do you sell?" on the first flow. Seen on 11/8: it asked to
     track competitors and the agent did not know which company it meant.
 
-    EACH PARAGRAPH ONLY EXISTS IF ITS DATUM DOES. The baptism used to be
-    emitted unconditionally, and a team client -- whose onboarding starts at
-    the business step, because nobody names a team's solo agent -- got
-    "te bautizo **** desde el portal. Ese es tu nombre" in their prompt: the
-    first thing the portal told their agent was to introduce itself as the
-    empty string.
+    THE NAME IS NOT OPTIONAL AND AN EMPTY ONE IS NOT A SHAPE. This used to
+    emit the baptism unconditionally and a nameless client got "te bautizo
+    **** desde el portal. Ese es tu nombre" in their prompt -- the first thing
+    the portal ever told that agent was to introduce itself as the empty
+    string. It was then made conditional, which was right while a team's solo
+    agent was never named: their onboarding opened at the business step.
+
+    There is no team and there is no such onboarding: naming is the first
+    screen (`app/app/lib/onboarding.tsx`). So an empty name here is a bug in
+    the caller, not a state a client can be in, and it RAISES -- the door
+    refuses it first (`_save_identity`), and a block written without a name is
+    a block whose whole reason for existing is missing.
+
+    THE COMPANY IS STILL CONDITIONAL, and that is a real state: the client
+    names their agent on step 1 and says what their business is on step 2, so
+    between the two writes the block legitimately holds a name and nothing
+    else.
     """
     name = _clean_for_soul(name)
     company = _clean_for_soul(company)
     url = _clean_for_soul(url)
+    if not name:
+        raise ValueError("the identity block cannot be written without a name")
 
     parts = [
         SOUL_START,
         "## Quien sos y para quien trabajas",
+        "",
+        f"Tu cliente te bautizo **{name}** desde el portal. Ese es tu nombre:",
+        "presentate asi cuando saludes, cuando te pregunten quien sos y en",
+        "todos los canales. Si el resto de este documento te llama de otra",
+        "forma, vale este.",
     ]
-    if name:
-        parts += [
-            "",
-            f"Tu cliente te bautizo **{name}** desde el portal. Ese es tu nombre:",
-            "presentate asi cuando saludes, cuando te pregunten quien sos y en",
-            "todos los canales. Si el resto de este documento te llama de otra",
-            "forma, vale este.",
-        ]
     if company:
         where = f" Su sitio es {url}." if url else ""
         parts += [
@@ -2590,12 +2600,26 @@ class Handler(BaseHTTPRequestHandler):
         target.write_text(content, encoding="utf-8")
         return self._send(200, {"ok": True})
 
+    # Everything the portal can write about who the agent is. A body with
+    # none of them is not an update, it is a caller with a typo.
+    IDENTITY_FIELDS = ("name", "look", "company", "url", "contact", "avatar_png")
+
     def _save_identity(self, body):
         """The agent's baptism and look, chosen by the client on the portal.
 
         Merged against what is already saved: the portal can send only the
-        name or only the look without erasing the other.
+        company or only the channel without erasing the rest.
+
+        THE FIRST WRITE IS THE BAPTISM. Onboarding opens on the name and every
+        later step is an update, so an identity that would still be nameless
+        after this write is refused: a body carrying only the business is a
+        caller starting where the TEAM's onboarding used to start, and that is
+        exactly what once put "te bautizo **** desde el portal" into a live
+        prompt. Refusing it at the door is what lets `_soul_block` stop
+        carrying a nameless shape.
         """
+        if not any(field in body for field in self.IDENTITY_FIELDS):
+            return self._send(400, {"error": "no mandaste nada de la identidad"})
         previous = identity()
         new_data = dict(previous)
         if "name" in body:
@@ -2629,6 +2653,9 @@ class Handler(BaseHTTPRequestHandler):
             if contact is None:
                 return self._send(400, {"error": "contact invalido"})
             new_data["contact"] = contact
+        if not new_data.get("name"):
+            return self._send(400, {
+                "error": "primero hay que ponerle un nombre al agente"})
         # The agentito's own snapshot (the baptism canvas): stays in data/ and
         # a kit tool uploads it as the bot's photo over MTProto (the Bot API
         # does not let a bot change its own photo; Telethon does).
@@ -2645,8 +2672,6 @@ class Handler(BaseHTTPRequestHandler):
                     (DATA / "bot_avatar.png").write_bytes(png)
                 except OSError:
                     pass
-        if not new_data:
-            return self._send(400, {"error": "name or look is required"})
         try:
             IDENTITY.write_text(json.dumps(new_data, ensure_ascii=False), encoding="utf-8")
         except OSError as exc:
@@ -2661,10 +2686,10 @@ class Handler(BaseHTTPRequestHandler):
         # business during onboarding's step 2 never reached the agent.
         if any(new_data.get(k) and new_data.get(k) != previous.get(k)
                for k in ("name", "company", "url")):
+            # `new_data` already carries what was saved before, so there is
+            # nothing to fall back to: the merge IS the current identity.
             applied["soul"] = write_identity_to_soul(
-                new_data.get("name") or previous.get("name") or "",
-                new_data.get("company") or previous.get("company") or "",
-                new_data.get("url") or previous.get("url") or "")
+                new_data["name"], new_data.get("company", ""), new_data.get("url", ""))
         if new_data.get("name") and new_data.get("name") != previous.get("name"):
             applied["telegram"] = set_telegram_name(new_data["name"])
         # A new URL: the agent goes out to read its own company's website and
