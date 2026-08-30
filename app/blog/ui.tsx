@@ -23,7 +23,7 @@ export function BlogHeader() {
         rel="noopener noreferrer"
         className="rounded-pill bg-ink px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-primary"
       >
-        Armá tu equipo
+        Quiero mi agente
       </a>
     </header>
   );
@@ -123,8 +123,9 @@ export function ArticleLayout({ slug, children }: { slug: string; children: Reac
             ¿Querés ver esto funcionando en tu empresa?
           </h2>
           <p className="mx-auto mt-3 max-w-md text-white/80">
-            Arrancá por el diagnóstico: USD 200, una llamada y un informe con qué roles te sirven,
-            cuánto te ahorra cada uno y qué sale el setup. Si seguís, se descuentan del setup.
+            Arrancá por el diagnóstico: USD 200, una llamada y un informe con el trabajo que
+            conviene sacarte de encima primero, cuánto te devuelve y qué sale. Si seguís, se
+            descuentan.
           </p>
           <a
             href={WHATSAPP}

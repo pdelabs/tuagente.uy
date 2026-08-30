@@ -15,90 +15,91 @@ export default function Page() {
   return (
     <ArticleLayout slug={post.slug}>
       <P>
-        Es la primera pregunta de toda reunión y la que casi nadie responde en su página. Nosotros
-        la publicamos con el número al frente: <B>$U 1.500 por rol, por mes</B>. Si te espanta,
-        mejor ahorrarte la reunión; si te cierra, mejor llegar sabiéndolo.
+        Es la primera pregunta de toda reunión y la que casi nadie responde en su página. Vamos a
+        contestarla en serio, que no es lo mismo que contestarla con un número solo: lo que
+        contratás son <B>tres cosas</B>, cada una se paga distinto, y hay una que no se puede
+        cotizar antes de mirar tu caso — te vamos a decir exactamente por qué.
       </P>
       <P>
-        Un aviso antes de los números: hoy no vendemos “un agente” por proyecto. Vendemos{" "}
-        <B>roles</B> — un empleado de IA por vez, con nombre y con una lista escrita de lo que hace
-        y de lo que nunca va a hacer — y se pagan como se paga un sueldo.
+        Un aviso antes de los números: no vendemos “packs” ni horas de consultoría. Vendemos{" "}
+        <B>un agente por empresa</B> — uno solo, con el nombre y la cara que le ponés vos — y{" "}
+        <B>plugins</B>: cada trabajo concreto que querés sacarte de encima, escrito adentro de ese
+        agente con tu proceso adentro.
       </P>
 
-      <H2>Qué cobramos: $U 1.500 por rol, por mes</H2>
-      <P>
-        Un solo precio, en pesos uruguayos, el mismo para todos los roles. No hay planes, no hay
-        escalones, no hay cargo por mensaje. Por cada rol que contratás:
-      </P>
+      <H2>Las tres cosas que se pagan</H2>
       <Ul>
         <li>
-          <B>El rol trabajando 24/7</B>, instalado adentro de tu empresa, conectado a lo que ya
-          usás y con los permisos que vos le des.
+          <B>El diagnóstico:</B> USD 200, una sola vez, y se descuentan si seguís. Es lo único que
+          está publicado con número, y más abajo está por qué.
         </li>
         <li>
-          <B>Su ficha en el portal:</B> qué hace, qué tiene corriendo y qué entregó. Lo mirás como
-          mirás a cualquier empleado.
+          <B>El plugin:</B> se paga una vez, cuando lo escribimos. El primero viene con el agente
+          armado, instalado y conectado; los que sumes después salen bastante menos, porque lo
+          pesado ya está hecho.
         </li>
         <li>
-          <B>Tu aprobación</B> para todo lo que sale para afuera: nada le llega a un cliente tuyo
-          sin tu ok.
+          <B>El mantenimiento:</B> todos los meses. Cubre los modelos que el agente consume
+          pensando, el hosting donde vive, los ajustes que le pedís y el soporte. Sin permanencia.
         </li>
-        <li><B>Soporte por WhatsApp, con nosotros.</B> No con un ticket.</li>
       </Ul>
-      <P>
-        Contratás los que necesites y ninguno más: uno son $U 1.500 por mes, y si mañana sumás un
-        segundo son otros $U 1.500. Si uno no te sirve, lo das de baja y dejás de pagarlo —{" "}
-        <B>sin permanencia y sin explicaciones</B>. Lo que recomendamos es arrancar con uno, el que
-        más te duele hoy, y recién después decidir si querés el segundo.
-      </P>
 
-      <H2>Por qué se paga por rol y no por proyecto</H2>
-      <P>
-        Cotizar “un agente a medida” tiene un problema de fondo: te obliga a decidir todo el día
-        cero, que es justo el día en que menos sabés. Pagás una cifra grande por adelantado
-        apostando a que elegiste bien, y si a los dos meses el cuello de botella resulta ser otro,
-        el proyecto ya está pago.
-      </P>
-      <Callout>
-        Un rol es un sueldo que decidís mes a mes: lo contratás, lo ves trabajar y si no rinde lo
-        das de baja. Con un proyecto pago por adelantado eso no lo podés hacer.
-      </Callout>
-      <P>
-        Cobrar así nos pone el riesgo del lado nuestro, que es donde tiene que estar. Por eso
-        preferimos que arranques con uno antes que venderte cinco: cinco roles que no mirás son
-        cinco bajas el mes que viene.
-      </P>
-
-      <H2>El diagnóstico: USD 200, y se descuentan del setup</H2>
+      <H2>El diagnóstico: USD 200, y se descuentan</H2>
       <P>
         No hacemos demos gratis — una demo gratis es una presentación de ventas con tu logo puesto
-        arriba. Hacemos un <B>diagnóstico</B>: una llamada y un informe escrito con qué roles te
-        sirven, en qué orden conviene arrancar, dónde te ahorra plata cada uno y qué sale ponerlos
-        a trabajar. Sale <B>USD 200, una sola vez</B>, y si seguís se descuentan del setup. El
-        informe es tuyo aunque no sigas, incluso si la conclusión honesta es que todavía no te
-        conviene.
-      </P>
-      <P>
-        ¿Y el setup? Se cotiza ahí, con tu caso a la vista, porque la variable real es{" "}
-        <B>cuántas integraciones hay que escribir</B>: conectar un Google Sheets no cuesta lo mismo
-        que conectar un ERP de 2009 que solo entiende el contador. Antes de mirar eso, cualquier
-        número es un número al aire — y los números al aire después se cobran igual.
+        arriba. Hacemos un <B>diagnóstico</B>: una llamada y un informe escrito con qué trabajo
+        tuyo conviene sacarte de encima primero, cuántas horas o cuánta plata te devuelve, qué
+        plugin hay que escribir para eso y qué sale todo. Sale <B>USD 200, una sola vez</B>, y si
+        seguís se descuentan. El informe es tuyo aunque no sigas, incluso si la conclusión honesta
+        es que todavía no te conviene.
       </P>
 
-      <H2>Qué estás pagando, exactamente</H2>
+      <H2>El plugin: por qué se cotiza y no se publica</H2>
+      <P>
+        La variable real de un plugin no es “cuánta IA lleva”: es <B>cuánto hay que escribir y
+        cuánto hay que conectar</B>. Contestar el WhatsApp de la noche con una lista de precios
+        que ya está en una planilla de Google no cuesta lo mismo que hacerlo contra un sistema de
+        gestión de 2009 que solo entiende el contador y que no tiene API.
+      </P>
+      <Callout>
+        Cualquiera te puede tirar un número antes de mirar tu proceso. Después ese número se cobra
+        igual — y la diferencia la pagás vos en un plugin que hace la mitad de lo que necesitabas.
+      </Callout>
+      <P>
+        Por eso lo que cotizamos en el diagnóstico es esto, con tu caso adelante: qué mira el
+        plugin, qué decide solo, qué te pregunta antes de actuar, qué <B>nunca</B> hace, y contra
+        qué sistemas tuyos tiene que hablar. Recién ahí hay un precio, y ese precio no se mueve
+        después.
+      </P>
+
+      <H2>El mensual: qué estás pagando de verdad</H2>
+      <P>
+        Acá va el número que nadie publica, así que lo publicamos nosotros. Un agente andando con
+        uso real de una empresa chica —contestando, leyendo, resumiendo, armando planillas todos
+        los días— <B>consume entre US$ 4 y US$ 10 por mes de modelos</B>. Está medido en los
+        agentes que tenemos corriendo, no estimado.
+      </P>
+      <P>
+        Es poco, y es a propósito que te lo digamos: si alguien te cobra “por consumo de IA” una
+        cifra diez veces mayor sin mostrarte el detalle, ya sabés qué te está vendiendo. Lo que
+        cuesta plata de verdad en el mensual no es el modelo — es todo lo demás:
+      </P>
       <Ul>
         <li>
-          <B>La construcción (el setup, una sola vez):</B> las herramientas que conectan cada rol
-          con tus sistemas, los permisos, las aprobaciones y tu proceso enseñado. Es ingeniería de
-          verdad — por eso el que te cobra USD 300 de setup te está vendiendo otra cosa.
+          <B>El hosting:</B> la máquina donde vive tu agente, prendida siempre, aislada de la de
+          cualquier otro cliente y con su propia clave.
         </li>
         <li>
-          <B>El combustible:</B> cada “pensamiento” del rol se le paga a un modelo de IA. Ya está
-          adentro de los $U 1.500.
+          <B>Los ajustes:</B> el mes dos siempre trae “che, cuando pregunten por esto contestá
+          así”. Eso lo hacemos nosotros y está adentro.
         </li>
         <li>
-          <B>La operación:</B> monitoreo, ajustes y mejoras, todos los meses. Un rol sin operación
-          es como un empleado sin jefe: arranca bien y termina quién sabe dónde.
+          <B>La operación:</B> mirar que siga andando, que no se rompa cuando cambia algo de tu
+          lado, y arreglarlo antes de que te enteres. Un agente sin operación es como un empleado
+          sin jefe: arranca bien y termina quién sabe dónde.
+        </li>
+        <li>
+          <B>El soporte:</B> por WhatsApp, con nosotros. No con un ticket.
         </li>
       </Ul>
 
@@ -107,14 +108,15 @@ export default function Page() {
         <li>
           <B>Contra un sueldo.</B> Un administrativo en Uruguay le cuesta a la empresa entre USD
           800 y 1.200 por mes, trabaja 8 horas, se toma licencia y —con todo derecho— un día
-          renuncia. Un rol sale $U 1.500 y no para nunca. No lo reemplaza: le saca de encima el
-          trabajo que nadie quiere hacer.
+          renuncia. Un agente no lo reemplaza: le saca de encima el trabajo que nadie quiere
+          hacer, y lo hace a las once de la noche de un domingo, que es cuando se pierden los
+          turnos que nunca supiste que tenías.
         </li>
         <li>
-          <B>Contra una agencia.</B> El mercado cobra entre USD 1.500 y 3.000 de armado más USD 100
-          a 500 por mes, y la mayoría instala un{" "}
-          <PostLink slug="agente-de-ia-vs-chatbot">chatbot con etiqueta de agente</PostLink>.
-          Fijate en la moneda, además: esa mensualidad está en dólares.
+          <B>Contra una agencia.</B> El mercado cobra entre USD 1.500 y 3.000 de armado más USD
+          100 a 500 por mes, y la mayoría instala un{" "}
+          <PostLink slug="agente-de-ia-vs-chatbot">chatbot con etiqueta de agente</PostLink>. La
+          pregunta que los separa es una sola: ¿qué hace sin que nadie le escriba?
         </li>
         <li>
           <B>Contra un chatbot SaaS.</B> Entre USD 50 y 200 por mes por una ventanita que contesta
@@ -124,36 +126,48 @@ export default function Page() {
       </Ul>
       <Callout>
         A nadie se lo contrata por lo que sale, sino por lo que te saca de encima. La pregunta útil
-        no es si $U 1.500 es caro: es cuántas horas por semana te devuelve el rol y cuánto vale tu
-        hora.
+        no es si el plugin es caro: es cuántas horas por semana te devuelve y cuánto vale tu hora.
       </Callout>
+
+      <H2>Empezás con uno</H2>
+      <P>
+        Un agente, un plugin: el trabajo que más te duele hoy. Lo ves andar un mes, medís si te
+        devolvió horas de verdad, y recién ahí pedís el segundo. No hay que decidir todo el día
+        cero, que es justo el día en que menos sabés qué necesitás.
+      </P>
+      <P>
+        Y si el mes no te devolvió nada, dejás de pagar el mensual. Sin permanencia y sin
+        explicaciones — es la única prueba que importa, y nos pone el riesgo del lado nuestro, que
+        es donde tiene que estar.
+      </P>
 
       <H2>Cuándo NO te conviene (sí, en serio)</H2>
       <P>Un poco de anti-venta, porque la confianza vale más que una factura:</P>
       <Ul>
         <li>
           Si tu proceso <B>cambia todas las semanas</B> y no está definido ni en la cabeza de
-          nadie — primero ordenalo, después automatizalo.
+          nadie — primero ordenalo, después automatizalo. Un plugin escribe un proceso; no puede
+          escribir uno que no existe.
         </li>
         <li>
           Si el volumen es muy bajo: cinco facturas por mes se hacen a mano más barato que con
           cualquier software.
         </li>
         <li>
-          Si querés <B>los cinco roles el primer mes</B>. Podés, pero nadie incorpora cinco
-          empleados el mismo lunes y les explica el trabajo a todos.
+          Si querés <B>todos los plugins el primer mes</B>. Podés, pero es la forma más cara de
+          descubrir que dos de ellos no eran el problema.
         </li>
         <li>
-          Si esperás magia: un rol hace trabajo real con reglas reales. El que promete “resultados
-          garantizados sin definir nada” te está vendiendo humo — huí.
+          Si esperás magia: un agente hace trabajo real con reglas reales. El que promete
+          “resultados garantizados sin definir nada” te está vendiendo humo — huí.
         </li>
       </Ul>
       <P>
-        El precio está publicado, entero, en la{" "}
+        El diagnóstico está publicado con número en la{" "}
         <a href="/#planes" className="font-semibold text-primary underline decoration-2 underline-offset-2 hover:text-primary-dark">página principal</a>;
-        lo único que no publicamos es el setup, y ya sabés por qué. Si los números te cierran, el
-        siguiente paso es el diagnóstico con tu caso adentro. Y si todavía no te queda claro qué es
-        exactamente lo que estarías contratando, empezá por{" "}
+        lo que no publicamos es el plugin y el mensual, y ya sabés por qué. Si los números te
+        cierran, el siguiente paso es el diagnóstico con tu caso adentro. Y si todavía no te queda
+        claro qué es exactamente lo que estarías contratando, empezá por{" "}
         <PostLink slug="que-es-un-agente-de-ia">qué es un agente de IA</PostLink>.
       </P>
     </ArticleLayout>

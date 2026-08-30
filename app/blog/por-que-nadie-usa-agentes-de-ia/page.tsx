@@ -127,7 +127,7 @@ export default function Page() {
         <li>
           <B>Exigí resultados medibles, no conversaciones.</B> A un agente se lo mide como a un
           empleado: tareas terminadas, horas devueltas. Si en un mes no te ahorró tiempo real,
-          tenés que poder darlo de baja y dejar de pagarlo — por eso cobramos por rol y por mes,
+          tenés que poder darlo de baja y dejar de pagarlo — por eso el mantenimiento es mensual y
           sin permanencia. No es generosidad: es la única prueba que importa.
         </li>
         <li>
