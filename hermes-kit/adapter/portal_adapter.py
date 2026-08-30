@@ -2846,30 +2846,38 @@ class Handler(BaseHTTPRequestHandler):
         # socket from an AttributeError.
         return body if isinstance(body, dict) else None
 
-    def _proxy_chat_stream(self, session_id, body, role=None):
-        """Continue an existing conversation, optionally as a member of the team."""
-        prefix, token = "", TOKEN
-        if role:
-            token = _role_key(role)
-            if not token:
-                return self._send(409, {
-                    "error": f"el rol '{role}' no tiene su propia clave configurada",
-                })
-            prefix = f"/p/{role}"
-        return self._proxy_sse(
-            f"{AGENT_BASE}{prefix}/api/sessions/{session_id}/chat/stream", body, token, role)
+    # The two fields the team pivot put on a chat body. Named here, refused
+    # everywhere: `role` picked which hired profile answered, `room` said which
+    # shared transcript the turn belonged to. Neither exists.
+    TEAM_FIELDS = ("role", "room")
 
-    def _proxy_sse(self, url, body, token, answered_by=None):
+    def _refuse_team_fields(self, body):
+        """400 on a field that is gone. Answers, and says so. NOT ignored.
+
+        A caller still sending one is a caller drawing a screen that no longer
+        exists -- and the worst outcome is the quiet one: `role` silently
+        dropped means every message going to the agent while the sender
+        believes a specialist took it, which looks like the agent answering
+        badly rather than like the portal being out of date.
+        """
+        gone = [field for field in self.TEAM_FIELDS if field in body]
+        if not gone:
+            return False
+        self._send(400, {"error": f"campo desconocido: {', '.join(gone)}"})
+        return True
+
+    def _proxy_chat_stream(self, session_id, body):
+        """Continue an existing conversation."""
+        return self._proxy_sse(
+            f"{AGENT_BASE}/api/sessions/{session_id}/chat/stream", body, TOKEN)
+
+    def _proxy_sse(self, url, body, token):
         """Relay one upstream SSE chat stream to the browser, line by line.
 
         TWO CALLERS, ONE RELAY: the session path continues a conversation, the
-        OpenAI-compatible path opens one with a role. Both need the same
-        line-buffered forwarding, the same CORS, and the same capability-mention
-        sweep -- and a copy of this would mean a fix landing in one of them.
-
-        `role` swaps BOTH the path prefix and the credential upstream: the engine
-        resolves API_SERVER_KEY inside the profile's scope, so the portal's key
-        gets a 401 on `/p/<role>/`. See `_role_key`.
+        OpenAI-compatible path opens one. Both need the same line-buffered
+        forwarding, the same CORS, and the same capability-mention sweep -- and
+        a copy of this would mean a fix landing in one of them.
         """
         # SSE line by line: readline() returns as soon as each event arrives
         # (read(n) would buffer until n bytes are complete and kill the streaming).
@@ -2892,16 +2900,6 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
-        # WHO IS ABOUT TO ANSWER, before a single token of the answer.
-        #
-        # When the client names someone the portal already knows. When the room
-        # routed it, only this side knows -- and without it the reply would be
-        # drawn with the wrong face and the wrong name, which is worse than no
-        # attribution at all.
-        if answered_by:
-            self.wfile.write(
-                f"event: portal.role\ndata: {json.dumps({'role': answered_by})}\n\n".encode())
-            self.wfile.flush()
         # Along the way, without slowing down the stream: if the agent wrote
         # `capability:<id>`, it gets recorded as a request with source
         # "mention". This is what makes the demand measurement REAL: the
@@ -3184,11 +3182,11 @@ class Handler(BaseHTTPRequestHandler):
             res = google_auth_code(str(body["code"]))
             return self._send(200 if res.get("ok") else 400, res)
         if path == "/portal/chat/stream":
-            # A NEW conversation with a member of the team.
+            # A NEW conversation, proxied onto `/v1/chat/completions`.
             #
-            # It proxies `/v1/chat/completions` -- the same path the portal
-            # already uses to open a conversation -- only prefixed with the role
-            # and carrying the role's key.
+            # THE PATH STAYS EVEN THOUGH THE TEAM IS GONE, and it is not
+            # inertia: it carries the advertised-model fix below, which the
+            # session route does not.
             #
             # THE OBVIOUS-LOOKING ALTERNATIVE DOES NOT WORK: creating the
             # session with `POST /api/sessions` and streaming into it stores the
@@ -3200,48 +3198,19 @@ class Handler(BaseHTTPRequestHandler):
             body = self._read_json_body()
             if body is None or not isinstance(body.get("messages"), list):
                 return self._send(400, {"error": "messages is required"})
-            # `room` IS REFUSED AND NOT IGNORED. The shared transcript went
-            # with the team, and a caller still sending its id is a caller
-            # drawing a screen that no longer exists: a 200 would let it look
-            # like the turn was filed somewhere.
-            if "room" in body:
-                return self._send(400, {"error": "campo desconocido: room"})
-            role = str(body.pop("role", "") or "").strip() or None
-            if role is None:
-                # Nobody was named, so the room decides. The client's own turn
-                # is the last message; earlier ones are context, including what
-                # a teammate already answered.
-                #
-                # A failure here costs the routing, never the answer: the agent
-                # they named takes the turn, which is what used to happen for
-                # every message anyway.
-                last = [m for m in body["messages"] if m.get("role") == "user"]
-                if last:
-                    try:
-                        role = route_message(str(last[-1].get("content") or ""))
-                    except Exception:
-                        role = None
-            token, prefix = TOKEN, ""
-            if role:
-                token = _role_key(role)
-                if not token:
-                    return self._send(409, {
-                        "error": f"el rol '{role}' no tiene su propia clave configurada",
-                    })
-                prefix = f"/p/{role}"
+            if self._refuse_team_fields(body):
+                return
             return self._proxy_sse(
-                f"{AGENT_BASE}{prefix}/v1/chat/completions", body, token, role)
+                f"{AGENT_BASE}/v1/chat/completions", body, TOKEN)
 
         m = re.match(r"^/portal/sessions/([^/]+)/chat/stream$", path)
         if m:
             body = self._read_json_body()
             if body is None or not str(body.get("message") or "").strip():
                 return self._send(400, {"error": "message is required"})
-            # `role` is optional and travels in the body, not the path: the
-            # client's key stays the same either way, only the member answering
-            # changes. Absent means the agent they named, exactly as before.
-            role = str(body.pop("role", "") or "").strip() or None
-            return self._proxy_chat_stream(m.group(1), body, role)
+            if self._refuse_team_fields(body):
+                return
+            return self._proxy_chat_stream(m.group(1), body)
 
         # --- kanban writes (all via CLI, never SQL) ---
         if path == "/portal/tickets":
