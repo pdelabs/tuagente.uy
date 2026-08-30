@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 export const alt =
-  "tuagente — Un equipo de IA que trabaja adentro de tu empresa. $U 1.500 por rol, por mes.";
+  "tuagente — Un agente de IA que trabaja adentro de tu empresa, con los plugins que tu empresa necesita.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -35,15 +35,15 @@ export default function OgImage() {
             fontWeight: 700,
           }}
         >
-          Hecho en Uruguay · $U 1.500 por rol, por mes
+          Hecho en Uruguay · un agente por empresa
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div style={{ display: "flex", fontSize: 76, fontWeight: 800, lineHeight: 1.05 }}>
-            Un equipo de IA que trabaja adentro de tu empresa.
+            Un agente de IA que trabaja adentro de tu empresa.
           </div>
           <div style={{ display: "flex", fontSize: 34, color: "rgba(255,255,255,0.85)" }}>
-            Marketing · Soporte · Ventas · Contabilidad · o el rol que te falte
+            Con los plugins que TU empresa necesita, hechos a medida
           </div>
         </div>
 

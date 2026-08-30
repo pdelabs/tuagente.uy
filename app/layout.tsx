@@ -11,12 +11,12 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://tuagente.uy"),
-  title: "tuagente — Un equipo de IA que trabaja adentro de tu empresa",
+  title: "tuagente — Un agente de IA que trabaja adentro de tu empresa",
   description:
-    "Contratás roles de IA — marketing, soporte, ventas, contabilidad o uno a medida — que trabajan 24/7 adentro de tu empresa. $U 1.500 por rol por mes, con un portal donde ves todo lo que hacen y nada sale sin tu aprobación. Un producto de pdelabs, Montevideo, Uruguay.",
+    "Un agente de IA por empresa: lo bautizás vos y trabaja 24/7 adentro de tu empresa, con plugins hechos a medida para lo que necesitás — WhatsApp fuera de hora, presupuestos, facturas, redes, transcripciones. Portal para ver todo lo que hace y nada sale sin tu aprobación. Un producto de pdelabs, Montevideo, Uruguay.",
   keywords: [
-    "equipo de agentes de IA",
-    "empleados de IA",
+    "agente de IA para empresas",
+    "plugins a medida para agentes de IA",
     "agentes de IA",
     "agentes de inteligencia artificial",
     "automatización con IA",
@@ -29,17 +29,17 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: "https://tuagente.uy",
-    title: "tuagente — Un equipo de IA que trabaja adentro de tu empresa",
+    title: "tuagente — Un agente de IA que trabaja adentro de tu empresa",
     description:
-      "Contratás los roles que necesitás y trabajan 24/7 adentro de tu empresa. $U 1.500 por rol por mes, y nada sale para afuera sin tu ok.",
+      "Un agente que bautizás vos, trabajando 24/7 adentro de tu empresa, con los plugins que tu empresa necesita hechos a medida. Nada sale para afuera sin tu ok.",
     locale: "es_UY",
     siteName: "tuagente.uy",
   },
   twitter: {
     card: "summary_large_image",
-    title: "tuagente — Un equipo de IA que trabaja adentro de tu empresa",
+    title: "tuagente — Un agente de IA que trabaja adentro de tu empresa",
     description:
-      "Contratás los roles que necesitás y trabajan 24/7 adentro de tu empresa. $U 1.500 por rol por mes, con un portal donde ves todo lo que hacen.",
+      "Un agente que bautizás vos, trabajando 24/7 adentro de tu empresa, con los plugins que tu empresa necesita hechos a medida y un portal donde ves todo lo que hace.",
   },
 };
 
