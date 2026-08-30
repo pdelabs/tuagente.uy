@@ -50,8 +50,8 @@ plugins/        the kit's plugin registry: one whole folder per plugin this
                 `/opt/plugins`. It is what SAYS which plugins are installed —
                 the adapter scans it at boot and serves it at
                 `/portal/plugins`. The skills inside are also delivered to
-                `kit-skills/` and to the profiles, which is what the engine
-                indexes: registry and delivery are two shipments
+                `kit-skills/`, which is what the engine indexes: registry and
+                delivery are two shipments
                 (`notes/plugin-system-plan.md`).
 kit-adapter/    the adapter's CODE, `:ro`. It used to live in `data/scripts/`
                 and that was a privilege escalation: the agent could rewrite
