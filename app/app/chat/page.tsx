@@ -12,8 +12,7 @@ import {
 } from "lucide-react";
 import {
   loadConfig, chatStream, sessionChatStream, getSessions, getSessionMessages,
-  getRooms, getRoom, uploadFile,
-  type PortalConfig, type ChatMessage, type RoomTurn,
+  uploadFile, type PortalConfig, type ChatMessage,
 } from "../lib/agent";
 import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
 import {
@@ -23,10 +22,7 @@ import { EntityProvider } from "../lib/EntityViewer";
 import Markdown from "../lib/Markdown";
 import ArtifactPreview, { artifactIdsIn } from "../lib/ArtifactPreview";
 import { loadAgentName } from "../lib/onboarding";
-import {
-  AgentitoAnimated, AgentitoAvatar, LOOK_DEFAULT, loadAgentLook, type AgentitoLook,
-} from "../lib/agentito";
-import { roleName, useRoles } from "../lib/roles";
+import { AgentitoAnimated, AgentitoAvatar, loadAgentLook } from "../lib/agentito";
 import type { AgentitoState } from "../lib/AgentitoRive";
 import { actionFor, summarizeActions } from "../lib/labels";
 import Sessions, { sessionTitle, type SessionSummary } from "./Sessions";
@@ -46,11 +42,6 @@ type Msg = {
   role: "user" | "assistant";
   content: string;
   tools?: string[]; // tools used in the run (live only)
-  /** Which member of the team answered. `assistant` messages only, and only
-   *  when the client addressed someone: absent means the agent they named, and
-   *  that one is never signed -- badging it would turn their agent into an
-   *  employee of a team they never hired. */
-  by?: string;
 };
 
 const THINKING = "_thinking";
@@ -143,21 +134,6 @@ export default function ChatPage() {
   // The look is loaded lazily (no effect) so the default violet doesn't flash
   // for a frame.
   const [agentLook] = useState(loadAgentLook);
-  // The team, if this agent has one. Empty on every agent running today, so the
-  // chat keeps drawing exactly one face: the one the client named.
-  const { roles, loading: rolesLoading } = useRoles();
-  /** The face for a message: the role that answered, or the client's own agent. */
-  const lookFor = (by?: string): AgentitoLook =>
-    by && roles[by]?.look
-      ? ({ ...LOOK_DEFAULT, ...roles[by].look } as AgentitoLook)
-      : agentLook;
-  /** Who the next message goes to. null = the agent the client named. */
-  const [talkingTo, setTalkingTo] = useState<string | null>(null);
-  // WITH A TEAM THE CHAT IS A ROOM, stored by the adapter. Without one it is an
-  // engine session, exactly as it has always been -- so no agent running today
-  // changes. Both live under the same `?conversation=` param and are told apart
-  // by the prefix the portal itself mints.
-  const roomMode = Object.keys(roles).length > 0;
   const [agentName, setAgentName] = useState<string | null>(null);
   useEffect(() => { setAgentName(loadAgentName()); }, []);
 
@@ -220,41 +196,15 @@ export default function ChatPage() {
     run(request.trim(), []);
   }, [cfg]);
 
-  // WHICH LISTING THIS ANSWER BELONGS TO. On a client with a team this runs
-  // twice: `roomMode` is false until the roster lands, so the first pass asks
-  // the ENGINE for its sessions and the second asks the adapter for the rooms.
-  // Nothing said which of the two answers was the current one, and the engine
-  // request -- fired first, against the other service -- can perfectly well
-  // land last: then it overwrote the rooms with the engine's session list and
-  // the client with a team was left looking at conversations that are not the
-  // ones they have, until something else refreshed the sidebar. The same
-  // counter `loadThread` uses to know whether the thread it opened is still
-  // the thread on screen; a slower request is ignored, never awaited.
+  // A REFRESH THAT ARRIVES LATE DOES NOT PAINT. The same counter `loadThread`
+  // uses to know whether the thread it opened is still the thread on screen:
+  // a slower request is ignored, never awaited.
   const listSeq = useRef(0);
-  const refreshSessions = useCallback((c: PortalConfig, rooms: boolean) => {
+  const refreshSessions = useCallback((c: PortalConfig) => {
     const seq = ++listSeq.current;
-    const load: Promise<SessionSummary[]> = rooms
-      // The adapter already returns them newest first.
-      ? getRooms(c).then((r) => (r.rooms ?? []).map((s): SessionSummary => ({
-          id: s.id,
-          // WITH THE CHANNEL THE SIDEBAR READS. The list only shows what it
-          // recognizes as somebody's conversation (`isHumanConversation`, by
-          // `source`): that is what keeps the engine's crons and workers out
-          // of it. A room carries no channel -- the portal mints it itself --
-          // so every one of them got dropped, and a client with a team read
-          // "todavía no hay conversaciones" with the room open right next to
-          // the list. The channel is `portal` because that is literally where
-          // it was written.
-          source: "portal",
-          title: s.title,
-          preview: null,
-          message_count: s.turns,
-          started_at: s.updated_at,
-          last_active: s.updated_at,
-        })))
-      : getSessions(c).then((r: { data?: SessionSummary[] }) =>
-          [...(r.data ?? [])].sort((a, b) => b.last_active - a.last_active));
-    load
+    getSessions(c)
+      .then((r: { data?: SessionSummary[] }) =>
+        [...(r.data ?? [])].sort((a, b) => b.last_active - a.last_active))
       .then((list) => {
         if (listSeq.current !== seq) return;
         setSessionsErr(null);
@@ -265,7 +215,7 @@ export default function ChatPage() {
         setSessionsErr(e instanceof Error ? e.message : "error de red");
       });
   }, []);
-  useEffect(() => { if (cfg) refreshSessions(cfg, roomMode); }, [cfg, roomMode, refreshSessions]);
+  useEffect(() => { if (cfg) refreshSessions(cfg); }, [cfg, refreshSessions]);
 
   // Scroll: we follow the stream only if the user is looking at the bottom.
   const onScroll = () => {
@@ -294,27 +244,14 @@ export default function ChatPage() {
     [activeId, sessions],
   );
 
-  const mentionItems = useMentionItems(cfg, mention?.kind ?? null, mention?.term ?? "", roles);
+  const mentionItems = useMentionItems(cfg, mention?.kind ?? null, mention?.term ?? "");
 
-  // `/…` and `#…` insert a reference into the message. `@…` does NOT: it hands
-  // the turn to someone on the team, which is what an @ means in a room.
-  // Leaving the id in the text would send the client's own words plus a token
-  // they never wrote.
+  // `@…` and `#…` insert the reference into the message: the chat draws it as
+  // a chip and the agent reads the path or the id it needs.
   const pickMention = (item: MentionItem) => {
     if (!mention) return;
     const el = taRef.current;
     const caret = el?.selectionStart ?? input.length;
-    if (mention.kind === "role") {
-      setTalkingTo(item.insert);
-      setInput(`${input.slice(0, mention.start)}${input.slice(caret)}`);
-      setMention(null);
-      setMentionIdx(0);
-      requestAnimationFrame(() => {
-        el?.focus();
-        el?.setSelectionRange(mention.start, mention.start);
-      });
-      return;
-    }
     const next = `${input.slice(0, mention.start)}${item.insert} ${input.slice(caret)}`;
     setInput(next);
     setMention(null);
@@ -374,16 +311,10 @@ export default function ChatPage() {
     setEditingIdx(null);
     setLoadingThread(true);
     setAtBottom(true);
-    const load = id.startsWith("sala_")
-      // A room keeps who answered each turn, which is what lets the thread be
-      // redrawn with the right faces after a reload instead of one voice.
-      ? getRoom(c, id).then((r) => (r.turns ?? []).map((t: RoomTurn) => ({
-          role: t.role, content: t.content, by: t.by,
-        })))
-      : getSessionMessages(c, id).then((r: { data?: StoredMessage[] }) => (r.data ?? [])
-          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
-          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content as string })));
-    load
+    getSessionMessages(c, id)
+      .then((r: { data?: StoredMessage[] }) => (r.data ?? [])
+        .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
+        .map((m): Msg => ({ role: m.role as "user" | "assistant", content: m.content as string })))
       .then((turns: Msg[]) => {
         if (openSeq.current !== seq) return;
         setMsgs(turns);
@@ -454,26 +385,8 @@ export default function ChatPage() {
     const sendSeq = openSeq.current;
     const isCurrent = () => openSeq.current === sendSeq;
 
-    // THE ROOM, SEEN FROM WHOEVER IS ANSWERING.
-    //
-    // In the OpenAI format `assistant` means "you said this", so handing a
-    // teammate's reply through untouched makes the next one read it as its own
-    // words. Measured on the lab: Vera got Beto's line as `assistant`, quoted
-    // it back as hers -- "Te dije: 'Soy Beto…'" -- and then apologised for
-    // having said something she never said.
-    //
-    // So a teammate's turn arrives as what it is: something SOMEONE ELSE said
-    // in the room, attributed by name. Only the answerer's own turns stay
-    // `assistant`. That is what makes the transcript a room instead of one
-    // confused monologue.
-    const speaker = (by?: string) => (by ? roleName(by, roles) : agentName || "Tu agente");
     const history: ChatMessage[] = [
-      ...base.map((m): ChatMessage => {
-        if (m.role !== "assistant" || (m.by ?? null) === talkingTo) {
-          return { role: m.role, content: m.content };
-        }
-        return { role: "user", content: `[${speaker(m.by)} dijo] ${m.content}` };
-      }),
+      ...base.map((m): ChatMessage => ({ role: m.role, content: m.content })),
       { role: "user", content: text },
     ];
 
@@ -488,38 +401,19 @@ export default function ChatPage() {
     setLiveTools([THINKING]);
     setEditingIdx(null);
     setMsgs([...base, { role: "user", content: text },
-             { role: "assistant", content: "", by: talkingTo ?? undefined }]);
+             { role: "assistant", content: "" }]);
     setSending(true);
     setAtBottom(true);
 
     const ac = new AbortController();
     abortRef.current = ac;
-    // THE ROOM THIS TURN BELONGS TO. An open conversation keeps its id; a new
-    // one gets minted here and goes into the URL, so a reload -- or the link --
-    // comes back to the same room.
-    const room = roomMode
-      ? (activeId?.startsWith("sala_") ? activeId
-        : `sala_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`)
-      : null;
-    if (room && room !== activeId) replaceInRoute({ [PARAM.conversation]: room });
 
     const tools: string[] = [];
-    // Who takes this turn. Starts as whoever the client named -- null when
-    // nobody was -- and the room may fill it in before the first token.
-    let answeredBy: string | null = talkingTo;
     const apply = (content: string) => {
       if (!isCurrent()) return;
       setMsgs((ms) => [
         ...ms.slice(0, -1),
-        {
-          role: "assistant",
-          content,
-          tools: tools.length ? [...tools] : undefined,
-          // Stamped on the message, not read from a live selector: the client
-          // can address someone else on the next turn and this reply has to
-          // keep saying who actually wrote it.
-          by: answeredBy ?? undefined,
-        },
+        { role: "assistant", content, tools: tools.length ? [...tools] : undefined },
       ]);
     };
 
@@ -541,16 +435,10 @@ export default function ChatPage() {
     };
 
     try {
-      // THE ROOM IS THE MESSAGE LIST, and that is the whole trick: `chatStream`
-      // already sends the full history, so whoever takes this turn reads
-      // everything said before it -- including what a teammate answered three
-      // messages ago -- without needing a memory of its own.
-      //
-      // A turn aimed at someone always goes this way, even inside an open
-      // conversation. `sessionChatStream` sends only the new message and leans
-      // on a session stored INSIDE one profile: down that path a teammate would
-      // answer having read nothing, which is exactly the bubble we are leaving.
-      if (activeId && !talkingTo && !roomMode) {
+      // An open conversation resumes on the engine's own session (only the new
+      // message travels); a new one goes through the gateway with the whole
+      // history, because there is no session to resume yet.
+      if (activeId) {
         // A run can bring several assistant messages (rounds of tools).
         const segments: string[] = [""];
         const render = () => paint(segments.filter((s) => s.trim()).join("\n\n"));
@@ -575,7 +463,7 @@ export default function ChatPage() {
               .find((m) => m.role === "assistant" && m.content?.trim());
             if (last?.content) paint(last.content);
           },
-        }, ac.signal, talkingTo);
+        }, ac.signal);
       } else {
         // New conversation: the gateway also reports tools, but through a
         // different event. Without this the trace and the gesture would
@@ -583,25 +471,20 @@ export default function ChatPage() {
         await chatStream(cfg, history, paint, (tool) => {
           if (tools[tools.length - 1] !== tool) tools.push(tool);
           setLiveTools([...tools]);
-        }, ac.signal, talkingTo, roomMode, (who) => {
-          answeredBy = who;
-          // Repaint the placeholder message so the face and the name are right
-          // from the first token, not after the answer lands.
-          setMsgs((ms) => [...ms.slice(0, -1), { ...ms[ms.length - 1], by: who }]);
-        }, room);
+        }, ac.signal);
       }
       flush();
       if (isCurrent()) {
         setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
       }
-      refreshSessions(cfg, roomMode);
+      refreshSessions(cfg);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         flush();
         if (isCurrent()) {
           setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
         }
-        refreshSessions(cfg, roomMode);
+        refreshSessions(cfg);
       } else if (isCurrent()) {
         setMsgs(base);
         setInput(text);
@@ -702,7 +585,7 @@ export default function ChatPage() {
       sending={sending}
       onOpen={goToSession}
       onNew={newConversation}
-      onRefresh={() => refreshSessions(cfg, roomMode)}
+      onRefresh={() => refreshSessions(cfg)}
       onDeletedActive={newConversation}
       searchRef={searchRef}
       onNavigate={() => setDrawer(false)}
@@ -770,38 +653,16 @@ export default function ChatPage() {
                 <div className="mb-5 h-36 w-36">
                   <AgentitoAnimated celebrations={0} look={agentLook} state="calm" className="h-full w-full" />
                 </div>
-                {/* NOBODY SAYS "yo" WHEN THERE IS A TEAM. The face stays the
-                    agent's -- it is the room, not a person -- but a room that
-                    offers itself in the first person promises one single
-                    interlocutor the client does not have: they hired people,
-                    and whoever the message is for takes it.
-
-                    AND UNTIL THE ROSTER LANDS IT SAYS NEITHER. `roomMode` is
-                    false while that request is in flight, so this greeted every
-                    client with a team by their agent's name first and corrected
-                    itself a round trip later -- the wrong sentence, on the
-                    biggest words on the screen. A placeholder is honest: we do
-                    not know yet who they hired. */}
-                {rolesLoading ? (
-                  <div className="flex w-full max-w-sm flex-col items-center gap-2" aria-hidden>
-                    <div className="h-5 w-56 max-w-full animate-pulse rounded bg-black/[0.06]" />
-                    <div className="mt-1 h-3 w-full animate-pulse rounded bg-black/[0.05]" />
-                    <div className="h-3 w-4/5 animate-pulse rounded bg-black/[0.05]" />
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-base font-bold text-ink">
-                      {roomMode
-                        ? "¿En qué te puede ayudar tu equipo?"
-                        : agentName ? `¿En qué te puede ayudar ${agentName}?` : "¿En qué te puedo ayudar?"}
-                    </p>
-                    <p className="mt-1 max-w-sm text-sm leading-relaxed text-ink-soft">
-                      {roomMode
-                        ? "Escribí lo que necesitás y lo toma quien corresponda; con @ le hablás a alguien en particular. Las conversaciones anteriores están a la izquierda."
-                        : "Preguntale lo que necesites o encargale una tarea. Las conversaciones anteriores están a la izquierda."}
-                    </p>
-                  </>
-                )}
+                {/* It greets by name once the client gave it one; before that
+                    it is the agent talking about itself in the first person,
+                    which is the only honest thing it can say. */}
+                <p className="text-base font-bold text-ink">
+                  {agentName ? `¿En qué te puede ayudar ${agentName}?` : "¿En qué te puedo ayudar?"}
+                </p>
+                <p className="mt-1 max-w-sm text-sm leading-relaxed text-ink-soft">
+                  Preguntale lo que necesites o encargale una tarea. Las conversaciones
+                  anteriores están a la izquierda.
+                </p>
               </div>
             ) : (
               <div className="flex flex-col gap-5">
@@ -850,28 +711,20 @@ export default function ChatPage() {
                   ) : (
                     <div key={i} className="group flex gap-2.5">
                       {/* One agentito per message: the animated one while
-                          it's working, the still one once it's done.
-                          When a member of the team answered, it is THEIR face:
-                          the same identity the board and the roster draw, so
-                          "who did this" reads the same everywhere. */}
+                          it's working, the still one once it's done. */}
                       <div className="mt-0.5 h-7 w-7 shrink-0">
                         {sending && i === lastIdx ? (
                           <AgentitoAnimated
                             celebrations={0}
-                            look={lookFor(m.by)}
+                            look={agentLook}
                             state={gestureFor(liveTools[liveTools.length - 1])}
                             className="h-full w-full"
                           />
                         ) : (
-                          <AgentitoAvatar look={lookFor(m.by)} className="h-full w-full" />
+                          <AgentitoAvatar look={agentLook} className="h-full w-full" />
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                      {m.by && (
-                        <p className="mb-0.5 text-[12px] font-semibold text-ink">
-                          {roleName(m.by, roles)}
-                        </p>
-                      )}
                       {(m.tools?.length || (sending && i === lastIdx && liveTools.length > 0)) && (
                         <ToolTrace
                           tools={sending && i === lastIdx ? liveTools : m.tools ?? []}
@@ -964,25 +817,6 @@ export default function ChatPage() {
                 ))}
               </div>
             )}
-            {/* WHO THIS TURN GOES TO. Only when it is aimed at someone: the
-                room's default is the agent the client named, and a standing row
-                of every teammate would say that picking is a step before every
-                message. `@` aims it; this shows it, and takes it back. */}
-            {talkingTo && (
-              <div className="mb-2 flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-c-violet/40 px-2 py-1 text-[12px] font-medium text-ink">
-                  <AgentitoAvatar look={lookFor(talkingTo)} className="h-4 w-4 shrink-0" />
-                  Para {roleName(talkingTo, roles)}
-                  <button
-                    aria-label="Escribirle a todo el equipo"
-                    onClick={() => setTalkingTo(null)}
-                    className="ml-0.5 text-ink-soft transition hover:text-ink"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              </div>
-            )}
             <div className="flex items-end gap-2 rounded-2xl border border-black/10 bg-white p-2 pl-2 transition focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
               <input
                 ref={fileRef}
@@ -1036,20 +870,9 @@ export default function ChatPage() {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
                 }}
                 rows={1}
-                placeholder={
-                  // The field says who is actually going to read it. With a
-                  // member selected it said the agent's name anyway, which
-                  // quietly contradicted the row right above.
-                  //
-                  // And nothing at all until the roster lands: this is a hint,
-                  // and a hint that names the agent to someone who hired a team
-                  // is the one thing it must not say.
-                  rolesLoading ? ""
-                    : talkingTo
-                    ? `Escribile a ${roleName(talkingTo, roles)}…`
-                    : roomMode ? "Escribile a tu equipo…"
-                    : agentName ? `Escribile a ${agentName}…` : "Escribile a tu agente…"
-                }
+                // The field says who is actually going to read it, by the name
+                // the client gave them.
+                placeholder={agentName ? `Escribile a ${agentName}…` : "Escribile a tu agente…"}
                 disabled={sending}
                 className="max-h-52 flex-1 resize-none bg-transparent py-1.5 text-[15px] text-ink outline-none placeholder:text-ink-soft/60 disabled:opacity-60"
               />

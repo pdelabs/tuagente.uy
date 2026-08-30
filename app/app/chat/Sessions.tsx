@@ -3,16 +3,13 @@
 // Conversations sidebar: search, grouped by date, pinning, rename, delete, and
 // a filter for system sessions (crons, workers, auto-generated titles).
 // Endpoints verified against :8642 — PATCH /api/sessions/{id} renames (200),
-// DELETE /api/sessions/{id} deletes (200); and against :8643 — POST
-// /portal/rooms/{id} renames (200), DELETE /portal/rooms/{id} deletes (200).
+// DELETE /api/sessions/{id} deletes (200).
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Trash2, X,
 } from "lucide-react";
-import {
-  deleteRoom, deleteSession, renameRoom, renameSession, type PortalConfig,
-} from "../lib/agent";
+import { deleteSession, renameSession, type PortalConfig } from "../lib/agent";
 import { isHumanConversation } from "../lib/events";
 import { momentOf } from "../lib/labels";
 import { ErrorState, Spinner, inputCls } from "../lib/ui";
@@ -62,15 +59,6 @@ function dayGroup(epochSeconds: number): string {
 
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
-/** WHERE THIS ROW IS ACTUALLY STORED. A room and an engine session draw the
- *  same and live in different places: the room on the adapter (it belongs to
- *  the client, not to any one role), the session in the engine. Told apart by
- *  the prefix the portal itself mints, exactly the way `loadThread` decides
- *  where to read the conversation from. Renaming and deleting used to go to
- *  the engine for both, so on a client with a team every row offered two menu
- *  items that could only fail. */
-const isRoom = (id: string) => id.startsWith("sala_");
 
 export default function Sessions({
   cfg, sessions, sessionsErr, activeId, sending,
@@ -161,7 +149,7 @@ export default function Sessions({
     setBusyId(id);
     setErr(null);
     try {
-      await (isRoom(id) ? renameRoom : renameSession)(cfg, id, title);
+      await renameSession(cfg, id, title);
       setRenamingId(null);
       onRefresh();
     } catch (e) {
@@ -175,7 +163,7 @@ export default function Sessions({
     setBusyId(id);
     setErr(null);
     try {
-      await (isRoom(id) ? deleteRoom : deleteSession)(cfg, id);
+      await deleteSession(cfg, id);
       savePinned(pinned.filter((p) => p !== id));
       closeMenu();
       if (id === activeId) onDeletedActive();
