@@ -1129,6 +1129,31 @@ Reproduced by contrast on the demo agent, same build, same agent: a slow run
 through the flow landed on `/app/home` straight after the channel question; a
 fast one reached «¿Qué te saco de encima?» normally.
 
+### Still open, and much rarer: a RELOAD in the same window loses the same tail
+
+Found on 30/8 revalidating the fix in jsdom against the real `layout.tsx`. The
+fix moved the decision to «once, on arrival» — `agentNeedsOnboarding` is read
+from the session's FIRST manifest — and what closes the gate afterwards is the
+browser's `seen.onboarding`, which only `onDone` sets. So a client who reloads
+the tab (or reopens the magic link) **after the channel step and before
+finishing** arrives with a manifest that is already `named` + `notify_channel`:
+`agentNeedsOnboarding` is false on that new first read, onboarding does not
+resume, and they land on the home welcome screen instead of the automations
+carousel and the chat step. Same lost tail as the poll bug, triggered by a
+reload rather than by a timer.
+
+It is the trade-off the fix took deliberately, not a regression: the agent is
+the only thing that knows anything across devices, and it cannot know how far
+through the flow a browser got. **Closing it is a decision, not a patch** —
+either onboarding writes its own progress somewhere durable (localStorage
+resumes on that device only; a field on the agent resumes everywhere and adds a
+write per step), or the last two steps stop being part of onboarding at all and
+become something the client can reach from home whenever they want. Nobody has
+picked, and nobody should pick it inside a bug fix.
+
+Reproduced with the harness: an answered manifest plus `tuagente_intro_v2={}`
+at `/app/home` renders no onboarding and a welcome screen instead.
+
 It was a decision about onboarding, not a one-line guard: either onboarding
 reads the manifest once at mount, or it holds its own completion flag and the
 poll stops being able to speak for it. Both, in the end.
