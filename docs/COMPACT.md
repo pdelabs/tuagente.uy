@@ -42,10 +42,13 @@ Auth: bearer with `API_SERVER_KEY` via magic link `#endpoint=&adapter=&key=`.
 
 ## The portal (11 tabs)
 
-Inicio · Chat · Pipeline · Aprobaciones · Artefactos · Tareas · Actividad ·
-Archivos · Uso · **Conexiones** · Capacidades. Each with its own welcome
-screen (`app/app/lib/intros/`). UI kit with no shadows, hairline borders,
-lucide icons, zero emojis.
+Inicio · Chat · Flujos · Actividad · Tablero · Aprobaciones · Entregas ·
+Conexiones · Archivos · Uso · Habilidades — the nav order of `MODULES` in
+`app/app/layout.tsx`. `/app/tasks` is a twelfth route that is deliberately
+NOT in the nav (Flujos replaced it as the machine-facing view). Each tab has
+its own welcome screen (`app/app/lib/intros/`). The URL of every one of them,
+and of everything they open, is `docs/portal-routes.md`. UI kit with no
+shadows, hairline borders, lucide icons, zero emojis.
 
 What it can do: chat with rich markdown (code with highlighting, KaTeX,
 mermaid, sanitized HTML, artifacts in a sandboxed iframe), attach files,
