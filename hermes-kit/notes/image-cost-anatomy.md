@@ -9,8 +9,8 @@ since 24/8 but the disk is untouched and readable (`fleet.md:129-160`). Every
 file:line below has been re-cited against the repo, which is the source of
 truth; where the deployed copy and the repo differ materially, both are named
 and the difference is called out. The composite per-placa number this note
-lands is the one `notes/team-pivot-status.md` pending item 1 says had never
-been measured.
+lands is the one the 24/8 cost wave says had never been measured
+(`notes/cost-and-engine-findings.md`).
 
 ---
 
@@ -252,7 +252,7 @@ INFO agent.auxiliary_client: Vision auto-detect: using main provider custom (ope
 On the local agent the same line reads `using main provider openrouter
 (openai/gpt-5.6-luna)` — the difference is only `provider: custom` vs
 `provider: openrouter`, i.e. whether litellm is in the middle. That local
-reading is the one recorded in `notes/team-pivot-status.md:530-537`, which
+reading is the one recorded in `notes/cost-and-engine-findings.md` §6, which
 draws the same conclusion from the other direction: "Vision resolves to the
 MAIN chat model on the MAIN key — not a separate vision provider."
 
@@ -360,8 +360,8 @@ Chat model price, from OpenRouter's cached metadata
 (`data/cache/openrouter_model_metadata.json`): `openai/gpt-5.6-luna` at
 US$0.10/M prompt, US$0.60/M completion, US$0.01/M cache read, US$0.125/M cache
 write. Cache is nearly all the saving: the runs hit 96-97%. Same effect
-`team-pivot-status.md:480-484` measures from the other end — first turn of a
-room US$0.0065, every turn after it US$0.0022, with `cache_read_tokens` around
+`notes/cost-and-engine-findings.md` §3 measures from the other end — first
+turn US$0.0065, every turn after it US$0.0022, with `cache_read_tokens` around
 44k against single-digit `input_tokens`.
 
 ---
@@ -479,16 +479,16 @@ lets broken text through does not save — it multiplies the component worth 92%
 With the per-turn numbers from today's measurement wave — conversational
 US$0.0036; cold ~US$0.0065; tool-heavy US$0.0247 as an upper bound, measured on
 a broken skills index; room router US$0.000071
-(`notes/team-pivot-status.md:456-478`) — moving a role from the cheap end to
+(`notes/cost-and-engine-findings.md` §3) — moving a role from the cheap end to
 the expensive one changes the chat subtotal by a few cents, while the pixel
 stays nailed at US$0.328. **Optimising the role's model to make placas cheaper
 is optimising the 8%.**
 
-This is the number `team-pivot-status.md` pending item 1 was missing. Its own
+This is the number the 24/8 cost wave was missing. Its own
 figures are consistent with these: its `approval` task came to US$0.00066 over
 5 calls (US$0.00013 each, against ~US$0.0001 here), and it records zero vision
 calls in its 10 turns because that agent has no image key at all
-(`team-pivot-status.md:523-527`) — which is why the LOOK had to be measured
+(`notes/cost-and-engine-findings.md` §3) — which is why the LOOK had to be measured
 here and not there.
 
 ---
@@ -766,7 +766,7 @@ engine bump**, not before.
    engine's own accounting was dead there, and only `costs.jsonl` held real
    money. On the local agent, which at the time went straight to
    `provider: openrouter`, it matched what was billed to the last decimal
-   (`team-pivot-status.md:448-453`).
+   (`notes/cost-and-engine-findings.md` §2).
 
    **Why it was not one line.** `observability.sh on` flipped `data/config.yaml`
    and called it done; that is one route of three. The client's chat was
@@ -846,7 +846,7 @@ engine bump**, not before.
    in the container's environment through `secrets.env`, the gate answered False
    on every turn, and answered True the moment the same key was written into the
    profile's `.env` — nothing else changed (`agent-check.py:2641-2650`).
-   *(This also corrects `team-pivot-status.md:523-527`, which read the same
+   *(This also corrects `notes/archive/team-pivot-status.md`, which read the same
    `check_image_generation_requirements returned False` as "no image key exists
    on this agent". The key existed, in `secrets.env`, in the container's
    environment. The role's turn could not see it.)* So selling social-package

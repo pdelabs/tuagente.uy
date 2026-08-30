@@ -1,3 +1,9 @@
+<!-- archived 2026-08-30: the team pivot was reverted; kept for the measurements
+     and decisions that outlive it. The product is ONE baptized agent per client
+     again (`docs/team-pivot-removal.md`). Nothing here describes code that still
+     runs. What survives it and is maintained: `notes/cost-and-engine-findings.md`
+     (prices, method, the two open engine findings) and `notes/image-cost-anatomy.md`. -->
+
 # Team pivot — status as of 8/19/2026
 
 To pick back up in a new session. Since 8/22/2026 it's ONE monorepo: the kit

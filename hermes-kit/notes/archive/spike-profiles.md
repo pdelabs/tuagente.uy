@@ -1,3 +1,9 @@
+<!-- archived 2026-08-30: the team pivot was reverted; kept for the measurements
+     and decisions that outlive it. This is the spike that said the engine could
+     serve several profiles — it can; we stopped wanting it
+     (`docs/team-pivot-removal.md`). The packaging half — what `hermes profile
+     install` preserves and what it overwrites — is the part still worth reading. -->
+
 # The profiles spike — 8/16/2026
 
 Before writing a single line of the team pivot, the question was whether the
