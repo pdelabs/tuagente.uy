@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Are two roles in the roster the same text with a different name? Two skills?
+"""Are two of the kit's skills the same text with a different name?
 
-Run it **when writing a new identity or a new skill** (before adding it to the
-catalog): `python3 tools/check-clones.py`.
+Run it **when writing a new skill** (before adding it to the catalog):
+`python3 tools/check-clones.py`.
 
     python3 tools/check-clones.py                 whole corpus, table + exit 0/1
     python3 tools/check-clones.py --threshold 25   moves the FAIL threshold
@@ -12,24 +12,22 @@ catalog): `python3 tools/check-clones.py`.
 Exit 0 = nobody clears the FAIL threshold. Exit 1 = at least one pair does.
 WARNINGS do not break the check: they are there to look at, not to block.
 
-Why this exists: the roster sells itself as a team. Five roles saying the same
-thing under a different name are not five roles, they are one role charged
-five times — and the copy-paste is easy to slip in by accident, because
-copying the identity next door and swapping the craft passes any review: the
-file is well-formed and reads fine. Same story with the kit's skills. That is
-why the comparison **neutralizes entities before measuring**: the roster's
-names, the capability labels, the skill names and any Capitalized word in the
-middle of a sentence get replaced by a placeholder, so a find-and-replace
-cannot hide the copy.
+Why this exists: what we sell is a menu of capabilities, and two of them behind
+the same text are one capability charged twice — the copy-paste is easy to slip
+in by accident, because copying the skill next door and swapping the craft
+passes any review: the file is well-formed and reads fine. That is why the
+comparison **neutralizes entities before measuring**: the capability labels, the
+plugin ids, the skill names and any Capitalized word in the middle of a sentence
+get replaced by a placeholder, so a find-and-replace cannot hide the copy.
+
+IT USED TO HAVE A SECOND POOL, `roles/*/identity.md`, and it went with the
+roster: one baptized agent per client has one identity, written for that client,
+and there is nothing to compare it against.
 
 How it measures: 8-word shingles over the neutralized text, and the overlap is
 `|shared shingles| / |shingles of the smaller file|`. The denominator is the
 smaller one on purpose: a clone that had two sections tacked on at the bottom
 is still a clone, and a classic Jaccard score would dilute that.
-
-Two separate pools — identities against identities, skills against skills —
-because an identity and a skill share no prose and should not: crossing them
-only adds noise.
 
 Ported (the idea, not the bash) from `scripts/check-agent-originality.sh` in
 the agency-agents repo, MIT. There the corpus had a 0% median and a ~1.5%
@@ -48,12 +46,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# The two pools. Never crossed: an identity and a SKILL.md share no prose.
-# A skill that ships inside a plugin is in the SAME pool as one under skills/:
-# they are the same kind of file and they install into the same directory, so
-# putting them in separate pools would let a clone hide by moving.
+# The pool. A skill that ships inside a plugin is in the SAME one as a skill
+# under skills/: they are the same kind of file and they install into the same
+# directory, so putting them in separate pools would let a clone hide by moving.
 POOLS = (
-    ("roles", ("roles/*/identity.md",)),
     ("skills", ("skills/*/SKILL.md", "plugins/*/skills/*/SKILL.md")),
 )
 
@@ -89,20 +85,9 @@ WARN_THRESHOLD = 15.0
 # did not earn. Anything NOT on this list counts, including similar-sounding
 # prose — that is the signal we want.
 SHARED_BOILERPLATE = (
-    # The anti-punt rule. roles/README.md says it out loud: "cada identity.md
-    # termina con la misma advertencia, y no es adorno". A rule every role is
-    # REQUIRED to repeat verbatim cannot count as evidence that two roles are
-    # the same role. Without this, it alone put ~4 points on every pair.
-    r"decilo una vez y segu[ií](?: con\s+lo que s[ií] pod[eé]s hacer)?",
-    r"\*\*Pero nunca patees lo que pod[eé]s hacer\.\*\*",
-    # Same story with the rule about company facts belonging to the shared file
-    # instead of to one role's memory: house rule, repeated on purpose.
-    r"va al archivo compartido",
-    r"el resto del equipo sigue diciendo lo viejo",
-    # Section headings. Also prescribed: an identity is "qué hace, qué no hace
-    # nunca, con qué otros roles se cruza" (roles/README.md), so the skeleton is
-    # the template's, not the author's. What hangs UNDER each heading is the
-    # author's, and that is still fully measured.
+    # Section headings. A SKILL.md's skeleton is the kit's house style, not the
+    # author's; what hangs UNDER each heading is theirs, and that is still fully
+    # measured.
     r"^#+ .*$",
 )
 _BOILERPLATE = re.compile("|".join(SHARED_BOILERPLATE), re.IGNORECASE | re.MULTILINE)
@@ -127,23 +112,12 @@ def strip_frontmatter(text):
 
 
 def entities(root):
-    """Names a find-replace clone would swap: roster, capabilities, skills.
+    """Names a find-replace clone would swap: capabilities, plugins, skills.
 
     Read from the catalogs rather than hardcoded so this check cannot drift out
-    of sync with the roster the way a copied literal silently would.
+    of sync with what we sell the way a copied literal silently would.
     """
     terms = set()
-
-    roles_catalog = root / "roles" / "catalog.json"
-    if roles_catalog.is_file():
-        data = json.loads(roles_catalog.read_text(encoding="utf-8"))
-        for role in data.get("roles", []):
-            for key in ("id", "label"):
-                if role.get(key):
-                    terms.add(str(role[key]))
-            name = (role.get("identity") or {}).get("name")
-            if name:
-                terms.add(str(name))
 
     capabilities_catalog = root / "capabilities" / "catalog.json"
     if capabilities_catalog.is_file():

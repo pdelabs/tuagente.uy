@@ -8,7 +8,6 @@ portal component AND by tools/draw-agentito.mjs, so these goldens guard all
 consumers at once. If a trait changes on purpose, regenerate the goldens and
 commit them with the change — a golden diff in a review is the feature.
 """
-import json
 import struct
 import subprocess
 import tempfile
@@ -29,15 +28,12 @@ def cli(*args: str) -> str:
 
 
 class GoldenGeometry(unittest.TestCase):
-    def test_roles_from_catalog(self):
-        cat = json.loads((ROOT / "hermes-kit" / "roles" / "catalog.json").read_text())
-        for role in [r["id"] for r in cat["roles"]]:
-            with self.subTest(role=role):
-                self.assertEqual(
-                    cli("--role", role, "--svg", "-"),
-                    (GOLD / f"{role}.svg").read_text(),
-                    f"the face for {role} changed: if that was on purpose, regenerate the golden",
-                )
+    """THE FIVE ROLE GOLDENS WENT WITH THE FIVE ROLES. They were the roster's
+    faces, read from `roles/catalog.json`, and there is no roster: one baptized
+    agent per client has ONE face, and where its look comes from is the
+    baptism's business, not this tool's. What the goldens are for -- the same
+    look producing the same SVG, byte for byte, across the portal component and
+    this CLI -- is guarded by the default one and the clamping case below."""
 
     def test_look_default(self):
         self.assertEqual(cli("--look", "{}", "--svg", "-"), (GOLD / "default.svg").read_text())
@@ -53,7 +49,7 @@ class TelegramRaster(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / "face.png"
             subprocess.run(
-                ["node", str(CLI), "--role", "assistant", "--for", "telegram", "--png", str(dest)],
+                ["node", str(CLI), "--look", "{}", "--for", "telegram", "--png", str(dest)],
                 capture_output=True, check=True,
             )
             data = dest.read_bytes()

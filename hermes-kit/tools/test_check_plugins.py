@@ -225,20 +225,20 @@ class TheSalesLayerPointsAtTheRightHome(unittest.TestCase):
 
 
 class ABaseRowPromisesSomethingThatExists(unittest.TestCase):
-    """A `level: base` capability whose kit skill nobody wrote, on BOTH paths.
+    """A `level: base` capability whose kit skill nobody wrote.
 
-    THE GAP THIS CLOSES. The rule existed and lived in
+    THE GAP THIS CLOSES. The rule lived in
     `roles/skills_split.base_capability_skills`, which only a TEAM agent ever
-    reaches: a solo agent gets every skill in the kit and never computes a
-    split. So the same catalog stopped a team install with "nowhere in the kit"
-    and installed on a solo agent with rc=0 and no mention of it -- the client
-    reads "ya viene puesta: no hay que pedirla" on a card behind which there is
+    reached: a solo agent got every skill in the kit and never computed a split.
+    So the same catalog stopped a team install with "nowhere in the kit" and
+    installed on a solo agent with rc=0 and no mention of it -- the client reads
+    "ya viene puesta: no hay que pedirla" on a card behind which there is
     nothing at all.
 
     The rule is `plugin_registry.check_capability_installs` now, which
-    `install.sh` reaches on every agent through `tools/plugin_set.py`. These
-    tests run the two entry points install.sh actually calls, over a copy of the
-    kit with one menu row promoted -- the measured repro.
+    `install.sh` reaches on EVERY agent through `tools/plugin_set.py` -- and
+    since the pivot there is only the one path. This runs it over a copy of the
+    kit with one menu row promoted: the measured repro.
     """
 
     # A menu row whose `installs.kit_skills` names a skill nobody has written.
@@ -268,38 +268,20 @@ class ABaseRowPromisesSomethingThatExists(unittest.TestCase):
             capture_output=True, text=True)
         return out.returncode, out.stdout + out.stderr
 
-    def team(self, root):
-        """What install.sh asks when policy/roles/catalog.json is there."""
-        out = subprocess.run(
-            [sys.executable, str(root / "roles" / "skills_split.py"), "--shared"],
-            capture_output=True, text=True)
-        return out.returncode, out.stdout + out.stderr
-
-    def test_both_paths_refuse_and_say_the_same_thing(self):
+    def test_the_install_refuses_and_names_the_row(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.kit_copy(tmp, promote=self.UNWRITTEN)
-            solo_code, solo_out = self.solo(tmp, root)
-            team_code, team_out = self.team(root)
-        self.assertEqual(solo_code, 1, solo_out)
-        self.assertEqual(team_code, 1, team_out)
-        for out in (solo_out, team_out):
-            self.assertIn(f"capability '{self.UNWRITTEN}'", out)
-            self.assertIn("level: base", out)
-        # THE REFUSAL, WHICH IS THE LAST LINE AND NOT THE WHOLE STREAM.
-        # `plugin_set.py` also says on stderr when this agent has bought nothing
-        # yet -- a state, printed before the refusal -- and the rule under test
-        # is that the two paths refuse with the SAME sentence.
-        self.assertEqual(solo_out.strip().splitlines()[-1],
-                         team_out.strip().splitlines()[-1])
+            code, out = self.solo(tmp, root)
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"capability '{self.UNWRITTEN}'", out)
+        self.assertIn("level: base", out)
 
-    def test_the_same_row_on_the_menu_installs_on_both(self):
+    def test_the_same_row_on_the_menu_installs(self):
         """`base` is the word that turns a row into a promise. `menu` is a plan."""
         with tempfile.TemporaryDirectory() as tmp:
             root = self.kit_copy(tmp)
-            solo_code, solo_out = self.solo(tmp, root)
-            team_code, team_out = self.team(root)
-        self.assertEqual(solo_code, 0, solo_out)
-        self.assertEqual(team_code, 0, team_out)
+            code, out = self.solo(tmp, root)
+        self.assertEqual(code, 0, out)
 
 
 class RealRegistry(unittest.TestCase):
@@ -654,12 +636,6 @@ class RoleSkillsListIsKitSkillsOnly(unittest.TestCase):
                 plugin_registry.check_kit_skills(["approval"], "support", Path(tmp))
             self.assertIn("plugins/approval/", str(raised.exception))
 
-    def test_the_kits_own_roles_pass_it(self):
-        for role_id in ("marketing", "support", "sales", "accounting", "assistant"):
-            cfg = json.loads(
-                (KIT / "roles" / role_id / "role.json").read_text(encoding="utf-8"))
-            plugin_registry.check_kit_skills(cfg.get("skills") or [], role_id, KIT)
-
 
 class TheRequiresThatAreNotPlugins(unittest.TestCase):
     """A toolset is the engine's word and a connection is `connections/`'s.
@@ -898,113 +874,14 @@ class TheKitsOwnRegistry(unittest.TestCase):
             self.assertTrue((where / "SKILL.md").is_file())
 
     def test_the_flattened_layout_still_has_one_directory_per_skill(self):
-        """What install.sh and build_role.py copy: name -> one source, no plugins."""
-        sys.path.insert(0, str(KIT / "roles"))
-        import skills_split
-        dirs = skills_split.skill_dirs()
+        """What install.sh copies: name -> one source, whoever ships it."""
+        import skill_sources
+        dirs = skill_sources.skill_dirs()
         self.assertEqual(dirs["transcribe"], KIT / "plugins/transcribe/skills/transcribe")
         self.assertEqual(dirs["approval"], KIT / "plugins/approval/skills/approval")
         self.assertEqual(dirs["capability"],
                          KIT / "plugins/capability/skills/capability")
         self.assertEqual(len(dirs), len(set(dirs)))
-
-
-class FlattenedRoleJson(unittest.TestCase):
-    """What the distribution's role.json says vs what its skills/ holds.
-
-    Nothing on the agent knows what a plugin is until phase 3, so
-    `roles/build_role.py` folds the resolved plugins back into `skills`. The two
-    have to agree: a manifest that lists fewer skills than the directory holds
-    is an agent whose role.json stopped describing it, and the build said
-    nothing.
-
-    AND THE LIST IS SORTED. Before phase 2 its order was wherever each name
-    happened to be written, so moving a skill into a plugin re-ordered it and
-    every future move would read as a change to the distribution. Nothing
-    consumes the order, so it is canonical.
-    """
-
-    def setUp(self):
-        sys.path.insert(0, str(KIT / "roles"))
-        import build_role
-        self.build_role = build_role
-
-    def flatten(self, cfg, sources):
-        with tempfile.TemporaryDirectory() as tmp:
-            role_dir, dest = Path(tmp) / "role", Path(tmp) / "dist"
-            role_dir.mkdir()
-            dest.mkdir()
-            (role_dir / "role.json").write_text(
-                json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            self.build_role.write_role_json(
-                role_dir, dest, {name: Path(tmp) / name for name in sources})
-            return json.loads((dest / "role.json").read_text(encoding="utf-8"))
-
-    def test_the_identity_comes_from_the_roster_and_not_from_the_source(self):
-        """A role with no plugins is still not copied through: the face is injected.
-
-        `roles/<id>/role.json` used to carry its own `identity` and the build
-        shipped that copy, so a face redrawn in `roles/catalog.json` reached the
-        roster and never reached a hired role. The source has none now, and this
-        is where the one in the distribution comes from.
-        """
-        catalog = {r["id"]: r for r in json.loads(
-            (KIT / "roles" / "catalog.json").read_text(encoding="utf-8"))["roles"]}
-        flat = self.flatten({"id": "sales", "skills": ["approval"]}, ["approval"])
-        self.assertEqual(flat["identity"], catalog["sales"]["identity"])
-        self.assertEqual(flat["skills"], ["approval"])
-
-    def test_a_source_that_carries_an_identity_is_a_build_failure(self):
-        """Two homes for one fact is the bug; refusing is how it stays one."""
-        with self.assertRaises(SystemExit) as raised:
-            self.flatten({"id": "sales", "skills": ["approval"],
-                          "identity": {"name": "Otra", "look": {"tone": 9}}},
-                         ["approval"])
-        message = str(raised.exception)
-        self.assertIn("roles/sales/role.json", message)
-        self.assertIn("roles/catalog.json", message)
-
-    def test_a_role_the_roster_does_not_know_cannot_be_built(self):
-        with self.assertRaises(SystemExit) as raised:
-            self.flatten({"id": "nobody", "skills": ["approval"]}, ["approval"])
-        self.assertIn("roles/catalog.json", str(raised.exception))
-
-    def test_the_kits_five_roles_ship_the_roster_face(self):
-        """The whole point, over the real files rather than a fixture."""
-        catalog = {r["id"]: r for r in json.loads(
-            (KIT / "roles" / "catalog.json").read_text(encoding="utf-8"))["roles"]}
-        for role_id, entry in sorted(catalog.items()):
-            source = json.loads(
-                (KIT / "roles" / role_id / "role.json").read_text(encoding="utf-8"))
-            self.assertNotIn("identity", source, f"{role_id}/role.json has a second copy")
-            names = list(plugin_registry.role_skills(
-                source.get("plugins") or [], role_id, KIT))
-            names += source.get("skills") or []
-            flat = self.flatten(source, names)
-            self.assertEqual(flat["identity"], entry["identity"], role_id)
-
-    def test_the_plugins_key_never_reaches_the_agent(self):
-        flat = self.flatten(
-            {"id": "accounting", "skills": ["quotes"], "plugins": ["invoices-to-data"]},
-            ["invoices-to-data", "quotes"])
-        self.assertNotIn("plugins", flat)
-        self.assertEqual(flat["skills"], ["invoices-to-data", "quotes"])
-
-    def test_the_flattened_list_is_sorted_whoever_ships_each_skill(self):
-        """Resolution order is plugins first; what SHIPS is alphabetical."""
-        flat = self.flatten(
-            {"id": "marketing", "skills": ["brand-kit", "capability"],
-             "plugins": ["deliverable", "approval"]},
-            ["deliverable", "approval", "brand-kit", "capability"])
-        self.assertEqual(flat["skills"],
-                         ["approval", "brand-kit", "capability", "deliverable"])
-
-    def test_a_role_whose_skills_all_come_from_plugins_still_lists_them(self):
-        """No `skills` key to fold into is not a reason to ship none."""
-        flat = self.flatten(
-            {"id": "accounting", "plugins": ["invoices-to-data"]}, ["invoices-to-data"])
-        self.assertNotIn("plugins", flat)
-        self.assertEqual(flat["skills"], ["invoices-to-data"])
 
 
 if __name__ == "__main__":
