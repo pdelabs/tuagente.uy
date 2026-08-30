@@ -289,6 +289,17 @@ running the check against it.
    once, and onboarding owns its own completion. **Anything long-lived that
    re-reads a value one of its own steps writes has this bug**, which is why it
    is here and not only in `docs/PENDING.md`.
+12. **`/portal/usage` cannot prove a cost delta, and it fails by reading
+   ZERO.** The adapter caches OpenRouter's answer for 300 s
+   (`USAGE_CACHE_SECONDS`, and the cache is right — the number moves per turn,
+   not per second) and the provider itself lags a minute or two behind. So the
+   natural way to measure a turn — read `/portal/usage`, spend, read it again —
+   returns the same `updated_at` and a delta of US$0.00, which looks exactly
+   like "this run cost nothing". Measure against `data/costs.jsonl` (one line
+   per turn, with the real upstream model) or OpenRouter's `/api/v1/key`
+   directly. **A cached reading of a number that only goes up reports "no
+   change" for both of the things you might be asking**, and any "spend
+   unchanged" claim taken through the portal is worth nothing.
 
 ## Aesthetics
 M3 expressive from `tailwind.config.ts`: primary #5B4BE8, surface #FBFAFF,
