@@ -4,14 +4,19 @@ Distilled context for humans and subagents. **Source of truth for VERIFIED
 facts.** Anything that doesn't say "verified" should be treated as a
 hypothesis.
 
-## The four repos
+## One repo, three pieces
 
-| Repo | What it is |
+Since 22/8/2026 this is a monorepo. The old `hermes-kit` repo is archived, and
+`agente-pdelabs` — La Mano, pdelabs' own agent and this product's client 0 —
+was retired 12/8/2026 (backup in `~/Desktop/Luis/Projects/_respaldo-lamano/`).
+`pdelabs-landing` is pdelabs.com and unrelated to any of this.
+
+| Where | What it is |
 |---|---|
-| `tuagente.uy` | public landing + **client portal** (`app/app/`) + `docs/` |
-| `hermes-kit` | **what gets installed on each client's agent** (the product) |
-| `agente-pdelabs` | La Mano — pdelabs' agent, **client 0** and fixture |
-| `pdelabs-landing` | pdelabs.com, unrelated to this |
+| `app/page.tsx`, `app/blog/` | the public landing |
+| `app/app/` | the **client portal** |
+| `hermes-kit/` | **what gets installed on each client's agent** (the product) |
+| `docs/` · `hermes-kit/notes/` | the project's memory and the kit's |
 
 **PRINCIPLE ZERO:** the portal serves ANY Hermes agent of ANY client.
 Nothing client-specific goes into the code or into fixed copy.
