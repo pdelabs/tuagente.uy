@@ -113,10 +113,11 @@ done
 # kit that installs to two different folders from one source. `adapter/plugins.py`
 # scans /opt/plugins at boot and refuses to start on a broken set; the rules it
 # checks live in `tools/plugin_registry.py`, which is also what `check-plugins.py`
-# and `build_role.py` use at build time. Copying the rules into the adapter would
-# give the build and the boot two answers to the same question, so the file ships
-# instead — the adapter imports it as a sibling in the container, exactly like it
-# imports flows and kanban (notes/plugin-system-plan.md, phase 3a).
+# reads at build time and what `plugin_set.py` reads right here, on the client's
+# agent. Copying the rules into the adapter would give the build and the boot two
+# answers to the same question, so the file ships instead — the adapter imports
+# it as a sibling in the container, exactly like it imports flows and kanban
+# (notes/plugin-system-plan.md, phase 3a).
 FILES+=("tools/plugin_registry.py:$KIT_ADAPTER/plugin_registry.py")
 # THE OLD PATH IS NOT INSTALLED ANY MORE, AND THAT IS THE MIGRATION, NOT A GAP.
 # There used to be a branch here that kept writing the adapter into
