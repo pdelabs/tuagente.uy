@@ -3,6 +3,10 @@
 > SUPERSEDED on 8/19: the final list with evidence and a devil's-advocate
 > pass is in `capabilities-50-verdict.md` (research in
 > `capabilities-research/`). This draft stays as the history of rounds 1-2.
+> It was written while the product sold a team, so it says "per role" where
+> the product now says per client, and it proposes a table of what each role
+> ships with — the shape of that table survived as the plugin dependency
+> graph, the roles did not (`docs/team-pivot-removal.md`).
 
 8/18/2026, round 2 on 8/19. Proposal for an expanded catalog (6 entries
 today, all content). This is the **what**: labels, purpose, and technical
@@ -18,9 +22,9 @@ pruning. Mark rows with ~~strikethrough~~ or delete them.
    in-house skill of the agent, no client credential involved.
 2. **What the model already does isn't a capability**: translating,
    summarizing, drafting. We don't sell empty rows.
-3. **A role's flow ≠ a capability**: "content calendar" is a marketing flow;
-   "generate images" is a capability. Capabilities are cross-cutting tools
-   any role can request.
+3. **A flow ≠ a capability**: "content calendar" is a flow; "generate
+   images" is a capability. Capabilities are cross-cutting tools the agent
+   can request.
 4. **One entry = one job the client understands** (a rule already in the
    catalog). Under the hood it can be a toolset + config + kit skill.
 
@@ -29,9 +33,9 @@ pruning. Mark rows with ~~strikethrough~~ or delete them.
 Every entry gets a `level: "base" | "menu"`:
 
 - **base** — ships on EVERY agent, it's not chosen or billed separately. On
-  the role's profile it shows as "included" (it sells, but it isn't a
+  the capability card it shows as "included" (it sells, but it isn't a
   button).
-- **menu** — chosen per role; generates a request; we install it.
+- **menu** — chosen per client; generates a request; we install it.
 
 And a `status` (only during the build): `existing` | `new-engine` (just an
 engine knob/config) | `new-kit` (a skill needs to be written) |
@@ -46,9 +50,9 @@ engine knob/config) | `new-kit` (a skill needs to be written) |
 | `web-search` (busqueda-web) | Buscar en internet | Busca y lee páginas para responderte con datos de hoy. | the `web` toolset + Tavily (decided 8/19: moves from menu to base) |
 
 Notes: `calc-and-spreadsheets` unlocks accounting's main work; `vision`
-unlocks "just send a photo" across every role. WATCH OUT with `web-search`
+unlocks "just send a photo" on every agent. WATCH OUT with `web-search`
 at base level: the search key adds to the **fixed cost of every agent** —
-measure it together with the per-role cost. `browse-sites` (navegar-sitios)
+measure it together with the per-turn cost. `browse-sites` (navegar-sitios)
 is a base candidate but stays on the menu until the toolset is tamed (a
 history of problems; a 6.2 KB schema on every request).
 
@@ -106,9 +110,10 @@ One mechanism, three moments:
 
 1. **Sign-up**: "¿qué necesitás que haga?" as free text → the adapter
    matches it against the catalog with a short prompt straight to the
-   provider (same pattern as the room router, ~300 tokens; the role doesn't
-   exist yet but the adapter does) → suggested capabilities, already
-   checked, editable → naming.
+   provider (~300 tokens, no agent run; the adapter answers before the agent
+   has anything to say) → suggested capabilities, already checked, editable.
+   Built as `POST /portal/capabilities/suggest` and **still unwired in the
+   portal** — see `docs/portal-roadmap.md`, Onboarding.
 2. **While working** (already exists): the `capability` skill — delivers,
    says what was missing, `capability:id` card.
 3. **Building a flow** (new): "for this flow I'd need to learn: …" → same
@@ -121,8 +126,8 @@ request travels **in the client's own words** as a ticket for us: it
 reaches us as a candidate for a new entry. We keep writing the catalog
 ourselves.
 
-For the sign-up screen: the Assistant adds a step — role → "¿qué vas a
-hacer?" → suggested capabilities → naming.
+For the sign-up screen: the step is "¿qué vas a hacer?" → suggested
+capabilities, inside the one onboarding there is (naming → business → …).
 
 ## Out of the menu (decided earlier, written down for the record)
 
@@ -132,7 +137,7 @@ hacer?" → suggested capabilities → naming.
 ## Cut from this draft (revive if you want)
 
 - `content-calendar` (calendario-de-contenido), `lead-tracking`
-  (seguimiento-de-leads) — role flows, not capabilities (rule 3).
+  (seguimiento-de-leads) — flows, not capabilities (rule 3).
 - `translation` (traduccion), `summaries` (resumenes) — the model already
   does this (rule 2).
 - `e-invoice-dgi` (factura-electronica-dgi), `read-email` (leer-correo),
@@ -143,7 +148,12 @@ hacer?" → suggested capabilities → naming.
 - `forms-and-surveys` (formularios-y-encuestas) — collecting responses
   needs a backend that doesn't exist.
 
-## What each role ships with out of the box (proposal)
+## What each role ships with out of the box (proposal — HISTORICAL)
+
+Roles are gone. This table is kept because it is where the grouping came
+from: what it calls "what a role ships with" became `installs.plugins` on
+the capability row, and buying the capability is what puts the plugin and
+its flows on the agent.
 
 | role | included menu capabilities |
 |---|---|
@@ -160,12 +170,12 @@ hacer?" → suggested capabilities → naming.
 2. `transcription` (the skill already exists, it's just packaging).
 3. `browse-sites` (a knob; test whether it can be tamed → base).
 4. The new kit skills, by real demand: `invoices-to-data` and `quotes`
-   first (roles already sold ask for them), then the content and office
-   ones.
+   first (already asked for), then the content and office ones.
 5. The `under-evaluation` ones only after checking libraries/cost in the
    image.
 6. `voice`, `video`, `subtitles` last, or never.
 
 Cost reminder: every installed capability enters the system prompt on
-EVERY request the role makes (tool schemas weigh ~2x the SOUL). The
-per-role menu isn't just commercial: it's context control.
+EVERY request the agent makes (tool schemas weigh ~2x the SOUL). The
+per-client menu isn't just commercial: it's context control — which is the
+argument that later made the skill index follow the purchase too.

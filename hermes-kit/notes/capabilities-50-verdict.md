@@ -7,6 +7,11 @@ data; maturity and technical cost of each capability) cross-checked against
 `capabilities-v2-draft.md`. The three full reports, with every link, are in
 `notes/capabilities-research/`.
 
+Written while the product sold a team, so the prices below were quoted per
+role; the client buys one agent and the capabilities they choose now
+(`docs/team-pivot-removal.md`). No conclusion here depended on the roster —
+the evidence is about what a Uruguayan SMB pays for.
+
 ## What the evidence screamed (read before the list)
 
 1. **Our catalog was upside down.** The 6 current entries are
@@ -17,7 +22,7 @@ data; maturity and technical cost of each capability) cross-checked against
    after that, the post with its image.
 2. **A "single-verb" capability churns.** Jasper −87%, Midjourney −46%,
    Grammarly −29% in 90 days: the general-purpose assistant absorbs them.
-   Retention lives in the ROLE that finishes the work; the capability is an
+   Retention lives in the AGENT that finishes the work; the capability is an
    enabler, not the product. The card's copy sells the finished work, never
    "image generation".
 3. **The Uruguayan market is smaller and more precarious than we assumed**:
@@ -28,9 +33,9 @@ data; maturity and technical cost of each capability) cross-checked against
    exist** (54.6% "don't need one"; messaging = the #1 online sales channel
    at 39-43%).
 5. **Price**: the AI WhatsApp chatbot sells for US$45-199/month in LATAM.
-   Our ~US$25/role sits BELOW that anchor — there's margin, don't give it
-   away.
-6. **What breaks the US$25/role isn't the capabilities** (image
+   Our ~US$25 a month sits BELOW that anchor — there's margin, don't give
+   it away.
+6. **What breaks the US$25 isn't the capabilities** (image
    US$0.005-0.06; transcription US$0.006/min) **it's uncapped agentic
    loops** (5-50x the tokens of a chat) — plus video (US$1.5-12/clip),
    premium TTS, and hourly monitoring (US$36-58/month; daily costs US$1-2).
@@ -55,7 +60,7 @@ data; maturity and technical cost of each capability) cross-checked against
 | `meeting-summaries` (resumen-de-reuniones) | Minutas de reuniones | THE proven combo of the moment (Fireflies/Fathom/Otter, a mature market). With transcription at base level, this is the natural upsell. | Whisper invents phrases ~1% of the time (silences): don't promise a literal transcript for anything legal. |
 | `knowledge-base` (base-de-conocimiento) | Respuestas de tu negocio | FAQs = the #1 agent use case (Salesforce); it's what makes support sellable. | A bot that answers badly raises end-customer churn by 67%: a quality gate and an honest "I don't know". The typical failure is a stale knowledge base — keeping it current is part of the capability. |
 | `web-monitoring` (monitoreo-web) | Vigilar páginas | Price-watching is a real market (US$1.2B); popular n8n templates. | Fixed DAILY cadence (hourly = US$36-58/month). Via a search API, not a browser: Cloudflare has blocked agents since 2025. |
-| `uy-tenders` (licitaciones-uy) | Licitaciones y compras estatales | 4 local tools exist ONLY for this (Tenderis, Gubly, ialicitaciones, ProveedorUY) = a validated pain point; 8-business-day windows demand active monitoring. | Local competition exists; for us it's a role capability, not a standalone product. ARCE's open data as a stable path in. |
+| `uy-tenders` (licitaciones-uy) | Licitaciones y compras estatales | 4 local tools exist ONLY for this (Tenderis, Gubly, ialicitaciones, ProveedorUY) = a validated pain point; 8-business-day windows demand active monitoring. | Local competition exists; for us it's a capability, not a standalone product. ARCE's open data as a stable path in. |
 | `product-catalog` (catalogo-de-productos) | Tu catálogo en tus canales | REPOSITIONED: not a PDF or a website — a catalog FOR WhatsApp/IG/MELI, which is where they actually sell (messaging is #1; MELI is the reference for 72%). Gorillaz case: orders validated against inventory. | Publishing to the channel requires a connection; the capability builds and maintains it, connecting the channel goes through Connections. |
 | `customer-memory` (memoria-de-clientes) | Ficha de cada cliente | The LATAM chatbot sells WITH a basic CRM (US$59-199/month); "personalized recommendations" is at the top of Salesforce's list. | CRM-lite inside the workspace, not a CRM: don't promise a pipeline. |
 
@@ -104,14 +109,14 @@ data; maturity and technical cost of each capability) cross-checked against
 | `competitor-analysis` (analisis-de-competencia), `mercadolibre-monitoring` (monitoreo-mercadolibre) | Dissolve into web-monitoring + company-research. |
 | `shipment-tracking` (seguimiento-de-envios) | Depends on browsing carrier sites that are hostile to scraping. |
 | `bulk-ocr` (ocr-masivo) | A one-off onboarding job, not a subscription: handled with base capabilities when it comes up. |
-| `content-calendar` (calendario-de-contenido), `lead-tracking` (seguimiento-de-leads) | Role flows (already decided). |
+| `content-calendar` (calendario-de-contenido), `lead-tracking` (seguimiento-de-leads) | Flows, not capabilities (already decided). |
 
 ## Consequences outside the catalog (note them, decide separately)
 
-1. **The accounting/admin role is the most sellable one according to the
+1. **Accounting and admin work is the most sellable, according to the
    evidence**, not marketing: quoting+collecting+invoices+reconciling is the
    cluster with money in it. The capability build order should follow it.
-2. **A token cap per role/capability** isn't optimization, it's price
+2. **A token cap per capability** isn't optimization, it's price
    survival: the #1 risk to the US$25 is an uncapped loop, not an image.
 3. **ANDE "Modo Digital" vouchers** (up to $U 800,000, 60% non-refundable,
    US$7M in 2025-26): a subsidized sales channel — check whether tuagente

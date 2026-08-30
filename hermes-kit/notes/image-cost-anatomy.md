@@ -115,8 +115,8 @@ Section 11, item 1, for why the config could not do it.
 **That `image_gen` block is not in `config.base.yaml` at all.** It is installed
 by the capability: `hermes-kit/capabilities/catalog.json:239` carries
 `"config": { "image_gen": { "provider": "openrouter" } }` under
-`social-package`. A base agent has no image route; an agent that hired the
-social package has exactly this one.
+`social-package`. A base agent has no image route; an agent whose client
+bought the social package has exactly this one.
 
 The model comes from `OPENROUTER_IMAGE_MODEL`, with the engine plugin's default
 `openai/gpt-5.4-image-2` when it is unset. That variable **is not defined**
@@ -153,7 +153,8 @@ items 1 and 5).
 
 The handoff assumed `check_image_generation_requirements` and
 `check_bfl_requirements` were two image providers billing separately, and from
-that deduced that the price of the pixel was independent of the role knobs.
+that deduced that the price of the pixel was independent of the agent's own
+model knobs.
 
 **They are not two image providers. One of the two is not even image.**
 
@@ -207,32 +208,30 @@ on 24/8: the same failing gate strips the tools BEFORE the schema is built, so
 the line costs zero bytes.** Section 10.
 
 **Handoff conclusion 1: right in the result, wrong in the mechanism.** The
-price of the pixel really does not vary with the role's model or effort — but
+price of the pixel really does not vary with the agent's model or effort — but
 not because a separate provider bills on its own; because **the image model is
 a global config key** (`image_gen.provider` + `OPENROUTER_IMAGE_MODEL`),
-outside the reach of the role knobs, charged to the same key.
+outside the reach of the model knobs, charged to the same key.
 
-### The loose end, closed: `profile_config.py`
+### The loose end, closed: there is one config and `image_gen` is in it
 
-The note could not open `hermes-kit/tools/profile_config.py`. It is readable
-now, and the conclusion stands. **The file contains zero image-related keys** —
-`grep -niE "image|pixel|img|visio|render"` over all 252 lines returns nothing.
+`data/config.yaml` is the agent's whole configuration, and the image block
+lives there — so nothing can hold a second image model, a second image provider
+or a second image price. The pixel is knob-independent because the per-turn
+knob does not exist, not because it fails to reach something.
 
-It is worth being precise about why, because the mechanism is the opposite of
-what "not mentioned" usually means. `profile_config.py:52-53` states the design:
-"A DENYLIST, NOT AN ALLOWLIST, and that is the decision this file rests on."
-`NOT_PROJECTED` (`:69-84`) holds exactly three top-level keys — `api_server`,
-`platforms`, `gateway` — and everything else in the agent's `config.yaml` is
-copied verbatim into each hired role's profile (`:202-209`). So on an agent
-that hired the social package, `image_gen` **does** travel into every role's
-profile config — as an identical copy of one global value, never derived from
-the role. No role can hold a different image model, a different image provider,
-or a different image price. The pixel is role-knob-independent, and it is
-independent because the knob does not exist, not because it fails to travel.
+**This was checked the harder way while the pivot was live**, and the answer
+came out the same. Back then a secondary profile got the agent's config through
+`tools/profile_config.py` (deleted 30/8 with the profiles), which was a DENYLIST
+of three top-level keys — `api_server`, `platforms`, `gateway` — with everything
+else copied verbatim. It contained zero image-related keys, and that was not an
+oversight: `image_gen` travelled into every profile as an identical copy of one
+global value, never derived from the profile. The mechanism is gone and the
+conclusion did not depend on it.
 
 ---
 
-## 3. The LOOK step DOES run on the role's model
+## 3. The LOOK step DOES run on the agent's own model
 
 `plugins/post-image/skills/post-image/SKILL.md` mandates three steps and warns
 that none is optional (`:12`): build the brief, generate with `image_generate`
@@ -242,7 +241,7 @@ both toolsets for exactly that reason: `plugins/post-image/plugin.json:26-33`
 requires `image_gen` and `vision`, and its `_comment` at `:11-21` names which
 step each one is.
 
-That "look" is a call to the model, and the engine resolves it to the role's
+That "look" is a call to the model, and the engine resolves it to the agent's
 **main model**. `agent.log:7121-7123`:
 
 ```
@@ -262,7 +261,7 @@ task: `state.db`'s `session_model_usage` has a `task='vision'` row per session,
 distinct from `''` (main) and `'approval'`.
 
 **Handoff conclusion 2: right in essence.** The composite cost per placa does
-vary with the role knobs, through the LOOK and through the turns that decide.
+vary with the model knobs, through the LOOK and through the turns that decide.
 What does not vary is the pixel, which turns out to be 92% of the total.
 
 ---
@@ -455,12 +454,12 @@ $$
 
 Over the 10 sessions that produced placas (55 attempts → 38 finished):
 
-| component | US$/placa | share | varies with the role knobs? |
+| component | US$/placa | share | varies with the model knobs? |
 |---|---:|---:|---|
-| **pixels** (1.447 × $0.2266) | **0.32797** | **92.0%** | **No** — global config key, not the role's |
+| **pixels** (1.447 × $0.2266) | **0.32797** | **92.0%** | **No** — a global config key |
 | deciding turns (main) | 0.02278 | 6.4% | **Yes** — model, effort, prompt size |
-| LOOK step (vision) | 0.00353 | 1.0% | **Yes** — resolves to the role's main model |
-| approval step | 0.00229 | 0.6% | **Yes** — the role's model |
+| LOOK step (vision) | 0.00353 | 1.0% | **Yes** — resolves to the agent's main model |
+| approval step | 0.00229 | 0.6% | **Yes** — the agent's model |
 | **TOTAL** | **0.35657** | 100% | |
 | *(chat subtotal)* | *0.02859* | *8.0%* | |
 
@@ -471,17 +470,17 @@ computed above: 0.7% apart, and no share moves. On
 placa is US$0.227; on Seedream, which we cannot call, US$0.079. Section 9.)*
 
 And there is a fourth channel, indirect: **the retry rate (1.447) depends on
-the LOOK's judgement**, which runs on the role's model. A cheaper role that
+the LOOK's judgement**, which runs on the agent's model. A cheaper model that
 lets broken text through does not save — it multiplies the component worth 92%.
 
 ### Sensitivity to the knobs
 
 With the per-turn numbers from today's measurement wave — conversational
 US$0.0036; cold ~US$0.0065; tool-heavy US$0.0247 as an upper bound, measured on
-a broken skills index; room router US$0.000071
-(`notes/cost-and-engine-findings.md` §3) — moving a role from the cheap end to
-the expensive one changes the chat subtotal by a few cents, while the pixel
-stays nailed at US$0.328. **Optimising the role's model to make placas cheaper
+a broken skills index; a short classifier call US$0.000071
+(`notes/cost-and-engine-findings.md` §3) — moving the agent from the cheap end
+to the expensive one changes the chat subtotal by a few cents, while the pixel
+stays nailed at US$0.328. **Optimising the agent's model to make placas cheaper
 is optimising the 8%.**
 
 This is the number the 24/8 cost wave was missing. Its own
@@ -655,8 +654,8 @@ path", not "add the images API path however you like".
 
 `google/gemini-3-pro-image` is already the plugin's own `_FALLBACK_MODEL`. It
 speaks the chat-completions surface, so it needs no engine change at all — just
-the model override in the agent's `config.yaml`, which `tools/profile_config.py`
-already projects into every hired role (section 2):
+the model override in the agent's `config.yaml`, which is the only config there
+is (section 2):
 
 ```yaml
 image_gen:
@@ -769,27 +768,29 @@ engine bump**, not before.
    (`notes/cost-and-engine-findings.md` §2).
 
    **Why it was not one line.** `observability.sh on` flipped `data/config.yaml`
-   and called it done; that is one route of three. The client's chat was
-   covered. Every teammate's chat was not — a hired role's home is
-   `data/profiles/<role>/` and the engine merges nothing from the parent. And
-   image generation was not, because `image_generate` asks
+   and called it done; that was one route of three at the time. The client's
+   chat was covered. The second route was every teammate's chat, whose home was
+   a profile directory the engine merges nothing into — moot since 30/8, when
+   teammates stopped existing. And image generation was not covered, because
+   `image_generate` asks
    `resolve_runtime_provider(requested='openrouter')` for its endpoint, a path
    that ignores the model block whenever the requested provider is not
    custom/auto (`runtime_provider.py:1192-1207`): the chat went through the
    proxy and the pixels went around it.
 
-   **`OPENROUTER_BASE_URL` in each home's `.env` is the only seam.**
+   **`OPENROUTER_BASE_URL` in the agent's own `.env` is the only seam.**
    `providers.openrouter.base_url` does nothing — `openrouter` is a canonical
    provider name, so the named-custom lookup returns None before it reads the
    block (`:657-672`). And it has to be a `.env` file rather than the
-   container's environment: with `gateway.multiplex_profiles` on, credential
-   reads go through a per-profile secret scope built from `<home>/.env`, and a
-   miss returns the default instead of falling through to `os.environ`
-   (`agent/secret_scope.py:123-190`). `secrets.env` reaches the process; the
-   turn never sees it.
+   container's environment: credential reads go through a secret scope built from
+   `<home>/.env`, and a miss returns the default instead of falling through to
+   `os.environ` (`agent/secret_scope.py:123-190`). `secrets.env` reaches the
+   process; the turn never sees it. (The scope was per profile under
+   `gateway.multiplex_profiles`, which is what made this bite several homes at
+   once; with one home the seam is identical and there is one of it.)
 
-   **Proven live**, one placa through the portal chat on marketing's turn,
-   `image_generate` → litellm → OpenRouter, and the row that had never existed:
+   **Proven live**, one placa through the portal chat, `image_generate` →
+   litellm → OpenRouter, and the row that had never existed:
    `openai/gpt-5.4-image-2 in=1656 out=7086 US$0.224898 source=upstream`.
    Reconciled against the provider — OpenRouter charged US$0.2699 over the run,
    the ledger accounts for US$0.2588, and the US$0.011 difference is exactly the
@@ -800,8 +801,8 @@ engine bump**, not before.
 
    **What was never true:** that the client sees a wrong number. The Usage tab
    was rewired on 8/19 to read `GET /api/v1/key` — what OpenRouter actually
-   charged that agent's key, "the agent, the images, the room's routing,
-   whatever comes next" (`portal_adapter.py:2545-2548`,
+   charged that agent's key, "the agent, the images, the capability matcher,
+   whatever comes next" (`portal_adapter.py:2186`,
    `docs/PENDING.md:857-863`, `docs/portal-routes.md:45-51`). `HIDDEN_MODULES`
    is empty again (`app/app/layout.tsx:51`). The screen always told the truth;
    what was blind was our per-task attribution — the thing this note needed and
@@ -838,41 +839,39 @@ engine bump**, not before.
    If the engine ever grows the images-API path, that one returns `usage.cost`
    in the exact field `litellm-cost.py` already reads (section 9).
 
-6. **DECISION NEEDED (Luis): social-package is DOA on a team agent.** The
-   package's whole value is the pixel, and the pixel needs
-   `check_image_generation_requirements` to pass **inside the role's process**.
-   Under `gateway.multiplex_profiles` that gate only sees
-   `data/profiles/<role>/.env`. Measured 24/8: with `OPENROUTER_API_KEY` already
-   in the container's environment through `secrets.env`, the gate answered False
-   on every turn, and answered True the moment the same key was written into the
-   profile's `.env` — nothing else changed (`agent-check.py:2641-2650`).
+6. **The decision this item asked Luis for is MOOT since 30/8, and the finding
+   under it is not.** As written it read: social-package is DOA on a team agent,
+   because the pixel needs `check_image_generation_requirements` to pass inside
+   the turn's own process and, under `gateway.multiplex_profiles`, that gate saw
+   only `data/profiles/<role>/.env`. There is one home now, so the question
+   "does the turn see the key" has one answer and it is the agent's own.
+
+   **What stays true, and it is the useful half.** Measured 24/8: with
+   `OPENROUTER_API_KEY` already in the container's environment through
+   `secrets.env`, the gate answered **False** on every turn, and answered True
+   the moment the same key was written into the home's `.env` — nothing else
+   changed (`agent-check.py:2641-2650`). The engine's secret scope reads
+   `<home>/.env` and a miss returns the default rather than falling through to
+   `os.environ`, so **a key that reaches the process does not reach the turn**.
+   Any capability gated on a credential has this shape.
    *(This also corrects `notes/archive/team-pivot-status.md`, which read the same
    `check_image_generation_requirements returned False` as "no image key exists
    on this agent". The key existed, in `secrets.env`, in the container's
-   environment. The role's turn could not see it.)* So selling social-package
-   to a client who has a team means **writing an OpenRouter key into `data/`**,
-   which is the one thing the compose files say we do not do
-   (`docker-compose.example.yml:116-123`, `:142-147`).
+   environment. The turn could not see it.)*
 
-   **The residual exposure was measured, and it is smaller than that guarantee
-   sounds.** The escalation chain the guarantee was written against is the
-   `env_file` one: `data/.env` used to be the `env_file` of both services, so a
-   `PYTHONPATH=` line in it ran the agent's own code inside the adapter, and
-   from there reached `policy/` and the `cont-init` that s6 runs as root. That
-   path is gone — `env_file` points at `./secrets.env`
-   (`docker-compose.example.yml:122-123`) and no service mounts `data/.env` or
-   `data/profiles/<role>/.env` as one, so the engine's secret scope reads them
-   and nobody else does. What an agent that rewrites its own profile `.env` gets
-   is its own OpenRouter key, which it already spends on every turn, and the
-   ability to break its own image generation. Not root, not the adapter, not
-   another client.
-
-   Two operational consequences that come with a yes: `hire-role.sh:339-344`
-   writes that file only on first hire (`--update` leaves it alone), so a key
-   placed there survives updates but is not part of the distribution and has to
-   be put in per role and per agent; and `agent-check.py:2660-2667` now names
-   any credential-shaped variable it finds in `data/.env` in its output, which
-   is the operator-visible price of the decision.
+   **And the exposure that came with putting a key inside `data/` was measured,
+   and it is smaller than the guarantee sounds.** The escalation chain the
+   guarantee was written against is the `env_file` one: `data/.env` used to be
+   the `env_file` of both services, so a `PYTHONPATH=` line in it ran the
+   agent's own code inside the adapter, and from there reached `policy/` and the
+   `cont-init` that s6 runs as root. That path is gone — `env_file` points at
+   `./secrets.env` (`docker-compose.example.yml:122-123`) and no service mounts
+   `data/.env` as one, so the engine's secret scope reads it and nobody else
+   does. What an agent that rewrites its own `.env` gets is its own OpenRouter
+   key, which it already spends on every turn, and the ability to break its own
+   image generation. Not root, not the adapter, not another client.
+   `agent-check.py:2660-2667` names any credential-shaped variable it finds
+   there, which is the operator-visible price.
 
 ---
 
