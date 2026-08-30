@@ -960,46 +960,27 @@ place the runbook made us deviate. It came out working — `portal-check` 13 ok
 · 0 failures through both HTTPS hostnames — and it exposed nine things. The
 first two are live bugs a client hits; the rest are the runbook lying.
 
-**1 and 2 are FIXED (25/8, adapter 0.42.2).** `_soul_block` no longer emits a
-paragraph whose datum is missing, and `agent-check`'s «SOUL: identity» now
-reads INSIDE the block instead of just finding it: a name passes, and so does
-a company with no name — that is the only identity a team's shared agent
-legitimately has, and it is what the business step writes. A block with
-neither fails, with the reason named. Verified on both agents: the local demo
-(which had the empty baptism in its live prompt, healed by rewriting the block)
-now reads «works for «Ferretería Demo»» and gives 36 ok · 0 failures. The two
-reports stay below because the shape they describe is the product's flagship
-one.
+**1 and 2 are CLOSED, twice over.** They were fixed on 25/8 in adapter 0.42.2
+— `_soul_block` stopped emitting a paragraph whose datum is missing, and
+`agent-check`'s «SOUL: identity» started reading INSIDE the block rather than
+just finding it — and then, on 30/8, the shape that produced them stopped
+existing. Kept in one paragraph because the failure mode is general and will be
+back in another costume.
 
-**1. A team agent can never satisfy `agent-check.py`'s identity check.** The
-check is the one every runbook calls mandatory ("0 failures BEFORE starting it
-up"), and it wants either a hand-written `00-identity.md` heading or the
-`portal:identity` block the naming step writes. On a team agent there IS no
-naming step: `app/app/lib/onboarding.tsx` starts at `"business"` when a roster
-is present, because "a team client is never asked to name their agent". So
-`POST /portal/identity` never carries a `name`, and nothing in
-`docs/client-onboarding.md` tells the operator to write the identity by hand
-for a team client. The product's flagship shape cannot reach 0 failures.
-
-**2. And the step the client DOES answer writes an EMPTY name into the
-prompt.** Onboarding's business step calls `saveIdentity(cfg, {company, url})`.
-The adapter's `_save_identity` rewrites the SOUL whenever name, company OR url
-changed — correct, that was the 11/8 fix — and calls
-`write_identity_to_soul("", company, url)`. `_soul_block` emits its first
-paragraph unconditionally, so the block lands as:
-
-```
-Tu cliente te bautizo **** desde el portal. Ese es tu nombre:
-presentate asi cuando saludes, cuando te pregunten quien sos y en
-todos los canales.
-```
-
-The first thing a team client's onboarding does is instruct their agent to
-introduce itself as the empty string — and it silently turns item 1 green,
-because `agent-check` only looks for the block, not for a name inside it. The
-fix is in `_soul_block`: with no name, skip the naming paragraph and open with
-who it works for. Not applied here on purpose — the pristine agent was built
-to show this, and it is Luis' first onboarding that confirms the shape.
+**1 and 2, the record.** The product's then-flagship shape could not satisfy
+the identity check every runbook calls mandatory: a team client was never asked
+to name their agent, so `POST /portal/identity` never carried a `name` and
+nothing wrote one by hand. Worse, the step the client DID answer — the business
+one — called `write_identity_to_soul("", company, url)`, and `_soul_block`
+emitted its first paragraph unconditionally, so the block landed as *«Tu cliente
+te bautizo **** desde el portal. Ese es tu nombre…»*: the first thing onboarding
+did was instruct the agent to introduce itself as the empty string. And it
+turned the check GREEN, because the check only looked for the block. **The
+lesson, which is what survives: a check that asserts a block EXISTS asserts
+nothing about what is in it, and a template that emits a field unconditionally
+will one day emit an empty one into a prompt.** Both halves are now structural
+— naming is the first step of the only onboarding there is, and as of adapter
+0.43.0 a `POST /portal/identity` that would leave the agent nameless is a 400.
 
 **3. `deploy-remote.sh`'s closing step 3 tells you to run `agent-check.py`
 over a copy of `data/` alone**, which fleet.md documented as broken on 14/8
@@ -1009,40 +990,41 @@ guard, no pairing patch, no capabilities catalog, no kit skills, no
 credentials. All seven live NEXT to `data/`, not inside it. The instruction
 has to be the whole tree (`rsync -rlpt --delete <host>:/opt/agentes/<slug>/
 <local>/`), which is also what makes a durable local mirror worth having.
+**Still open in the script** (re-confirmed 25/8: it printed the same
+instruction verbatim). `docs/client-onboarding.md` Phase 2b now gives the
+correct command, which is a workaround, not the fix.
 
 **4. The runbook never brings the `API_SERVER_KEY` back.** Step 2 says to
 generate it on the server, "not from here", and it is right about not
 uploading it. But step 5 (`portal-check --key`) and step 7 (the magic link)
 both need it on the operator's machine, and no step retrieves it. In practice
 you `ssh <host> 'grep ^API_SERVER_KEY= …'` into a local 600 file; the runbook
-should say so instead of leaving everyone to invent it.
+should say so instead of leaving everyone to invent it. **Written into
+`client-onboarding.md` Phase 2b on 30/8; still not printed by the script,
+which is where an operator is actually reading.**
 
-**5. Nothing in the remote path installs the roster.** `policy/roles/catalog.json`
-is what turns an agent into a team product, and `client-onboarding.md` Phase 3b
-gives a `cp` for a LOCAL agent path. For a VPS it is an `scp` plus a
-`chown 10000:10000` (the adapter runs as uid 10000 and writes
-`requests.jsonl` next to it) that no runbook mentions.
+**5 and 6 are CLOSED — there is no roster to install.** They said that nothing
+in the remote path installed `policy/roles/catalog.json` and that it had to go
+in before the installer or the installer had to run twice. The file is gone. The
+second half of 6 was never about the roster, though, and it is live: the deploy
+computes the install against what it reads ON THE SERVER, so
+`policy/capabilities/purchased.json` has the same before-the-installer ordering
+requirement — which `deploy-remote.sh` now handles itself by copying it into its
+staging, and which `docs/client-onboarding.md` Phase 3b spells out.
 
-**6. And it has to go in BEFORE the installer, or the installer has to run
-twice.** `deploy-remote.sh` reads the roster from the SERVER to decide the
-skills split — it says so ("this agent has a team: only the shared skills go").
-Following the documented order (deploy, then drop the roster in) leaves
-`kit-skills/` with all 14 skills and every future role paying prompt for the
-other roles' craft skills. It took a second `deploy-remote.sh` run to converge
-to the 7 shared ones. `hire-role.sh` prints "RUN THE INSTALLER ONCE MORE" for
-exactly this reason; the deploy path has the same need and says nothing.
-
-**7. `docs/client-onboarding.md` Phase 2 is the LOCAL runbook, unlabelled.**
+**7. CLOSED 30/8 — `docs/client-onboarding.md` Phase 2 was the LOCAL runbook, unlabelled.**
 It says the compose is generated by `new-agent.sh` and gives a ports table with
 8642/8643 on the host. On a VPS the compose comes from
 `compose/docker-compose.remote.yml` via `deploy-remote.sh` and **publishes no
 port at all** — that is the whole point of the remote compose. A reader
 onboarding a VPS client is reading instructions for a different topology.
+Phase 2 says so in its heading now and Phase 2b carries the remote path.
 
-**8. Phase 6 of the same doc says to run `portal-check` against
+**8. CLOSED 30/8 — Phase 6 of the same doc said to run `portal-check` against
 `http://<host>:8643`**, which on a remote agent is unreachable by design. It
 has to go through the two hostnames, which is also the only way to test what
-the client's browser actually traverses (Caddy, TLS, CORS).
+the client's browser actually traverses (Caddy, TLS, CORS). It gives both
+commands now, local and remote, with the ports-are-not-optional warning.
 
 **9. `deploy-remote.sh` leaves no `.gitignore`.** `new-agent.sh` writes one,
 by allowlist, with `secrets.env` first — and the remote path, which is the one
@@ -1057,61 +1039,86 @@ left `.kit-installed.new` unconsumed, one obsolete craft skill still mounted
 `501:staff` on the VPS. The pipe masked the exit status. Redirect to a file;
 re-running the deploy converged everything.
 
-## The first hire, on a real client's request (25/8)
+## HISTORICAL — the first hire, on a real client's request (25/8)
 
-Luis onboarded through the portal as a new client and hired `support` from
-Equipo; the request landed in `policy/roles/requests.jsonl` with the
-catalog's Beto and the look he kept. Fulfilled with `tools/hire-role.sh
-support tuagente --from-request`, `deploy-remote.sh`, `observability.sh
-tuagente on` — 82 s of hire, 5 min from the request line to `hired`, 0
-failures on both checks and **US$0.00 for the hire chain**. Five more things
-the runbook does not say, numbered on from the 24/8 nine.
+**The run this section reports cannot happen any more.** Hiring was removed on
+30/8 (`docs/team-pivot-removal.md`); `tools/hire-role.sh`,
+`policy/roles/requests.jsonl` and the roster are gone. The section stays because
+three of its five findings were never about the hire — they are the deploy's,
+the installer's and the mirror's — and they are still open.
 
-**10. Nothing documents that a hire is THREE commands, not one.**
-`client-onboarding.md` Phase 3b ends at `hire-role.sh`. The installer re-run
-is printed by the script itself; the observability re-run lives **only in a
-comment inside `observability.sh`** ("RE-RUN THIS AFTER EVERY HIRE"), where no
-operator reads it. It is not cosmetic: right after the hire,
-`data/profiles/support/.env` held `API_SERVER_KEY` and nothing else, so
-Beto's image generation would have gone around litellm — untraced and absent
-from `costs.jsonl`, which is the exact failure the three-route note in that
-script was written about. Phase 3b has to carry the sequence.
+The run, for the record: Luis onboarded through the portal as a new client and
+hired `support`; fulfilled with `hire-role.sh --from-request`,
+`deploy-remote.sh` and `observability.sh` — 82 s of hire, 5 min from request to
+`hired`, 0 failures on both checks and **US$0.00 for the hire chain**.
+
+**10. MOOT — a hire was three commands, not one.** `client-onboarding.md`
+Phase 3b ended at `hire-role.sh`; the installer re-run was printed by the
+script and the observability re-run lived only in a comment inside
+`observability.sh` («RE-RUN THIS AFTER EVERY HIRE»), where no operator reads
+it. **The transferable half is live and is now Phase 3b's job**: selling a
+capability changes what `install.sh` ships, so it is edit `purchased.json` →
+deploy, and on an agent with observability on, `observability.sh` after it.
+A step that lives only in a comment inside the script that needs it is not
+documented.
 
 **11. `install.sh` tells you to delete the file `observability.sh` needs.**
 Every deploy prints «there are keys in secrets.env AND in data/.env […]
 delete the data/ one by hand». There is no key in `data/.env`: it holds
-`OPENROUTER_BASE_URL=http://litellm:4000`, put there on purpose (a profile's
-secret scope does not fall through to the environment), and `agent-check`
-reports the same file as OK — «credentials — 4 variables · data/.env holds
-OPENROUTER_BASE_URL». Two kit tools, opposite instructions about one file.
-The warning should read what is in it instead of that it exists.
+`OPENROUTER_BASE_URL=http://litellm:4000`, put there on purpose, and
+`agent-check` reports the same file as OK — «credentials — 4 variables ·
+data/.env holds OPENROUTER_BASE_URL». Two kit tools, opposite instructions
+about one file. The warning should read what is in it instead of that it
+exists. **STILL OPEN, and it is a solo bug**: nothing about it involved a role.
 
-**12. The ledger is stamped by two clocks and can read backwards.** The
-adapter writes `requested_at` in the agent's TZ; `hire-role.sh` writes
-`hired_at` and `named_at` with `time.strftime` on the OPERATOR's machine.
-Both naive, no offset. This hire, six minutes after the request, landed as
-`requested_at 2026-08-25T12:13:17` (UTC-3) and `hired_at
-2026-08-25T09:19:49` (the operator's UTC-6) — the fulfilment three hours
-before the request that caused it. Only a human reads those fields today;
-the first screen that sorts or subtracts them will lie. Both should be UTC
-with the offset written down.
+**12. MOOT — the hire ledger was stamped by two clocks and could read
+backwards.** `requested_at` came from the adapter in the agent's TZ,
+`hired_at`/`named_at` from `hire-role.sh` on the operator's machine, both naive:
+a fulfilment six minutes after its request landed three hours before it. The
+ledger is gone. **The rule it taught is not, and `requests.jsonl` — the
+capability request log, which is still written — has the same shape**: a
+timestamp written by two machines with no offset will eventually sort backwards,
+and the first screen that subtracts them will lie. UTC with the offset, both
+ends.
 
-**13. The mirror does not version a hired role.** `tuagente-agent/.gitignore`
-keeps `data/*` out except `SOUL.md`, `config.yaml`, `connections/` and the
-skills manifest — so `data/profiles/support/` (its projected `config.yaml`,
-its `role.json`, its SOUL with the baptism) is in the working tree and in no
-commit. That directory is precisely what six of `agent-check`'s checks read,
-and the mirror exists to be what the checks read. Decide whether the profile
-is versioned or the README says it is deliberately not.
+**13. The mirror does not version what the checks read.** `tuagente-agent/`'s
+`.gitignore` keeps `data/*` out except `SOUL.md`, `config.yaml`, `connections/`
+and the skills manifest. As written on 25/8 the casualty was
+`data/profiles/support/`, which is gone with the profiles — but the allowlist is
+unchanged and nobody has crossed it against what `agent-check.py` actually
+reads. **STILL OPEN, and it is the general form that matters**: the mirror
+exists to be what the checks read, and an allowlist that was never derived from
+the checks will drift from them again. Decide, once, and write the rule down.
 
-**14. And the day-one spend is the brief, not the hire.** The pristine
-agent's US$0.00 survived the hire, the redeploy and the observability re-run
-untouched; the first charge — US$0.0165 over 12 calls at ~22 k input tokens
-— is the `Conocer <empresa>` ticket that onboarding's business step spawns
-one minute later. Worth pinning because "hiring a teammate costs nothing" and
-"onboarding costs a turn" are two different sentences, and only the second is
-what a client's first minute actually charges.
+**14. The day-one spend is the brief, not the setup.** The pristine agent's
+US$0.00 survived the deploy and the observability re-run untouched; the first
+charge — US$0.0165 over 12 calls at ~22 k input tokens — is the `Conocer
+<empresa>` ticket that onboarding's business step spawns a minute later. Worth
+pinning: bringing an agent up costs nothing, and a client's first minute costs
+a turn.
 
 **Bug 3 is still exactly as reported**: `deploy-remote.sh`'s closing step 3
 printed the `rsync -a … /data/` + `agent-check` instruction again, verbatim.
 The whole tree gave 35 ok · 1 warn · 0 failures.
+
+## The portal, 30/8 — onboarding can be cut short by a background poll
+
+**IN PROGRESS** (a portal agent is on it). Found in wave 1 of the team-pivot
+removal and **pre-existing**: the gate condition is unchanged, wave 1 only
+removed the `modules.roles` conjunct from it, which makes onboarding MORE
+likely to render, not less. The pivot hid it, because on a team agent that gate
+never fired at all.
+
+`app/app/layout.tsx` refetches the manifest every 60 s. The channel step writes
+`contact.channel`, which makes `onboardingAlreadyAnswered()` true, and the next
+poll then unmounts `<Onboarding>` mid-flow: the client is dropped into the
+portal without ever seeing the automations carousel or the chat step, and
+`onDone` never runs, so the welcome screens are not marked seen either.
+
+Reproduced by contrast on the demo agent, same build, same agent: a slow run
+through the flow landed on `/app/home` straight after the channel question; a
+fast one reached «¿Qué te saco de encima?» normally.
+
+It is a decision about onboarding, not a one-line guard: either onboarding
+reads the manifest once at mount, or it holds its own completion flag and the
+poll stops being able to speak for it.
