@@ -139,22 +139,41 @@ Feasibility marks:
   client-facing reports with debug scripts. See the shared toolkit.
 - [?] Delete/rename (read-only is safer).
 
-## Team
+## Onboarding
 
-- **Team onboarding: done.** An agent with a roster
-  (`policy/roles/catalog.json`) no longer shows a single agent's naming step:
-  the client picks their first role, names it, the request gets logged and
-  the screen waits until it shows up hired in the roster. After that come the
-  business and the notification channel, with no naming step. See
-  `docs/client-onboarding.md`, Phase 3b.
-- [adapter] Add the **second** role from inside the portal (today onboarding
-  only covers the first; the rest is requested through Support from the Team
-  tab).
-- [ui] Have the waiting screen say **since when** it's been requested (the
-  `requested_at` field already comes through).
-- [?] **Price per role** — undefined, and no number gets published until the
-  real cost is measured (marketing generates images).
-- [adapter] Let go of a hired role.
+The entrance is one again: name and face, the business, the overview, the
+channel, the automations carousel, the first message. That order is
+`app/app/lib/onboarding.tsx` and it is what a client sees behind the magic
+link (`docs/client-onboarding.md`, Phase 8).
+
+- **[ui+adapter] THE NEXT ONE: "¿qué necesitás que haga?" — asked from the
+  business, answered with capabilities.** Today the business step takes what
+  the company does and its site, and the answer goes nowhere but the SOUL. The
+  direction is to make it the axis of onboarding: the client says what they
+  need in their own words, and the portal comes back with the two or three
+  capabilities from the curated menu that match it, so their first minute ends
+  with a shape of the offering rather than an empty chat.
+  **Half of it already exists and is not wired.**
+  `POST /portal/capabilities/suggest` is live in the adapter — one ~300-token
+  call straight to the provider (US$0.000071 a call, measured;
+  `hermes-kit/notes/cost-and-engine-findings.md` §3), ids validated against the
+  menu, `no_match` falls back to the whole menu without flagging anything —
+  and `suggestCapabilities()` is exported from `app/app/lib/agent.ts` **with
+  zero callers**. It was built for the hiring flow and it outlived it: what it
+  answers ("which of the things we sell does this client need") is exactly the
+  question that decides `policy/capabilities/purchased.json`. Wiring it is
+  frontend plus a decision about what the client does with the answer —
+  request it, or just see it.
+- [ui] The suggestion has to be **an offer, not an install**. Nothing
+  self-installs: a pick writes a request to `policy/capabilities/requests.jsonl`
+  and we sell it. The card copy already exists in `capabilities/catalog.json`.
+- [ui] **Onboarding can be cut short by a background poll** — the layout
+  refetches the manifest every 60 s and the channel step makes
+  `onboardingAlreadyAnswered()` true, so the next poll can unmount the flow
+  mid-way. Pre-existing, being fixed; see `docs/PENDING.md`.
+- [ui] Change the name and the look **after** onboarding. There is nowhere to
+  do it today, and it belongs with the customization tab rather than in its own
+  screen.
 
 ## Usage
 
@@ -162,11 +181,13 @@ Feasibility marks:
   OpenRouter what was actually charged (today / month / total). The old path
   (`estimated_cost_usd` from `state.db`, litellm) was off by 9x and got
   deleted entirely.
-- [adapter] Breakdown by role: OpenRouter charges per key and today there's
-  one key per agent; splitting by role needs either one key per role or our
-  own attribution.
 - [adapter] Monthly budget with an alert (the `limit_usd` field already comes
   through).
+- [?] A breakdown at all. One key per agent means the total is exact and
+  isolated per client; anything finer (per capability, per flow, per channel)
+  has to come from the engine's own `session_model_usage`, which on this
+  configuration **is** the charge and not an estimate
+  (`hermes-kit/notes/cost-and-engine-findings.md` §2). Nobody has asked yet.
 
 ---
 
