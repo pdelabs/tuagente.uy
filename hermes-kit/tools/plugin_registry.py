@@ -2,9 +2,9 @@
 """The plugin registry: read `plugins/`, validate it, resolve it.
 
 The library behind `tools/check-plugins.py`. Everything that needs to know
-which plugins exist, or where a plugin's skill lives on disk, comes through
-here — `roles/build_role.py`, `roles/skills_split.py` and, via
-`skills_split.py --dirs`, `install.sh`.
+which plugins exist, or where a plugin's skill or curated flow lives on disk,
+comes through here — `tools/plugin_set.py`, `tools/skill_sources.py` and, via
+both, `install.sh` and `tools/agent-check.py`.
 
 WHY IT VALIDATES ON EVERY READ. There is one registry and it is small; the
 alternative is a caller that half-reads a broken one and installs half a
@@ -269,9 +269,9 @@ def _check_skill_slots(root: Path, plugins: dict[str, dict]) -> None:
     `/opt/plugins/transcribe/skills/` AND under `/opt/kit/skills/` and refuse to
     start -- on every correctly installed agent. The kit-vs-plugin half belongs
     to build time, where both homes are real and there is no delivery to
-    confuse it with: `check-plugins.py` and `build_role.py`, over the repo,
-    before there is an agent to install it onto. Do not "fix" it from the boot
-    side (notes/plugin-system-plan.md, 3b).
+    confuse it with: `check-plugins.py`, over the repo, before there is an agent
+    to install it onto. Do not "fix" it from the boot side
+    (notes/plugin-system-plan.md, 3b).
     """
     seen: dict[str, str] = {}
     for path in sorted((root / "skills").glob("*/SKILL.md")):
@@ -370,8 +370,8 @@ def flow_sources(ids: list[str] | None = None, root: Path = KIT) -> dict[str, Pa
 
 
 # A capability the catalog promises as already installed on every agent: the
-# card says "ya viene puesta: no hay que pedirla". `roles/skills_split.py` and
-# `tools/plugin_set.py` both key off this word.
+# card says "ya viene puesta: no hay que pedirla". `tools/plugin_set.py` and
+# `tools/skill_sources.py` both key off this word.
 BASE = "base"
 
 
@@ -401,10 +401,10 @@ def capability_installs(root: Path = KIT) -> dict[str, dict]:
 def check_capability_installs(root: Path = KIT) -> None:
     """Every id `installs` names is in the home the key says it is.
 
-    THE THIRD HALF OF THE ONE-SOURCE RULE. `_check_skill_slots` stops a skill
-    name from having two homes in the registry and `check_kit_skills` stops a
-    ROLE from asking for a plugin's skill by name; this stops the CATALOG from
-    doing it -- and the catalog is the one that can do real damage, because
+    THE OTHER HALF OF THE ONE-SOURCE RULE. `_check_skill_slots` stops a skill
+    name from having two homes in the registry; this stops the CATALOG from
+    naming the wrong one -- and the catalog is the one that can do real damage,
+    because
     `tools/plugin_set.py` reads `installs.plugins` off the `level: base` rows to
     decide what ships on EVERY agent. A base row that still named a skill would
     promise a plugin ("ya viene puesta") that the installer never copies, and
@@ -414,11 +414,11 @@ def check_capability_installs(root: Path = KIT) -> None:
 
     AND A `level: base` ROW HAS TO EXIST, WHICH IS THE HALF THE SOLO AGENT WAS
     MISSING. `roles/skills_split.py` refused a base row whose kit skill nobody
-    had written -- but only a TEAM agent computes the split, so on a solo agent
+    had written -- but only a TEAM agent computed the split, so on a solo agent
     the same catalog installed with rc=0 and said nothing. Measured: promote a
-    menu row to base and `install.sh <solo>/data` exits 0 while the team fixture
-    exits 1 with "nowhere in the kit". Here it is one rule and one message, and
-    both paths reach it: install.sh always asks `tools/plugin_set.py`, which
+    menu row to base and the solo install exited 0 while the team fixture exited
+    1 with "nowhere in the kit". Here it is one rule and one message, and there
+    is one path to reach it: install.sh always asks `tools/plugin_set.py`, which
     asks this.
 
     A MENU ROW MAY NAME A SKILL NOBODY HAS WRITTEN and most of them do -- the
@@ -427,8 +427,7 @@ def check_capability_installs(root: Path = KIT) -> None:
     pedirla"), and that promise is checkable.
 
     Run at BUILD time (`tools/check-plugins.py`) and at INSTALL time
-    (`tools/plugin_set.py` on every agent, and `roles/skills_split.py` on a team
-    one). Not at boot: an agent has no `capabilities/catalog.json` next to its
+    (`tools/plugin_set.py`, on every agent). Not at boot: an agent has no `capabilities/catalog.json` next to its
     `plugins/` -- the catalog it carries is `policy/capabilities/`, which is the
     text the CLIENT reads, and the registry validator runs over the agent's root.
     """
@@ -446,11 +445,33 @@ def check_capability_installs(root: Path = KIT) -> None:
                         f"({', '.join(f'{n} -> plugins/{owned[n]}/' for n in misplaced)}). "
                         "Move the id to `installs.plugins`: the catalog names the plugin "
                         "when the plugin is where the source lives.")
-        unknown = [p for p in installs.get("plugins") or [] if p not in available]
+        declared = installs.get("plugins") or []
+        unknown = [p for p in declared if p not in available]
         if unknown:
             fail(where, f"capability {cid!r} installs plugins {unknown}, which are not in "
                         "the registry (hermes-kit/plugins/). A capability sells something "
                         "that exists.")
+        # A CAPABILITY INSTALLS ITS PLUGINS' NON-SYSTEM DEPENDENCIES TOO, and the
+        # rule is per ROW because a row is what a client buys on its own: a
+        # `post-image` sold without `brand-kit` arrives with no hexes to read and
+        # `tools/plugin_set.py` refuses the set on that agent, at install time,
+        # naming a file the operator cannot fix from there. A system plugin is on
+        # every agent by definition, so leaning on one needs no declaring.
+        #
+        # THIS IS WHERE THE ROLE'S HALF OF THE RULE WENT. `role_skills` asked it
+        # of `roles/<id>/role.json` -- "this role declares a plugin, so it
+        # declares its dependencies" -- and a role is not what anybody buys any
+        # more. The capability is, and it is the only declaration left.
+        for pid in declared:
+            for dependency in available[pid]["requires"].get("plugins") or []:
+                if available[dependency]["system"] or dependency in declared:
+                    continue
+                fail(where, f"capability {cid!r} installs {pid!r}, which requires "
+                            f"{dependency!r}, and this row does not install it. A client "
+                            f"who buys only this row gets {pid!r} with nothing behind it, "
+                            f"and tools/plugin_set.py refuses the set on their agent. Add "
+                            f"{dependency!r} to this row's `installs.plugins` — another "
+                            "row installing it is another purchase, not this one.")
         if row.get("level") != BASE:
             continue
         unwritten = [n for n in installs.get("kit_skills") or []
@@ -461,57 +482,3 @@ def check_capability_installs(root: Path = KIT) -> None:
                         "promise that it is already on every agent, so what it installs has "
                         "to exist before the row says base. A menu row may name a skill "
                         "still to be built.")
-
-
-def check_kit_skills(names: list[str], owner: str, root: Path = KIT) -> None:
-    """A role's `skills:` list may only name skills that live in `skills/`.
-
-    THE OTHER HALF OF THE ONE-SOURCE RULE. `_check_skill_slots` stops a skill
-    name from having two homes in the REGISTRY; this stops a ROLE from asking
-    for a plugin's skill by name instead of declaring the plugin.
-
-    THE TWO READERS OF A role.json USED TO DISAGREE ABOUT IT. `skills_split.py`
-    checked the name against every skill in the kit, plugin-owned ones included,
-    so `skills: ["artifact"]` passed -- and passing CHANGED THE SPLIT: with
-    support and assistant declaring artifact it turned SHARED, and install.sh
-    wrote it into kit-skills/ on every team agent, which is the fat agent the
-    team pivot exists to replace. `build_role.py` refused the same file, with
-    "skill 'artifact' does not exist in skills/" -- pointing at the one place it
-    was never going to be. Install said yes, build said no, and the message was
-    wrong. One rule, one message, both sides.
-    """
-    owned = {name: data["id"]
-             for data in registry(root).values()
-             for name in data["surfaces"].get("skills") or []}
-    misplaced = [n for n in names if n in owned]
-    if misplaced:
-        raise SystemExit(
-            f"{owner}: {misplaced} listed under `skills`, but they ship inside a plugin "
-            f"({', '.join(f'{n} -> plugins/{owned[n]}/' for n in misplaced)}). A skill has "
-            "one source: take the name out of `skills` and declare the plugin under "
-            "`plugins`, in roles/catalog.json and in the role manifest.")
-
-
-def role_skills(ids: list[str], owner: str, root: Path = KIT) -> dict[str, Path]:
-    """The skills a role's plugin list contributes, in declaration order.
-
-    A dependency on a NON-system plugin has to be declared by the role too: the
-    role's skill index is what its plugins put there, and quietly pulling in a
-    dependency's skills would grow a role nobody asked to grow. A system plugin
-    is on every agent by definition, so depending on one needs no declaration.
-    """
-    available = registry(root)
-    out: dict[str, Path] = {}
-    for pid in ids:
-        if pid not in available:
-            raise SystemExit(
-                f"{owner}: plugin '{pid}' is not in the registry (hermes-kit/plugins/)")
-        for dependency in available[pid]["requires"].get("plugins", []):
-            if available[dependency]["system"] or dependency in ids:
-                continue
-            raise SystemExit(
-                f"{owner}: plugin '{pid}' requires '{dependency}' and this role does not "
-                f"declare it. Add '{dependency}' to its plugins list.")
-        for name in available[pid]["surfaces"].get("skills") or []:
-            out[name] = available[pid]["_dir"] / "skills" / name
-    return out

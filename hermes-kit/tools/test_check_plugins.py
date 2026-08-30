@@ -5,13 +5,14 @@ Run from the monorepo root:
 
 Every failure case is a whole fixture registry in a tempdir, checked through
 the command line the way an operator runs it, because the exit code and the
-message ARE the feature: `roles/build_role.py` and `install.sh` both stop on
-this and the person reading the output has to know which file to open.
+message ARE the feature: `install.sh` stops on this, and the person reading the
+output has to know which file to open.
 
 The classes after `BrokenRegistry` go at the resolver directly
-(`plugin_registry`), which is where a ROLE's declaration is turned into skills —
-the registry can be perfect and the role still ask for a plugin that is not
-there, or ask for a plugin's skill by name instead of declaring the plugin.
+(`plugin_registry`), which is where the SALES layer meets it — the registry can
+be perfect and `capabilities/catalog.json` still sell a plugin that is not
+there, name a plugin's skill under `kit_skills`, or sell a row whose plugin
+needs one nothing else installs.
 """
 import json
 import shutil
@@ -565,76 +566,73 @@ class TheFlowsSurface(unittest.TestCase):
                     self.assertIn(key, head, slug)
 
 
-class RoleResolution(unittest.TestCase):
-    """What a role's `plugins:` list is allowed to say."""
+class ACapabilityInstallsAClosedSet(unittest.TestCase):
+    """A row is what a client buys ON ITS OWN, so a row has to be closed.
 
-    def test_the_skills_come_back_in_declaration_order(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "alpha", manifest("alpha"))
-            write(tmp, "beta", manifest("beta"))
-            got = plugin_registry.role_skills(["beta", "alpha"], "accounting", Path(tmp))
-            self.assertEqual(list(got), ["beta", "alpha"])
-            self.assertTrue(got["beta"].joinpath("SKILL.md").is_file())
+    THE RULE MOVED HERE FROM THE ROLE. `plugin_registry.role_skills` asked it of
+    `roles/<id>/role.json` — a role that declares a plugin declares its
+    non-system dependencies too — and a role is not what anybody buys any more.
+    The capability is, and it is the only declaration left.
 
-    def test_a_plugin_that_is_not_in_the_registry(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "plugins").mkdir()
-            with self.assertRaises(SystemExit) as raised:
-                plugin_registry.role_skills(["alpha"], "accounting", Path(tmp))
-            self.assertIn("plugin 'alpha' is not in the registry", str(raised.exception))
-
-    def test_a_dependency_the_role_does_not_declare(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "alpha", manifest("alpha", requires={"plugins": ["beta"]}))
-            write(tmp, "beta", manifest("beta"))
-            with self.assertRaises(SystemExit) as raised:
-                plugin_registry.role_skills(["alpha"], "accounting", Path(tmp))
-            self.assertIn("requires 'beta' and this role does not declare it",
-                          str(raised.exception))
-
-    def test_a_system_dependency_needs_no_declaring(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "alpha", manifest("alpha", requires={"plugins": ["beta"]}))
-            write(tmp, "beta", manifest("beta", system=True))
-            got = plugin_registry.role_skills(["alpha"], "accounting", Path(tmp))
-            self.assertEqual(list(got), ["alpha"])
-
-
-class RoleSkillsListIsKitSkillsOnly(unittest.TestCase):
-    """A role asks for a plugin's skill BY DECLARING THE PLUGIN, never by name.
-
-    The role-side half of the one-source rule. Both readers of a role.json go
-    through it, because they used to disagree: `skills_split.py` accepted a
-    plugin-owned name under `skills:` -- and accepting it made the skill look
-    declared by every role, which turned it SHARED and put it in kit-skills/ on
-    every team agent -- while `build_role.py` refused the same file saying the
-    skill "does not exist in skills/", which is the one place it was never
-    going to be.
+    Caught here and not at install time on purpose: `tools/plugin_set.py` also
+    refuses an open set, but it refuses it on the CLIENT'S agent, naming a
+    catalog the operator standing there cannot fix.
     """
 
-    def test_a_kit_skill_under_skills_is_fine(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "alpha", manifest("alpha"))
-            kit_skill(tmp, "quotes")
-            plugin_registry.check_kit_skills(["quotes"], "sales", Path(tmp))
+    def catalog(self, tmp, *rows):
+        capabilities(tmp, *rows)
+        return Path(tmp)
 
-    def test_a_plugin_skill_under_skills_stops_it(self):
+    def test_a_dependency_no_row_installs_stops_it(self):
         with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "artifact", manifest("artifact", system=True))
+            write(tmp, "post-image", manifest(
+                "post-image", requires={"plugins": ["brand-kit"]}))
+            write(tmp, "brand-kit", manifest("brand-kit"))
+            root = self.catalog(tmp, {"id": "social-package", "level": "menu",
+                                      "installs": {"plugins": ["post-image"]}})
             with self.assertRaises(SystemExit) as raised:
-                plugin_registry.check_kit_skills(["artifact"], "support", Path(tmp))
+                plugin_registry.check_capability_installs(root)
             message = str(raised.exception)
-            self.assertIn("support", message)
-            self.assertIn("plugins/artifact/", message)
-            self.assertIn("one source", message)
+            self.assertIn("social-package", message)
+            self.assertIn("post-image", message)
+            self.assertIn("brand-kit", message)
 
-    def test_declaring_it_on_both_sides_is_caught_too(self):
-        """`skills: [approval]` AND `plugins: [approval]` is the same mistake."""
+    def test_the_same_row_declaring_both_is_fine(self):
         with tempfile.TemporaryDirectory() as tmp:
-            write(tmp, "approval", manifest("approval", system=True))
+            write(tmp, "post-image", manifest(
+                "post-image", requires={"plugins": ["brand-kit"]}))
+            write(tmp, "brand-kit", manifest("brand-kit"))
+            plugin_registry.check_capability_installs(self.catalog(
+                tmp, {"id": "social-package", "level": "menu",
+                      "installs": {"plugins": ["post-image", "brand-kit"]}}))
+
+    def test_a_system_dependency_needs_no_declaring(self):
+        """A default is on every agent, so leaning on one is free."""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "quotes", manifest(
+                "quotes", requires={"plugins": ["deliverable"]}))
+            write(tmp, "deliverable", manifest("deliverable", system=True))
+            plugin_registry.check_capability_installs(self.catalog(
+                tmp, {"id": "quotes", "level": "menu",
+                      "installs": {"plugins": ["quotes"]}}))
+
+    def test_another_row_installing_it_is_not_enough(self):
+        """Two rows are two purchases, and a client may make only one."""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "post-image", manifest(
+                "post-image", requires={"plugins": ["brand-kit"]}))
+            write(tmp, "brand-kit", manifest("brand-kit"))
+            root = self.catalog(
+                tmp,
+                {"id": "images", "level": "menu", "installs": {"plugins": ["post-image"]}},
+                {"id": "branding", "level": "menu", "installs": {"plugins": ["brand-kit"]}})
             with self.assertRaises(SystemExit) as raised:
-                plugin_registry.check_kit_skills(["approval"], "support", Path(tmp))
-            self.assertIn("plugins/approval/", str(raised.exception))
+                plugin_registry.check_capability_installs(root)
+            self.assertIn("images", str(raised.exception))
+
+    def test_the_kits_own_catalog_is_closed(self):
+        """Over the real rows: every menu row can be bought on its own."""
+        plugin_registry.check_capability_installs(KIT)
 
 
 class TheRequiresThatAreNotPlugins(unittest.TestCase):

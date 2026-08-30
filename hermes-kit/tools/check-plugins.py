@@ -11,8 +11,8 @@ judgement call. A duplicate id, an id that is not its folder name, a version
 that is not semver, a dependency on a plugin nobody wrote, a cycle, a surface
 whose file is missing, a system plugin leaning on one the client may not have
 bought, malformed JSON — each of them ships something that does not work, so
-each of them stops the build (`roles/build_role.py`) and the install
-(`install.sh`, through `roles/skills_split.py`) too.
+each of them stops the install too (`install.sh`, through
+`tools/plugin_set.py`).
 
 The rules and the manifest schema live next to the data, in `plugins/README.md`;
 the design they come from is `notes/plugin-system-plan.md`. The checking itself
