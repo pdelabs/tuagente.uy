@@ -28,7 +28,6 @@ in their portal and that we'll take them there as soon as they enter).
 |---|---|
 | Home | `/app/home` |
 | Chat | `/app/chat` |
-| Team | `/app/team` |
 | Flows | `/app/flows` |
 | Board | `/app/pipeline` |
 | Approvals | `/app/approvals` |
@@ -87,27 +86,6 @@ one.
 | A connection | `/app/connections?connection=<catalog id>` | `/app/connections?connection=telegram` | opens · stale id |
 | A system skill | `/app/skills?skill=<name>` | `/app/skills?skill=approval` | opens · stale id |
 | A scheduled task | `/app/tasks?scheduled=<cron id>` | `/app/tasks?scheduled=bb8485784d90` | opens |
-| A teammate | `/app/team?role=<role id>` | `/app/team?role=sales` | UNVERIFIED |
-| Hiring a role (its naming) | `/app/team?hire=<role id>` | `/app/team?hire=sales` | UNVERIFIED |
-
-Both Team ones **only exist on an agent with a team** (`modules.roles`): on a
-single-role agent the tab isn't in the nav and the page is never reached.
-
-`?hire=` is **another parameter, not a mode of `?role=`**: they're two
-different things about the same id — looking at someone's profile, or naming
-and giving a face to someone who isn't there yet — and folding them into one
-parameter would force a second value alongside it to tell the two apart.
-It opens the naming screen (the same one hiring uses) and leaves the
-request on record; **it doesn't install anything**: that's our own work by
-hand, and the card stays "on its way" until then.
-
-**A `?hire=` that can't be requested shows the roster, not a form**: if the
-id doesn't exist, if that role is already on the team, if it was already
-requested, or if the catalog doesn't call it `ready` yet (requesting it
-answers 404), the tab behaves like it would with any stale link. That's why
-it's not a link to quote to the client: the one that serves "add someone" is
-the tab itself, `/app/team`.
-
 What's left **UNVERIFIED** inside rows that were otherwise tested:
 
 - `?folder=entregables` (`interno` was tested, which is the hard case, not
@@ -286,3 +264,17 @@ never an error number, never a screen that says nothing.
 - A link to a specific thing **skips that tab's welcome screen**: whoever
   arrives via a link came to see one thing, not to be introduced to the
   module.
+
+## Retired: `/app/team`, `?role=` and `?hire=`
+
+**Removed 30/8/2026 with the team pivot** (`docs/team-pivot-removal.md`,
+wave 1). The tab and both parameters existed only on an agent whose adapter
+served a roster, and no agent serves one any more.
+
+They are named here and not simply erased because **a link outlives the
+screen it pointed at**: anything quoted to a client, pasted into a ticket, or
+sitting in someone's history now lands on a route the portal does not have.
+Neither was ever a link to hand out — both shipped UNVERIFIED and the
+`?hire=` row said in as many words that it was not one — so what is expected
+is nothing. If a `/app/team` shows up in a support conversation, this is what
+happened to it.

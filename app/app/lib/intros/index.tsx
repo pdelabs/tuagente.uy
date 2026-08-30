@@ -17,7 +17,6 @@ import FilesIntro from "./files";
 import UsageIntro from "./usage";
 import ConnectionsIntro from "./connections";
 import FlowsIntro from "./flows";
-import TeamIntro from "./team";
 
 const KEY = "tuagente_intro_v2";
 
@@ -26,7 +25,6 @@ export const INTROS: Record<string, ComponentType<IntroProps>> = {
   chat: ChatIntro,
   // The key is the MODULE's, not the tab's: the manifest declares `roles` and
   // the nav labels it "Equipo".
-  roles: TeamIntro,
   kanban: PipelineIntro,
   approvals: ApprovalsIntro,
   artifacts: ArtifactsIntro,

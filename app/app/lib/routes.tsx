@@ -47,14 +47,6 @@ export const PARAM = {
   connection: "connection",
   /** /app/tasks?scheduled=<cron id> */
   scheduled: "scheduled",
-  /** /app/team?role=<role id> */
-  role: "role",
-  /** /app/team?hire=<role id> -- naming the one being added.
-   *  It's ANOTHER param and not a mode of `?role=`: they're two different
-   *  things about the same id -- looking at someone's profile, and naming
-   *  someone who isn't there yet -- and folding them into a single param
-   *  would force a second value next to it just to tell the two apart. */
-  hire: "hire",
 } as const;
 
 /** `?p=` (the request the chat starts with) also counts as arriving with an
