@@ -6,34 +6,54 @@ import {
   Check,
   ChevronDown,
   Clock,
+  Dices,
   Eye,
+  FileText,
   FolderOpen,
   Hand,
+  Instagram,
   LayoutDashboard,
   MapPin,
   MessageCircle,
+  Mic,
+  Moon,
   Pause,
   PhoneCall,
-  Plug,
   Puzzle,
+  Receipt,
   SlidersHorizontal,
   ShieldCheck,
   Sparkles,
-  UserPlus,
-  Users,
+  Wrench,
   Zap,
 } from "lucide-react";
 import Reveal from "./Reveal";
 import { AgentitoAvatar, type AgentitoLook } from "./app/lib/agentito";
-import CountUp from "./CountUp";
 
 const WHATSAPP = "https://wa.me/59899002835";
 const EMAIL = "mailto:hola@tuagente.uy";
 
-/** The price, in a single place: it repeats in the hero, in the numbers, in
- *  the pricing section, the FAQ and the structured data. */
-const ROLE_PRICE = "$U 1.500";
-const DIAGNOSIS_PRICE = "USD 200";
+/* ─────────────────────────────────────────── Pricing
+ *
+ * The prices live here and nowhere else: they repeat in the hero, the
+ * numbers, the pricing section, the FAQ and the structured data.
+ *
+ * TODO(Luis): SETUP_FROM and MONTHLY_FROM are NOT decided yet (29/8/2026).
+ * While a constant is empty the page says the number comes out of the
+ * diagnóstico — it never renders a blank or a placeholder. Write the string
+ * the client should read (e.g. "USD 1.200") and every place picks it up. */
+
+/** Decided: the entry door. Discounted from the setup if the client goes on. */
+const DIAGNOSTIC: string = "USD 200";
+
+/** TODO(Luis): the agent plus its first plugin, one time. */
+const SETUP_FROM: string = "";
+
+/** TODO(Luis): the monthly — models, hosting, adjustments, support. */
+const MONTHLY_FROM: string = "";
+
+/** What an undecided price says instead of a blank. */
+const QUOTED = "Se cotiza en el diagnóstico";
 
 export default function Page() {
   return (
@@ -43,7 +63,8 @@ export default function Page() {
       <Cards />
       <Reveal><Stats /></Reveal>
       <Steps />
-      <TeamSection />
+      <Jobs />
+      <Baptism />
       <Control />
       <Portal />
       <Integrations />
@@ -76,7 +97,8 @@ function Header() {
       <nav className="hidden items-center gap-1 rounded-pill bg-white/70 px-2 py-1 text-sm font-bold text-ink-soft backdrop-blur md:flex">
         {[
           ["Cómo funciona", "#como-funciona"],
-          ["El equipo", "#equipo"],
+          // #casos is the section id the widget and /api/agent already know.
+          ["Qué le pedís", "#casos"],
           ["Tu portal", "#portal"],
           // The pricing section id stays #planes: a blog post links to
           // /#planes and we don't want to break it by renaming the anchor.
@@ -99,7 +121,7 @@ function Header() {
         rel="noopener noreferrer"
         className="rounded-pill bg-ink px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-primary"
       >
-        Armá tu equipo
+        Quiero mi agente
       </a>
     </header>
   );
@@ -123,7 +145,7 @@ function Hero() {
           className="animate-fadeup mx-auto mt-7 max-w-4xl text-5xl font-extrabold leading-[1.05] tracking-tight text-ink sm:text-7xl"
           style={{ animationDelay: "80ms" }}
         >
-          Un equipo de IA que trabaja{" "}
+          Un agente de IA que trabaja{" "}
           <span className="text-primary">solo</span>, adentro de tu empresa.
         </h1>
 
@@ -131,10 +153,10 @@ function Hero() {
           className="animate-fadeup mx-auto mt-6 max-w-2xl text-lg text-ink-soft sm:text-xl"
           style={{ animationDelay: "180ms" }}
         >
-          Contratás los roles que te faltan — marketing, soporte, ventas, contabilidad — y
-          trabajan <strong className="text-ink">24/7</strong> adentro de tu empresa.{" "}
-          <strong className="text-ink">{ROLE_PRICE} por rol, por mes.</strong> Nada sale para
-          afuera sin tu ok.
+          Uno solo, con el nombre y la cara que vos le pongas. Le sumás{" "}
+          <strong className="text-ink">lo que tu empresa necesita</strong> — hecho a medida — y
+          trabaja <strong className="text-ink">24/7</strong>: contesta el WhatsApp de las once de
+          la noche, arma el presupuesto, ordena las facturas. Nada sale para afuera sin tu ok.
         </p>
 
         <div
@@ -147,14 +169,14 @@ function Hero() {
             rel="noopener noreferrer"
             className="group inline-flex w-full items-center justify-center gap-2 rounded-pill bg-primary px-7 py-4 text-base font-bold text-white shadow-lift transition hover:-translate-y-0.5 hover:bg-primary-dark sm:w-auto"
           >
-            Armá tu equipo
+            Quiero mi agente
             <ArrowRight size={19} className="transition group-hover:translate-x-1" />
           </a>
           <a
-            href="#equipo"
+            href="#casos"
             className="inline-flex w-full items-center justify-center gap-2 rounded-pill border border-ink/10 bg-white px-7 py-4 text-base font-bold text-ink shadow-soft transition hover:-translate-y-0.5 sm:w-auto"
           >
-            Conocé a los roles
+            Mirá qué le podés pedir
           </a>
         </div>
 
@@ -162,7 +184,7 @@ function Hero() {
           className="animate-fadeup mt-6 text-sm font-medium text-ink-soft"
           style={{ animationDelay: "380ms" }}
         >
-          Un equipo por empresa, aislado y con su propia clave · vos ves todo lo que hace cada uno
+          Un agente por empresa, aislado y con su propia clave · vos ves todo lo que hace
         </p>
       </div>
     </section>
@@ -173,30 +195,30 @@ function Hero() {
 
 const CARDS = [
   {
-    Icon: Users,
-    title: "Contratás roles, no proyectos",
-    body: "Cada uno tiene nombre, cara y una ficha con lo que hace. Sumás el que te falta y sacás el que no usás, cuando quieras.",
+    Icon: Bot,
+    title: "Uno solo, y es tuyo",
+    body: "Le ponés nombre, le elegís la cara y le hablás a él. No hay organigrama que aprender ni herramienta nueva que usar: le escribís como le escribís a cualquiera que trabaja con vos.",
     bg: "bg-c-violet",
     ink: "text-c-violet-ink",
   },
   {
     Icon: Clock,
-    title: "Trabajan 24/7",
-    body: "Tu equipo no duerme, no se enferma y no renuncia. Opera en piloto automático mientras vos hacés otra cosa.",
+    title: "Trabaja 24/7",
+    body: "No duerme, no se enferma y no renuncia. Lo que entra un domingo a la noche se contesta un domingo a la noche — que es cuando se pierden los turnos que nunca supiste que tenías.",
     bg: "bg-c-green",
     ink: "text-c-green-ink",
   },
   {
-    Icon: Plug,
-    title: "Conectados a lo tuyo",
-    body: "Se enchufan a tu correo, tus planillas y tus sistemas internos. Actúan de verdad — no solo chatean.",
+    Icon: Puzzle,
+    title: "Con lo que TU empresa necesita",
+    body: "Cada trabajo concreto es un plugin, escrito con tu proceso adentro. Algunos ya los tenemos y se adaptan; los que no existen los escribimos nosotros. Empezás con uno y sumás cuando lo pidas.",
     bg: "bg-c-coral",
     ink: "text-c-coral-ink",
   },
   {
     Icon: Eye,
     title: "Nada pasa a tus espaldas",
-    body: "Tenés un portal donde ves qué hizo cada uno, qué está haciendo y qué produjo. Y lo que sale para afuera — un mail a un cliente, un posteo — espera tu ok.",
+    body: "Tenés un portal donde ves qué hizo, qué está haciendo y qué produjo. Y lo que sale para afuera — un mail a un cliente, un posteo, un presupuesto — espera tu ok.",
     bg: "bg-c-amber",
     ink: "text-c-amber-ink",
   },
@@ -231,18 +253,11 @@ function Cards() {
 // companies, 3x productivity). A made-up number can't be defended in the
 // first meeting, and the client buying this asks. What follows are four
 // product facts, all verifiable against what actually gets delivered.
-const STATS: {
-  l: string;
-  value?: number;
-  prefix?: string;
-  suffix?: string;
-  static?: string;
-  size?: string;
-}[] = [
-  { static: "24/7", l: "tu equipo no para" },
-  { static: ROLE_PRICE, l: "por rol, por mes", size: "text-3xl sm:text-5xl" },
-  { static: "1 a 1", l: "un equipo por empresa, aislado" },
-  { static: "Tu ok", l: "para todo lo que sale para afuera" },
+const STATS: { value: string; l: string; size?: string }[] = [
+  { value: "24/7", l: "tu agente no para" },
+  { value: DIAGNOSTIC, l: "el diagnóstico, y se descuenta", size: "text-3xl sm:text-5xl" },
+  { value: "1 a 1", l: "un agente por empresa, aislado" },
+  { value: "Tu ok", l: "para todo lo que sale para afuera" },
 ];
 
 function Stats() {
@@ -255,11 +270,7 @@ function Stats() {
               <div
                 className={`font-extrabold tracking-tight ${s.size ?? "text-4xl sm:text-6xl"}`}
               >
-                {s.static ? (
-                  s.static
-                ) : (
-                  <CountUp value={s.value!} prefix={s.prefix} suffix={s.suffix} />
-                )}
+                {s.value}
               </div>
               <div className="mt-2 text-sm font-medium text-white/60 sm:text-base">{s.l}</div>
             </div>
@@ -276,17 +287,17 @@ const STEPS = [
   {
     Icon: PhoneCall,
     title: "Empezás por el diagnóstico",
-    body: `Una llamada y un informe: qué roles te sirven, cuánto te ahorra cada uno y qué sale ponerlos a trabajar. Son ${DIAGNOSIS_PRICE} y se descuentan del setup si seguís.`,
+    body: `Una llamada y un informe: qué trabajo tuyo conviene sacarte de encima primero, cuánta plata o cuántas horas te devuelve y qué sale ponerlo a andar. Son ${DIAGNOSTIC} y se descuentan si seguís.`,
   },
   {
-    Icon: UserPlus,
-    title: "Armamos tu equipo",
-    body: "Cada rol se arma a medida: partimos de un ejemplo o lo componemos desde cero. Lo instalamos adentro de tu empresa, conectado a lo que ya usás y con los permisos que vos le des.",
+    Icon: Wrench,
+    title: "Armamos tu agente y su primer plugin",
+    body: "Lo instalamos adentro de tu empresa, con el nombre y la cara que elegiste, conectado a lo que ya usás y con los permisos que vos le des. El primer plugin lleva tu proceso adentro: tus precios, tu tono, tu manera.",
   },
   {
     Icon: Zap,
-    title: "Trabajan solos",
-    body: "Desde ese día el trabajo pasa sin que nadie lo empuje. Vos entrás al portal, mirás lo que hicieron y aprobás lo que sale para afuera.",
+    title: "Trabaja solo",
+    body: "Desde ese día el trabajo pasa sin que nadie lo empuje. Vos entrás al portal, mirás lo que hizo y aprobás lo que sale para afuera. Cuando querés otro trabajo resuelto, pedís el plugin que sigue.",
   },
 ];
 
@@ -298,7 +309,7 @@ function Steps() {
           <Sparkles size={15} /> Simple de verdad
         </span>
         <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
-          Tu equipo, trabajando en 3 pasos
+          Tu agente, trabajando en 3 pasos
         </h2>
       </div>
 
@@ -322,117 +333,101 @@ function Steps() {
   );
 }
 
-/* ─────────────────────────────────────────── The team (the roles) */
+/* ─────────────────────────────────────────── What you ask it for (plugins) */
 
-// The five that are in the kit's catalog today (hermes-kit/roles/catalog.json):
-// the "does", the "never" and the `look` all come from there, with the same
-// words and the same face the client later sees inside the portal. If the
-// catalog changes, this changes — no role gets promised here that isn't
-// written there.
-const ROLES = [
+// Concrete jobs, not capabilities: the client recognizes "los turnos que
+// perdés de noche", not "integración con WhatsApp Business API". Each one is
+// a plugin — one we already have and adapt, or one we write from scratch —
+// and each one carries its "never", because the limit written inside the
+// plugin is the part that makes the rest believable.
+const JOBS = [
   {
-    name: "Vera",
-    role: "Marketing",
-    does: "Escribe y planifica lo que publicás: posteos de Instagram, historias, textos y el kit de marca.",
+    Icon: Moon,
+    title: "Los turnos que perdés de noche",
+    body: "Contesta el WhatsApp fuera de hora con tus precios, tus horarios y lo que tenés disponible. El que escribe a las once de la noche recibe respuesta a las once de la noche, no mañana a las diez — cuando ya compró en otro lado.",
+    never: "inventa un precio ni una fecha. Si no lo tiene escrito, avisa que se lo confirmás vos y te lo deja marcado.",
+  },
+  {
+    Icon: FileText,
+    title: "Presupuestos y seguimiento",
+    body: "Arma el presupuesto con tu lista de precios y te lo deja listo. Y a los días le vuelve a escribir al que no contestó — que es la plata que se pierde por olvido, no por precio.",
+    never: "manda un presupuesto sin tu ok, ni cierra un precio ni promete una entrega.",
+  },
+  {
+    Icon: Receipt,
+    title: "Facturas de proveedores",
+    body: "La factura que llega por mail o de la que te sacaron una foto: la lee, la pasa a tu planilla y te avisa lo que vence esta semana antes de que venza.",
+    never: "factura, paga ni presenta nada. Mira, ordena y avisa.",
+  },
+  {
+    Icon: Instagram,
+    title: "Instagram sin escribir los domingos",
+    body: "Escribe los posteos de la semana con tu tono, los deja armados en el portal y los publica cuando vos les diste el visto bueno.",
     never: "publica nada sin tu aprobación.",
-    look: { tone: 0, antenna: 5, accessory: 0, pupil: 1, mouth: 1, skin: 1, suit: 0, brows: 1, hat: 0 } as AgentitoLook,
-    bg: "bg-c-violet",
   },
   {
-    name: "Beto",
-    role: "Soporte",
-    does: "Contesta los mensajes de tus clientes: horarios, precios y estado de pedidos.",
-    never: "manda un mensaje a un cliente tuyo sin tu aprobación.",
-    look: { tone: 1, antenna: 3, accessory: 2, pupil: 0, mouth: 1, skin: 0, suit: 0, brows: 0, hat: 0 } as AgentitoLook,
-    bg: "bg-c-green",
-  },
-  {
-    name: "Nina",
-    role: "Ventas",
-    does: "Arma presupuestos y hace el seguimiento de los que no te contestaron.",
-    never: "cierra un precio ni promete una entrega sin tu aprobación.",
-    look: { tone: 5, antenna: 4, accessory: 2, pupil: 2, mouth: 3, skin: 1, suit: 0, brows: 2, hat: 0 } as AgentitoLook,
-    bg: "bg-c-pink",
-  },
-  {
-    name: "Tino",
-    role: "Contabilidad",
-    does: "Te arma las planillas de lo que entra y lo que sale, y te avisa lo que vence.",
-    never: "factura, paga ni presenta nada. Solo mira, ordena y avisa.",
-    look: { tone: 4, antenna: 2, accessory: 1, pupil: 2, mouth: 2, skin: 0, suit: 1, brows: 1, hat: 0 } as AgentitoLook,
-    bg: "bg-c-amber",
-  },
-  {
-    name: "Lola",
-    role: "Asistente",
-    does: "Hace los mandados del negocio: averigua lo que le pedís, lee lo que le mandás, escucha los audios y te deja la planilla o el documento armado.",
-    never:
-      "promete lo que no puede hacer. Si le falta una herramienta te lo dice y te ofrece la que lo resuelve.",
-    look: { tone: 2, antenna: 0, accessory: 3, pupil: 1, mouth: 1, skin: 0, suit: 0, brows: 0, hat: 0 } as AgentitoLook,
-    bg: "bg-c-coral",
+    Icon: Mic,
+    title: "Audios y reuniones, en texto",
+    body: "El audio de WhatsApp, la reunión grabada, la nota de voz del depósito: te los deja transcriptos y resumidos, con lo que hay que hacer separado de lo que solo se dijo.",
+    never: "manda para afuera nada de lo que escuchó. La transcripción queda adentro de tu empresa.",
   },
 ];
 
-function TeamSection() {
+function Jobs() {
   return (
-    <section id="equipo" className="mx-auto max-w-7xl px-5 py-6 sm:px-8 sm:py-10">
+    <section id="casos" className="mx-auto max-w-7xl px-5 py-6 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-2xl text-center">
         <span className="inline-flex items-center gap-2 rounded-pill bg-primary/10 px-4 py-1.5 text-sm font-bold text-primary">
-          <Users size={15} /> Todos los roles se arman a medida
+          <Puzzle size={15} /> Cada trabajo es un plugin
         </span>
         <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
-          Conocé a tu equipo
+          Qué le pedís
         </h2>
         <p className="mt-4 text-lg text-ink-soft">
-          Acá no hay menú: cada rol se arma para tu empresa, capacidad por capacidad, y estos
-          cinco son puntos de partida que ya existen. El tuyo puede ser uno de estos ajustado o
-          uno nuevo desde cero. Todos llevan nombre, cara, lo que hacen y — esto es lo
-          importante — una línea de lo que <strong className="text-ink">nunca</strong> van a
-          hacer, escrita adentro del rol y no de palabra.
+          Un plugin es un trabajo concreto de tu empresa escrito adentro del agente: tu proceso,
+          tus precios, tu manera de decir las cosas. Estos son ejemplos de lo que más nos piden —
+          algunos ya los tenemos y se adaptan a lo tuyo, y los que no existen los escribimos
+          nosotros. Cada uno viene con una línea de lo que{" "}
+          <strong className="text-ink">nunca</strong> va a hacer, escrita adentro del plugin y no
+          de palabra.
         </p>
       </div>
 
       <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {ROLES.map((r, i) => (
-          <Reveal key={r.name} delay={(i % 3) * 90} className="h-full">
+        {JOBS.map(({ Icon, title, body, never }, i) => (
+          <Reveal key={title} delay={(i % 3) * 90} className="h-full">
             <article className="flex h-full flex-col rounded-card border border-ink/5 bg-white p-7 shadow-soft transition duration-300 hover:-translate-y-1">
-              <div className="flex flex-wrap items-center gap-4">
-                <span className={`grid h-16 w-16 shrink-0 place-items-center rounded-2xl ${r.bg}`}>
-                  <AgentitoAvatar look={r.look} className="h-14 w-14" />
-                </span>
-                <div className="min-w-0">
-                  <h3 className="text-2xl font-extrabold tracking-tight text-ink">{r.name}</h3>
-                  <p className="text-xs font-bold uppercase tracking-wider text-primary">{r.role}</p>
-                </div>
-              </div>
-
-              <p className="mt-5 flex-1 text-ink-soft">{r.does}</p>
+              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                <Icon size={23} />
+              </span>
+              <h3 className="mt-5 text-xl font-extrabold tracking-tight text-ink">{title}</h3>
+              <p className="mt-2 flex-1 text-ink-soft">{body}</p>
 
               <div className="mt-5 flex items-start gap-2.5 rounded-2xl bg-ink/[0.04] p-4">
                 <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-c-coral text-c-coral-ink">
                   <Ban size={12} />
                 </span>
                 <p className="text-sm text-ink-soft">
-                  <strong className="font-extrabold text-ink">Nunca</strong> {r.never}
+                  <strong className="font-extrabold text-ink">Nunca</strong> {never}
                 </p>
               </div>
             </article>
           </Reveal>
         ))}
 
-        {/* The sixth spot in the grid is the role that doesn't exist yet: yours. */}
+        {/* The sixth card is the plugin that doesn't exist yet: the client's. */}
         <Reveal delay={180} className="h-full">
           <article className="flex h-full flex-col justify-center rounded-card border-2 border-dashed border-primary/25 bg-primary/[0.04] p-7">
             <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-white">
-              <Puzzle size={23} />
+              <Wrench size={23} />
             </span>
             <h3 className="mt-5 text-2xl font-extrabold tracking-tight text-ink">
-              El sexto es el tuyo
+              ¿Y lo tuyo?
             </h3>
             <p className="mt-2 text-ink-soft">
-              Contanos qué necesitás que haga y lo componemos con vos, capacidad por capacidad:
-              leer facturas, buscar en internet, transcribir audios, armar planillas. Sale lo
-              mismo que cualquier otro rol: {ROLE_PRICE} por mes.
+              Contanos el trabajo que te come las horas todas las semanas y te decimos tres cosas:
+              si ya lo tenemos escrito, cuánto lleva escribirlo si no, y qué sale. Todo eso antes
+              de que pongas un peso.
             </p>
             <a
               href={WHATSAPP}
@@ -450,28 +445,89 @@ function TeamSection() {
   );
 }
 
+/* ─────────────────────────────────────────── The baptism */
+
+// The face isn't decoration: it's the moment the client stops saying "el
+// sistema" and starts saying a name. These are four looks of the SAME
+// character — the dice the client rolls on day one — not four agents.
+const LOOK: AgentitoLook = {
+  tone: 0, antenna: 5, accessory: 0, pupil: 1, mouth: 1, skin: 1, suit: 0, brows: 1, hat: 0,
+};
+const LOOK_ROLLS: AgentitoLook[] = [
+  { tone: 1, antenna: 3, accessory: 2, pupil: 0, mouth: 1, skin: 0, suit: 0, brows: 0, hat: 0 },
+  { tone: 3, antenna: 2, accessory: 1, pupil: 2, mouth: 2, skin: 0, suit: 1, brows: 1, hat: 0 },
+  { tone: 5, antenna: 4, accessory: 3, pupil: 2, mouth: 3, skin: 1, suit: 0, brows: 2, hat: 0 },
+];
+
+function Baptism() {
+  return (
+    <section className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-16">
+      <Reveal>
+        <div className="rounded-card bg-c-violet px-6 py-12 sm:px-12 sm:py-16">
+          <div className="grid items-center gap-10 lg:grid-cols-2">
+            <div>
+              <span className="inline-flex items-center gap-2 rounded-pill bg-white/60 px-4 py-1.5 text-sm font-bold text-c-violet-ink">
+                <Dices size={15} /> Lo bautizás vos
+              </span>
+              <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-c-violet-ink sm:text-5xl">
+                Tiene el nombre y la cara que vos le pongas.
+              </h2>
+              <p className="mt-4 max-w-lg text-lg text-c-violet-ink/80">
+                El día uno le ponés un nombre y le tirás el dado a la cara hasta que salga la que
+                te gusta. Desde ahí es él: el que te contesta en el portal, el que te escribe por
+                Telegram, el que firma lo que entrega. En tu empresa nadie va a decir “el
+                sistema” — lo van a llamar por el nombre, y le van a pedir cosas como se las
+                pedirían a cualquiera.
+              </p>
+            </div>
+
+            <div className="flex flex-col items-center gap-6">
+              <span className="grid h-40 w-40 place-items-center rounded-card bg-white/70 sm:h-48 sm:w-48">
+                <AgentitoAvatar look={LOOK} className="h-32 w-32 sm:h-40 sm:w-40" />
+              </span>
+              <div className="flex items-center gap-3">
+                {LOOK_ROLLS.map((look, i) => (
+                  <span
+                    key={i}
+                    className="grid h-16 w-16 place-items-center rounded-2xl bg-white/40 opacity-70"
+                  >
+                    <AgentitoAvatar look={look} className="h-12 w-12" />
+                  </span>
+                ))}
+              </div>
+              <p className="text-sm font-semibold text-c-violet-ink/70">
+                El mismo agente, otras caras. Elegís una y esa queda.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Reveal>
+    </section>
+  );
+}
+
 /* ─────────────────────────────────────────── Control (you stay in charge) */
 
 const CONTROL_POINTS = [
   {
     Icon: MessageCircle,
-    title: "Le hablás al equipo",
-    body: "Escribís en un solo lugar, desde el portal o desde el celular, y contesta el que corresponde. Le pedís tareas, le preguntás qué hizo y te responde al momento.",
+    title: "Le hablás",
+    body: "Escribís en un solo lugar, desde el portal o desde el celular, y te contesta. Le pedís tareas, le preguntás qué hizo y responde al momento.",
   },
   {
     Icon: SlidersHorizontal,
-    title: "Los ajustás hablándoles",
-    body: "¿Querés que Beto salude distinto o que Vera priorice otra cosa? Se lo decís y cambia. Sin proyecto, sin código, sin esperar a nadie.",
+    title: "Lo ajustás hablándole",
+    body: "¿Querés que salude distinto o que priorice otra cosa? Se lo decís y cambia. Sin proyecto, sin código, sin esperar a nadie.",
   },
   {
     Icon: Eye,
-    title: "Ves todo lo que hace cada uno",
-    body: "Cada acción queda registrada, y con el nombre de quién la hizo. Cero cajas negras: siempre sabés qué pasó y por qué.",
+    title: "Ves todo lo que hace",
+    body: "Cada acción queda registrada, con la hora y con lo que produjo. Cero cajas negras: siempre sabés qué pasó y por qué.",
   },
   {
     Icon: Pause,
-    title: "Los frenás con un botón",
-    body: "Pausa inmediata, a uno o a todos. Y lo que sale para afuera — un mail a un cliente, un posteo, un presupuesto — siempre pasa por tu aprobación.",
+    title: "Lo frenás con un botón",
+    body: "Pausa inmediata, cuando quieras. Y lo que sale para afuera — un mail a un cliente, un posteo, un presupuesto — siempre pasa por tu aprobación.",
   },
 ];
 
@@ -490,7 +546,7 @@ function Control() {
                 <span className="underline decoration-4 underline-offset-4">Vos.</span>
               </h2>
               <p className="mt-4 max-w-lg text-lg text-c-amber-ink/80">
-                Autónomo no significa descontrolado. Tu equipo trabaja solo, pero vos lo dirigís
+                Autónomo no significa descontrolado. Tu agente trabaja solo, pero vos lo dirigís
                 como a cualquier persona que trabaja con vos — hablándole.
               </p>
               <div className="mt-8 grid gap-5 sm:grid-cols-2">
@@ -508,21 +564,16 @@ function Control() {
               </div>
             </div>
 
-            {/* Chat mock: the owner writes to the team, and whoever's in charge answers */}
+            {/* Chat mock: the owner writes, the agent answers. One agent. */}
             <div className="mx-auto w-full max-w-md rounded-card bg-white p-5 shadow-lift sm:p-6">
               <div className="flex items-center gap-3 border-b border-ink/5 pb-4">
-                <span className="flex -space-x-3">
-                  <span className="grid h-10 w-10 place-items-center rounded-2xl bg-c-green ring-2 ring-white">
-                    <AgentitoAvatar look={ROLES[1].look} className="h-8 w-8" />
-                  </span>
-                  <span className="grid h-10 w-10 place-items-center rounded-2xl bg-c-violet ring-2 ring-white">
-                    <AgentitoAvatar look={ROLES[0].look} className="h-8 w-8" />
-                  </span>
+                <span className="grid h-11 w-11 place-items-center rounded-2xl bg-c-violet">
+                  <AgentitoAvatar look={LOOK} className="h-9 w-9" />
                 </span>
                 <div>
-                  <p className="text-sm font-extrabold text-ink">Tu equipo</p>
+                  <p className="text-sm font-extrabold text-ink">Tu agente</p>
                   <p className="flex items-center gap-1.5 text-xs font-medium text-ink-soft">
-                    <span className="h-2 w-2 rounded-full bg-c-green-ink" /> 4 en línea · trabajando
+                    <span className="h-2 w-2 rounded-full bg-c-green-ink" /> en línea · trabajando
                   </p>
                 </div>
               </div>
@@ -531,19 +582,17 @@ function Control() {
                   ¿Cómo venimos hoy?
                 </div>
                 <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-ink shadow-soft">
-                  <span className="font-extrabold text-c-green-ink">Beto</span> · Contesté 34
-                  consultas y quedan 2 esperando tu ok para salir.
+                  Anoche entraron 7 consultas por WhatsApp. Contesté las 6 de precios y horarios;
+                  la otra pedía una fecha que no tengo y te la dejé marcada.
                 </div>
                 <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-ink shadow-soft">
-                  <span className="font-extrabold text-primary">Vera</span> · Dejé los tres posteos
-                  de la semana listos para que los mires.
+                  Y quedaron 2 presupuestos esperando tu ok para salir.
                 </div>
                 <div className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 font-medium text-white">
-                  Aprobá la primera, Beto. Y de ahora en más contestá más formal, ¿puede ser?
+                  Aprobá el primero. Y de ahora en más contestá más formal, ¿puede ser?
                 </div>
                 <div className="w-fit max-w-[85%] rounded-2xl rounded-bl-md bg-surface px-4 py-2.5 text-ink shadow-soft">
-                  <span className="font-extrabold text-c-green-ink">Beto</span> · Hecho: salió la
-                  respuesta y ya ajusté mi tono.
+                  Hecho: salió el presupuesto y ya ajusté el tono.
                 </div>
               </div>
             </div>
@@ -563,22 +612,22 @@ function Control() {
 const PORTAL_SCREENS = [
   {
     Icon: Eye,
-    title: "Qué hizo cada uno",
-    body: "Entrás a la mañana y ves lo del día: qué terminó, quién lo hizo, qué está en curso y qué te está esperando a vos.",
+    title: "Qué hizo",
+    body: "Entrás a la mañana y ves lo del día: qué terminó, qué está en curso y qué te está esperando a vos.",
   },
   {
     Icon: Hand,
     title: "Lo que espera tu ok",
-    body: "Antes de mandar un mail o publicar algo, el que lo escribió frena y te muestra el texto completo. Aprobás, lo corregís o lo rechazás.",
+    body: "Antes de mandar un mail o publicar algo, frena y te muestra el texto completo. Aprobás, lo corregís o lo rechazás.",
   },
   {
-    Icon: Users,
-    title: "La ficha de cada rol",
-    body: "Abrís a Vera o a Beto y ahí está: qué hace, qué nunca hace, qué tiene corriendo y todo lo que entregó hasta hoy.",
+    Icon: Puzzle,
+    title: "Su ficha y sus plugins",
+    body: "Abrís a tu agente y ahí está: qué hace, qué nunca hace, qué plugins tiene puestos y qué tiene corriendo ahora mismo.",
   },
   {
     Icon: FolderOpen,
-    title: "Lo que produjeron",
+    title: "Lo que produjo",
     body: "Informes, listados y planillas, ordenados por trabajo y con fecha. Se abren ahí mismo, sin bajar nada.",
   },
 ];
@@ -591,10 +640,10 @@ function Portal() {
           <LayoutDashboard size={15} /> Tu portal
         </span>
         <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
-          Un lugar donde ver todo lo que hacen
+          Un lugar donde ver todo lo que hace
         </h2>
         <p className="mt-4 text-lg text-ink-soft">
-          Tu equipo trabaja solo, pero no a ciegas. Cada empresa tiene su portal: entrás con un
+          Tu agente trabaja solo, pero no a ciegas. Cada empresa tiene su portal: entrás con un
           link, y ahí está todo lo que pasó — sin instalar nada y sin saber de computación.
         </p>
       </div>
@@ -645,7 +694,7 @@ function Integrations() {
       <Reveal>
         <div className="rounded-card bg-c-green px-6 py-10 text-center sm:px-12">
           <p className="text-sm font-bold uppercase tracking-wider text-c-green-ink/60">
-            Se conectan con lo que ya usás
+            Se conecta con lo que ya usás
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
             {INTEGRATIONS.map((x) => (
@@ -658,7 +707,7 @@ function Integrations() {
             ))}
           </div>
           <p className="mx-auto mt-6 max-w-xl text-sm font-medium text-c-green-ink/70">
-            Estas son las que ya vienen listas. ¿Tu sistema no está? Le escribimos la integración a
+            Estas son las que ya vienen listas. ¿Tu sistema no está? Le escribimos la conexión a
             medida — es lo que sabemos hacer. Y te decimos de entrada cuánto lleva: WhatsApp, por
             ejemplo, depende de un trámite ante Meta y son días, no horas.
           </p>
@@ -670,15 +719,21 @@ function Integrations() {
 
 /* ─────────────────────────────────────────── Pricing */
 
-// A single price per role. The three plans (Starter / Pro / Fleet) went away
-// with the pivot: when what's being hired is people, the client isn't buying
-// a "package", they're hiring their second employee. The section id stays
-// #planes because a blog post links there.
-const INCLUDES = [
-  "El rol trabajando 24/7, adentro de tu empresa",
-  "Su ficha en el portal: qué hace, qué tiene corriendo y qué entregó",
-  "Aprobación tuya para todo lo que sale para afuera",
-  "Soporte por WhatsApp, con nosotros",
+// Three numbers and nothing else: the diagnóstico that opens the door, the
+// plugin we build once, and the monthly that keeps it alive. The section id
+// stays #planes because a blog post links there.
+const SETUP_INCLUDES = [
+  "Tu agente instalado adentro de tu empresa, con el nombre y la cara que elegís",
+  "El primer plugin escrito con tu proceso adentro, y su “nunca”",
+  "Conectado a lo que ya usás: WhatsApp, tu correo, tus planillas, tu agenda",
+  "Tu portal, para ver todo lo que hace y aprobar lo que sale para afuera",
+];
+
+const MONTHLY_INCLUDES = [
+  "Los modelos que piensa: el consumo real va adentro, no lo pagás aparte",
+  "El hosting: la máquina donde vive tu agente, andando siempre",
+  "Los ajustes: le cambiás el criterio, nosotros lo dejamos fino",
+  "Soporte por WhatsApp, con nosotros. No con un ticket.",
 ];
 
 function Pricing() {
@@ -686,35 +741,64 @@ function Pricing() {
     <section id="planes" className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-24">
       <div className="mx-auto max-w-2xl text-center">
         <span className="inline-flex items-center gap-2 rounded-pill bg-primary/10 px-4 py-1.5 text-sm font-bold text-primary">
-          <Sparkles size={15} /> Un precio, sin letra chica
+          <Sparkles size={15} /> Tres números, sin letra chica
         </span>
         <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
-          Cuánto sale tu equipo
+          Cuánto sale
         </h2>
         <p className="mt-4 text-lg text-ink-soft">
-          Se paga por rol, como se paga un sueldo — solo que este es el mismo para todos y lo
-          decidís vos mes a mes.
+          El diagnóstico, el plugin que te escribimos y el mensual que lo mantiene vivo. No hay
+          planes, no hay escalones y no hay cargo por mensaje.
         </p>
       </div>
 
-      <div className="mt-12 grid gap-5 lg:grid-cols-5">
-        <Reveal className="h-full lg:col-span-3">
-          <article className="flex h-full flex-col rounded-card bg-primary p-8 text-white shadow-lift sm:p-10">
-            <p className="text-sm font-bold uppercase tracking-wider text-white/70">
-              Por cada rol que contratás
-            </p>
-            <div className="mt-4 flex flex-wrap items-baseline gap-x-3">
-              <span className="text-5xl font-extrabold tracking-tight sm:text-6xl">
-                {ROLE_PRICE}
-              </span>
-              <span className="text-lg font-bold text-white/80">por mes</span>
+      <div className="mt-12 grid gap-5 lg:grid-cols-3">
+        <Reveal className="h-full">
+          <article className="flex h-full flex-col rounded-card border border-ink/5 bg-white p-8 shadow-soft sm:p-9">
+            <p className="text-sm font-bold uppercase tracking-wider text-primary">El primer paso</p>
+            <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">El diagnóstico</h3>
+            <div className="mt-3 flex flex-wrap items-baseline gap-x-3">
+              <span className="text-4xl font-extrabold tracking-tight text-ink">{DIAGNOSTIC}</span>
+              <span className="text-sm font-bold text-ink-soft">una sola vez</span>
             </div>
-            <p className="mt-2 text-sm font-medium text-white/70">
-              Pesos uruguayos, por rol. Pagás los que contratás, y nada más.
+            <p className="mt-4 flex-1 text-ink-soft">
+              Una llamada y un informe escrito: qué trabajo tuyo conviene sacarte de encima
+              primero, cuánta plata o cuántas horas te devuelve, qué plugin hay que escribir y qué
+              sale todo. El informe es tuyo aunque no sigas — incluso si la conclusión honesta es
+              que todavía no te conviene.
+            </p>
+            <p className="mt-4 rounded-2xl bg-c-green p-4 text-sm font-semibold text-c-green-ink">
+              Si seguís, los {DIAGNOSTIC} se descuentan.
+            </p>
+          </article>
+        </Reveal>
+
+        <Reveal delay={110} className="h-full">
+          <article className="relative flex h-full flex-col rounded-card bg-primary p-8 text-white shadow-lift sm:p-9">
+            <p className="text-sm font-bold uppercase tracking-wider text-white/70">El armado</p>
+            <h3 className="mt-4 text-2xl font-extrabold tracking-tight">
+              Tu agente y su primer plugin
+            </h3>
+            <div className="mt-3 flex flex-wrap items-baseline gap-x-3">
+              {SETUP_FROM ? (
+                <>
+                  <span className="text-4xl font-extrabold tracking-tight">desde {SETUP_FROM}</span>
+                  <span className="text-sm font-bold text-white/80">de armado</span>
+                </>
+              ) : (
+                <span className="text-2xl font-extrabold leading-snug tracking-tight">
+                  {QUOTED}
+                </span>
+              )}
+            </div>
+            <p className="mt-3 text-sm font-medium text-white/75">
+              El número depende de una sola cosa: qué hay que escribir y qué hay que conectar.
+              Conectar una planilla de Google no cuesta lo mismo que conectar un sistema de 2009
+              que solo entiende el contador.
             </p>
 
-            <ul className="mt-8 flex-1 space-y-3">
-              {INCLUDES.map((f) => (
+            <ul className="mt-7 flex-1 space-y-3">
+              {SETUP_INCLUDES.map((f) => (
                 <li key={f} className="flex items-start gap-2.5">
                   <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/20">
                     <Check size={13} className="text-white" />
@@ -724,9 +808,9 @@ function Pricing() {
               ))}
             </ul>
 
-            <p className="mt-8 rounded-2xl bg-white/10 p-4 text-sm font-semibold text-white/90">
-              Sumás o sacás roles cuando quieras. Si uno no te está sirviendo, lo das de baja y
-              dejás de pagarlo — sin permanencia y sin explicaciones.
+            <p className="mt-7 rounded-2xl bg-white/10 p-4 text-sm font-semibold text-white/90">
+              Empezás con uno. Cada plugin que sumes después se cotiza aparte y sale bastante
+              menos: el agente ya está instalado, conectado y sabiendo cómo trabajás.
             </p>
 
             <a
@@ -735,40 +819,46 @@ function Pricing() {
               rel="noopener noreferrer"
               className="group mt-6 inline-flex items-center justify-center gap-2 rounded-pill bg-white px-6 py-3.5 text-sm font-extrabold text-primary shadow-lift transition hover:-translate-y-0.5"
             >
-              Armá tu equipo
+              Quiero mi agente
               <ArrowRight size={16} className="transition group-hover:translate-x-1" />
             </a>
           </article>
         </Reveal>
 
-        <Reveal delay={110} className="h-full lg:col-span-2">
-          <article className="flex h-full flex-col rounded-card border border-ink/5 bg-white p-8 shadow-soft sm:p-10">
-            <p className="text-sm font-bold uppercase tracking-wider text-primary">El primer paso</p>
-            <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">El diagnóstico</h3>
+        <Reveal delay={220} className="h-full">
+          <article className="flex h-full flex-col rounded-card border border-ink/5 bg-white p-8 shadow-soft sm:p-9">
+            <p className="text-sm font-bold uppercase tracking-wider text-primary">Todos los meses</p>
+            <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">El mantenimiento</h3>
             <div className="mt-3 flex flex-wrap items-baseline gap-x-3">
-              <span className="text-4xl font-extrabold tracking-tight text-ink">
-                {DIAGNOSIS_PRICE}
-              </span>
-              <span className="text-sm font-bold text-ink-soft">una sola vez</span>
+              {MONTHLY_FROM ? (
+                <>
+                  <span className="text-4xl font-extrabold tracking-tight text-ink">
+                    desde {MONTHLY_FROM}
+                  </span>
+                  <span className="text-sm font-bold text-ink-soft">por mes</span>
+                </>
+              ) : (
+                <span className="text-2xl font-extrabold leading-snug tracking-tight text-ink">
+                  {QUOTED}
+                </span>
+              )}
             </div>
-            <p className="mt-4 flex-1 text-ink-soft">
-              Una llamada y un informe escrito: dónde un equipo de agentes te ahorra plata y
-              tiempo, qué roles te sirven, en qué orden conviene arrancar y qué sale el setup. Si
-              seguís, los {DIAGNOSIS_PRICE} se descuentan del setup.
+
+            <ul className="mt-7 flex-1 space-y-3">
+              {MONTHLY_INCLUDES.map((f) => (
+                <li key={f} className="flex items-start gap-2.5">
+                  <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-c-green">
+                    <Check size={13} className="text-c-green-ink" />
+                  </span>
+                  <span className="text-ink-soft">{f}</span>
+                </li>
+              ))}
+            </ul>
+
+            <p className="mt-7 rounded-2xl bg-ink/[0.04] p-4 text-sm font-medium text-ink-soft">
+              Sin permanencia. Si un mes no te devolvió tiempo real, lo das de baja y dejás de
+              pagarlo — es la única prueba que importa.
             </p>
-            <p className="mt-4 rounded-2xl bg-ink/[0.04] p-4 text-sm font-medium text-ink-soft">
-              El setup se cotiza ahí, con tu caso a la vista: depende de qué haya que conectar.
-              Antes de eso no te tiramos un número al aire.
-            </p>
-            <a
-              href={WHATSAPP}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group mt-6 inline-flex items-center justify-center gap-2 rounded-pill bg-ink px-6 py-3.5 text-sm font-extrabold text-white shadow-soft transition hover:-translate-y-0.5 hover:bg-primary"
-            >
-              Quiero el diagnóstico
-              <ArrowRight size={16} className="transition group-hover:translate-x-1" />
-            </a>
           </article>
         </Reveal>
       </div>
@@ -780,48 +870,56 @@ function Pricing() {
 
 const FAQS = [
   {
-    q: "¿Qué es un empleado de IA?",
-    a: "Es software que usa un modelo de IA (como Claude o GPT) para ejecutar trabajo real: lee tus sistemas, decide qué hacer y lo hace. No es un chat al que hay que hablarle — es un compañero de trabajo digital que corre solo, 24/7, con un nombre, una lista de lo que hace y un límite escrito de lo que nunca va a hacer.",
+    q: "¿Qué es un agente de IA?",
+    a: "Es software que usa un modelo de IA (como Claude o GPT) para ejecutar trabajo real: lee tus sistemas, decide qué hacer y lo hace. No es un chat al que hay que hablarle — es un compañero de trabajo digital que corre solo, 24/7, con un nombre que le ponés vos, una lista de lo que hace y un límite escrito de lo que nunca va a hacer.",
   },
   {
-    q: "¿En qué se diferencia de un chatbot?",
-    a: "Un chatbot responde preguntas. Tu equipo actúa: entra a tu correo, arma presupuestos, escribe los posteos, ordena las planillas y ejecuta procesos completos con permisos controlados. El chatbot conversa; el equipo trabaja.",
+    q: "¿Qué es un plugin?",
+    a: "Es un trabajo concreto de tu empresa escrito adentro del agente. “Contestar el WhatsApp fuera de hora con mis precios” es un plugin. “Leer las facturas que me llegan y pasarlas a la planilla” es otro. Adentro va tu proceso: qué mira, qué decide, qué te pregunta antes de actuar y qué no hace nunca. Sin plugins, el agente conversa; con un plugin, trabaja.",
   },
   {
-    q: "¿Por qué no usar ChatGPT o Claude directo?",
-    a: "Porque esas herramientas necesitan que una persona las use: vos escribís, ellas responden. Tu equipo corre flujos autónomos en un cronograma, conectado a tus sistemas con herramientas escritas a medida, sin que nadie lo empuje. Es la diferencia entre tener un asistente y tener empleados.",
+    q: "¿Puedo pedir uno a medida?",
+    a: "Es lo normal, no la excepción: casi todos los plugins que escribimos nacen de un pedido concreto de una empresa. Nos contás el trabajo que te come las horas, lo miramos, te decimos si algo parecido ya existe (y entonces se adapta, que es más rápido y más barato) o cuánto lleva escribirlo de cero. Recién después de eso hay un número, y el número se cotiza antes de escribir una línea.",
   },
   {
     q: "¿Cuánto cuesta?",
-    a: `${ROLE_PRICE} por rol, por mes, en pesos uruguayos. Contratás los que necesites y pagás solo esos. Antes va el diagnóstico, ${DIAGNOSIS_PRICE}: una llamada y un informe con dónde te ahorra plata cada rol y cuánto sale el setup. Si seguís, esos ${DIAGNOSIS_PRICE} se descuentan del setup.`,
+    a: `Hay tres números y ninguno tiene letra chica. El diagnóstico sale ${DIAGNOSTIC}, una sola vez, y se descuenta si seguís. El agente con su primer plugin se paga una vez: ${
+      SETUP_FROM ? `desde ${SETUP_FROM}` : "el número sale del diagnóstico, con tu caso a la vista"
+    }. Y después hay un mensual que cubre los modelos, el hosting, el soporte y los ajustes: ${
+      MONTHLY_FROM ? `desde ${MONTHLY_FROM} por mes` : "también se cotiza ahí"
+    }. Cada plugin nuevo que pidas se cotiza aparte, antes de escribirlo.`,
   },
   {
-    q: "¿Puedo contratar un solo rol?",
-    a: "Sí, y es lo que recomendamos para arrancar. Ponés a trabajar el que más te duele hoy, lo ves andar un mes y recién ahí sumás el segundo. Sumar o sacar roles es una decisión tuya y no lleva un proyecto nuevo.",
+    q: "¿Puedo empezar con uno solo?",
+    a: "Es lo que recomendamos. Un agente, un plugin: el trabajo que más te duele hoy. Lo ves andar un mes, medís si te devolvió horas de verdad y recién ahí pedís el segundo. Sumar un plugin después no es un proyecto nuevo — el agente ya está instalado, conectado y sabiendo cómo trabajás — así que sale bastante menos que el primero.",
   },
   {
-    q: "¿Y si ninguno de los cinco es lo que necesito?",
-    a: "Ese es el caso normal: todos los roles se arman a medida, y los cinco que mostramos son puntos de partida, no un menú. El tuyo se compone de capacidades — leer facturas y fotos, buscar en internet, transcribir audios, hacer cuentas y planillas — según lo que nos cuentes que necesitás que haga. Sale lo mismo que cualquier otro rol.",
+    q: "¿En qué se diferencia de un chatbot?",
+    a: "Un chatbot responde preguntas. Tu agente actúa: entra a tu correo, arma presupuestos, escribe los posteos, ordena las planillas y ejecuta procesos completos con permisos controlados. El chatbot conversa; el agente trabaja.",
+  },
+  {
+    q: "¿Por qué no usar ChatGPT o Claude directo?",
+    a: "Porque esas herramientas necesitan que una persona las use: vos escribís, ellas responden. Tu agente corre solo, en un cronograma, conectado a tus sistemas con herramientas escritas a medida, sin que nadie lo empuje. Es la diferencia entre tener un asistente al que hay que dictarle y tener el trabajo hecho cuando llegás a la mañana.",
   },
   {
     q: "¿Cuánto demora estar funcionando?",
-    a: "El primer rol arranca en semanas, no en meses: la mayor parte del tiempo se va en conectar tus sistemas, no en armar el rol. Los que sumes después son bastante más rápidos, porque tu equipo ya está instalado y conectado.",
+    a: "El agente con su primer plugin arranca en semanas, no en meses: la mayor parte del tiempo se va en conectar tus sistemas y en entender tu proceso, no en armar el agente. Los plugins que sumes después son bastante más rápidos, porque lo pesado ya está hecho.",
   },
   {
-    q: "¿A qué sistemas se conectan?",
-    a: "Ya vienen listas: Telegram, la casilla de correo de la empresa, y Google Planillas, Drive, Agenda y Documentos. Slack y WhatsApp los conectamos nosotros (WhatsApp lleva días por la verificación de Meta). Para tu CRM, tu ERP o cualquier sistema propio con API escribimos la integración a medida — eso es lo que hacemos. Si te decimos que sí, es porque lo probamos.",
+    q: "¿A qué sistemas se conecta?",
+    a: "Ya vienen listas: Telegram, la casilla de correo de la empresa, y Google Planillas, Drive, Agenda y Documentos. Slack y WhatsApp los conectamos nosotros (WhatsApp lleva días por la verificación de Meta). Para tu CRM, tu sistema de gestión o cualquier sistema propio con API escribimos la conexión a medida — eso es lo que hacemos. Si te decimos que sí, es porque lo probamos.",
   },
   {
     q: "¿Es seguro? ¿Qué pasa con mis datos?",
-    a: "Tu equipo entero vive adentro de un contenedor tuyo, aislado del de cualquier otro cliente y con su propia clave. Cada rol opera con permisos acotados: solo ve y toca lo que le habilitás. Todo lo que sale para afuera pasa por tu aprobación, y hay roles con el límite puesto de fábrica — Contabilidad, por ejemplo, mira y ordena los números pero no factura ni paga nada. Tus datos no se usan para entrenar ningún modelo.",
+    a: "Tu agente vive adentro de un contenedor tuyo, aislado del de cualquier otro cliente y con su propia clave. Opera con permisos acotados: solo ve y toca lo que le habilitás. Todo lo que sale para afuera pasa por tu aprobación, y cada plugin trae su límite escrito de fábrica — el de facturas, por ejemplo, mira y ordena los números pero no factura ni paga nada. Tus datos no se usan para entrenar ningún modelo.",
   },
   {
-    q: "¿Puedo hablarles y cambiarles las instrucciones?",
-    a: "Sí, y es de lo mejor que tiene. Les hablás desde tu portal y desde el celular por Telegram, que se activa en cinco minutos: preguntás qué hicieron, pedís tareas nuevas y les cambiás las instrucciones hablándoles, como a cualquier empleado. WhatsApp también se puede, pero es el más lento de conectar porque depende de una verificación ante Meta: lo tramitamos nosotros y lleva días. Y si algo no te cierra, los pausás. Autonomía no significa perder el control.",
+    q: "¿Puedo hablarle y cambiarle las instrucciones?",
+    a: "Sí, y es de lo mejor que tiene. Le hablás desde tu portal y desde el celular por Telegram, que se activa en cinco minutos: le preguntás qué hizo, le pedís tareas nuevas y le cambiás las instrucciones hablándole, como a cualquier empleado. WhatsApp también se puede, pero es el más lento de conectar porque depende de una verificación ante Meta: lo tramitamos nosotros y lleva días. Y si algo no te cierra, lo pausás. Autonomía no significa perder el control.",
   },
   {
     q: "¿Dónde trabajan y quién está detrás?",
-    a: "Estamos en Montevideo y trabajamos de forma remota. tuagente es un producto de pdelabs, un estudio de ingeniería de software con años construyendo sistemas en producción — no somos una agencia de marketing que descubrió la IA el mes pasado. Estamos arrancando con tuagente, y lo decimos de frente: el primer equipo que pusimos a trabajar fue el nuestro.",
+    a: "Estamos en Montevideo y trabajamos de forma remota. tuagente es un producto de pdelabs, un estudio de ingeniería de software con años construyendo sistemas en producción — no somos una agencia de marketing que descubrió la IA el mes pasado. Detrás de tu agente hay personas: los plugins los escribimos nosotros y damos la cara por lo que hace.",
   },
 ];
 
@@ -858,6 +956,8 @@ function Faq() {
 
 /* ─────────────────────────────────────────── Structured data (SEO / AEO) */
 
+// The undecided prices don't get faked here either: an Offer without a price
+// is honest, an Offer with a made-up one is a lie a crawler repeats.
 const JSON_LD = {
   "@context": "https://schema.org",
   "@graph": [
@@ -867,11 +967,17 @@ const JSON_LD = {
       name: "tuagente.uy",
       url: "https://tuagente.uy",
       description:
-        "Equipos de IA para empresas uruguayas: contratás roles — marketing, soporte, ventas, contabilidad o uno a medida — que trabajan 24/7 adentro de tu empresa, con un portal donde ves todo lo que hacen y aprobás lo que sale para afuera.",
-      slogan: "Un equipo de IA que trabaja adentro de tu empresa",
+        "Un agente de IA por empresa, instalado adentro de tu empresa y bautizado por vos, con plugins escritos a medida para el trabajo que te come las horas: WhatsApp fuera de hora, presupuestos, facturas, redes y transcripciones. Portal para ver todo lo que hace y aprobar lo que sale para afuera.",
+      slogan: "Un agente de IA que trabaja adentro de tu empresa",
       email: "hola@tuagente.uy",
       telephone: "+59899002835",
-      priceRange: "UYU 1.500 por rol, por mes",
+      priceRange: [
+        `${DIAGNOSTIC} el diagnóstico`,
+        SETUP_FROM && `armado desde ${SETUP_FROM}`,
+        MONTHLY_FROM && `${MONTHLY_FROM} por mes`,
+      ]
+        .filter(Boolean)
+        .join(" · "),
       address: {
         "@type": "PostalAddress",
         addressLocality: "Montevideo",
@@ -885,7 +991,7 @@ const JSON_LD = {
       },
       knowsAbout: [
         "Agentes de IA",
-        "Equipos de agentes de IA",
+        "Plugins a medida para agentes de IA",
         "Automatización de procesos",
         "Inteligencia artificial para empresas",
         "Integraciones a medida",
@@ -893,19 +999,23 @@ const JSON_LD = {
       makesOffer: [
         {
           "@type": "Offer",
-          name: "Un rol del equipo, por mes",
+          name: "Diagnóstico",
           description:
-            "Un rol de IA trabajando 24/7 adentro de tu empresa, con su ficha en el portal y aprobación tuya para todo lo que sale para afuera.",
-          price: "1500",
-          priceCurrency: "UYU",
+            "Una llamada y un informe: qué trabajo conviene sacarte de encima primero, cuánto te devuelve y qué sale ponerlo a andar. Se descuenta si seguís.",
+          price: "200",
+          priceCurrency: "USD",
         },
         {
           "@type": "Offer",
-          name: "Diagnóstico",
+          name: "Tu agente y su primer plugin",
           description:
-            "Una llamada y un informe: qué roles te sirven, cuánto te ahorran y qué sale el setup. Se descuenta del setup si seguís.",
-          price: "200",
-          priceCurrency: "USD",
+            "Un agente de IA instalado adentro de tu empresa, con el nombre y la cara que elegís, y un plugin escrito con tu proceso adentro. Se cotiza en el diagnóstico.",
+        },
+        {
+          "@type": "Offer",
+          name: "Mantenimiento mensual",
+          description:
+            "Los modelos, el hosting, los ajustes y el soporte, todos los meses. Sin permanencia.",
         },
       ],
     },
@@ -932,7 +1042,7 @@ function Proof() {
             Somos nuestro propio cliente
           </p>
           <h2 className="mt-4 text-3xl font-extrabold leading-snug tracking-tight text-c-violet-ink sm:text-4xl">
-            El primer equipo que pusimos a trabajar fue el nuestro.
+            El primer agente que pusimos a trabajar fue el nuestro.
           </h2>
           <p className="mt-5 text-lg leading-relaxed text-c-violet-ink/80">
             Investiga empresas, arma informes, prepara los mails que salen a nombre nuestro y nos
@@ -962,11 +1072,12 @@ function FinalCta() {
           style={{ animationDelay: "-3s" }}
         />
         <h2 className="relative mx-auto max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
-          ¿Listo para tener tu equipo trabajando?
+          ¿Listo para tener tu agente trabajando?
         </h2>
         <p className="relative mx-auto mt-5 max-w-xl text-lg text-white/80">
-          Arrancá por el diagnóstico: {DIAGNOSIS_PRICE}, una llamada y un informe con lo que te
-          ahorra cada rol. Si seguís, se descuentan del setup. Escribinos y lo agendamos.
+          Arrancá por el diagnóstico: {DIAGNOSTIC}, una llamada y un informe con el trabajo que
+          conviene sacarte de encima primero y qué sale. Si seguís, se descuentan. Escribinos y lo
+          agendamos.
         </p>
         <a
           href={WHATSAPP}
@@ -974,7 +1085,7 @@ function FinalCta() {
           rel="noopener noreferrer"
           className="group relative mt-9 inline-flex items-center justify-center gap-2 rounded-pill bg-white px-8 py-4 text-base font-extrabold text-primary shadow-lift transition hover:-translate-y-0.5"
         >
-          Quiero mi equipo
+          Quiero el diagnóstico
           <ArrowRight size={19} className="transition group-hover:translate-x-1" />
         </a>
       </div>
