@@ -129,7 +129,7 @@ export default function AgentWidget() {
                 <Bot size={20} />
               </span>
               <div>
-                <p className="text-sm font-extrabold text-ink">Tu equipo</p>
+                <p className="text-sm font-extrabold text-ink">Tu agente</p>
                 <p className="flex items-center gap-1.5 text-xs font-medium text-ink-soft">
                   <span className="h-2 w-2 rounded-full bg-c-green-ink" /> en línea · probalo acá
                 </p>
