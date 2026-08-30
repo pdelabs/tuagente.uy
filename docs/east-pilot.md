@@ -1,5 +1,10 @@
 # East Comunicación pilot (Cata) — first real client
 
+> **HISTORICAL.** The pilot as planned here did not happen: East turned out to
+> be a test client and was retired on 30/8/2026, restarting from zero on the
+> single-agent + plugins model. What it actually did — and which of the
+> intentions below survived contact — is in `docs/east-requirements.md`.
+
 Decided 2026-08-06. tuagente's first real client, under the new structure:
 **free install + free pilot month 1**. Cata is a freelance communicator with
 several end clients; her typical interview ends up on live TV.

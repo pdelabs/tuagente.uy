@@ -14,7 +14,6 @@ old date isn't a problem; a row that says something no longer true is.
 | Agent | Host | SOUL | Engine | Last check |
 |---|---|---|---|---|
 | tuagente demo (Luis' Mac) | `tuagente-local-agent`, local docker, `:8642`/`:8643` | **v13** — installed by `install.sh`, marker read back off disk | `v2026.7.30` | 30/8, wave 5: named «Tuca», works for «Ferretería Demo». `policy/capabilities/purchased.json` written by hand with `social-package` + `invoices-to-data` — the two rows whose installs are exactly what its former marketing and accounting roles carried — then `install.sh` and a restart of `hermes` + `portal-adapter`. `agent-check` **30 ok · 0 warn · 0 failures**, `portal-check` **14 ok · 2 warn · 0 failures**, `/portal/roles` **404**, `/portal/plugins` **11** (six system + transcribe + the four purchased), `hermes profile list` = `default` only, zero "Skipping secondary profile", US$0.53851965 on the key — unchanged by the visit. **30/8, revalidated independently**: every number in this row reproduced from scratch — same 30 ok · 0 warn · 0 failures, same 14 ok · 2 warn · 0 failures, same 404, same 11 — plus one chat turn that asked the agent its name and got «Tuca», on `openai/gpt-5.6-luna`, 22,486 in / 41 out, **US$0.00567055**. That turn is why the key now reads US$0.5441902 and not the figure above; nothing else on this agent moved |
-| East Comunicación | `east` → `/opt/agentes/east` | **v1** — the bare `<!-- kit:base -->` marker, no version (read over ssh, 24/8/2026; re-read 30/8, unchanged) | `v2026.7.30` (24/8: read from that host's `docker ps`, not the compose; 30/8 unchanged) | 24/8: alive only. **30/8: cutover REHEARSED and PASSED — the live tree was not touched beyond reading and one backup.** Rehearsed against a local copy and a server-side copy (`east-rehearsal`, deleted after): migration → SOUL v13 → `install.sh` → `agent-check` **30 ok · 0 warn · 0 failures**, then booted the migrated pair in throwaway containers → `portal-check` **11 ok · 3 warn · 0 failures** (the three warnings are `approvals`/`usage`/`crons` not declared, all correct), `/portal/manifest` `named:true` «Selastian» adapter-**0.43.0**, `/portal/plugins` **7** (six system + transcribe), `/portal/flows` **8** curated. No `purchased.json`: nothing she uses is a menu row. **THE BIG FINDING: the live tree is an empty shell** — 0 sessions, 0 messages, 0 tickets, 0 crons, empty `workspace/`, no identity, no flows; every non-404 request it has ever logged is Luis' own `curl /health` from 10–11/8. Cata's real data is the LAPTOP tree (`~/Desktop/Luis/Projects/agente-east/`, 169 MB, `state.db` 66 MB, her three flows, `google_client_secret.json`, baptism «Selastian»), whose containers are gone. Migrating the VPS does not give her her agent back — that is a separate decision. Backup kept at `/opt/agentes/east-backup-20260830.tgz` (9 307 208 B, sha256 `97f6fb31…88ff0`). Runbook: `docs/east-cutover.md`. **The live cutover needs Luis' explicit go** |
 | tuagente.uy (our own) | `tuagente` → `/opt/agentes/tuagente` | **v13** — installed 24/8 by `deploy-remote.sh`, marker read back off disk | `v2026.7.30` (24/8: `docker inspect tuagente-hermes`) | 24/8, the day it was built: `agent-check` **30 ok · 1 warn · 1 failure**, and the failure is the identity, which is the pristine state (see below); `portal-check` **13 ok · 2 warn · 0 failures** through both HTTPS hostnames. 25/8, redeployed for adapter **0.42.2** (the empty-baptism fix) and `observability.sh tuagente on` re-run because the redeploy rewrites the root `.env`: `agent-check` **30 ok · 1 warn · 1 failure** over the WHOLE tree — still the identity, still the pristine state, now failing with the true reason (no block at all, nobody has onboarded it); `portal-check` **13 ok · 2 warn · 0 failures**, 0 sessions · 0 tickets · 0 hired · US$0.0000. **25/8, no longer pristine**: Luis onboarded through the portal as a client and hired `support` (Beto) from the request — `agent-check` over the whole tree **35 ok · 1 warn · 0 failures** (the identity closed itself: the business step wrote «Tu Agente»), `portal-check` **13 ok · 2 warn · 0 failures**, multiplex `['default', 'support']`, 1 session · 1 ticket · 1 hired · US$0.0165 — the onboarding brief, not the hire. **30/8: the roster is gone and so is Beto** — see «The team pivot, undone» below: `agent-check` **32 ok · 0 warn · 2 failures**, both of them the kit's team/solo skill split and not this agent. **30/8, wave 5, redeployed off the pivot-free kit** (adapter **0.43.0**, `deploy-remote.sh tuagente tuagente agentes.tuagente.uy`, then `multiplex_profiles` out of `data/config.yaml` and a restart): `agent-check` **29 ok · 0 warn · 1 failure**, and the failure is the identity again — «onboarding incomplete: the agent was never named». **That one is correct and expected**: its `portal:identity` block says «Tu Agente» and no name, which the team-era check called legitimate and wave 5 stopped doing. `/portal/manifest` reports `named:false`, so the portal opens at the naming step on Luis' next visit and the failure closes itself the moment he names it. **Nobody should invent a name to make it green.** `portal-check` **12 ok · 2 warn · 0 failures** through both HTTPS hostnames, `/portal/roles` **404**, `/portal/plugins` **7** (six system + transcribe), `hermes profile list` = `default` only, zero "Skipping secondary profile" in the logs, US$0.05497028 on the key — unchanged by the visit. No `policy/capabilities/purchased.json`: this client has bought nothing, which is the legitimate state and what `plugin_set.py` says out loud |
 
 ## The team pivot, undone — 30/8/2026, Luis' decision
@@ -24,9 +23,12 @@ face at onboarding, they talk to it, it owns everything. The plugin framework
 stays; what goes is per-role exposure. This section records what changed on
 the two live agents, which is the reversible half and went first.
 
-**East was not touched and must not be.** It is the pre-pivot reference shape
-— the only agent in the fleet that never saw a roster — and it is what the
-portal is being brought back to.
+**East was the pre-pivot reference shape** — the only agent in the fleet that
+never saw a roster — and it is what the portal was brought back to. **30/8, and
+after that was written: East is retired and every instance deleted** (test
+client, restarting from zero — see "East: what remains, and what does not").
+The reference it provided has already done its work here; nothing below still
+depends on that agent existing.
 
 | | `tuagente` (VPS) | `tuagente-local-agent` (demo, Luis' Mac) |
 |---|---|---|
@@ -179,7 +181,10 @@ nothing else was affected.
 > `docker compose up -d portal-adapter` (a `restart` is not enough: it is a new
 > mount). Not run against either agent yet — this line says what is pending,
 > not what was done. **24/8: with Mr.Wobble gone this concerns East alone**,
-> and East is further behind than 3b.
+> and East is further behind than 3b. **30/8: East is retired and deleted, so
+> this is pending for NOBODY** — every agent alive today was built by the
+> current installer, which does both steps. Kept as the description of the two
+> steps, not as a task.
 
 > **Pending after this translation pass.** This rename introduced new inline
 > chip syntax in the SOUL (`capability:<id>` etc., soul/VERSION → v13) and new
@@ -192,6 +197,11 @@ nothing else was affected.
 > English layout". This is a statement of what's pending, not a report of
 > results — update this table (and the row above) only once each migration
 > has actually run and been checked.
+>
+> **30/8: nothing is pending here any more, because East is gone.** It was the
+> last agent on the old layout and it is retired and deleted. The migration
+> script and its runbook stay — the three bugs it found are real and a future
+> old agent would hit them — but no agent is waiting on them today.
 >
 > **30/8: the script has now been run against a real agent — a COPY of East,
 > on East's own host — and it was wrong in three ways the unit tests could not
@@ -271,6 +281,12 @@ knobs. **That one's closed now**: on 16/8 the SOUL has the `portal:identity`
 block, written by the portal's naming step, and `agent-check` reports it OK.
 It was the only failure still open from that reset.
 
+**Everything in the next two paragraphs is now historical: East was retired and
+deleted on 30/8** (see "East: what remains, and what does not"). No agent is on
+v1 today and none is missing the promises guard. They are kept because they
+describe what an old agent looks like when one turns up, not because anything
+is waiting.
+
 **East is on v1, and that was measured on 24/8** — the bare
 `<!-- kit:base -->` marker, from before versioning. This paragraph used to
 say "two versions behind" and that it was unknown; it is neither. East is
@@ -305,14 +321,15 @@ exists, so `plugins.enabled` — and with it `hooks`, `hooks_auto_accept` and
 It's the step people forget when updating an old client, because the deploy
 finishes without saying anything.
 
-**East has a second copy, on Luis' laptop**, found during the 24/8 sweep:
+**East had a second copy, on Luis' laptop**, found during the 24/8 sweep:
 `~/Desktop/Luis/Projects/agente-east/` — a full agent tree (its own git
 repo, `data/` with Eco's SOUL, `kanban.db`, `state.db` at 66 MB, real
 interview material under `workspace/interno/`, and
-`google_client_secret.json`). Its containers are gone; the directory is
-not. It was NOT deleted in that sweep and must not be treated as scratch:
-it is a client's data at rest outside the VPS. Whoever disposes of it
-decides that with Cata's agent in mind, not as housekeeping.
+`google_client_secret.json`). **30/8: disposed of, deliberately and not as
+housekeeping** — Luis' decision that East is a test client and restarts from
+zero. It was READ FIRST (`docs/east-requirements.md`) and then moved to
+`~/.Trash/agente-east/`, which is recoverable until the Trash is emptied. See
+the retirement row and the record below.
 
 **Retirements.** A retired agent leaves the table — the table says what runs
 where — but not the record:
@@ -321,6 +338,75 @@ where — but not the record:
 |---|---|---|
 | La Mano (pdelabs, client 0) | 2026-08-12, Luis' decision | backup at `~/Desktop/Luis/Projects/_respaldo-lamano/lamano-final-20260812.tgz`; containers deleted and repo removed |
 | Mr.Wobble (tuagente.uy's own agent) | 2026-08-24, Luis' decision | the tree on its VPS, moved aside and otherwise byte for byte: `/opt/agentes/retired-tuagente-20260824/` (178 MB — it WAS `/opt/agentes/tuagente/`, renamed the same day to free the slug for its successor) and `/opt/agentes/wobble-pre-reset-20260813.tgz` (39 MB). Containers removed with `compose down` **without `-v`**; the four volumes were kept, but three of them now belong to the successor — see the runbook below. Runbook below |
+| East Comunicación (Cata, «Selastian») | 2026-08-30, Luis' decision — **test client, restarting from zero** on the single-agent + plugins model | ONE archive: `east:/opt/agentes/east-final-backup-20260830.tgz` (9 307 208 B, sha256 `97f6fb3132ea1d9284059d492e0515a47892c4895e3940863f56bb8829588ff0`, re-hashed after the rename). The laptop tree — the only East that ever worked — is in `~/.Trash/agente-east/` (169 MB, recoverable until the Trash is emptied). **What it did is written down in `docs/east-requirements.md`, and that dossier outlives both.** Record below |
+
+### East: what remains, and what does not
+
+**Decided 30/8/2026 by Luis: East is a TEST client, and it restarts from zero
+on the single-agent + plugins model.** So the cutover in `docs/east-cutover.md`
+— rehearsed and passed the same day — was never run: there was nothing worth
+migrating, and a from-zero build on today's kit is a different job. Every East
+instance was deleted so that nothing left behind could be mistaken for the
+real one.
+
+**What was deleted, 30/8:**
+
+- **The laptop tree** (`~/Desktop/Luis/Projects/agente-east/`, 169 MB) →
+  `~/.Trash/agente-east/`. Moved, not `rm`: recoverable until the Trash is
+  emptied. This was **the only East that ever worked** — 207 sessions, 9,430
+  messages, three flows, one cron with 191 runs, six deliverables, the baptism
+  «Selastian».
+- **The VPS agent** (`east` → `49.13.225.187`, `/opt/agentes/east/`). Verified
+  empty first — 0 sessions, 0 messages, no `workspace/`, no flows, no crons —
+  then `docker compose down` **without `-v`**, which removed all three
+  containers (`east-hermes`, `east-portal-adapter`, `east-caddy`) and the
+  `east_default` network, and the tree was deleted.
+
+**What remains on that VPS, and it is the whole list:**
+`/opt/agentes/east-final-backup-20260830.tgz` (9 307 208 B, sha256
+`97f6fb3132ea1d9284059d492e0515a47892c4895e3940863f56bb8829588ff0`) — renamed
+from `east-backup-20260830.tgz` so the name says what it is, and re-hashed
+after the rename. Plus what `down` without `-v` leaves and the box's own
+furniture: two orphan volumes (`east_caddy_config`, `east_caddy_data`, TLS
+state only), two images (`nousresearch/hermes-agent:v2026.7.30`,
+`caddy:2-alpine`), the three default docker networks. Zero containers, zero
+compose projects, no custom systemd units, no crontab, nothing listening but
+sshd. **That box was single-purpose and is now bare** — 6.7 G of 38 G used,
+ports 80/443 free.
+
+**The archive is a copy of the EMPTY SHELL, not of Cata's work.** 123 entries.
+It preserves the compose, the Caddyfile, the `.env` and a SOUL — the shape of
+the install, not a history. **The record of what she actually did is
+`docs/east-requirements.md`**, written from the laptop tree before it went:
+what she asked for, ranked by evidence; the plugin build for a from-zero East;
+and the gaps that block it (no catalog row sells `drive-inbox`, the onboarding
+runbook never mentions Google OAuth, a `drive` trigger accepts empty folders).
+Read that before rebuilding her, not this row.
+
+**The OpenRouter key `east-comunicacion` was NOT disabled** — see "Keys, after
+East" below.
+
+### Keys, after East
+
+`east-comunicacion` (hash `738e147b92a8e33c…`) is **still enabled**, on
+purpose: nothing should be using it, and turning it off would hide the
+evidence if something is. Read on 30/8/2026 from the provisioning key:
+limit **US$10**, usage **US$5.010627101**, remaining **US$4.989372899**,
+`disabled: false`, no expiry, created 6/8. `usage_daily` **0**;
+`usage_weekly` **US$0.234563265**.
+
+That weekly figure is the thing to watch. With the laptop containers long gone
+and the VPS agent deleted, **any further movement on this key means something
+we do not know about is still calling it** — and now that both agents are gone,
+the next reading is unambiguous. The demo agent has its own key
+(`local-demo`, `36beb7346dcae81a`), so it is not that one.
+
+One number does not reconcile and is worth knowing: the laptop `state.db` adds
+up to **US$3.09** of session cost against **US$5.01** on the key. The ~US$1.9
+difference is unaccounted for by that history — most likely the 30/8 cutover
+rehearsal, which booted a migrated copy and ran `portal-check` against it, plus
+whatever ran before the tree took its final shape. **Luis decides whether to
+disable or delete the key**; this file only reports it.
 
 ### Mr.Wobble: what remains, and how to bring it back
 
@@ -562,6 +648,10 @@ if it was deployed before 11/8, it came out without a SOUL, because the
 remote deploy didn't install one back then.
 
 ## Engine knobs: Mr.Wobble yes, East no
+
+**Historical as of 30/8: both agents in this section are gone** — Mr.Wobble
+decommissioned 24/8, East retired and deleted 30/8. Nobody is running with the
+70 engine skills on today. Kept for the runbook it points at.
 
 Batch C1 left the kit with the engine's own skills turned off, the portal's
 preamble replaced, and the kit's skills mounted `:ro`. **That only reaches

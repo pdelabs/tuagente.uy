@@ -1,5 +1,14 @@
 # East: cutover to the English layout, SOUL v13 and the plugin set
 
+> **SUPERSEDED — 30/8/2026, Luis' decision: East is a TEST client and restarts
+> from zero on the single-agent + plugins model. This cutover will never be
+> run, and every East instance has been deleted** (see `hermes-kit/fleet.md`,
+> "East: what remains, and what does not"). **The file stays because the
+> migration-script fixes it documents are real**: `tools/migrate-agent-to-english.sh`
+> had three bugs that only a run against a real agent could find, they are
+> fixed here, and the next old agent that turns up will hit them. What East
+> actually needed is in `docs/east-requirements.md`.
+
 Rehearsed end to end on **30/8/2026** against a copy of the live agent, plus a
 second pass over the real client data on Luis' laptop. **Result: PASS** —
 `agent-check` 30 ok / 0 failures, `portal-check` 11 ok / 3 warnings / 0

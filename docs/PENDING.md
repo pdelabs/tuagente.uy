@@ -4,9 +4,14 @@ What's left open, and who unblocks it. Close it here once it's resolved.
 
 ## Migration to English (2026-08-23)
 
-- **Migrate live agents (Mr.Wobble, East) to the English on-disk layout**
-  with `tools/migrate-agent-to-english.sh` and install SOUL v13 — pending,
-  untested against live hosts.
+- ~~**Migrate live agents (Mr.Wobble, East) to the English on-disk layout**~~
+  — **CLOSED 30/8/2026: there is nobody left to migrate.** Mr.Wobble was
+  decommissioned 24/8; East was retired and every instance deleted 30/8 (test
+  client, restarting from zero — `hermes-kit/fleet.md`, "East: what remains,
+  and what does not", and `docs/east-requirements.md` for what it needed).
+  Every agent alive was built by the current installer. The script and its
+  runbook (`docs/east-cutover.md`) stay for the next old agent that turns up;
+  the three bugs a real run found are fixed.
 
 ## Waiting on Luis (nobody else can)
 
@@ -848,7 +853,9 @@ outside all the day's work on the gate.
 - **The plugin isn't on the remote agents.** `deploy-remote.sh` uploads the
   new compose but **doesn't overwrite an existing `config.yaml`**:
   Mr.Wobble and East need `plugins.enabled` added by hand. Tero, Faro and
-  Pulga are still on SOUL v10 and without the guard.
+  Pulga are still on SOUL v10 and without the guard. *(30/8: Mr.Wobble and
+  East are both gone. The `config.yaml` gap is still real for any agent
+  deployed over an existing one — that is what to keep from this line.)*
 - **`flows/page.tsx` still shows the declared cadence** (`f.trigger`): if
   the FLOW.md goes stale, Flows contradicts itself. Home already got fixed;
   Flows didn't.
