@@ -23,7 +23,7 @@ Static portal (Next 14) → two services **on the client's agent**:
 - **`:8643`** `portal_adapter.py` (our sidecar, lives in the kit): tickets,
   approvals, artifacts, files, activity, usage, capabilities, uploads, and
   the **chat stream proxy** (the gateway serves it without CORS and the
-  browser drops it). Today at **v0.20.0**.
+  browser drops it). Today at **v0.43.0**.
 
 Auth: bearer with `API_SERVER_KEY` via magic link `#endpoint=&adapter=&key=`.
 `app/app/lib/agent.ts` is the portal's ONLY network entry point.
@@ -151,20 +151,33 @@ the agent's key; this is `/portal/uso` under its new English name,
 implementation, just renamed, not the old broken one coming back) ·
 `files` (+`/{path}`, always `text/plain`) · `crons/{id}` · `capabilities` ·
 `boards` · `POST upload` · `POST sessions/{id}/chat/stream` (proxy) ·
-`plugins` (adapter 0.41+: the kit plugins installed at `/opt/plugins`, id,
-version, description, system, requires, which surfaces are present and the
-tab object verbatim, sorted by id. `/opt/plugins` ships as of the phase-3b
-installer: `install.sh` writes `<agent>/plugins/<id>/` and the compose mounts
-it `:ro`, so a freshly installed agent answers with its computed set — **seven**
-on a solo agent, plus whatever its hired roles declare. Seven and not six: the
-six system plugins (`kanban`, `approval`, `artifact`, `deliverable`, `flow`,
-`capability` — the sixth since phase 4) plus `transcribe`, which the
+`POST chat/stream` (proxy onto `/v1/chat/completions`; it is the one that
+resolves the configured model instead of storing the advertised `hermes-agent`
+on the session) · `POST identity` (the baptism — **a body that would leave the
+agent nameless is a 400** as of 0.43.0: the name comes first, the business and
+the channel after) · `plugins` (adapter 0.41+: the kit plugins installed at
+`/opt/plugins`, id, version, description, system, requires, which surfaces are
+present and the tab object verbatim, sorted by id. `/opt/plugins` ships as of
+the phase-3b installer: `install.sh` writes `<agent>/plugins/<id>/` and the
+compose mounts it `:ro`, so a freshly installed agent answers with its computed
+set — **seven**. Seven and not six: the six system plugins (`kanban`,
+`approval`, `artifact`, `deliverable`, `flow`, `capability` — the sixth since
+phase 4) plus `transcribe`, which the
 `transcription` base capability promises as already installed on every agent.
 Measured both ways: a fixture created with `new-agent.sh` comes out with exactly
-those seven, and the live local agent, with marketing and accounting hired,
-serves 11 over a real socket. One installed BEFORE the phase-3b installer
-answers `[]`, which is the tested behaviour and not an outage — and
-`agent-check.py` reports it as pending).
+those seven, and the live local agent served 11 over a real socket — that
+second number was taken while it still had two roles hired, and their plugins
+left with them. One installed BEFORE the phase-3b installer answers `[]`,
+which is the tested behaviour and not an outage — and `agent-check.py` reports
+it as pending).
+
+**Gone in adapter 0.43.0, and it is a contract break:** `GET /portal/roles`,
+`POST /portal/roles/request`, `GET/POST/DELETE /portal/rooms(/{id})`, the
+manifest's `roles` module flag, and the `role`/`room` fields on both chat
+stream routes — which are now **refused with a 400**, not ignored, so a portal
+that still sends one hears about it instead of quietly getting the agent's own
+answer. Nothing removed here is anything a portal still asks for: `agent.ts`
+stopped calling all of it in wave 1 (`e6ddcea`).
 
 The manifest's `portal_plugin` is `adapter_version` as of adapter 0.41.0 —
 same `adapter-<semver>` value, a name that is not the third thing here called

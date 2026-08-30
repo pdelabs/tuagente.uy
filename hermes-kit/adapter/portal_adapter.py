@@ -23,7 +23,7 @@ from flows import FlowStore
 from kanban import KanbanStore
 from workspace import MAX_FILE_BYTES, WorkspaceStore
 
-VERSION = "0.42.2"
+VERSION = "0.43.0"
 # The gateway answers the session stream WITHOUT CORS headers (it only sends
 # them on the preflight), so the browser discards the response. We proxy it.
 AGENT_BASE = os.environ.get("AGENT_API_BASE", "http://hermes:8642")
