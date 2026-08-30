@@ -400,10 +400,6 @@ def manifest():
             # anything and has to guess whether the mechanism exists on this
             # agent.
             "capabilities": CAPABILITIES_CATALOG.is_file(),
-            # The team. Only when the kit left a roster: a single-role agent --
-            # every one we run today -- looks exactly as it did, with no tab
-            # telling the client about people they never hired.
-            "roles": ROLES_CATALOG.is_file(),
             # ALWAYS on, even when there isn't a single one yet. Flows are the
             # product: if all the client wanted was a chat they'd have
             # ChatGPT, and what justifies this is the agent DOING things on
@@ -500,22 +496,16 @@ def _kit_names():
     approval→Approvals, artifact→visualizations): they are not presented as
     "made for you" and are not edited from the portal.
 
-    THE ROLES' SKILLS COUNT TOO, and they are not in kit-skills/. Since the team
-    pivot `install.sh` leaves only the shared ones there: `brand-kit` travels
-    inside marketing's profile. Without looking at the profiles, a capability
-    detected by `kit_skill` -- the brand kit, the posts, the pieces -- would
-    tell the client they do not have it while the role they hired is using it.
+    THEY ARE ALL IN kit-skills/ AGAIN. While the team existed this also swept
+    `data/profiles/*/skills/` -- `brand-kit` travelled inside marketing's
+    profile, and a capability detected by `kit_skill` would have come back
+    missing while the role that owned it was using it. With no profiles the
+    single directory is the whole answer.
     """
     names = set()
     if KIT_SKILLS_DIR.is_dir():
         names = {d.name for d in KIT_SKILLS_DIR.iterdir()
                  if d.is_dir() and (d / "SKILL.md").is_file()}
-    if PROFILES_DIR.is_dir():
-        for profile in PROFILES_DIR.iterdir():
-            if not (profile / "skills").is_dir():
-                continue
-            names |= {d.name for d in (profile / "skills").iterdir()
-                      if d.is_dir() and (d / "SKILL.md").is_file()}
     try:
         # The manifest still counts for an agent not yet migrated, where the
         # kit's own live inside data/skills/.
@@ -719,38 +709,6 @@ CAPABILITIES_DIR = POLICY_DIR / "capabilities"
 CAPABILITIES_CATALOG = CAPABILITIES_DIR / "catalog.json"
 CAPABILITIES_REQUESTS = CAPABILITIES_DIR / "requests.jsonl"
 
-# THE ROSTER: which roles exist, which ones the client hired, and what each is
-# called. It lives in policy/ for the same reason as the capability catalog
-# and with more force -- money is involved. In data/ the agent could rewrite the
-# list of what its own client pays for, or hire itself a role.
-#
-# An INSTALLED role is a Hermes profile: a directory under data/profiles/. Like
-# capabilities it is detected by PRESENCE, never by a value someone wrote: the
-# directory is either there or it is not.
-ROLES_DIR = POLICY_DIR / "roles"
-ROLES_CATALOG = ROLES_DIR / "catalog.json"
-# WHAT THE CLIENT ASKED FOR, AND WHAT THEY CALLED IT. Append-only, sibling of
-# `capabilities/requests.jsonl` and there for the same reasons -- with more
-# force, because hiring is money: the record of what a client asked for cannot
-# live where the agent can rewrite it, and a log that is only appended to
-# cannot lose the ask when the hire that follows it fails.
-#
-#   {"event": "requested", "role":…, "name":…, "look":…, "requested_at":…}
-#   {"event": "hired",     "role":…, "name":…, "hired_at":…}   <- closes it
-#
-# PENDING IS DERIVED FROM THE LOG, never stored. A state file next to an
-# append-only log is a second truth, and it drifts the first time a hire dies
-# halfway: the ask is written by the adapter and closed by tools/hire-role.sh
-# hours later, from another machine.
-ROLES_REQUESTS = ROLES_DIR / "requests.jsonl"
-# The name and face the CLIENT chose, per role, written by hire-role.sh when
-# the hire succeeds. It is NOT in the profile: the profile's role.json is
-# `distribution_owned`, so the next `hermes profile install` replaces it and a
-# baptism stored there dies with the first update the client never asked for.
-ROLES_IDENTITIES = ROLES_DIR / "identities.json"
-# Serialises check-then-append on requests.jsonl (the server is threaded).
-_REQUESTS_LOCK = threading.Lock()
-PROFILES_DIR = DATA / "profiles"
 # The mention exactly as the contract asks for it: ALONE ON ONE LINE. Anchored
 # this way on purpose -- the `capability:social-package` that shows up as an
 # example inside the skill, or quoted mid-sentence, is not a request.
@@ -1068,301 +1026,18 @@ def save_policy(connection_id, changes):
     return policy_for(connection_id)
 
 
-def _role_installed(role_id):
-    """A role is hired when its profile exists on disk. Nothing else.
-
-    By presence and not by a flag: a flag has to be kept current and drifts
-    exactly when it matters -- the client drops a role, someone forgets to lower
-    the flag, and the portal keeps showing a team they no longer pay for. The
-    directory does not lie.
-    """
-    return (PROFILES_DIR / role_id).is_dir()
-
-
-def _role_identity(role_id, catalog_identity, baptism=None):
-    """The role's name and face, most personal first.
-
-      1. what the CLIENT called it when they hired it (identities.json),
-      2. the identity the installed profile shipped with (its role.json),
-      3. the default in the catalog -- what a role ON OFFER is drawn with.
-
-    THE BAPTISM GOES FIRST AND LIVES OUTSIDE THE PROFILE. role.json is
-    `distribution_owned`: the next `hermes profile install` replaces it, so a
-    name written there survives exactly until the first update. The catalog
-    default stays underneath because a role nobody hired still has to have a
-    face -- otherwise the roster is four identical grey shapes, which defeats
-    the entire point of giving them faces.
-    """
-    manifest_file = PROFILES_DIR / role_id / "role.json"
-    identity_ = catalog_identity
-    if manifest_file.is_file():
-        identity_ = json.loads(manifest_file.read_text(encoding="utf-8")).get("identity") or identity_
-    out = {k: identity_[k] for k in ("name", "look") if k in (identity_ or {})}
-    name = str((baptism or {}).get("name") or "").strip()
-    if name:
-        out["name"] = name[:MAX_NAME_LEN]
-    look = _clean_look((baptism or {}).get("look"))
-    if look:
-        out["look"] = look
-    return out
-
-
-def _roles_catalog():
-    """The offer. Its absence is the answer to "is this agent a team?"."""
-    if not ROLES_CATALOG.is_file():
-        return {}
-    return json.loads(ROLES_CATALOG.read_text(encoding="utf-8"))
-
-
-def _roles_identities():
-    """{role: {name, look}} — how the client baptised each role they hired."""
-    try:
-        data = json.loads(ROLES_IDENTITIES.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    # One hand-mangled entry must cost that entry, not the whole roster: an
-    # unparseable FILE already degrades to defaults, so a non-dict VALUE
-    # degrades the same way instead of AttributeError-ing the Team tab away.
-    return {role: v for role, v in data.items() if isinstance(v, dict)}
-
-
-def _pending_requests():
-    """{role: {name, look, requested_at}} — asks that no hire has closed yet.
-
-    Read forward over the log: a `requested` opens one, a `hired` (the hire
-    went through) or a `cancelled` closes it. The OLDEST open ask for a role
-    wins, because it is the one the client is waiting on -- and it is the same
-    one `hire-role.sh --from-request` reads, so the portal and the hire never
-    disagree about which name is being installed.
-    """
-    pending = {}
-    if not ROLES_REQUESTS.is_file():
-        return pending
-    try:
-        fh = ROLES_REQUESTS.open(encoding="utf-8")
-    except OSError:
-        # Same condition _roles_identities already absorbs: a fleet file
-        # left root-owned by the ssh hire path. The ledger being unreadable
-        # must not take GET /portal/roles down with it.
-        return pending
-    with fh:
-        for line in fh:
-            try:
-                row = json.loads(line)
-            except ValueError:
-                continue          # a half-written line costs that line, not the log
-            role = row.get("role")
-            if not role:
-                continue
-            if row.get("event") == "requested":
-                pending_entry = {
-                    "name": row.get("name"),
-                    "look": row.get("look"),
-                    "requested_at": row.get("requested_at"),
-                }
-                # The key only shows up when the ask brought it, same as when
-                # it was created: a request with no capabilities and one with
-                # an empty list are the same thing, and the portal already
-                # reads `capabilities` as optional.
-                if row.get("capabilities"):
-                    pending_entry["capabilities"] = row["capabilities"]
-                pending.setdefault(role, pending_entry)
-            elif row.get("event") in ("hired", "cancelled"):
-                pending.pop(role, None)
-    return pending
-
-
-def request_role(role, name, look, capabilities=None):
-    """The client asks for a role and baptises it. Returns (status, body).
-
-    `capabilities` is optional and today only the assistant sends it, since
-    it's the only role that doesn't ship pre-built: they're the ids from the
-    menu the client checked off when they said what they needed. THEY DO NOT
-    INSTALL ANYTHING -- they travel with the request because that's the only
-    moment the client says what they expect, and whoever does the hiring reads
-    them to know what to set it up with (`hire-role.sh` prints them).
-
-    HIRING IS NOT A BUTTON, and this endpoint does not pretend it is: it writes
-    down the ask -- which role, what they called it, what face they gave it --
-    and someone runs tools/hire-role.sh. Installing a profile builds a
-    distribution, mints a key and restarts the gateway; none of that belongs
-    behind a click, and it is also the moment the client starts paying.
-
-    THE NAME IS THE POINT OF ASKING FROM THE PORTAL. The catalog ships Vera,
-    Beto, Nina and Tino so the roles are told apart before anyone reads a label,
-    but the one the client types is the one that ends up in the role's SOUL and
-    on every chip in the product. It is captured here, at the ask, because after
-    the hire nobody goes back to fill it in.
-
-    Two asks for the same role are a 409 and not a second line: the double click
-    of a portal button used to count twice in `capabilities/requests.jsonl`, and
-    here it would show the client two people arriving.
-    """
-    role_id = str(role or "").strip()
-    catalog_row = next(
-        (r for r in _roles_catalog().get("roles", []) if r.get("id") == role_id), None)
-    # `ready` and not merely present: a draft entry has an id, a label and a
-    # face, and no SOUL to install behind them.
-    if catalog_row is None or catalog_row.get("state") != "ready":
-        return 404, {"error": "ese rol no está en el catálogo"}
-    # Sanitized like the agent's own baptism, and for the same reason: this
-    # name travels into a block delimited with HTML comments inside the
-    # role's SOUL.
-    clean_name = _clean_for_soul(name)[:MAX_NAME_LEN]
-    if not clean_name:
-        return 400, {"error": "hace falta un nombre"}
-    chosen, problem = _requested_capabilities(capabilities)
-    if problem:
-        return 400, {"error": problem}
-
-    # Check-then-append under one lock: the server is threaded, and without it
-    # a double click reliably lands two 201s -- the exact "two people arriving"
-    # the docstring above promises not to show.
-    with _REQUESTS_LOCK:
-        if _role_installed(role_id):
-            return 409, {"error": "ese rol ya está contratado"}
-        if role_id in _pending_requests():
-            return 409, {"error": "ya pediste ese rol"}
-
-        row = {
-            "event": "requested",
-            "role": role_id,
-            "name": clean_name,
-            "look": _clean_look(look),
-            "requested_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "agent": agent_name(),   # the fleet writes separate files; the
-        }                            # analysis of what gets asked joins them
-        if chosen:
-            # Only when something is checked: an empty list is not a signal
-            # of anything, and the absent key is what every old line already
-            # reads.
-            row["capabilities"] = chosen
-        try:
-            ROLES_REQUESTS.parent.mkdir(parents=True, exist_ok=True)
-            with ROLES_REQUESTS.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-        except OSError as e:
-            # Same guard as request_capability, and it matters more here
-            # because hiring is money: the client already pressed the button,
-            # so say what happened instead of resetting the socket.
-            return 400, {"error": f"no pude anotar el pedido: {e}"}
-    fields = ("role", "name", "look", "requested_at")
-    if chosen:
-        fields += ("capabilities",)
-    return 201, {"request": {k: row[k] for k in fields}}
-
-
-def _role_key(role_id):
-    """The API key that addresses one role, read from its own profile.
-
-    THIS IS WHY THE PORTAL CANNOT TALK TO A ROLE DIRECTLY. The engine serves
-    every profile off one port through a `/p/<role>/` prefix, but it resolves
-    `API_SERVER_KEY` inside that profile's scope and FAILS CLOSED rather than
-    letting a named profile inherit the listener's key. Measured 2026-08-17 on
-    the lab: `/p/marketing/v1/chat/completions` answers 200 with marketing's own
-    key and 401 with the portal's.
-
-    That is the right call upstream and it leaves the portal with a problem: the
-    magic link carries ONE credential, and it is the credential -- handing the
-    browser one key per role would multiply what leaks if a link leaks.
-
-    So the adapter holds the mapping. It already lives in the container with the
-    profiles mounted, it is already the thing that exists for what the native
-    API does not expose, and the client keeps a single key.
-    """
-    env_file = PROFILES_DIR / role_id / ".env"
-    if not env_file.is_file():
-        return ""
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        name, _, value = line.partition("=")
-        if name.strip() == "API_SERVER_KEY":
-            return value.strip().strip("\"'")
-    return ""
-
-
-def roles():
-    """The team: who is hired, who is on offer, and what each one is called.
-
-    PORTAL CONTRACT:
-      GET /portal/roles -> {available, roles:[{id, label, does, never, hired,
-                            request, name, look, needs, flows, state}]}
-
-    `request` is null or {name, look, requested_at}: the client asked for this
-    role and nobody has hired it yet. It is what lets the portal show "lo
-    pediste, está en camino" instead of the button they already pressed.
-
-    What does NOT come out of here: `routing` and `internal_note`. `routing` is
-    the description the decomposer reads to route tasks -- our machinery, and
-    putting it on a commercial screen is showing the client a prompt.
-    """
-    # No catalog means no team: the portal keeps working as the single-role
-    # agent it has been until today. `manifest()` gates the tab on the same
-    # file, so this only answers a client that asked anyway.
-    catalog = _roles_catalog()
-    if not catalog:
-        return {"available": False, "roles": []}
-    identities = _roles_identities()
-    pending = _pending_requests()
-
-    out = []
-    for role in catalog.get("roles", []):
-        role_id = role["id"]
-        hired = _role_installed(role_id)
-        row = {
-            "id": role_id,
-            "label": role.get("label"),
-            "does": role.get("does"),
-            "never": role.get("never"),
-            "hired": hired,
-            "request": pending.get(role_id),
-            "needs": role.get("needs") or [],
-            "flows": role.get("flows") or [],
-            "state": role.get("state"),
-        }
-        row.update(_role_identity(role_id, role.get("identity") or {}, identities.get(role_id)))
-        out.append(row)
-    return {"available": True, "roles": out}
-
-
-# The router's whole prompt. Short on purpose: this is a dispatch decision, not
-# a conversation, and it runs on every message that does not name someone.
-_ROUTE_PROMPT = """Sos el ruteo de un equipo de trabajo.
-
-QUIEN ESCRIBE ES LA DUEÑA DEL NEGOCIO, la jefa de este equipo. No es una
-clienta de ella escribiendo: es ella hablándole a su gente.
-
-Equipo:
-{team}
-
-Lo que escribió:
-{message}
-
-Respondé UNICAMENTE con el id de quien corresponde, o con `-`.
-
-Un PEDIDO DE TRABAJO va siempre a quien lo hace, aunque falte algún dato para
-hacerlo. "Contestá los mensajes que quedaron" es trabajo de quien atiende la
-bandeja, esté conectada o no.
-
-`-` es sólo para lo que no es un pedido de trabajo: un saludo, una pregunta
-sobre cómo viene todo, charla.
-
-Sin explicar, sin puntuación, sin comillas."""
-
-
-def _model_for_routing():
+def _provider_runtime():
     """The provider endpoint and model the agent itself is configured with.
 
     IT DOES NOT GO THROUGH THE GATEWAY, and that is the point. `/v1/chat/completions`
     runs the whole agent -- SOUL, skills, tools -- and we measured it at ~10s a
-    turn. Paying that to answer "who should take this" would make every message
-    twice as slow and twice as expensive to decide something a one-word answer
-    settles.
+    turn. Paying that to match a sentence against a menu of twenty rows would
+    make onboarding's one useful question the slowest thing in it, to decide
+    something a one-line answer settles.
 
     So this reads the same config the agent uses and calls the provider
     directly. With observability on, `base_url` already points at litellm and
-    the routing call gets logged and costed like everything else.
+    the call gets logged and costed like everything else.
     """
     import yaml
 
@@ -1379,17 +1054,18 @@ def _model_for_routing():
 def _ask_the_model(prompt, max_tokens):
     """One short question to the provider, and its answer as text.
 
-    THE TWO DECISIONS THE ADAPTER TAKES ON ITS OWN GO THROUGH HERE: who answers
-    a room turn, and which capacities the sentence a client typed points at.
-    Neither is a conversation -- one prompt, a handful of tokens, no history --
-    and neither can afford the ~10s a full agent turn costs (see
-    `_model_for_routing` for why the gateway is the wrong door for this).
+    THE ONE DECISION THE ADAPTER TAKES ON ITS OWN GOES THROUGH HERE: which
+    capacities the sentence a client typed points at. It is not a conversation
+    -- one prompt, a handful of tokens, no history -- and it cannot afford the
+    ~10s a full agent turn costs (see `_provider_runtime` for why the gateway
+    is the wrong door for this). There used to be a second caller, the team's
+    router, and it left with the team.
 
-    It raises like any other request, and each caller decides what a provider
-    that is down means for IT: the router falls back to the agent the client
-    named, the capacity matcher falls back to showing the whole menu.
+    It raises like any other request, and the caller decides what a provider
+    that is down means for it: the capacity matcher falls back to showing the
+    whole menu.
     """
-    runtime = _model_for_routing()
+    runtime = _provider_runtime()
     body = {
         "model": runtime["model"],
         "messages": [{"role": "user", "content": prompt}],
@@ -1406,33 +1082,6 @@ def _ask_the_model(prompt, max_tokens):
     payload = json.loads(urllib.request.urlopen(request, timeout=30).read())
     choice = (payload.get("choices") or [{}])[0]
     return ((choice.get("message") or {}).get("content") or "").strip()
-
-
-def route_message(message):
-    """Which hired role should answer, or None for the agent the client named.
-
-    None is a real answer, not a failure: most of what a client writes is for
-    their agent, and forcing a specialist onto every "hola" is worse than not
-    routing at all.
-
-    IT ROUTES ON `routing`, WHICH MAKES THAT FIELD A COMMERCIAL ARTIFACT. A role
-    with a weak description is a role the client pays for that never receives
-    work -- and they find out at renewal, not before.
-    """
-    catalog = _roles_catalog()
-    if not catalog:
-        return None
-    hired = [r for r in catalog.get("roles", []) if _role_installed(r["id"])]
-    if len(hired) < 2:
-        # One role (or none) is not a routing decision. Do not spend a call.
-        return None
-
-    team = "\n".join(f"- {r['id']}: {r.get('routing') or r.get('does') or ''}" for r in hired)
-    answer = _ask_the_model(
-        _ROUTE_PROMPT.format(team=team, message=message[:2000]), 12).strip("`\"' .")
-    # Only an id that is actually on the team counts. Anything else -- "-", a
-    # sentence, a role they never hired -- means the agent they named answers.
-    return answer if any(r["id"] == answer for r in hired) else None
 
 
 def capabilities():
@@ -1668,15 +1317,14 @@ def _ids_from_response(response):
 def suggest_capabilities(text):
     """From what the client wrote to catalog ids. Returns (status, body).
 
-    IT IS THE STEP THAT MAKES THE ASSISTANT SELLABLE. The other roles already
-    ship pre-built; the assistant is composed of capabilities, and asking a
-    client to choose from a list of twenty before knowing what they are is
-    asking them to do our own job. So they write what they need and the
-    portal comes back with what matches, checked off -- editable, because this
-    suggests and does not decide.
+    IT IS WHAT ONBOARDING ASKS INSTEAD OF SHOWING THE MENU. The agent is
+    composed of capabilities, and asking a client to choose from a list of
+    twenty before knowing what any of them are is asking them to do our own
+    job. So they write what they need and the portal comes back with what
+    matches, checked off -- editable, because this suggests and does not
+    decide.
 
-    ONE SHORT CALL TO THE PROVIDER, not a full agent run: the same path the
-    room's routing uses (`_ask_the_model`), for the same reasons.
+    ONE SHORT CALL TO THE PROVIDER, not a full agent run (`_ask_the_model`).
 
     NO PROVIDER MEANS NO ERROR, IT MEANS THE MENU. `no_match` tells the portal
     the suggestion could not be made so it shows the whole list unchecked: an
@@ -1710,30 +1358,6 @@ def suggest_capabilities(text):
         if candidate_id in menu_ids and candidate_id not in suggested:
             suggested.append(candidate_id)
     return 200, {"suggested": suggested[:5]}
-
-
-def _requested_capabilities(capabilities):
-    """What the client checked off, validated against the menu. Returns (list, error).
-
-    VALIDATED FOR THE SAME REASON `request_capability` VALIDATES ITS `id`:
-    this list is read to decide what we build and what we install for this
-    client. A made-up id in there is not a slightly less precise data point,
-    it is a request nobody will be able to fulfill -- and `level: base` is
-    worse still: it would record as requested something that already ships.
-    """
-    if capabilities is None:
-        return [], None
-    if not isinstance(capabilities, list):
-        return None, "capabilities tiene que ser una lista de ids"
-    menu_ids = {c["id"] for c in _menu_capabilities()}
-    clean = []
-    for raw in capabilities:
-        candidate = raw.strip() if isinstance(raw, str) else ""
-        if candidate not in menu_ids:
-            return None, f"«{str(raw)[:40]}» no es una capacidad que se pueda pedir"
-        if candidate not in clean:
-            clean.append(candidate)
-    return clean, None
 
 
 def request_capability(text, cap_id=None, source="client"):
@@ -2549,7 +2173,7 @@ def activity():
 # Now the number comes from whoever charges it. Each agent has ITS OWN
 # OpenRouter key, so `GET /api/v1/key` already comes isolated per client with
 # nobody having to filter anything, and it includes EVERYTHING charged to
-# that key: the agent, the images, the room's routing, whatever comes next.
+# that key: the agent, the images, the capability matcher, whatever comes next.
 #
 # AND THE KEY NEVER LEAVES HERE. The call is made by the adapter, server-side;
 # the browser gets a dollar-amount summary and nothing else.
@@ -2761,8 +2385,6 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, connections())
             if path == "/portal/capabilities":
                 return self._send(200, capabilities())
-            if path == "/portal/roles":
-                return self._send(200, roles())
             if path == "/portal/flows":
                 return self._send(200, flows())
             m = re.match(r"^/portal/flows/([^/]+)$", path)
@@ -3124,16 +2746,6 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "invalid JSON body"})
             r = request_capability(body.get("text"), body.get("id"))
             return self._send(200 if r.get("ok") else 400, r)
-        if path == "/portal/roles/request":
-            # The client picked a role from the catalog and baptised it. This
-            # does NOT hire it: it records the request, and hire-role.sh closes it.
-            body = self._read_json_body()
-            if body is None:
-                return self._send(400, {"error": "invalid JSON body"})
-            status, response = request_role(
-                body.get("role"), body.get("name"), body.get("look"),
-                body.get("capabilities"))
-            return self._send(status, response)
         if path == "/portal/identity":
             body = self._read_json_body()
             if body is None:

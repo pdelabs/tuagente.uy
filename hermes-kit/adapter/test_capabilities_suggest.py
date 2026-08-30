@@ -1,10 +1,14 @@
-"""Regression tests for the capability matcher and the capabilities a request carries.
+"""Regression tests for the capability matcher: a sentence in, catalog ids out.
 
-The assistant is the only role that is not written in advance: the client says
-what they need, one short provider call turns that sentence into ids of the
-catalog, and those ids ride along with the hire request. Two things have to hold
-for that to be worth anything -- an id we cannot install never gets stored, and
-a provider that is down costs the SUGGESTION and never the sign-up.
+It is the one question onboarding asks instead of showing a menu of twenty:
+the client says what they need, one short provider call turns that sentence
+into ids of the catalog, and the portal draws those checked off. Two things
+have to hold for it to be worth anything -- an id we cannot install never
+comes back, and a provider that is down costs the SUGGESTION and never the
+sign-up.
+
+Run from the monorepo root:
+    python3 -m unittest discover -s hermes-kit/adapter -p "test_*.py"
 """
 
 import json
@@ -32,37 +36,18 @@ CATALOG = {
     ]
 }
 
-ROLES_CATALOG = {
-    "roles": [
-        {"id": "assistant", "label": "Asistente", "does": "Lo que le pidas.",
-         "state": "ready", "identity": {"name": "Tino"}},
-        {"id": "sales", "label": "Ventas", "does": "Arma presupuestos.", "state": "ready"},
-    ]
-}
-
-
 class CapabilitiesSuggestTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
         root = Path(self.temporary_directory.name)
         self.previous = {
             name: getattr(adapter, name)
-            for name in ("CAPABILITIES_DIR", "CAPABILITIES_CATALOG", "ROLES_DIR",
-                         "ROLES_CATALOG", "ROLES_REQUESTS", "ROLES_IDENTITIES",
-                         "PROFILES_DIR", "_ask_the_model")
+            for name in ("CAPABILITIES_DIR", "CAPABILITIES_CATALOG", "_ask_the_model")
         }
         adapter.CAPABILITIES_DIR = root / "policy" / "capabilities"
         adapter.CAPABILITIES_CATALOG = adapter.CAPABILITIES_DIR / "catalog.json"
-        adapter.ROLES_DIR = root / "policy" / "roles"
-        adapter.ROLES_CATALOG = adapter.ROLES_DIR / "catalog.json"
-        adapter.ROLES_REQUESTS = adapter.ROLES_DIR / "requests.jsonl"
-        adapter.ROLES_IDENTITIES = adapter.ROLES_DIR / "identities.json"
-        adapter.PROFILES_DIR = root / "data" / "profiles"
         adapter.CAPABILITIES_DIR.mkdir(parents=True)
-        adapter.ROLES_DIR.mkdir(parents=True)
-        adapter.PROFILES_DIR.mkdir(parents=True)
         adapter.CAPABILITIES_CATALOG.write_text(json.dumps(CATALOG), encoding="utf-8")
-        adapter.ROLES_CATALOG.write_text(json.dumps(ROLES_CATALOG), encoding="utf-8")
         self.prompts = []
 
     def tearDown(self):
@@ -147,8 +132,8 @@ class CapabilitiesSuggestTests(unittest.TestCase):
         # And above all: not a single call to the provider was spent.
         self.assertEqual(self.prompts, [])
 
-    def test_no_provider_and_the_sign_up_still_gets_the_whole_menu(self):
-        """A missing key costs the SUGGESTION, never the hire."""
+    def test_no_provider_and_onboarding_still_gets_the_whole_menu(self):
+        """A missing key costs the SUGGESTION, never the sign-up."""
         self.answer_with(OSError("no hay clave"))
         status, body = adapter.suggest_capabilities("quiero que me ordene la administracion")
         self.assertEqual(status, 200)
@@ -161,57 +146,6 @@ class CapabilitiesSuggestTests(unittest.TestCase):
             adapter.suggest_capabilities("quiero que me ordene la administracion"),
             (200, {"suggested": [], "no_match": True}))
         self.assertEqual(self.prompts, [])
-
-    # --- what the request carries with it ----------------------------------
-
-    def test_checked_off_capabilities_get_recorded_and_served(self):
-        status, body = adapter.request_role(
-            "assistant", "Tina", {"tono": 2}, ["quotes", "appointments-and-scheduling"])
-        self.assertEqual(status, 201)
-        self.assertEqual(body["request"]["capabilities"], ["quotes", "appointments-and-scheduling"])
-
-        # In the ledger, which is what hire-role.sh reads hours later.
-        row = json.loads(adapter.ROLES_REQUESTS.read_text(encoding="utf-8").strip())
-        self.assertEqual(row["capabilities"], ["quotes", "appointments-and-scheduling"])
-
-        # And in the roster, which is where the portal reads them from.
-        role = next(r for r in adapter.roles()["roles"] if r["id"] == "assistant")
-        self.assertEqual(role["request"]["capabilities"], ["quotes", "appointments-and-scheduling"])
-
-    def test_a_request_with_no_capabilities_stays_exactly_as_before(self):
-        """The other four roles do not change at all: the key does not even show up."""
-        body = adapter.request_role("sales", "Coca", None)[1]
-        self.assertEqual(set(body["request"]), {"role", "name", "look", "requested_at"})
-        self.assertNotIn("capabilities", json.loads(
-            adapter.ROLES_REQUESTS.read_text(encoding="utf-8").strip()))
-        role = next(r for r in adapter.roles()["roles"] if r["id"] == "sales")
-        self.assertNotIn("capabilities", role["request"])
-
-    def test_a_capability_that_does_not_exist_does_not_get_recorded(self):
-        status, body = adapter.request_role(
-            "assistant", "Tina", None, ["quotes", "calendar-sync"])
-        self.assertEqual(status, 400)
-        self.assertIn("calendar-sync", body["error"])
-        # Nothing halfway: the whole request does not go in.
-        self.assertFalse(adapter.ROLES_REQUESTS.exists())
-
-    def test_what_already_ships_cannot_be_requested(self):
-        """`level: base` is on every agent: asking for it means nothing."""
-        status, body = adapter.request_role("assistant", "Tina", None, ["vision"])
-        self.assertEqual(status, 400)
-        self.assertIn("vision", body["error"])
-        self.assertFalse(adapter.ROLES_REQUESTS.exists())
-
-    def test_a_list_that_is_not_a_list_gets_rejected(self):
-        for garbage in ("quotes", {"id": "quotes"}, [{"id": "quotes"}], [None]):
-            status, _ = adapter.request_role("assistant", "Tina", None, garbage)
-            self.assertEqual(status, 400, garbage)
-        self.assertFalse(adapter.ROLES_REQUESTS.exists())
-
-    def test_the_same_capability_twice_gets_recorded_once(self):
-        body = adapter.request_role(
-            "assistant", "Tina", None, ["quotes", " quotes "])[1]
-        self.assertEqual(body["request"]["capabilities"], ["quotes"])
 
 
 if __name__ == "__main__":

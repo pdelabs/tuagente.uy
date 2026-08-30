@@ -56,12 +56,13 @@ class KanbanStore:
         return boards
 
     def tickets(self, database=None):
-        # `assignee` IS THE ROLE DOING THE WORK. The board is shared across
-        # Hermes profiles and this column records which one holds the task;
-        # without exposing it the portal draws a team's board that never says
-        # who does what. Measured in the 16/8 spike: the decomposer split one
-        # request in two and routed both correctly, and the portal still
-        # returned them with a null assignee.
+        # `assignee` IS THE ENGINE'S OWN COLUMN and it is served as it is
+        # found. The decomposer writes it when it splits a request, and it
+        # travels because it is what the board says about the ticket -- not
+        # because anything draws it today: the chip that did left with the
+        # team (428c4fc). Measured in the 16/8 spike: the decomposer split one
+        # request in two and the portal still returned both with a null
+        # assignee.
         connection = self.connect(database or self.default_database)
         try:
             rows = connection.execute(

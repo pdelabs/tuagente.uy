@@ -25,7 +25,7 @@ both halves are real; `_check_skill_slots` carries the reason it stays that way
 boot check that read them would refuse every correct install.
 
 WHY A BROKEN SET IS NOT A DEGRADED BOOT. A plugin's surfaces are load-bearing: a
-skill a role's SOUL promises, a tab the portal draws, an endpoint that tab calls.
+skill the SOUL promises, a tab the portal draws, an endpoint that tab calls.
 An adapter that came up with four plugins out of five would serve a portal that
 offers the fifth and 404s on it, and the client reads that as the product being
 broken, not the install. Exiting nonzero puts it in the container's restart loop

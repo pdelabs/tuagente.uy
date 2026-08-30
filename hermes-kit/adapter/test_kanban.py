@@ -75,10 +75,11 @@ class KanbanStoreTests(unittest.TestCase):
         self.assertEqual(self.store.pending_count(unreadable), 0)
 
     def test_assignee_travels_to_the_portal(self):
-        """The role doing the work reaches the portal: it draws the role chip.
+        """What the board says about the ticket reaches the portal as it is.
 
-        The board is one database shared across every Hermes profile, and this
-        column is where it records which profile holds the task.
+        The engine's decomposer writes this column when it splits a request.
+        Nothing draws it today -- the chip left with the team -- but dropping
+        it on the way out would be the adapter editing the board's own record.
         """
         by_id = {ticket["id"]: ticket for ticket in self.store.tickets()}
         self.assertEqual(by_id["t_blocked"]["assignee"], "marketing")
