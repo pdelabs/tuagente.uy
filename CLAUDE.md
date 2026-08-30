@@ -129,6 +129,12 @@ python3 hermes-kit/tools/agent-check.py <path>/data
 # THE TWO URLS ARE NOT OPTIONAL IN PRACTICE: the script defaults them to
 # 8642/8643, and on a host that already runs an agent the ports move — without
 # them the check greets the OTHER agent and passes green.
+# AND `--origin` IS NOT OPTIONAL OFF LOOPBACK: it defaults to
+# http://localhost:8090 and the CORS checks assert the agent reflects it, so on
+# a deployed agent — whose allowlist is the real portal's origin and nothing
+# else — the default fails four checks that are pure artifact. The inverse
+# trap: green against the wrong agent, red against the right one.
 python3 hermes-kit/tools/portal-check.py --key <API_SERVER_KEY> \
-    --endpoint http://127.0.0.1:<port> --adapter http://127.0.0.1:<port+1>
+    --endpoint http://127.0.0.1:<port> --adapter http://127.0.0.1:<port+1> \
+    --origin http://localhost:8090   # deployed: https://app.tuagente.uy
 ```
