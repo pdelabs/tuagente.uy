@@ -78,12 +78,18 @@ def build_old_agent(root: Path):
     write(root, "skills-reemplazadas/entregable/SKILL.md", "old skill")
     write(root, "respaldos/agente-20260801.tgz", "fake tarball")
 
+    # COPIED FROM A REAL PRE-TRANSLATION AGENT (East, read 30/8/2026), not
+    # written from memory. The previous fixture had the container half of every
+    # bind already in English (`./politica:/opt/policy`), which no agent of that
+    # era has: the mount is `/opt/politica` on both halves. That one wrong
+    # character is what let `test_docker_compose_rewrites` pass over a script
+    # that only renamed the host half.
     write(root, "docker-compose.yml", """services:
   hermes:
     container_name: ${CLIENTE}-hermes
     volumes:
       - ./data:/opt/data
-      - ./politica:/opt/policy:ro
+      - ./politica:/opt/politica:ro
       - ./politica/cont-init-parches.sh:/etc/cont-init.d/03-parches:ro
       - ./politica/plugins:/opt/data/plugins:ro
     env_file:
@@ -91,9 +97,12 @@ def build_old_agent(root: Path):
   portal-adapter:
     container_name: ${CLIENTE}-portal-adapter
     volumes:
-      - ./politica:/opt/policy
+      - ./politica:/opt/politica
     env_file:
       - ./secretos.env
+
+# .env al lado de este archivo (NUNCA se commitea):
+#   CLIENTE=east
 """)
 
     write(root, ".env",
@@ -372,10 +381,17 @@ class MigrationTests(unittest.TestCase):
     def test_docker_compose_rewrites(self):
         text = (self.root / "docker-compose.yml").read_text(encoding="utf-8")
         self.assertIn("./policy:/opt/policy:ro", text)
+        # BOTH HALVES OF THE BIND, NAMED SEPARATELY. The adapter, the MCP guard
+        # and the gate all read /opt/policy inside the container; a rename that
+        # only moves the host half mounts cleanly and leaves every one of them
+        # reading a path nothing is mounted at.
+        self.assertIn("./policy:/opt/policy\n", text)          # the adapter's, rw
+        self.assertNotIn("/opt/politica", text)
         self.assertIn("./policy/cont-init-patches.sh:/etc/cont-init.d/03-patches:ro", text)
         self.assertIn("./policy/plugins:/opt/data/plugins:ro", text)
         self.assertIn("./secrets.env", text)
         self.assertIn("${CLIENT}-hermes", text)
+        self.assertIn("#   CLIENT=east", text)                 # the doc comment too
         self.assertNotIn("politica", text)
         self.assertNotIn("secretos.env", text)
         self.assertNotIn("CLIENTE", text)
@@ -429,7 +445,13 @@ class MigrationTests(unittest.TestCase):
     def test_shadow_skill_reported_not_deleted(self):
         self.assertTrue((self.root / "data/skills/entregable/SKILL.md").exists())
         self.assertIn("data/skills/entregable", self.result.stdout)
-        self.assertIn("not deleted", self.result.stdout)
+        # It has to send the reader to do it BY HAND. The message used to say
+        # install.sh/clean-obsolete.sh would retire these, and no installer
+        # does: the cleaner deletes only what a previous `.kit-installed`
+        # recorded, and an agent old enough to need this migration never had
+        # one. Believing that message leaves the old Spanish skill winning over
+        # the kit's copy for as long as nobody looks.
+        self.assertIn("DELETE IT BY HAND", self.result.stdout)
 
     # -- summary + backups --
 

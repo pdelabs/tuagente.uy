@@ -520,10 +520,27 @@ move(ROOT / "respaldos-config", ROOT / "config-backups", "config backups directo
 
 rewrite_text(ROOT / "docker-compose.yml", [
     ("./politica -> ./policy", _sub("./politica", "./policy")),
+    # THE CONTAINER SIDE OF THE BIND, WHICH IS A DIFFERENT STRING AND THE ONE
+    # THAT MATTERS. A pre-translation compose reads `- ./politica:/opt/politica`;
+    # renaming only the host half leaves `- ./policy:/opt/politica`, which mounts
+    # fine and is wrong in the only way that hurts: the adapter defaults
+    # POLICY_DIR to /opt/policy (portal_adapter.py) and CREATES it empty, the
+    # guard reads /opt/policy/policy.json (mcp-guard/guard.py) and the gate reads
+    # /opt/policy/notices/ (policy/hooks/gate.py). Nothing errors. The client's
+    # connection permissions silently read as defaults and the capability cards
+    # come up blank. Found running this script against East's real compose, 30/8;
+    # the test fixture had the container side already in English, so the
+    # `assertNotIn("politica", …)` below it passed on a file no live agent has.
+    ("/opt/politica -> /opt/policy", _sub("/opt/politica", "/opt/policy")),
     ("cont-init script name", _sub("cont-init-parches.sh", "cont-init-patches.sh")),
     ("03-parches -> 03-patches", _sub("03-parches", "03-patches")),
     ("secretos.env -> secrets.env", _sub("./secretos.env", "./secrets.env")),
     ("${CLIENTE} -> ${CLIENT}", _sub("${CLIENTE}", "${CLIENT}")),
+    # The trailing comment block that documents the .env next to it. The
+    # interpolation above only matches `${CLIENTE}`, so the bare key in the
+    # comment survived and went on telling the next operator to write the key
+    # this same run just renamed inside .env. Same shape as `MODELO=` below.
+    ("CLIENTE= -> CLIENT= (doc comment)", _sub("CLIENTE=", "CLIENT=")),
     ("PORTAL_POLITICA_DIR key", _sub("PORTAL_POLITICA_DIR", "PORTAL_POLICY_DIR")),
     ("litellm-costo.py -> litellm-cost.py", _sub("litellm-costo.py", "litellm-cost.py")),
     ("MODELO_DEL_AGENTE -> AGENT_MODEL", _sub("MODELO_DEL_AGENTE", "AGENT_MODEL")),
@@ -798,8 +815,22 @@ else:
     log("skipped", f"deliverables: {relpath(deliverables_root)} not present")
 
 # ── F. reported, never touched: leftover kit skills in the old name ────────
-# clean-obsolete.sh (run by install.sh) is what retires these; this script
-# only reports them so nothing silently keeps shadowing the kit's copy.
+# THESE HAVE TO GO BY HAND, AND THIS USED TO SAY install.sh WOULD DO IT.
+# clean-obsolete.sh deletes what a PREVIOUS `.kit-installed` manifest recorded
+# and nothing else -- which is the whole point of the manifest, and which means
+# it cannot touch these: every agent old enough to need this migration was put
+# up with deploy-remote.sh, which never wrote a manifest, so the old Spanish
+# skills are in no list the cleaner reads. install.sh's set-aside only catches
+# a name that COLLIDES with a kit skill (`artifact`); `flujo`, `entregable`,
+# `aprobacion`, `transcribir` and `entrada-drive` do not collide, so they stay.
+#
+# AND STAYING IS NOT COSMETIC. data/skills/ wins over the external kit-skills/
+# mount, so the agent keeps running the old copy: `flujo/crear_flujo.py` writes
+# to /opt/data/flujos/ while the 0.43.0 adapter lists /opt/data/flows/, so a
+# flow the client asks for is created, runs, and never appears in their Flujos
+# tab -- the exact silent failure the promises guard exists to catch, walked
+# back in through a leftover. `agent-check.py` does not catch it either: its
+# shadowing check is by name, and these names no longer collide.
 
 OLD_SKILL_DIRS = set(SKILL_ID_MAP.keys())
 SKIP_DIR_NAMES = {".archive", ".git", ".github", ".hub", "node_modules", "__pycache__", ".venv"}
@@ -811,7 +842,10 @@ if skills_root.is_dir():
             if d in OLD_SKILL_DIRS:
                 found = Path(dirpath) / d
                 log("manual", f"leftover kit skill in the old name at {relpath(found)} -- "
-                               "not deleted, install.sh/clean-obsolete.sh handles it after a fresh install")
+                               "DELETE IT BY HAND once install.sh has run: no installer removes it "
+                               "(the cleaner only deletes what a previous .kit-installed recorded, "
+                               "and this agent never had one), and while it is there the engine "
+                               "indexes it INSTEAD of the kit's new copy")
 
 # ── bookkeeping (ssh mode's cleanup list) + summary table ───────────────────
 
@@ -865,16 +899,46 @@ else
 
   echo "→ staging a local copy of $HOST:$DIR (migrated offline, then synced back)"
   rsync -a "$HOST:$DIR/" "$STAGING/"
+
+  # WHO OWNS WHAT, READ BEFORE ANYTHING MOVES. `data/` belongs to the container
+  # user (10000:10000 on every agent we run); the rest of the tree is root's.
+  # The round trip through this machine CANNOT carry that: the staging copy is
+  # pulled as an unprivileged Mac user, so every file in it comes back owned by
+  # whoever ran the script, and `rsync -a` on the way up (which is `-o -g`, and
+  # the receiver IS root) would happily write that ownership onto the server.
+  # Measured against East on 30/8/2026: `data/` went from 10000:10000 to 501:0.
+  # The agent then cannot write its own state.db, logs or workspace — the
+  # gateway comes up and everything it tries to save fails. Nothing in the
+  # migration's own output says a word about it.
+  OWNER_ROOT="$(ssh "$HOST" "stat -c '%u:%g' '$DIR'")"
+  OWNER_DATA="$(ssh "$HOST" "stat -c '%u:%g' '$DIR/data'")"
+  echo "   ownership to restore: $DIR = $OWNER_ROOT · $DIR/data = $OWNER_DATA"
+
   run_engine "$STAGING" 0
   echo
   echo "→ uploading the migrated layout to $HOST"
-  rsync -a "$STAGING/" "$HOST:$DIR/"
+  # -rlptD is `-a` WITHOUT `-o -g`: an existing file keeps the ownership it
+  # already has on the server, so only the paths this run created are wrong,
+  # and the chown below fixes exactly those. (Not `--no-owner/--no-group`:
+  # macOS ships openrsync, which does not have them.)
+  rsync -rlptD "$STAGING/" "$HOST:$DIR/"
+  echo "→ restoring ownership on the paths this run created"
+  ssh "$HOST" "chown -R $OWNER_DATA '$DIR/data' && \
+               find '$DIR' -maxdepth 1 ! -path '$DIR' ! -name data \
+                 -exec chown -R $OWNER_ROOT {} +"
   REMOVED_LIST="$(ls "$STAGING"/backups/migrate-to-english-*/removed-paths.txt 2>/dev/null | head -1 || true)"
   if [[ -n "$REMOVED_LIST" ]]; then
     echo "→ removing the old-named paths on $HOST that this run retired"
+    # `ssh -n`, AND THE `-n` IS THE WHOLE LOOP. Without it ssh reads the loop's
+    # stdin — which IS removed-paths.txt — swallows every remaining line on the
+    # first iteration, and the loop ends after ONE removal reporting success.
+    # Measured on 30/8/2026 against a copy of East: 8 retired paths in the file,
+    # `politica/` among them, exactly 1 deleted and no error anywhere. The old
+    # tree then sits next to the new one with the pre-migration guard and
+    # policy.json inside it, for the next person to edit by mistake.
     while IFS= read -r rel; do
       [[ -n "$rel" ]] || continue
-      ssh "$HOST" "rm -rf -- '$DIR/$rel'"
+      ssh -n "$HOST" "rm -rf -- '$DIR/$rel'"
       echo "   removed $rel"
     done < "$REMOVED_LIST"
   fi
