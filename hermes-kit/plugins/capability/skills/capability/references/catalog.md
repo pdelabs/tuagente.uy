@@ -186,6 +186,13 @@ Que arme la presentación con tus datos y tu identidad, lista para proyectar.
 
 ## information
 
+### `drive-inbox` — Tus carpetas de Drive como bandeja
+
+Que dejes el material donde ya lo dejás —una carpeta de Drive, o una por cada cliente tuyo— y el agente lo levante solo: los videos y audios nuevos entran a trabajarse sin que le mandes nada por chat.
+
+- Cómo se consigue: La prendemos nosotros, pero hay un paso tuyo que no podemos hacer por vos: conectar Google desde la pestaña Conexiones (es un permiso de solo lectura sobre tu Drive) y decirnos qué carpetas mirar. Con eso queda revisando cada 15 minutos.
+- Costo: Sin costo aparte: se cobra el trabajo que hace con lo que llega, no el revisar.
+
 ### `web-monitoring` — Vigilar páginas
 
 Que mire todos los días las páginas que te importan —una licitación nueva, una lista de precios publicada, una mención de tu negocio en una noticia— y te avise cuando algo cambia.

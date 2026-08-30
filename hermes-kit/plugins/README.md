@@ -62,15 +62,15 @@ string or a list of strings) is allowed and ignored.
 | `brand-kit` | no | what a company looks like, read off its own site (marketing) |
 | `social-content` | no | Instagram posts in the brand's voice (marketing) |
 | `post-image` | no | the image a post needs, and the step that LOOKS at it (marketing) |
-| `drive-inbox` | no | Drive folders as an inbox — **sold by nobody, its folder ships nowhere** |
+| `drive-inbox` | no | Drive folders as an inbox: the agent's front door for material |
 
-`drive-inbox` is the honest odd one out and its manifest says so: no capability
-sells it, no base capability installs it, and `system` is false, so
-`tools/plugin_set.py` gives its FOLDER to no agent. It is packaged so the day a
-client needs it the unit is there to sell. Nothing of it reaches an agent —
-not the folder and not the skill — which is what changed on 2026-08-30: while a
-solo agent got the kit's whole skills catalog, `drive-inbox`'s SKILL.md was in
-every client's prompt with no folder behind it.
+`drive-inbox` was the honest odd one out until 2026-08-30 and the manifest said
+so: no capability sold it, no base capability installed it, and `system` is
+false, so `tools/plugin_set.py` gave its FOLDER to no agent — nothing of it
+reached anybody, not the folder and not the skill. **That is what a plugin with
+no row is: a plugin that does not exist.** The row (`drive-inbox`, `level:
+menu`, group `information`) is what fixed it, and the general lesson is the
+line below about the sales layer: writing the plugin is half the shipment.
 
 ### Harness skills: what `skills/` still holds, and why
 
@@ -207,9 +207,9 @@ the catalog promises and the installer never copies.
 
 A ROW HAS TO BE CLOSED ON ITS OWN, because a row is what a client buys on its
 own. `check-plugins.py` refuses a row whose plugin requires a non-system plugin
-that same row does not install — `social-package` selling `post-image` without
-`brand-kit` is an image generator with no hexes to read. Another row installing
-the dependency is another purchase, not this one.
+that same row does not install — `social-package` selling `post-image` without `brand-kit`
+is an image generator with no hexes to read. Another row installing the
+dependency is another purchase, not this one.
 
 `verifies` did NOT move, on purpose. It describes the agent's DELIVERED layout —
 a plugin's skill is flattened into `kit-skills/` exactly as it always was — so
