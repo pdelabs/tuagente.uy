@@ -174,11 +174,11 @@ done < <(find "$KIT"/connections/*/mcp -type f ! -path "*/__pycache__/*" 2>/dev/
 #
 # WHERE EACH SKILL'S FILES ARE is no longer just `skills/<name>/`: a skill can
 # ship inside a plugin, at `plugins/<id>/skills/<name>/`. It installs into the
-# same `kit-skills/<name>/` either way -- in phase 1 the plugin folder is
-# packaging in this repo and the agent's layout does not change
-# (notes/plugin-system-plan.md) -- so the only thing that moves is where the
-# source is read from, and skills_split.py is the one that knows.
-SKILL_DIRS="$(python3 "$KIT/roles/skills_split.py" --dirs)"
+# same `kit-skills/<name>/` either way -- the plugin folder is packaging in this
+# repo and the agent's layout does not change (notes/plugin-system-plan.md) --
+# so the only thing that moves is where the source is read from, and
+# tools/skill_sources.py is the one that knows.
+SKILL_DIRS="$(python3 "$KIT/tools/skill_sources.py" --dirs)"
 skill_dir() { printf '%s\n' "$SKILL_DIRS" | awk -F'\t' -v n="$1" '$1 == n { print $2; exit }'; }
 
 ROSTER="$POLICY/roles/catalog.json"
