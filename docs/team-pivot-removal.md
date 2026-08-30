@@ -338,6 +338,51 @@ Team tab replaced by the onboarding direction; PENDING's closed items closed
 and its hire report marked historical; COMPACT's status, routes and two new
 hard lessons; and five notes that mentioned roles in passing.
 
+## Validated independently, 30/8 — and what it found
+
+A second pass measured the claims above rather than reading them. Everything in
+the inventory reproduced: 53 files deleted counting the two archived notes as
+deletions, 91 code files at +2,771/−8,792, 59 prose files, and the whole gate
+green — 67 adapter tests, 139 tool tests, `check-plugins`, `check-clones`,
+`check-adapter-boundaries`, `compare-installers` (73 identical files), `tsc` and
+`npm run build`. No Spanish identifier entered the new code.
+
+The measurements the removal rests on, taken again from scratch:
+
+- **A fresh solo install is 7 plugins, 8 flows, 8 skills** — approval, artifact,
+  capability, deliverable, flow, kanban, transcribe. Buying `social-package` and
+  `invoices-to-data` takes it to **11 plugins, 14 flows, 12 skills**, and a
+  `purchased.json` naming an id the catalog does not have stops the install by
+  name and writes nothing.
+- **The adapter's contract break is real on a booted fixture**: `/portal/roles`,
+  `/portal/rooms(/{id})` and `/portal/roles/request` all 404, `role` or `room`
+  in the body of either stream route is a 400, the manifest does not contain the
+  substring `role` at all, and identity refuses a company before a name (400)
+  then accepts name (200) then company (200).
+- **Both live agents match `fleet.md` exactly** — the demo at 30 ok · 0 warn ·
+  0 failures and 11 plugins, the VPS at 29 ok · 0 warn · 1 failure (the
+  identity, correct and expected) and 7 plugins, TLS clean on both hostnames,
+  US$0.00 moved on the VPS key. One chat turn asked the demo agent its name and
+  got «Tuca», US$0.00567055.
+- **The onboarding fix holds under the poll it was written for**, driven against
+  the real `layout.tsx` in jsdom: the flow survives a manifest poll at every
+  step, and the bug reproduces on the parent commit and on HEAD with only that
+  line reverted.
+
+Six documentation defects came out of it, all fixed here, and only ONE of them
+was a pivot leftover — `hermes-kit/README.md` still delivering skills «to the
+profiles». The other five were pre-pivot staleness the removal simply did not
+touch: COMPACT's repo table, its tab list, its kit inventory, `fleet.md`
+calling East the only agent in the fleet, and a PENDING item the same file
+closes 130 lines later. Worth saying plainly: **the removal was clean, and what
+the audit found was the debt around it.**
+
+One thing is NOT closed and is written up in `docs/PENDING.md`: a client who
+**reloads** between the channel step and the end of onboarding still loses the
+last two steps, because the gate reads the agent once on arrival. Same tail as
+the poll bug, much rarer, and closing it is a decision about what onboarding is
+rather than a patch.
+
 ## What is deliberately NOT here
 
 - **East (`49.13.225.187`) was never touched and must not be.** It is the only
