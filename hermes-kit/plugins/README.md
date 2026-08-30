@@ -67,10 +67,10 @@ string or a list of strings) is allowed and ignored.
 `drive-inbox` is the honest odd one out and its manifest says so: no capability
 sells it, no base capability installs it, and `system` is false, so
 `tools/plugin_set.py` gives its FOLDER to no agent. It is packaged so the day a
-client needs it the unit is there to sell. Its SKILL is delivered like every
-other one — kit-skills/ is the whole catalog — which is exactly the split the
-rest of this file insists on: the delivery is what the engine indexes, the
-folder is what says the plugin is installed.
+client needs it the unit is there to sell. Nothing of it reaches an agent —
+not the folder and not the skill — which is what changed on 2026-08-30: while a
+solo agent got the kit's whole skills catalog, `drive-inbox`'s SKILL.md was in
+every client's prompt with no folder behind it.
 
 ### Harness skills: what `skills/` still holds, and why
 
@@ -112,14 +112,19 @@ this client bought install (`policy/capabilities/purchased.json`). `install.sh`
 ships exactly that set — the folder, the engine surface and the curated flows —
 and removes what leaves it.
 
-WHAT THE FOLDER DOES NOT DECIDE IS THE SKILL INDEX, and that is one agent's
-whole catalog. Until the team pivot came off, exposure was per ROLE: kit-skills/
-is mounted for the whole installation, so a teammate paid prompt for the other
-teammates' craft and `roles/skills_split.py` computed who saw what. One baptized
-agent per client has nobody else to pay for it, so every skill in the kit is
-delivered and indexed — a plugin whose folder this agent does not have still
-leaves its SKILL.md in the index, and what the client does not get is the
-tab, the adapter routes, the flows and the right to depend on it.
+THE SKILL INDEX FOLLOWS THE SAME SET, and that is what makes the folder and the
+index one answer. `install.sh` delivers the HARNESS — everything under `skills/`,
+which belongs to every agent unconditionally — plus the skills of the plugins in
+THIS agent's set, and `tools/agent-check.py` verifies against the same function
+(`tools/skill_sources.py`).
+
+It was the whole kit on a solo agent until 2026-08-30, and that was wrong in
+both directions: `quotes` in the index of an agent that never bought it is
+prompt paid on EVERY request for a SKILL.md whose folder — its tab, its routes,
+its flows — was never installed. During the team pivot the split was per ROLE
+(kit-skills/ is mounted for the whole installation, so a teammate paid for the
+other teammates' craft, and `roles/skills_split.py` computed who saw what); it
+is per AGENT now, off the purchase.
 
 `kanban` is the extreme case: it has no skills surface at all. Its store is the
 engine's and its screens are the portal's; the manifest exists so the four that

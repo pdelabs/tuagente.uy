@@ -27,6 +27,7 @@ fails over an agent that is already installed.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -41,6 +42,15 @@ sys.path.insert(0, str(TOOLS))
 import plugin_registry  # noqa: E402
 import plugin_set  # noqa: E402
 import skill_sources  # noqa: E402
+
+
+def agent_check():
+    """agent-check.py, whose file name is not an identifier."""
+    spec = importlib.util.spec_from_file_location(
+        "agent_check", TOOLS / "agent-check.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 # A client who bought the two menu rows that install one plugin each, which is
 # the smallest purchase that changes the answer: `quotes` is sales work,
@@ -77,16 +87,50 @@ class WhatTheAgentGets(unittest.TestCase):
         directory = root / "kit-skills"
         return {d.name for d in directory.iterdir() if (d / "SKILL.md").is_file()}
 
-    def test_every_skill_in_the_kit_is_delivered_and_the_index_is_the_clients(self):
-        """One agent per client, one index, and it holds the whole kit.
+    def test_the_index_is_the_harness_plus_what_this_client_bought(self):
+        """NOT the whole kit, which is what a solo agent used to get.
 
-        There was a second answer for the length of the team pivot: with a
-        roster, kit-skills/ got only the skills EVERY role declared, because the
-        mount is for the whole installation and a teammate paid prompt for the
-        other teammates' craft. There are no teammates.
+        Before the menu there was nothing else it could mean; now it is wrong in
+        both directions. `quotes` in the index of an agent that never bought it
+        is prompt paid on every request for a SKILL.md whose plugin folder — its
+        tab, its routes, its flows — is not on the agent at all.
         """
-        self.assertEqual(self.delivered(self.fresh), set(skill_sources.skill_dirs()))
-        self.assertEqual(self.delivered(self.buyer), set(skill_sources.skill_dirs()))
+        for root in (self.fresh, self.buyer):
+            with self.subTest(agent=root.name):
+                self.assertEqual(self.delivered(root),
+                                 set(skill_sources.agent_skills(root / "data")))
+        whole_kit = set(skill_sources.skill_dirs())
+        self.assertLess(self.delivered(self.fresh), whole_kit)
+        self.assertLess(self.delivered(self.fresh), self.delivered(self.buyer))
+
+    def test_the_harness_is_on_every_agent_whatever_anybody_bought(self):
+        """The fallback notes: the only thing between a missing tool and a
+        faked result, and they answer to the engine's index, not to a sale."""
+        for root in (self.fresh, self.buyer):
+            with self.subTest(agent=root.name):
+                self.assertLessEqual(skill_sources.harness_skills(),
+                                     self.delivered(root))
+        self.assertIn("no-web-search", skill_sources.harness_skills())
+
+    def test_a_skill_nobody_bought_is_not_on_the_agent(self):
+        """`quotes` arrives with the purchase and not before it."""
+        self.assertNotIn("quotes", self.delivered(self.fresh))
+        self.assertIn("quotes", self.delivered(self.buyer))
+        # And `drive-inbox` is in nobody's set: no capability sells it.
+        self.assertNotIn("drive-inbox", self.delivered(self.buyer))
+
+    def test_agent_check_expects_exactly_what_the_installer_wrote(self):
+        """The two have to be one answer, which is why they are one function.
+
+        `agent-check.py` demanding a skill install.sh does not ship is an
+        eternal red line that says "run install.sh" and re-running it changes
+        nothing — which is exactly what the whole-kit answer did the day an
+        agent stopped getting the whole kit.
+        """
+        for root in (self.fresh, self.buyer):
+            with self.subTest(agent=root.name):
+                self.assertEqual(agent_check().expected_skills(str(root / "data")),
+                                 self.delivered(root))
 
     def test_a_skill_is_on_the_agent_exactly_once_per_home(self):
         """No name is delivered twice, and nothing lands in data/skills/.

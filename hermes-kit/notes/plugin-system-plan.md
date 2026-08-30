@@ -358,13 +358,19 @@ kit skill no role declared, and porting it did not change that.
   installed — `transcribe`, which nobody buys), and — v3 — what the
   capabilities the client BOUGHT install, read off
   `policy/capabilities/purchased.json`. A fresh client's agent therefore comes
-  out with SEVEN and not with all thirteen, even though `install.sh` delivers
-  every skill in the kit to it: six system plugins plus `transcribe`. The
-  registry describes what the agent HAS; kit-skills/ describes the whole
-  catalog, because the index is the client's and there is nobody else on the
-  agent paying for it. If a client plugin ever grows a tab or an adapter
-  surface, an agent that carries its skill and not its folder will not draw it
-  — and that is the honest answer, because nobody sold it.
+  out with SEVEN and not with all thirteen: six system plugins plus
+  `transcribe`.
+
+  AND THE SKILL INDEX FOLLOWS IT, which closed the last place the two could
+  disagree. `install.sh` delivers the HARNESS (everything under `skills/` — the
+  fallback notes, which belong to every agent unconditionally) plus the skills
+  of the plugins in that set, and `agent-check.py`'s `expected_skills` is the
+  same function. Until 2026-08-30 a solo agent got the kit's whole catalog,
+  because before there was a menu there was nothing else it could mean, and it
+  was wrong in both directions: `quotes` in the index of an agent that never
+  bought it is prompt paid on EVERY request for a SKILL.md whose folder — tab,
+  routes, flows — was never installed, and `agent-check` demanded that SKILL.md
+  forever, an eternal red line whose "run install.sh" changed nothing.
 
   THE THIRD SOURCE USED TO BE THE ROSTER: what each HIRED role declared in the
   kit's `role.json`, hired meaning `data/profiles/<id>/` exists. The question it

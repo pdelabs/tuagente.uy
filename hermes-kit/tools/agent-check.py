@@ -20,7 +20,6 @@ CLAUDE.md and a production agent still had a skill without it — precisely the
 one that mails a lead. It got indexed with an empty description, so the agent
 could never discover it. A rule nobody checks is not a rule.
 """
-import glob
 import importlib.util
 import json
 import os
@@ -563,20 +562,34 @@ def allowed_skills():
         return set(ALLOWED_BY_DEFAULT)
 
 
-def kit_skills():
-    """The names of the skills this kit installs.
+def agent_skills(data):
+    """The names of the skills THIS agent should have in kit-skills/.
 
-    Two homes, one installed directory: `skills/<name>/` and the skills
-    surface of a plugin, `plugins/<id>/skills/<name>/`. Both land in
-    kit-skills/<name>/ (notes/plugin-system-plan.md, phase 1), so an agent
-    cannot tell them apart and neither does this list.
+    Through `tools/skill_sources.py`, which is what `install.sh` asks: one
+    function decides which skills reach an agent, so the install and the check
+    cannot disagree about what is supposed to be on disk. Exactly the same
+    reason `expected_plugins()` goes through `plugin_set.py`.
+
+    IT USED TO BE THE WHOLE KIT, and that was wrong in both directions. A solo
+    agent got every skill because before the menu there was nothing else it
+    could mean, so an agent whose client never bought `quotes` indexed the quote
+    writer -- prompt paid on every request -- while the plugin FOLDER behind it
+    was not installed, and this check demanded the SKILL.md be there forever.
+    Two homes, one installed directory: `skills/<name>/` and the skills surface
+    of a plugin both land in kit-skills/<name>/, so an agent cannot tell them
+    apart and neither does this list.
+
+    IT RAISES `SystemExit`, WHICH IS NOT AN `Exception` -- the same trap
+    `shared_split()` and `installed_registry()` document. Translated here, where
+    it is one red line instead of the whole run.
     """
-    kit = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-    names = set()
-    for parts in (("skills", "*"), ("plugins", "*", "skills", "*")):
-        for path in glob.glob(os.path.join(kit, *parts, "SKILL.md")):
-            names.add(os.path.basename(os.path.dirname(path)))
-    return names
+    sys.path.insert(0, kit_tools())
+    import skill_sources
+    from pathlib import Path
+    try:
+        return set(skill_sources.agent_skills(Path(data)))
+    except SystemExit as broken:
+        raise AssertionError(str(broken))
 
 
 def has_team(data):
@@ -615,10 +628,11 @@ def shared_split():
 def expected_skills(data):
     """The ones install.sh leaves in kit-skills/ for THIS agent, or None.
 
-    An agent with a team gets the shared ones only: the craft skills live inside
-    each hired role's profile, installed by tools/hire-role.sh. Asking for
-    all of them here would fail every team agent and send whoever reads it to
-    re-run install.sh, which would not change a thing.
+    The harness plus the skills of the plugins this agent has — what its client
+    bought — computed by the same `tools/skill_sources.py` the installer runs.
+    Asking for the kit's whole catalog here would fail every agent that did not
+    buy everything, and send whoever reads it to re-run install.sh, which would
+    not change a thing.
 
     None means the split could not be computed (the roster and a role.json
     contradict each other, which is its own check): nobody can say which skills
@@ -626,7 +640,7 @@ def expected_skills(data):
     guessing a set and reporting the guess as a fact.
     """
     if not has_team(data):
-        return kit_skills()
+        return agent_skills(data)
     return shared_split()[0]
 
 
@@ -2451,10 +2465,15 @@ def main():
         swears it is current. install.sh writes both in the same run; a
         difference means one of them was touched afterwards.
 
-        THE PROFILE COPIES ARE NOT COMPARED, and that is not an oversight: a
-        craft skill packed into a role's profile goes through build_role.py,
-        which REWRITES `/opt/kit/skills/<name>/` into the profile's own path.
-        Those copies are supposed to differ, byte for byte, from the registry's.
+        A PLUGIN WHOSE SKILL IS NOT DELIVERED AT ALL IS SKIPPED, not failed,
+        and after the pivot that is only ever an agent nobody has re-installed:
+        the delivered set is now the harness plus THIS agent's plugin set
+        («kit skills: external mount» is the check that says the two disagree),
+        so on a current agent every plugin in the folder has its skills next
+        door. It used to be the normal case — a craft skill packed into a role's
+        profile went through build_role.py, which REWROTE
+        `/opt/kit/skills/<name>/` into the profile's own path, so those copies
+        were SUPPOSED to differ byte for byte from the registry's.
         """
         directory = plugins_dir(data)
         if not os.path.isdir(directory):

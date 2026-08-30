@@ -154,46 +154,50 @@ while IFS= read -r f; do
   connection="${rel%%/*}"
   FILES+=("connections/$rel:$POLICY/mcp/$connection/${rel#"$connection"/mcp/}")
 done < <(find "$KIT"/connections/*/mcp -type f ! -path "*/__pycache__/*" 2>/dev/null | sort)
-# WHICH SKILLS THIS AGENT GETS: ALL OF THEM, AND THERE IS ONE PATH AGAIN. There
-# were two for the length of the team pivot. With a roster on disk the installer
-# shipped only the skills EVERY role declared and the craft ones travelled
-# inside each hired profile, because kit-skills/ is mounted for the WHOLE
-# installation and a teammate paid prompt for the other teammates' skills. One
-# baptized agent per client is the decision that ended it: there is one index,
-# it is the client's, and every skill in the kit is in it.
+# WHICH SKILLS THIS AGENT GETS, AND IT IS NOT THE WHOLE KIT. It was, on a solo
+# agent, right up until the pivot came off -- and there was nothing else it
+# could have meant back then: one client, one agent, no menu. It is wrong in
+# both directions now. An agent whose client never bought `quotes` indexed the
+# quote writer, and every skill's description is loaded on EVERY request; and
+# the plugin folder behind that SKILL.md was not installed, so the skill
+# promised work whose tab, routes and flows are not on the agent at all.
 #
-# WHAT IS PER-AGENT NOW IS THE PLUGIN SET, further down -- the folder that says
-# a plugin is installed, its engine surface and its curated flows all follow
-# what the client bought. The skill index is the whole kit, exactly as it was
-# before the pivot.
+# THE HARNESS PLUS THE PLUGIN SET, which is one question asked of the same
+# source the FOLDERS follow (`tools/plugin_set.py`), so the index and the
+# registry cannot disagree about what this client has. The harness is
+# everything under `skills/` -- today the two fallback notes, which the engine
+# only indexes when the tool is missing and which are the only thing between a
+# missing tool and an agent that fakes the result. The product is the skills of
+# the plugins this agent has: system, base capability, purchased.
 #
-# WHERE EACH SKILL'S FILES ARE is no longer just `skills/<name>/`: a skill can
-# ship inside a plugin, at `plugins/<id>/skills/<name>/`. It installs into the
-# same `kit-skills/<name>/` either way -- the plugin folder is packaging in this
-# repo and the agent's layout does not change (notes/plugin-system-plan.md) --
-# so the only thing that moves is where the source is read from, and
+# `tools/agent-check.py` asks the SAME function (`expected_skills`), which is
+# the only way "what should be there" and "what is there" can be one answer.
+#
+# WHERE EACH SKILL'S FILES ARE is not just `skills/<name>/`: a skill can ship
+# inside a plugin, at `plugins/<id>/skills/<name>/`. It installs into the same
+# `kit-skills/<name>/` either way -- the plugin folder is packaging in this repo
+# and the agent's layout does not change (notes/plugin-system-plan.md) -- so the
+# only thing that moves is where the source is read from, and
 # tools/skill_sources.py is the one that knows.
-SKILL_DIRS="$(python3 "$KIT/tools/skill_sources.py" --dirs)"
-skill_dir() { printf '%s\n' "$SKILL_DIRS" | awk -F'\t' -v n="$1" '$1 == n { print $2; exit }'; }
-
 SKILLS_TO_INSTALL=()
-while IFS=$'\t' read -r name _; do
+SKILL_SOURCES=()
+while IFS=$'\t' read -r name rel_dir; do
+  [[ -n "$name" ]] || continue
   SKILLS_TO_INSTALL+=("$name")
-done < <(printf '%s\n' "$SKILL_DIRS")
-# An empty list is not "this kit has no skills": it is the resolver having
-# failed to say, and installing nothing would take the portal's screens down.
-# Stop before writing anything, the same way the plugin set does below.
+  SKILL_SOURCES+=("$rel_dir")
+done < <(python3 "$KIT/tools/skill_sources.py" --agent "$DATA")
+# An empty list is not "this agent has no skills": the harness alone is two, and
+# the six system plugins are unconditional. It is the resolver having failed to
+# say, and installing nothing would take the portal's screens down. Stop before
+# writing anything, the same way the plugin set does below.
 [[ ${#SKILLS_TO_INSTALL[@]} -gt 0 ]] || {
-  echo "tools/skill_sources.py didn't say where the kit's skills are. Installed nothing." >&2
+  echo "tools/skill_sources.py didn't say which skills this agent gets. Installed nothing." >&2
   exit 1
 }
 
-for s in "${SKILLS_TO_INSTALL[@]}"; do
-  rel_dir="$(skill_dir "$s")"              # skills/deliverable or plugins/x/skills/y
-  [[ -n "$rel_dir" ]] || {
-    echo "'$s' has to be installed and there is no such skill in the kit." >&2
-    exit 1
-  }
+for i in "${!SKILLS_TO_INSTALL[@]}"; do
+  s="${SKILLS_TO_INSTALL[$i]}"
+  rel_dir="${SKILL_SOURCES[$i]}"           # skills/deliverable or plugins/x/skills/y
   source_dir="$KIT/$rel_dir"
   while IFS= read -r f; do
     inner="${f#"$source_dir"/}"            # SKILL.md, scripts/verify_rows.py

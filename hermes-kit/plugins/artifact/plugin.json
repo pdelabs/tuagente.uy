@@ -10,10 +10,10 @@
     "IT WAS NOT ON EVERY ROLE, and that asymmetry died with the roster: marketing,",
     "sales and accounting had things worth drawing and support and assistant did",
     "not, so `roles/skills_split.py` kept this skill out of two teammates'",
-    "indexes. One baptized agent per client has one index and it is the client's,",
-    "so the distinction has nowhere left to live: `system: true` ships the FOLDER",
-    "to every agent so anything may depend on it, and the skill is delivered like",
-    "every other one in the kit."
+    "indexes. One baptized agent per client has one index, and what decides it is",
+    "the plugin SET: `system: true` puts this folder on every agent so anything",
+    "may depend on it, and the skill is delivered with it. A client plugin's",
+    "skill is not -- it arrives with the capability that installs the plugin."
   ],
   "requires": {
     "plugins": [
