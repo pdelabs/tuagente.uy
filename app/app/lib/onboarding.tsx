@@ -83,8 +83,8 @@ function agentitoCapture(): { avatar_png?: string } {
   return {};
 }
 
-/** A random look, guaranteed different from the current one. The agent's own
- *  naming and the team's first role naming roll the same dice. */
+/** A random look, guaranteed different from the current one: the dice the
+ *  naming step rolls when the client asks for another face. */
 export function randomizeLook(current: AgentitoLook): AgentitoLook {
   for (;;) {
     const look = { ...current };
@@ -122,8 +122,8 @@ export function agentDisplayName(manifest: Manifest | null): string {
   return loadAgentName() || manifest?.agent || "tu agente";
 }
 
-/** HAS THIS AGENT ALREADY GONE THROUGH HIRING/NAMING? THE AGENT answers this,
- *  not the browser.
+/** HAS THIS AGENT ALREADY BEEN NAMED AND TOLD WHERE TO WRITE? THE AGENT
+ *  answers this, not the browser.
  *
  *  It used to be decided by what this browser remembered, and the browser's
  *  memory gets wiped entirely when the agent changes (`forgetAgent`). Meaning
@@ -145,18 +145,8 @@ export function agentDisplayName(manifest: Manifest | null): string {
  *  cases we'd rather ask: the price of asking too much is one screen; the
  *  price of not asking is a client with no notification channel, which is
  *  exactly what this flow exists to fix. */
-export function hiringAlreadyAnswered(manifest: Manifest | null | undefined): boolean {
+export function onboardingAlreadyAnswered(manifest: Manifest | null | undefined): boolean {
   return Boolean(manifest?.named) && (manifest?.notify_channel ?? "").trim() !== "";
-}
-
-/** THE SAME QUESTION, FOR A TEAM AGENT. On a team there's no naming step for
- *  the agent itself -- the client names whoever they hire, not the agent --
- *  so `named` never arrives and `hiringAlreadyAnswered` would always be
- *  false. What's left is the notify channel, and the same lesson applies:
- *  answering it WRITES to the agent, so a client who already answered doesn't
- *  get asked again when they come in from another machine. */
-export function channelAlreadyAnswered(manifest: Manifest | null | undefined): boolean {
-  return (manifest?.notify_channel ?? "").trim() !== "";
 }
 
 // What we tell in step 2: only what the manifest turns on.
@@ -192,36 +182,23 @@ const POINTS = [
   },
 ];
 
-export default function Onboarding({ manifest, cfg, onDone, team }: {
+export default function Onboarding({ manifest, cfg, onDone }: {
   manifest: Manifest;
   cfg: PortalConfig;
   onDone: (name: string) => void;
-  /** TEAM HIRING: who just joined the client's team.
-   *
-   *  When this is set, this onboarding runs TRIMMED DOWN -- the business and
-   *  the notify channel, nothing else -- and it does so in the voice of the
-   *  teammate the client just hired. Naming doesn't happen here: it already
-   *  happened when they picked it (`lib/hiring.tsx`), and asking for a name
-   *  again would mean naming someone twice. The overview doesn't show either:
-   *  the three cards describe what ONE agent does, and this client has a team. *
-   *
-   *  What DOES stay is what team hiring doesn't ask and the portal still
-   *  needs: what the business is (it's what triggers the brief) and where to
-   *  notify them (without it the agent works and nobody finds out). */
-  team?: { name: string; look: AgentitoLook } | null;
 }) {
   // If the agent was ALREADY named (another machine, another person at the
   // company), it doesn't ask for the name again: it skips straight to the
   // overview.
   const alreadyNamed = Boolean(manifest.named);
   const [name, setName] = useState(
-    () => team?.name ?? loadAgentName() ?? (alreadyNamed ? manifest.agent : ""));
+    () => loadAgentName() ?? (alreadyNamed ? manifest.agent : ""));
   // The notify channel is its OWN step, not the overview's footer. It's the
   // decision that decides whether the portal is any use -- "the sheet is
   // waiting for me to show up and I'm not going to" -- and squeezed below
   // three cards it competed with them.
   const [step, setStep] = useState<"naming" | "business" | "overview" | "notify" | "automations" | "chat">(
-    team ? "business" : alreadyNamed ? "overview" : "naming");
+    alreadyNamed ? "overview" : "naming");
   // Who THE CLIENT is. Onboarding used to ask the agent's name and never the
   // business's: the portal ended up talking about "us" and the agent signing
   // with the previous owner's name.
@@ -385,10 +362,9 @@ export default function Onboarding({ manifest, cfg, onDone, team }: {
   // Celebration counter: every naming fires the character's trigger.
   const [celebrations, setCelebrations] = useState(0);
   const [look, setLook] = useState<AgentitoLook>(
-    () => (team?.look
-      ?? (hasSavedLook()
-        ? loadAgentLook()
-        : lookFromAgent(manifest.look) ?? LOOK_DEFAULT)));
+    () => (hasSavedLook()
+      ? loadAgentLook()
+      : lookFromAgent(manifest.look) ?? LOOK_DEFAULT));
   const ready = name.trim().length > 0;
 
   const anotherLook = () => {
@@ -421,10 +397,7 @@ export default function Onboarding({ manifest, cfg, onDone, team }: {
   };
 
   /** Step 2 -> overview. The site gets sent HERE and not at the end: while the
-   *  client reads the overview, the agent is already reading their site.
-   *
-   *  On team hiring the overview doesn't exist, so the brief still gets sent
-   *  and it goes straight to the channel question. */
+   *  client reads the overview, the agent is already reading their site. */
   const submitCompany = () => {
     const e = company.trim();
     if (!e) return;
@@ -432,7 +405,7 @@ export default function Onboarding({ manifest, cfg, onDone, team }: {
       company: e,
       ...(url.trim() ? { url: url.trim() } : {}),
     }).catch(() => { /* old or down adapter: the portal carries on */ });
-    setStep(team ? "notify" : "overview");
+    setStep("overview");
   };
 
   /** The same request the Connections tab leaves -- same helper, same ticket
@@ -506,11 +479,6 @@ export default function Onboarding({ manifest, cfg, onDone, team }: {
     // decided by the manifest, which is where the truth comes from.
     rememberChannelInProgress(connectionRequest);
     if (connectionRequest) requestConnection(connectionRequest);
-    // On team hiring this was the last question: the client already picked
-    // someone and already waited for them to arrive, and the automations
-    // carousel would offer to build a flow with an agent they don't know yet.
-    // They enter the portal, which is where their team is.
-    if (team) { finish(); return; }
     setStep("automations");
   };
 

@@ -24,7 +24,7 @@ import {
 } from "./lib/routes";
 import { INTROS, useIntroGate } from "./lib/intros";
 import Onboarding, {
-  NoChannelNotice, hiringAlreadyAnswered, loadAgentName, saveAgentName,
+  NoChannelNotice, loadAgentName, onboardingAlreadyAnswered, saveAgentName,
 } from "./lib/onboarding";
 import {
   AgentitoAvatar, hasSavedLook, loadAgentLook, lookFromAgent, saveAgentLook,
@@ -403,7 +403,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // again. A brand-new (unnamed) agent still sees the full flow, and a named
   // one missing a channel sees it starting from the overview -- which is
   // where `Onboarding` starts when `named` is true.
-  if (seen && !seen.onboarding && !hiringAlreadyAnswered(manifest)) {
+  if (seen && !seen.onboarding && !onboardingAlreadyAnswered(manifest)) {
     return (
       <Onboarding
         manifest={manifest}
