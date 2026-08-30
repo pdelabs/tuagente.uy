@@ -150,11 +150,15 @@ Files stays under "Más" as a raw view of the workspace.
     (mounted `:ro`), not in `/opt/data/`. If the agent can edit the guard,
     there is no guard.
 
-- **A third path around the policy is still open, unclosed.** The adapter
-  **runs** `/opt/data/scripts/portal_adapter.py` — which lives on the
-  agent's volume — and the adapter has `./policy` mounted read-write. If the
-  agent overwrites that file and the adapter restarts, it runs the agent's
-  code with permission to rewrite the policy.
+- ~~**A third path around the policy is still open, unclosed.**~~ **CLOSED —
+  see «Privilege», below.** The adapter used to **run**
+  `/opt/data/scripts/portal_adapter.py` — which lives on the
+  agent's volume — with `./policy` mounted read-write, so the
+  agent could overwrite that file and have the adapter execute it on the next
+  restart. The code moved to `kit-adapter/`, mounted `:ro`, and the adapter
+  runs as uid 10000. An agent whose compose still points at the old path is a
+  migration, and `install.sh` detects it and prints the lines to paste. The
+  reasoning below is kept because it is what found the hop.
   - On the Mac the agent can overwrite it, **but that's a Docker Desktop
     artifact**: bind mounts ignore ownership (the file got created as
     `hermes` inside a `root` directory with no write permission). On Linux
