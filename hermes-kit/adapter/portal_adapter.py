@@ -21,7 +21,6 @@ from urllib.parse import unquote, urlparse
 import plugins
 from flows import FlowStore
 from kanban import KanbanStore
-from rooms import RoomStore
 from workspace import MAX_FILE_BYTES, WorkspaceStore
 
 VERSION = "0.42.2"
@@ -728,11 +727,6 @@ CAPABILITIES_REQUESTS = CAPABILITIES_DIR / "requests.jsonl"
 # An INSTALLED role is a Hermes profile: a directory under data/profiles/. Like
 # capabilities it is detected by PRESENCE, never by a value someone wrote: the
 # directory is either there or it is not.
-# The client's conversations. In policy/ for the same reason as
-# `capabilities/requests.jsonl`: the agent's container mounts it :ro, so an
-# agent cannot rewrite the record of what its client asked it to do.
-ROOMS = RoomStore(POLICY_DIR / "rooms")
-
 ROLES_DIR = POLICY_DIR / "roles"
 ROLES_CATALOG = ROLES_DIR / "catalog.json"
 # WHAT THE CLIENT ASKED FOR, AND WHAT THEY CALLED IT. Append-only, sibling of
@@ -2684,7 +2678,8 @@ class Handler(BaseHTTPRequestHandler):
         with bytes still unread makes the kernel send an RST: the caller loses
         the response it had already started reading and gets a transport error
         with no status in it. Measured 2026-08-24, wrong key on
-        `POST /portal/rooms/<id>`: the body read blew up with
+        a POST behind this door (`/portal/rooms/<id>`, a route since retired):
+        the body read blew up with
         `ConnectionResetError` on 15 of 40 attempts, and the identical call with
         no body was clean 40 out of 40. It is every POST behind this door, not
         one route -- and what the client sees for a key that is merely wrong is
@@ -2768,11 +2763,6 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, capabilities())
             if path == "/portal/roles":
                 return self._send(200, roles())
-            if path == "/portal/rooms":
-                return self._send(200, {"rooms": ROOMS.rooms()})
-            m = re.match(r"^/portal/rooms/([^/]+)$", path)
-            if m:
-                return self._send(200, {"turns": ROOMS.read(m.group(1))})
             if path == "/portal/flows":
                 return self._send(200, flows())
             m = re.match(r"^/portal/flows/([^/]+)$", path)
@@ -2831,20 +2821,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = unquote(urlparse(self.path).path)
         try:
-            m = re.match(r"^/portal/rooms/([^/]+)$", path)
-            if m:
-                # The client throwing away their own conversation. The room is
-                # theirs -- that is why it is stored here and not inside any
-                # one role's profile -- so this is the same gesture the sidebar
-                # already offers over an engine session, on the store that
-                # actually holds it.
-                #
-                # A room that is not there answers 404. A silent 200 would tell
-                # the sidebar a row disappeared that is still on disk, and the
-                # next listing would put it back.
-                if not ROOMS.delete(m.group(1)):
-                    return self._send(404, {"error": "esa conversación no existe"})
-                return self._send(200, {"ok": True})
             m = re.match(r"^/portal/artifacts/([^/]+)$", path)
             if m:
                 if not WORKSPACE_STORE.delete_artifact(m.group(1)):
@@ -2883,7 +2859,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._proxy_sse(
             f"{AGENT_BASE}{prefix}/api/sessions/{session_id}/chat/stream", body, token, role)
 
-    def _proxy_sse(self, url, body, token, answered_by=None, room=None):
+    def _proxy_sse(self, url, body, token, answered_by=None):
         """Relay one upstream SSE chat stream to the browser, line by line.
 
         TWO CALLERS, ONE RELAY: the session path continues a conversation, the
@@ -2940,7 +2916,7 @@ class Handler(BaseHTTPRequestHandler):
         # the catalog with `capability:social-package` as an example, and
         # counting that would have invented demand on every single read --
         # exactly the measurement we want clean.
-        mentions, event, response = [], "", ""
+        mentions, event = [], ""
         try:
             for line in upstream:
                 self.wfile.write(line)
@@ -2955,32 +2931,10 @@ class Handler(BaseHTTPRequestHandler):
                         except (ValueError, AttributeError):
                             content = ""
                         mentions += CAPABILITY_MENTION.findall(content)
-                        # The session path hands over the whole answer at once.
-                        response = content or response
-                    elif room and not event and "[DONE]" not in text:
-                        # The OpenAI-compatible path -- the one a room turn takes
-                        # -- has no `completed` event: the text arrives in
-                        # unnamed deltas and has to be accumulated.
-                        try:
-                            chunk = (json.loads(text[5:]).get("choices") or [{}])[0]
-                            response += (chunk.get("delta") or {}).get("content") or ""
-                        except (ValueError, AttributeError, IndexError):
-                            pass
         except (BrokenPipeError, ConnectionResetError):
             pass  # the client cut the stream (stop button): normal
         finally:
             upstream.close()
-        # AFTER closing, never inside the loop: the client is reading the answer
-        # as it lands and a disk write in there buys nothing.
-        #
-        # A stopped stream still persists what arrived. The client saw those
-        # words; a transcript that drops them is a transcript that disagrees
-        # with the screen they were just looking at.
-        if room and response.strip():
-            try:
-                ROOMS.append(room, "assistant", response, answered_by)
-            except OSError:
-                pass  # the chat already arrived: it isn't lost for failing to log it
         for candidate_id in dict.fromkeys(mentions):  # after closing: does not steal time from the chat
             try:
                 request_capability("mención del agente en el chat", candidate_id,
@@ -3209,28 +3163,6 @@ class Handler(BaseHTTPRequestHandler):
             if body is None:
                 return self._send(400, {"error": "invalid JSON body"})
             return self._save_skill(m.group(1), body)
-        m = re.match(r"^/portal/rooms/([^/]+)$", path)
-        if m:
-            # Renaming a conversation. It is a POST and not a PATCH because
-            # this door only advertises GET, POST and DELETE in
-            # `Access-Control-Allow-Methods`: a PATCH from the browser dies in
-            # the preflight before any of this runs -- the same wall the
-            # engine's `PATCH /api/jobs/{id}` hits (see docs/PENDING.md). So it
-            # is shaped like every other write the adapter takes: POST on the
-            # thing, the new value in the body.
-            body = self._read_json_body()
-            if body is None:
-                return self._send(400, {"error": "invalid JSON body"})
-            title = str(body.get("title") or "").strip()
-            if not title:
-                return self._send(400, {"error": "title is required"})
-            try:
-                if not ROOMS.rename(m.group(1), title):
-                    return self._send(404, {"error": "esa conversación no existe"})
-            except OSError as exc:
-                return self._send(500, {"error": str(exc)})
-            return self._send(200, {"ok": True})
-
         # --- Google self-service connection ---
         if path == "/portal/connections/google/auth-url":
             if not GOOGLE_CLIENT_SECRET.is_file():
@@ -3268,20 +3200,13 @@ class Handler(BaseHTTPRequestHandler):
             body = self._read_json_body()
             if body is None or not isinstance(body.get("messages"), list):
                 return self._send(400, {"error": "messages is required"})
+            # `room` IS REFUSED AND NOT IGNORED. The shared transcript went
+            # with the team, and a caller still sending its id is a caller
+            # drawing a screen that no longer exists: a 200 would let it look
+            # like the turn was filed somewhere.
+            if "room" in body:
+                return self._send(400, {"error": "campo desconocido: room"})
             role = str(body.pop("role", "") or "").strip() or None
-            # The room this belongs to. The portal makes the id; without one
-            # the turn is not recorded, which is what the chat did until today.
-            room = str(body.pop("room", "") or "").strip() or None
-            if room:
-                # The client's own turn goes in BEFORE the answer streams. If it
-                # went in after, a stream that dies mid-flight would leave a
-                # transcript where the client never said anything.
-                last = [m for m in body["messages"] if m.get("role") == "user"]
-                if last:
-                    try:
-                        ROOMS.append(room, "user", str(last[-1].get("content") or ""))
-                    except OSError:
-                        pass
             if role is None:
                 # Nobody was named, so the room decides. The client's own turn
                 # is the last message; earlier ones are context, including what
@@ -3305,7 +3230,7 @@ class Handler(BaseHTTPRequestHandler):
                     })
                 prefix = f"/p/{role}"
             return self._proxy_sse(
-                f"{AGENT_BASE}{prefix}/v1/chat/completions", body, token, role, room)
+                f"{AGENT_BASE}{prefix}/v1/chat/completions", body, token, role)
 
         m = re.match(r"^/portal/sessions/([^/]+)/chat/stream$", path)
         if m:

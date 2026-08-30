@@ -42,7 +42,7 @@ if not (_HERE / "plugin_registry.py").is_file():
     # install.sh puts a copy next to us, and this line never runs.
     #
     # APPENDED, NOT PREPENDED, and the difference is which directory wins. The
-    # adapter imports its own siblings by bare name -- flows, kanban, rooms,
+    # adapter imports its own siblings by bare name -- flows, kanban,
     # workspace -- and tools/ is full of scripts. Putting that directory FIRST
     # means the day somebody writes `tools/kanban.py` (a perfectly reasonable
     # name for a kit script) the adapter starts importing it instead of
