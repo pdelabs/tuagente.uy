@@ -56,24 +56,25 @@ POOLS = (
 WINDOW = 8   # shingle length, in words
 
 # --- thresholds -------------------------------------------------------------
-# Calibrated against the measured baseline of THIS repo (2026-08-20, 5
-# identities + 14 skills, 101 pairs):
-#   roles:  worst pair 0.9%, median 0.0%
-#   skills: worst pair 3.8% (no-web-search <-> no-images), median 0.0%
+# Calibrated against the measured baseline of THIS repo (2026-08-20, 14 skills):
+# worst pair 3.8% (no-web-search <-> no-images), median 0.0%.
 # The 3.8% is real and correct: those two skills are siblings — both say "you
 # don't have this, offer the capability" — and they share the sentence that
 # explains the note disappears on its own. That is overlap worth seeing, not a
 # clone, so it stays measured instead of whitelisted.
-# The other end of the ruler: a real find-replace clone (an identity copied with
-# the role names swapped) measures ~98% here. So the honest corpus lives under
-# 5% and a clone lives over 95%; there is nothing in between to split hairs
-# about. WARN at 15% is ~4x today's worst honest pair, FAIL at 30% means "a
-# third of the smaller file is verbatim the other one", which no two roles can
-# defend. Both are set for zero false positives, not for catching more.
-# The half-clone case, measured the same way: copy an identity and rewrite half
-# of it -> 53% (FAIL); rewrite three quarters -> 22% (WARN); nine tenths -> 9%
-# (ok). Which is the behaviour we want — the further you get from the original,
-# the less the check has to say about you.
+# The other end of the ruler: a real find-replace clone measures ~98% here. So
+# the honest corpus lives under 5% and a clone lives over 95%; there is nothing
+# in between to split hairs about. WARN at 15% is ~4x today's worst honest pair,
+# FAIL at 30% means "a third of the smaller file is verbatim the other one",
+# which no two files we write can defend. Both are set for zero false positives,
+# not for catching more.
+# The half-clone case, measured the same way: copy a file and rewrite half of it
+# -> 53% (FAIL); rewrite three quarters -> 22% (WARN); nine tenths -> 9% (ok).
+# Which is the behaviour we want — the further you get from the original, the
+# less the check has to say about you.
+# THE RULER WAS MEASURED ON THE IDENTITIES POOL, which is gone (see above). The
+# thresholds are not: they are percentages of shared shingles over neutralized
+# text, and nothing about that changes with the corpus.
 FAIL_THRESHOLD = 30.0
 WARN_THRESHOLD = 15.0
 
@@ -236,9 +237,9 @@ def label(pct):
 def pairs(files):
     """Every pair in a pool, worst first.
 
-    Sanity check for the numbers this returns: a real identity copied with its
-    role names find-replaced scores ~98%, while the two most alike real files
-    score under 5%. There is no middle ground in practice.
+    Sanity check for the numbers this returns: a real copy with its names
+    find-replaced scores ~98%, while the two most alike real files score under
+    5%. There is no middle ground in practice.
     """
     scores = []
     for a, b in combinations(sorted(files), 2):
@@ -337,7 +338,7 @@ def corpus_mode(root, top):
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Whether two identities (or two skills) are the same text under a different name.",
+        description="Whether two of the kit's skills are the same text under a different name.",
         epilog="With no arguments, checks the whole kit corpus.")
     ap.add_argument("--threshold", type=float, metavar="N",
                     help="replaces the FAIL threshold; WARN stays at half of it")
