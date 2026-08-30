@@ -154,23 +154,18 @@ while IFS= read -r f; do
   connection="${rel%%/*}"
   FILES+=("connections/$rel:$POLICY/mcp/$connection/${rel#"$connection"/mcp/}")
 done < <(find "$KIT"/connections/*/mcp -type f ! -path "*/__pycache__/*" 2>/dev/null | sort)
-# WHICH SKILLS THIS AGENT GETS, AND IT IS NO LONGER "ALL OF THEM". The kit used
-# to copy every skill into kit-skills/, which the compose mounts for the WHOLE
-# installation -- so on a client with a team the accounting role was indexing
-# the brand kit and the Instagram writer, and a skill's description is loaded on
-# EVERY request. A role carrying the whole kit is the single fat agent this
-# pivot exists to replace.
+# WHICH SKILLS THIS AGENT GETS: ALL OF THEM, AND THERE IS ONE PATH AGAIN. There
+# were two for the length of the team pivot. With a roster on disk the installer
+# shipped only the skills EVERY role declared and the craft ones travelled
+# inside each hired profile, because kit-skills/ is mounted for the WHOLE
+# installation and a teammate paid prompt for the other teammates' skills. One
+# baptized agent per client is the decision that ended it: there is one index,
+# it is the client's, and every skill in the kit is in it.
 #
-# THE MARKER IS THE ROSTER, the same file the adapter reads to decide whether
-# this client has a team (`ROLES_CATALOG.is_file()` in portal_adapter.py).
-# Presence, never a value someone wrote. Without it nothing changes: a pre-pivot
-# client gets the whole kit exactly like yesterday.
-#
-# With a roster only the shared skills travel here; the craft ones arrive with
-# the role that claims them (`tools/hire-role.sh` installs the profile with
-# its skills inside). Who is shared and who is not is COMPUTED from the roles by
-# roles/skills_split.py, not written down here: a list by hand is how two skills
-# once made it into the kit and never into a new agent.
+# WHAT IS PER-AGENT NOW IS THE PLUGIN SET, further down -- the folder that says
+# a plugin is installed, its engine surface and its curated flows all follow
+# what the client bought. The skill index is the whole kit, exactly as it was
+# before the pivot.
 #
 # WHERE EACH SKILL'S FILES ARE is no longer just `skills/<name>/`: a skill can
 # ship inside a plugin, at `plugins/<id>/skills/<name>/`. It installs into the
@@ -181,31 +176,17 @@ done < <(find "$KIT"/connections/*/mcp -type f ! -path "*/__pycache__/*" 2>/dev/
 SKILL_DIRS="$(python3 "$KIT/tools/skill_sources.py" --dirs)"
 skill_dir() { printf '%s\n' "$SKILL_DIRS" | awk -F'\t' -v n="$1" '$1 == n { print $2; exit }'; }
 
-ROSTER="$POLICY/roles/catalog.json"
 SKILLS_TO_INSTALL=()
-if [[ -f "$ROSTER" ]]; then
-  while IFS= read -r s; do
-    SKILLS_TO_INSTALL+=("$s")
-  done < <(python3 "$KIT/roles/skills_split.py" --shared)
-  # If the split cannot be computed there is no safe fallback: installing
-  # everything would put the craft skills back on every role, and installing
-  # nothing would take the portal's screens down. Stop before writing anything.
-  [[ ${#SKILLS_TO_INSTALL[@]} -gt 0 ]] || {
-    echo "roles/skills_split.py didn't say which skills are shared. Installed nothing." >&2
-    exit 1
-  }
-  # The roster is OURS and closed -- the client never writes it (the name they
-  # gave a role lives beside it, in policy/roles/identities.json, and their
-  # pending asks in requests.jsonl; neither is touched here, and this copies the
-  # one file and not the directory). Keeping it in the install is what makes a
-  # new role show up as available to a client that already has a team, instead
-  # of waiting for someone to copy a file by hand.
-  FILES+=("roles/catalog.json:$ROSTER")
-else
-  while IFS=$'\t' read -r name _; do
-    SKILLS_TO_INSTALL+=("$name")
-  done < <(printf '%s\n' "$SKILL_DIRS")
-fi
+while IFS=$'\t' read -r name _; do
+  SKILLS_TO_INSTALL+=("$name")
+done < <(printf '%s\n' "$SKILL_DIRS")
+# An empty list is not "this kit has no skills": it is the resolver having
+# failed to say, and installing nothing would take the portal's screens down.
+# Stop before writing anything, the same way the plugin set does below.
+[[ ${#SKILLS_TO_INSTALL[@]} -gt 0 ]] || {
+  echo "tools/skill_sources.py didn't say where the kit's skills are. Installed nothing." >&2
+  exit 1
+}
 
 for s in "${SKILLS_TO_INSTALL[@]}"; do
   rel_dir="$(skill_dir "$s")"              # skills/deliverable or plugins/x/skills/y
@@ -236,9 +217,9 @@ done
 # is installed (notes/plugin-system-plan.md, phase 3b).
 #
 # WHICH ONES IS COMPUTED, NEVER LISTED: tools/plugin_set.py resolves the system
-# plugins, the ones behind a base capability, and the ones each HIRED role
-# declares. A list by hand is how two skills once made it into the kit and never
-# into a new agent.
+# plugins, the ones behind a base capability, and the ones the capabilities this
+# client BOUGHT install (policy/capabilities/purchased.json). A list by hand is
+# how two skills once made it into the kit and never into a new agent.
 PLUGIN_IDS=()
 while IFS= read -r p; do
   [[ -n "$p" ]] && PLUGIN_IDS+=("$p")
@@ -369,10 +350,9 @@ if [[ "$MODE" == "--diff" ]]; then
       different=$((different+1))
     fi
   done
-  # WHAT THIS AGENT GETS, not the kit's whole catalog -- same list the copy uses
-  # below. On a team agent `brand-kit` is not shipped here, so a directory by
-  # that name under data/skills/ is the CLIENT's, and calling it "an old copy
-  # shadowing the kit's" is a lie that ends with us moving it away.
+  # THE SAME LIST THE COPY USES BELOW, and it matters that it is the same one:
+  # a name the kit does not ship here is the CLIENT's own, and calling that "an
+  # old copy shadowing the kit's" is a lie that ends with us moving it away.
   for s in "${SKILLS_TO_INSTALL[@]}"; do
     old="$DATA/skills/$s"
     [[ -d "$old" ]] && { echo "EXTRA    data/skills/$s — old copy, shadows the kit's"; different=$((different+1)); }
@@ -467,13 +447,12 @@ done
 # (EXCLUDED_SKILL_DIRS) get skipped: whatever is in .archive/ is already out of
 # play.
 #
-# IT WALKS THIS AGENT'S SELECTION AND NOT THE KIT'S CATALOG, and the difference
-# is whose file it is. Setting a directory aside is justified by one sentence:
-# there are two copies of THE SAME skill and the one in data/ shadows ours. On a
-# team agent the kit does not ship `brand-kit` here -- it travels inside
-# marketing's profile -- so a `data/skills/brand-kit` shadows nothing: it is the
-# client's. Walking the whole catalog confiscated a client's own skill and told
-# them it was shadowing a kit skill this agent is never going to receive.
+# IT WALKS WHAT THIS INSTALL SHIPS AND NOT A WIDER LIST, and the difference is
+# whose file it is. Setting a directory aside is justified by one sentence:
+# there are two copies of THE SAME skill and the one in data/ shadows ours. A
+# name the kit does not ship shadows nothing -- it is the client's -- and
+# walking a list wider than the shipment confiscated a client's own skill and
+# told them it was shadowing a kit skill that was never coming.
 SET_ASIDE_DIR="$AGENT/shadowed-skills"
 set_aside_count=0
 for name in "${SKILLS_TO_INSTALL[@]}"; do
@@ -547,31 +526,13 @@ fi
 # Without this, every skill looks like the client's and the portal offers to
 # edit the one that holds up the deliveries tab.
 #
-# IT IS WHAT THIS AGENT GOT, not the kit's whole catalog: on a team agent
-# `brand-kit` lives inside marketing's profile and not here. The adapter adds
-# the hired roles' skills when it builds the list (`_kit_names`), so a craft
-# skill still counts as ours -- and a capability detected by `kit_skill` does
-# not tell the client "you already have this" about something that is nowhere.
+# IT IS WHAT THIS AGENT GOT, written from the same list that was copied. A
+# capability detected by `kit_skill` reads it to answer "you already have this",
+# so a name in here that is not on disk is a card telling the client they have
+# something that is nowhere.
 mkdir -p "$DATA/skills"
 printf '%s\n' "${SKILLS_TO_INSTALL[@]}" > "$DATA/skills/.kit_manifest"
 echo "installed data/skills/.kit_manifest"
-
-if [[ -f "$ROSTER" ]]; then
-  echo "team: kit-skills/ got the shared ones (${SKILLS_TO_INSTALL[*]})"
-  echo "      the craft ones travel with each role: tools/hire-role.sh <role> <agent>"
-  # OUT LOUD, because the alternative is a skill that reaches nobody: a skill in
-  # the kit that no role claims and that is not a fallback note has no way into
-  # a team agent. Either a role declares it or it does not exist for this client.
-  #
-  # A BANNER IS NOT WORTH ABORTING FOR, and under `set -euo pipefail` this
-  # assignment was: the install had already copied every file, and a failure
-  # here died before writing the manifest -- leaving the agent installed and the
-  # cleanup never run. The install was already gated on `--shared` succeeding,
-  # up where it still could stop without writing anything; this second call only
-  # decorates the output. If it fails, no banner.
-  orphaned="$(python3 "$KIT/roles/skills_split.py" --orphan | tr '\n' ' ')" || orphaned=""
-  [[ -z "${orphaned// }" ]] || echo "        no owner (no role brings them): ${orphaned% }"
-fi
 
 
 # The manifest of what we installed, and the cleanup of what the kit stopped
@@ -591,8 +552,8 @@ fi
 # the files —it is the same manifest mechanism as everything else— but it
 # reports one line per FILE, and "plugins/invoices-to-data/skills/…/SKILL.md
 # removed" three times over is not the sentence anybody needs. The sentence is
-# which plugin this agent no longer has and why it is going: a role was let go
-# and its plugin goes with it.
+# which plugin this agent no longer has and why it is going: a capability came
+# off policy/capabilities/purchased.json and its plugin goes with it.
 if [[ -f "$MANIFEST" ]]; then
   while IFS= read -r gone; do
     [[ -n "$gone" ]] || continue

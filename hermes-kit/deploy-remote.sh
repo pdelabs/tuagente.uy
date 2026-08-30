@@ -125,46 +125,32 @@ echo "→ building the kit with install.sh (staging)"
 STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"' EXIT
 mkdir -p "$STAGING/data"
-# THE ROSTER FROM OVER THERE TRAVELS INTO THE STAGING BEFORE THE INSTALL.
-# `install.sh` decides which skills it ships by looking at
-# `policy/roles/catalog.json` -- the same file the adapter reads to know
-# whether this client has a team -- and the staging is a newborn agent: without
-# this, a client with a team would get the whole kit in kit-skills/ again, which
-# is mounted for the WHOLE installation, so every role would go back to paying
-# prompt for the other roles' skills. Same shape as the adapter's old entrypoint
-# a few lines below: what decides the install is the state OVER THERE, not the
-# state of the fake directory.
-if over_there "[ -f $REMOTE/policy/roles/catalog.json ]" 2>/dev/null; then
-  mkdir -p "$STAGING/policy/roles"
-  over_there "cat $REMOTE/policy/roles/catalog.json" > "$STAGING/policy/roles/catalog.json"
-  echo "   this agent has a team: only the shared skills go"
-fi
-# AND SO DOES WHICH ROLES ARE HIRED OVER THERE, for the same reason and with
-# the same shape. `install.sh` ships a plugin folder for every plugin an
-# INSTALLED role declares, and it reads that off `data/profiles/<id>/` -- which
-# in a newborn staging is nobody. Without this the deploy would take
-# accounting's `invoices-to-data` off an agent that has accounting hired, and
-# the cleaner would do it silently, because from the staging's point of view it
-# was correct. The markers are empty directories and they are DELETED right
-# after the install: `data/profiles/` is the agent's, it is not in any manifest,
-# and uploading it would rewrite the ownership of a directory the engine owns.
-if over_there "[ -d $REMOTE/data/profiles ]" 2>/dev/null; then
-  while IFS= read -r role; do
-    [[ -n "$role" ]] || continue
-    mkdir -p "$STAGING/data/profiles/$role"
-  done < <(over_there "ls -1 $REMOTE/data/profiles 2>/dev/null" || true)
-  hired="$(ls -1 "$STAGING/data/profiles" 2>/dev/null | tr '\n' ' ')"
-  [[ -z "${hired// }" ]] || echo "   roles hired over there: ${hired% }"
+# WHAT THE CLIENT BOUGHT TRAVELS INTO THE STAGING BEFORE THE INSTALL.
+# `install.sh` ships a plugin folder for every plugin a purchased capability
+# installs, and it reads that off `policy/capabilities/purchased.json` -- which
+# in a newborn staging is nobody's. Without this the deploy would take `quotes`
+# off an agent whose client bought it, and the cleaner would do it silently,
+# because from the staging's point of view it was correct. Same shape as the
+# adapter's old entrypoint a few lines below: what decides the install is the
+# state OVER THERE, not the state of the fake directory.
+#
+# THE FILE ITSELF DOES NOT TRAVEL BACK. It is written where the client's agent
+# lives — by us when a capability is sold — and it is not in any manifest, so
+# the deploy reads it and never rewrites it.
+if over_there "[ -f $REMOTE/policy/capabilities/purchased.json ]" 2>/dev/null; then
+  mkdir -p "$STAGING/policy/capabilities"
+  over_there "cat $REMOTE/policy/capabilities/purchased.json" \
+    > "$STAGING/policy/capabilities/purchased.json"
+  echo "   bought over there: $(python3 -c '
+import json, sys
+print(", ".join(json.load(open(sys.argv[1]))["capabilities"]) or "nothing")' \
+    "$STAGING/policy/capabilities/purchased.json")"
 fi
 if ! "$KIT/install.sh" "$STAGING/data" > "$STAGING/install-output.txt" 2>&1; then
   echo "install.sh failed while building the staging; not uploading anything:" >&2
   sed 's/^/   /' "$STAGING/install-output.txt" >&2
   exit 1
 fi
-
-# The profile markers did their job during the install and do not travel: see
-# the note above.
-rm -rf "$STAGING/data/profiles"
 
 MANIFEST="$STAGING/.kit-installed"
 [[ -s "$MANIFEST" ]] || { echo "install.sh left no .kit-installed: I don't know what to upload" >&2; exit 1; }
