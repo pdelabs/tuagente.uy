@@ -25,8 +25,8 @@
 #   and Caddyfile on a remote agent, and inside data/: portal_identidad.json,
 #   connections/{catalogo,requeridas}.json, google_oauth_portal.json,
 #   flujos/<slug>/FLUJO.md, costos.jsonl, SOUL.md's portal:identity marker,
-#   config.yaml's hook path / plugin name / kit:exception marker, deliverable
-#   frontmatter under workspace/entregables/, and data/profiles/<role>/.
+#   config.yaml's hook path / plugin name / kit:exception marker, and
+#   deliverable frontmatter under workspace/entregables/.
 #   JSON/JSONL keys and known enum VALUES are translated along with the
 #   paths; free-text values (labels, prose) are left exactly as they were.
 #   The full key-by-key map lives in the embedded Python below and mirrors
@@ -37,10 +37,11 @@
 # file this script doesn't recognize (reported, not guessed at).
 #
 # WHAT IT DOES NOT DO: it never stops or restarts the containers, and it
-# never calls the Hermes CLI (`hermes profile …`). If the agent has hired
-# roles, their `data/profiles/<id>/` directories and `role.json` get renamed
-# on disk, but Hermes' own profile registry still knows them by the old id —
-# that gets reported as a manual step, not guessed at.
+# never calls the Hermes CLI. It also does not translate `politica/roles/` or
+# touch `data/profiles/`: the roster is gone from the product, nothing reads
+# either of them, and translating a dead file is work with no reader. The
+# roster moves to `policy/roles/` exactly as it is so it is not silently
+# deleted; the profiles are left where they are.
 #
 # --dry-run prints every action this run WOULD take and touches nothing —
 # not even a backup gets written. Idempotent: a second real run finds every
@@ -140,11 +141,6 @@ LOOK_AXIS_MAP = {
     "pupila": "pupil", "boca": "mouth", "piel": "skin", "traje": "suit",
     "cejas": "brows", "sombrero": "hat",
 }
-ROLE_ID_MAP = {
-    "asistente": "assistant", "contabilidad": "accounting",
-    "soporte": "support", "ventas": "sales",
-    # marketing's id never changed
-}
 CONNECTION_ID_MAP = {
     "correo": "email", "modelos-auxiliares": "auxiliary-models",
 }
@@ -185,7 +181,6 @@ SKILL_ID_MAP = {
 }
 TRIGGER_TYPE_MAP = {"horario": "schedule", "pedido": "request"}
 FLOW_STATUS_MAP = {"activo": "active", "incompleto": "incomplete", "pausado": "paused"}
-EVENT_MAP = {"pedido": "requested", "atendido": "hired", "cancelado": "cancelled"}
 NOTIFY_CHANNEL_MAP = {"correo": "email", "ninguno": "none"}
 NO_CONNECTION_TOKENS = {"ninguna", "ninguno", "none", "n/a", "-", "—"}
 
@@ -442,59 +437,12 @@ move_and_rewrite_jsonl(
     NEW_POLICY / "capabilities" / "requests.jsonl",
     _capabilities_requests_transform, "capabilities requests log")
 
-# ours and closed, the client never writes it; just relocate it.
-move(OLD_POLICY / "roles" / "catalogo.json",
-     NEW_POLICY / "roles" / "catalog.json", "roles roster")
-
-
-def _role_identities_transform(data):
-    if not isinstance(data, dict):
-        return data
-    out = {}
-    for role_id, entry in data.items():
-        new_role_id = ROLE_ID_MAP.get(role_id, role_id)
-        if isinstance(entry, dict):
-            entry = {
-                {"nombre": "name", "pinta": "look", "bautizado_en": "named_at"}.get(k, k): v
-                for k, v in entry.items()
-            }
-            if "look" in entry:
-                entry["look"] = remap_look(entry["look"])
-        out[new_role_id] = entry
-    return out
-
-
-move_and_rewrite_json(
-    OLD_POLICY / "roles" / "identidades.json",
-    NEW_POLICY / "roles" / "identities.json",
-    _role_identities_transform, "role identities")
-
-
-def _role_requests_transform(row):
-    out = {}
-    for k, v in row.items():
-        new_k = {
-            "evento": "event", "rol": "role", "nombre": "name", "pinta": "look",
-            "pedido_en": "requested_at", "atendido_en": "hired_at",
-            "cancelado_en": "cancelled_at", "agente": "agent",
-            "capacidades": "capabilities",
-        }.get(k, k)
-        if new_k == "event":
-            v = EVENT_MAP.get(v, v)
-        elif new_k == "role":
-            v = ROLE_ID_MAP.get(v, v)
-        elif new_k == "look":
-            v = remap_look(v)
-        elif new_k == "capabilities" and isinstance(v, list):
-            v = [CAPABILITY_ID_MAP.get(i, i) if isinstance(i, str) else i for i in v]
-        out[new_k] = v
-    return out
-
-
-move_and_rewrite_jsonl(
-    OLD_POLICY / "roles" / "pedidos.jsonl",
-    NEW_POLICY / "roles" / "requests.jsonl",
-    _role_requests_transform, "role requests log")
+# THE ROSTER IS DEAD and nothing reads these any more, so there is nothing to
+# translate: no key of theirs has a reader left to care what it is called. They
+# are still the client's own record, so they are not deleted either -- the
+# directory moves as it is, Spanish keys and all, and whoever wants it gone
+# deletes it by hand.
+move(OLD_POLICY / "roles", NEW_POLICY / "roles", "roster leftovers (inert)")
 
 move(OLD_POLICY / "salas", NEW_POLICY / "rooms", "chat rooms")
 
@@ -848,70 +796,6 @@ if deliverables_root.is_dir():
         ], f"deliverable {relpath(md)}")
 else:
     log("skipped", f"deliverables: {relpath(deliverables_root)} not present")
-
-# -- profiles: data/profiles/<old-role-id>/ -> <new-role-id>/, + role.json.
-#    This only renames what's on disk; it never touches the Hermes engine's
-#    own profile registry (see hire-role.sh: `hermes profile install/update`),
-#    which this script does not call -- that's a manual step, printed below,
-#    not guessed at.
-
-PROFILES_DIR = DATA / "profiles"
-migrated_profiles = []
-if PROFILES_DIR.is_dir():
-    for old_id, new_id in ROLE_ID_MAP.items():
-        old_profile = PROFILES_DIR / old_id
-        if not old_profile.exists():
-            log("skipped", f"profile {old_id}: {relpath(old_profile)} not present")
-            continue
-        new_profile = PROFILES_DIR / new_id
-        if move(old_profile, new_profile, f"profile directory ({old_id} -> {new_id})"):
-            migrated_profiles.append((old_id, new_id))
-            role_json = new_profile / "role.json"
-
-            def _role_json_transform(data, _new_id=new_id):
-                if not isinstance(data, dict):
-                    return data
-                if "id" in data:
-                    data["id"] = _new_id
-                identity = data.get("identity")
-                if isinstance(identity, dict) and "look" in identity:
-                    identity["look"] = remap_look(identity["look"])
-                return data
-
-            if role_json.exists() and not DRY_RUN:
-                backup(role_json)
-                try:
-                    payload = json.loads(role_json.read_text(encoding="utf-8"))
-                except ValueError as exc:
-                    log("manual", f"{relpath(role_json)} is not valid JSON ({exc}) -- left untouched")
-                else:
-                    role_json.write_text(
-                        json.dumps(_role_json_transform(payload), ensure_ascii=False, indent=2) + "\n",
-                        encoding="utf-8")
-                    log("done", f"rewrote id/look in {relpath(role_json)}")
-            elif role_json.exists():
-                log("done", f"[dry-run] would rewrite id/look in {relpath(role_json)}")
-else:
-    log("skipped", f"profiles: {relpath(PROFILES_DIR)} not present")
-
-if migrated_profiles:
-    names = ", ".join(f"{o}->{n}" for o, n in migrated_profiles)
-    log("manual",
-        "hired-role profiles were renamed on disk (" + names + "), but the Hermes engine's "
-        "own profile registry (`hermes profile list`) still knows them by their OLD id -- this "
-        "script does not call the Hermes CLI. Reconcile it by hand once the containers are back "
-        "up, e.g. `hermes profile update <new-id> -y` inside the hermes container for each "
-        "renamed role (see hire-role.sh), and confirm with `hermes profile list`.")
-
-for old_id in ROLE_ID_MAP:
-    for cfg_name in ("data/config.yaml", "docker-compose.yml"):
-        cfg_path = ROOT / cfg_name
-        if not cfg_path.exists():
-            continue
-        text = cfg_path.read_text(encoding="utf-8")
-        if re.search(rf"\b{re.escape(old_id)}\b", text):
-            log("manual", f"{cfg_name} still mentions '{old_id}' -- check by hand whether that's "
-                           f"a profile reference that needs updating to '{ROLE_ID_MAP[old_id]}'")
 
 # ── F. reported, never touched: leftover kit skills in the old name ────────
 # clean-obsolete.sh (run by install.sh) is what retires these; this script

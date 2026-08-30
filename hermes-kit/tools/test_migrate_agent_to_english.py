@@ -181,10 +181,6 @@ fecha: 2026-08-10 09:00
 Contenido sin tocar.
 """)
 
-    write(root, "data/profiles/ventas/role.json",
-          {"id": "ventas", "identity": {"name": "Juana", "look": {"tono": 2, "antena": 1}}})
-    write(root, "data/profiles/ventas/.env", "API_SERVER_KEY=xyz\n")
-
     write(root, "data/skills/entregable/SKILL.md", "shadow copy")
 
 
@@ -270,8 +266,7 @@ class MigrationTests(unittest.TestCase):
         expected = [
             "secrets.env", ".kit-installed", ".kit-installed.new", "shadowed-skills",
             "backups", "policy/policy.json", "policy/capabilities/catalog.json",
-            "policy/capabilities/requests.jsonl", "policy/roles/catalog.json",
-            "policy/roles/identities.json", "policy/roles/requests.jsonl",
+            "policy/capabilities/requests.jsonl",
             "policy/rooms/general.jsonl", "policy/notices/in-progress.json",
             "policy/hooks/gate.py", "policy/plugins/promises/plugin.yaml",
             "policy/plugins/promises/promises.py", "policy/guard.py",
@@ -280,7 +275,6 @@ class MigrationTests(unittest.TestCase):
             "data/portal_identity.json", "data/connections/catalog.json",
             "data/connections/required.json", "data/google_oauth_pending.json",
             "data/costs.jsonl", "data/flows/reporte-semanal/FLOW.md",
-            "data/profiles/sales/role.json",
         ]
         for rel in expected:
             self.assertTrue((self.root / rel).exists(), f"{rel} should exist")
@@ -306,22 +300,17 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(rows[1]["source"], "mention")
         self.assertIsNone(rows[1]["id"])
 
-    def test_role_identities(self):
-        identities = self.read_json("policy/roles/identities.json")
-        self.assertNotIn("ventas", identities)
-        self.assertEqual(identities["sales"], {
-            "name": "Juana", "look": {"tone": 2, "antenna": 1},
-            "named_at": "2026-08-10T10:00:00",
-        })
-
-    def test_role_requests_log(self):
-        rows = self.read_jsonl("policy/roles/requests.jsonl")
-        self.assertEqual(rows[0]["event"], "requested")
-        self.assertEqual(rows[0]["role"], "sales")
-        self.assertEqual(rows[0]["look"], {"tone": 2})
-        self.assertEqual(rows[0]["requested_at"], "2026-08-09T10:00:00")
-        self.assertEqual(rows[1]["event"], "hired")
-        self.assertEqual(rows[1]["hired_at"], "2026-08-10T10:00:00")
+    def test_the_roster_moves_untranslated(self):
+        """The roster is dead: it travels so it is not silently deleted, and
+        its keys are left exactly as they were because no reader is left to
+        care what they are called."""
+        identities = self.read_json("policy/roles/identidades.json")
+        self.assertEqual(identities["ventas"]["nombre"], "Juana")
+        self.assertEqual(identities["ventas"]["pinta"], {"tono": 2, "antena": 1})
+        rows = self.read_jsonl("policy/roles/pedidos.jsonl")
+        self.assertEqual(rows[0]["evento"], "pedido")
+        self.assertEqual(rows[0]["rol"], "ventas")
+        self.assertTrue((self.root / "policy/roles/catalogo.json").exists())
 
     def test_in_progress_notice(self):
         notice = self.read_json("policy/notices/in-progress.json")
@@ -413,12 +402,6 @@ class MigrationTests(unittest.TestCase):
         self.assertNotIn("DOMINIO", text)
         self.assertNotIn("acceso-", text)
 
-    def test_profile_directory_and_role_json(self):
-        self.assertFalse((self.root / "data/profiles/ventas").exists())
-        role = self.read_json("data/profiles/sales/role.json")
-        self.assertEqual(role["id"], "sales")
-        self.assertEqual(role["identity"]["look"], {"tone": 2, "antenna": 1})
-
     # -- untouched, byte for byte --
 
     def test_soul_kit_base_body_untouched(self):
@@ -447,10 +430,6 @@ class MigrationTests(unittest.TestCase):
         self.assertTrue((self.root / "data/skills/entregable/SKILL.md").exists())
         self.assertIn("data/skills/entregable", self.result.stdout)
         self.assertIn("not deleted", self.result.stdout)
-
-    def test_profile_registry_reconciliation_reported(self):
-        self.assertIn("hermes profile", self.result.stdout)
-        self.assertIn("ventas->sales", self.result.stdout)
 
     # -- summary + backups --
 
