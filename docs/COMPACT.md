@@ -16,6 +16,13 @@ hypothesis.
 **PRINCIPLE ZERO:** the portal serves ANY Hermes agent of ANY client.
 Nothing client-specific goes into the code or into fixed copy.
 
+**THE PRODUCT IS ONE BAPTIZED AGENT PER CLIENT.** The client names it and gives
+it a face at onboarding, they talk to it, it owns everything they bought. A
+pivot to a team of hired roles was built through August and **reverted on
+30/8/2026**: the removal is `docs/team-pivot-removal.md`, the pivot's own record
+is `hermes-kit/notes/archive/`. Nothing in this file describes a roster, a
+teammate or a room, and nothing should again.
+
 ## Architecture
 
 Static portal (Next 14) → two services **on the client's agent**:
@@ -149,7 +156,13 @@ the agent's key; this is `/portal/uso` under its new English name,
 `/portal/usage` v1 that undercounted by 9x and was retired in favor of
 `/portal/uso` back then; the current endpoint is that same `uso`
 implementation, just renamed, not the old broken one coming back) ·
-`files` (+`/{path}`, always `text/plain`) · `crons/{id}` · `capabilities` ·
+`files` (+`/{path}`, always `text/plain`) · `flows` (+`/{slug}`, cross-read
+against `/api/jobs` so a card can say whether it ran and how it went) ·
+`crons/{id}` · `capabilities` (+`POST capabilities/request`, the append-only
+ask; +`POST capabilities/suggest`, one short provider call that maps free text
+onto menu ids — live, and the portal has no caller for it) · `connections`
+(+`/{id}`, + the Google `auth-url`/`auth-code`, Telegram `pairing` and WhatsApp
+`pair`/`pair/start`/`pair/qr` routes) · `inventory` · `skills/{name}` ·
 `boards` · `POST upload` · `POST sessions/{id}/chat/stream` (proxy) ·
 `POST chat/stream` (proxy onto `/v1/chat/completions`; it is the one that
 resolves the configured model instead of storing the advertised `hermes-agent`
@@ -164,12 +177,30 @@ set — **seven**. Seven and not six: the six system plugins (`kanban`,
 `approval`, `artifact`, `deliverable`, `flow`, `capability` — the sixth since
 phase 4) plus `transcribe`, which the
 `transcription` base capability promises as already installed on every agent.
-Measured both ways: a fixture created with `new-agent.sh` comes out with exactly
-those seven, and the live local agent served 11 over a real socket — that
-second number was taken while it still had two roles hired, and their plugins
-left with them. One installed BEFORE the phase-3b installer answers `[]`,
-which is the tested behaviour and not an outage — and `agent-check.py` reports
-it as pending).
+Measured on a fixture created with `new-agent.sh`: exactly those seven. One
+installed BEFORE the phase-3b installer answers `[]`, which is the tested
+behaviour and not an outage — and `agent-check.py` reports it as pending).
+
+**WHAT MAKES ONE AGENT DIFFER FROM ANOTHER IS ONE FILE, AND IT IS THE
+PURCHASE.** `policy/capabilities/purchased.json` holds the capability ids this
+client bought, in the vocabulary they already read on the Capacidades card.
+`tools/plugin_set.py` computes the agent's plugin set from three facts — the
+six `system` plugins, the plugins a `level: base` capability promises as
+already installed (`transcribe`, via `transcription`), and the plugins the
+purchased capabilities declare under `installs.plugins` — and `install.sh`,
+`tools/skill_sources.py` and `agent-check.py` all ask that same function, which
+is the only way "what should be there" and "what is there" can be one answer.
+No file is a fresh client, not an error: seven plugins and eight skills. It
+lives in `policy/` and not `data/` for the same reason the catalog does — an
+agent that could rewrite it could install itself a plugin nobody sold.
+
+**A CURATED FLOW SHIPS WITH THE PLUGIN WHOSE WORK IT IS**, declared as
+`surfaces.flows` and delivered to `data/flows/<slug>/` — where `create_flow.py`
+writes, where the adapter's FlowStore reads, and where the client can edit it
+exactly like the ones their agent wrote. So buying `invoices-to-data` is what
+puts `planilla-del-mes`, `conciliar-cobros` and `facturas-vencidas` on the
+agent. The seven that no plugin owns live in `plugins/flow/curated/`, because a
+manifest with nothing behind it would be worse than the honest list.
 
 **Gone in adapter 0.43.0, and it is a contract break:** `GET /portal/roles`,
 `POST /portal/roles/request`, `GET/POST/DELETE /portal/rooms(/{id})`, the
@@ -238,6 +269,25 @@ running the check against it.
    `?connection=noexiste-xyz` used to announce "Venís a conectar noexiste
    xyz": the portal inventing a product for the client. Existence check
    first, and if it's not there, `StaleLinkNotice` + the list.
+10. **A condition added to a gate can delete a step of the product, and no
+   check will say so.** The team pivot put `&& !manifest.modules.roles` on
+   onboarding's gate, so on a rostered agent the naming step never rendered,
+   `POST /portal/identity` never carried a `name`, and the business step then
+   wrote an EMPTY name into the SOUL — instructing the agent to introduce
+   itself as the empty string. `agent-check`'s identity check passed the whole
+   time, because it looked for the block and not for a name inside it. Two
+   rules out of it: **a check that asserts something EXISTS asserts nothing
+   about what is in it**, and **a template that emits a field unconditionally
+   will one day emit an empty one into a prompt**. Both are closed structurally
+   now — naming is the first step of the only onboarding there is, and a `POST
+   /portal/identity` that would leave the agent nameless is a 400 — which is
+   the shape to copy, not another check.
+11. **A layout's background poll can unmount a flow the client is still in.**
+   Live and pre-existing: the manifest refetch every 60 s makes
+   `onboardingAlreadyAnswered()` true as soon as the channel step writes
+   `contact.channel`, and the next tick drops the client into the portal
+   mid-onboarding. Anything long-lived that reads a value a step of its own
+   writes has this bug. See `docs/PENDING.md`.
 
 ## Aesthetics
 M3 expressive from `tailwind.config.ts`: primary #5B4BE8, surface #FBFAFF,
