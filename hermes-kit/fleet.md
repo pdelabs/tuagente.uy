@@ -14,7 +14,103 @@ old date isn't a problem; a row that says something no longer true is.
 | Agent | Host | SOUL | Engine | Last check |
 |---|---|---|---|---|
 | East Comunicación | `east` → `/opt/agentes/east` | **v1** — the bare `<!-- kit:base -->` marker, no version (read over ssh, 24/8/2026) | `v2026.7.30` (24/8: read from that host's `docker ps`, not the compose) | 24/8: alive only. Host up 14 days, `east-hermes` / `east-portal-adapter` / `east-caddy` up 13 days. No `agent-check` run — see below |
-| tuagente.uy (our own) | `tuagente` → `/opt/agentes/tuagente` | **v13** — installed 24/8 by `deploy-remote.sh`, marker read back off disk | `v2026.7.30` (24/8: `docker inspect tuagente-hermes`) | 24/8, the day it was built: `agent-check` **30 ok · 1 warn · 1 failure**, and the failure is the identity, which is the pristine state (see below); `portal-check` **13 ok · 2 warn · 0 failures** through both HTTPS hostnames. 25/8, redeployed for adapter **0.42.2** (the empty-baptism fix) and `observability.sh tuagente on` re-run because the redeploy rewrites the root `.env`: `agent-check` **30 ok · 1 warn · 1 failure** over the WHOLE tree — still the identity, still the pristine state, now failing with the true reason (no block at all, nobody has onboarded it); `portal-check` **13 ok · 2 warn · 0 failures**, 0 sessions · 0 tickets · 0 hired · US$0.0000. **25/8, no longer pristine**: Luis onboarded through the portal as a client and hired `support` (Beto) from the request — `agent-check` over the whole tree **35 ok · 1 warn · 0 failures** (the identity closed itself: the business step wrote «Tu Agente»), `portal-check` **13 ok · 2 warn · 0 failures**, multiplex `['default', 'support']`, 1 session · 1 ticket · 1 hired · US$0.0165 — the onboarding brief, not the hire |
+| tuagente.uy (our own) | `tuagente` → `/opt/agentes/tuagente` | **v13** — installed 24/8 by `deploy-remote.sh`, marker read back off disk | `v2026.7.30` (24/8: `docker inspect tuagente-hermes`) | 24/8, the day it was built: `agent-check` **30 ok · 1 warn · 1 failure**, and the failure is the identity, which is the pristine state (see below); `portal-check` **13 ok · 2 warn · 0 failures** through both HTTPS hostnames. 25/8, redeployed for adapter **0.42.2** (the empty-baptism fix) and `observability.sh tuagente on` re-run because the redeploy rewrites the root `.env`: `agent-check` **30 ok · 1 warn · 1 failure** over the WHOLE tree — still the identity, still the pristine state, now failing with the true reason (no block at all, nobody has onboarded it); `portal-check` **13 ok · 2 warn · 0 failures**, 0 sessions · 0 tickets · 0 hired · US$0.0000. **25/8, no longer pristine**: Luis onboarded through the portal as a client and hired `support` (Beto) from the request — `agent-check` over the whole tree **35 ok · 1 warn · 0 failures** (the identity closed itself: the business step wrote «Tu Agente»), `portal-check` **13 ok · 2 warn · 0 failures**, multiplex `['default', 'support']`, 1 session · 1 ticket · 1 hired · US$0.0165 — the onboarding brief, not the hire. **30/8: the roster is gone and so is Beto** — see «The team pivot, undone» below: `agent-check` **32 ok · 0 warn · 2 failures**, both of them the kit's team/solo skill split and not this agent |
+
+## The team pivot, undone — 30/8/2026, Luis' decision
+
+**Back to ONE baptized agent per client.** The client names it and gives it a
+face at onboarding, they talk to it, it owns everything. The plugin framework
+stays; what goes is per-role exposure. This section records what changed on
+the two live agents, which is the reversible half and went first.
+
+**East was not touched and must not be.** It is the pre-pivot reference shape
+— the only agent in the fleet that never saw a roster — and it is what the
+portal is being brought back to.
+
+| | `tuagente` (VPS) | `tuagente-local-agent` (demo, Luis' Mac) |
+|---|---|---|
+| Roles hired before | `support` (Beto) | `accounting` (Tino), `marketing` (Vera) |
+| Rooms before | none, ever | 5 transcripts |
+| Backup | `/opt/agentes/tuagente-roster-20260830.tgz`, 44 KB | `../tuagente-local-agent-roster-20260830.tgz`, 6.1 MB |
+| `agent-check` before | 36 ok · 0 warn · 0 fail | 36 ok · 0 warn · 0 fail |
+| `agent-check` after | 32 ok · 0 warn · **2 fail** | 31 ok · 0 warn · **3 fail** |
+
+Three deletions on each, then `docker compose restart hermes
+portal-adapter` — a restart is enough, no mount moved:
+
+1. `policy/roles/catalog.json`. **One file turns the whole team UI off**:
+   `manifest()` computes `"roles": ROLES_CATALOG.is_file()`, the portal reads
+   `modules.roles`, and every team surface is gated on it.
+2. `data/profiles/<role>/`. The gateway multiplexes that directory, so the
+   role's own door closes on the restart: `/p/support/`, `/p/accounting/`,
+   `/p/marketing/` all went 200 → 404, and the default `/health` never moved.
+   **The client's baptism is NOT in there** — it is `data/SOUL.md` and
+   `data/portal_identity.json`, both untouched.
+3. `policy/rooms/`. Only the demo had any.
+
+`policy/roles/identities.json` and `requests.jsonl` were KEPT on the VPS.
+They are the append-only record of what the client asked for and what they
+named it, `roles()` never reads them without a catalog, and deleting the
+roster is not the same as deleting the evidence that a hire happened.
+
+**`/portal/roles` does not 404 — it answers 200 with `{"available": false,
+"roles": []}`.** `roles()` returns that shape when the catalog is missing, on
+purpose, and `manifest()` gates the tab on the same file. Anything checking
+for a 404 there is checking for something that was never promised.
+
+### What the checks do now, and which ones misfire
+
+Both agents came out with new failures, and **none of them is damage to the
+agent**. They are the kit measuring a roster-less agent against the solo
+shape for the first time:
+
+- **`kit installed` and `kit skills: external mount` fail on both**, asking
+  for `artifact`, `brand-kit`, `drive-inbox`, `invoices-to-data`,
+  `post-image`, `quotes`, `social-content`. `expected_skills()` hands a team
+  agent the SHARED split only, because the craft skills travel inside each
+  hired role's profile; with `has_team()` false it falls through to
+  `kit_skills()` and asks for all of them. **This one is real and it is a
+  gap, not noise**: a roster-less agent today has fewer skills than a
+  pre-pivot solo agent had. It closes with an `install.sh` pass once the kit
+  drops the split (waves 3–6), not before.
+- **`plugins: the agent's set` fails on the demo only**, naming `brand-kit`,
+  `invoices-to-data`, `post-image`, `social-content` — the plugins its two
+  hired roles pulled in, now orphaned at `plugins/`.
+- **The four `roles: …` checks now pass trivially** ("no roles installed").
+  They still RUN because `data/profiles/` survives as an empty directory;
+  remove the directory too and they vanish instead. The other two
+  (`roster vs profiles`, `the gateway multiplexes`) are already gone —
+  they sit behind `has_team()`.
+- **`SOUL: identity` LIES rather than fails.** It still reports OK with «with
+  no name of its own (a team client never names theirs), works for
+  "<empresa>"». That branch does not consult `has_team()` at all, so on both
+  agents a solo agent with **no baptism at all** passes on a sentence about a
+  shape that no longer exists. This is the one to delete first in wave 5: it
+  is hiding the exact thing the product now requires.
+
+### What the portal did the moment the roster left
+
+Observed at HEAD — pivot code untouched, built and served on :8090 against
+the demo agent — before a single line was deleted:
+
+- **Onboarding opens at the naming step.** «Tu empresa tiene un empleado
+  nuevo» → «Empecemos por lo más importante: ponerle nombre» → the animated
+  face with its dice → «¡Hola! Soy ____». The solo baptism was never removed
+  from the code, only gated: `layout.tsx` suppressed it with
+  `&& !manifest.modules.roles` and `manifest.modules.roles` is now false.
+- **No «Equipo» tab.** The nav is Inicio · Chat · Flujos · Actividad ·
+  Tablero · Entregas · Conexiones · Más. It is filtered by
+  `manifest.modules[key]` like every other module.
+- **Home already greets solo**: «Buen día» / «Agente Local, tu agente ·
+  última actividad hace 6 días».
+- **The chat sidebar lists engine sessions only** — the five rooms are gone
+  and nothing replaced them with an error.
+- Two things the portal still gets wrong on its own, which is wave 1's job:
+  the composer says «Escribile a tu agente…» instead of «Escribile a
+  <nombre>…», and the chat's empty state is the team one.
+
+The portal, in other words, degrades to the solo shape by itself. Deleting
+the pivot from it is removing dead branches, not restoring a lost path.
 
 **Mr.Wobble is decommissioned — 24/8/2026, Luis' decision.** It left the table
 because the table says what runs where, and nothing runs there any more.
