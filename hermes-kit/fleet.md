@@ -13,8 +13,9 @@ old date isn't a problem; a row that says something no longer true is.
 
 | Agent | Host | SOUL | Engine | Last check |
 |---|---|---|---|---|
+| tuagente demo (Luis' Mac) | `tuagente-local-agent`, local docker, `:8642`/`:8643` | **v13** — installed by `install.sh`, marker read back off disk | `v2026.7.30` | 30/8, wave 5: named «Tuca», works for «Ferretería Demo». `policy/capabilities/purchased.json` written by hand with `social-package` + `invoices-to-data` — the two rows whose installs are exactly what its former marketing and accounting roles carried — then `install.sh` and a restart of `hermes` + `portal-adapter`. `agent-check` **30 ok · 0 warn · 0 failures**, `portal-check` **14 ok · 2 warn · 0 failures**, `/portal/roles` **404**, `/portal/plugins` **11** (six system + transcribe + the four purchased), `hermes profile list` = `default` only, zero "Skipping secondary profile", US$0.53851965 on the key — unchanged by the visit |
 | East Comunicación | `east` → `/opt/agentes/east` | **v1** — the bare `<!-- kit:base -->` marker, no version (read over ssh, 24/8/2026) | `v2026.7.30` (24/8: read from that host's `docker ps`, not the compose) | 24/8: alive only. Host up 14 days, `east-hermes` / `east-portal-adapter` / `east-caddy` up 13 days. No `agent-check` run — see below |
-| tuagente.uy (our own) | `tuagente` → `/opt/agentes/tuagente` | **v13** — installed 24/8 by `deploy-remote.sh`, marker read back off disk | `v2026.7.30` (24/8: `docker inspect tuagente-hermes`) | 24/8, the day it was built: `agent-check` **30 ok · 1 warn · 1 failure**, and the failure is the identity, which is the pristine state (see below); `portal-check` **13 ok · 2 warn · 0 failures** through both HTTPS hostnames. 25/8, redeployed for adapter **0.42.2** (the empty-baptism fix) and `observability.sh tuagente on` re-run because the redeploy rewrites the root `.env`: `agent-check` **30 ok · 1 warn · 1 failure** over the WHOLE tree — still the identity, still the pristine state, now failing with the true reason (no block at all, nobody has onboarded it); `portal-check` **13 ok · 2 warn · 0 failures**, 0 sessions · 0 tickets · 0 hired · US$0.0000. **25/8, no longer pristine**: Luis onboarded through the portal as a client and hired `support` (Beto) from the request — `agent-check` over the whole tree **35 ok · 1 warn · 0 failures** (the identity closed itself: the business step wrote «Tu Agente»), `portal-check` **13 ok · 2 warn · 0 failures**, multiplex `['default', 'support']`, 1 session · 1 ticket · 1 hired · US$0.0165 — the onboarding brief, not the hire. **30/8: the roster is gone and so is Beto** — see «The team pivot, undone» below: `agent-check` **32 ok · 0 warn · 2 failures**, both of them the kit's team/solo skill split and not this agent |
+| tuagente.uy (our own) | `tuagente` → `/opt/agentes/tuagente` | **v13** — installed 24/8 by `deploy-remote.sh`, marker read back off disk | `v2026.7.30` (24/8: `docker inspect tuagente-hermes`) | 24/8, the day it was built: `agent-check` **30 ok · 1 warn · 1 failure**, and the failure is the identity, which is the pristine state (see below); `portal-check` **13 ok · 2 warn · 0 failures** through both HTTPS hostnames. 25/8, redeployed for adapter **0.42.2** (the empty-baptism fix) and `observability.sh tuagente on` re-run because the redeploy rewrites the root `.env`: `agent-check` **30 ok · 1 warn · 1 failure** over the WHOLE tree — still the identity, still the pristine state, now failing with the true reason (no block at all, nobody has onboarded it); `portal-check` **13 ok · 2 warn · 0 failures**, 0 sessions · 0 tickets · 0 hired · US$0.0000. **25/8, no longer pristine**: Luis onboarded through the portal as a client and hired `support` (Beto) from the request — `agent-check` over the whole tree **35 ok · 1 warn · 0 failures** (the identity closed itself: the business step wrote «Tu Agente»), `portal-check` **13 ok · 2 warn · 0 failures**, multiplex `['default', 'support']`, 1 session · 1 ticket · 1 hired · US$0.0165 — the onboarding brief, not the hire. **30/8: the roster is gone and so is Beto** — see «The team pivot, undone» below: `agent-check` **32 ok · 0 warn · 2 failures**, both of them the kit's team/solo skill split and not this agent. **30/8, wave 5, redeployed off the pivot-free kit** (adapter **0.43.0**, `deploy-remote.sh tuagente tuagente agentes.tuagente.uy`, then `multiplex_profiles` out of `data/config.yaml` and a restart): `agent-check` **29 ok · 0 warn · 1 failure**, and the failure is the identity again — «onboarding incomplete: the agent was never named». **That one is correct and expected**: its `portal:identity` block says «Tu Agente» and no name, which the team-era check called legitimate and wave 5 stopped doing. `/portal/manifest` reports `named:false`, so the portal opens at the naming step on Luis' next visit and the failure closes itself the moment he names it. **Nobody should invent a name to make it green.** `portal-check` **12 ok · 2 warn · 0 failures** through both HTTPS hostnames, `/portal/roles` **404**, `/portal/plugins` **7** (six system + transcribe), `hermes profile list` = `default` only, zero "Skipping secondary profile" in the logs, US$0.05497028 on the key — unchanged by the visit. No `policy/capabilities/purchased.json`: this client has bought nothing, which is the legitimate state and what `plugin_set.py` says out loud |
 
 ## The team pivot, undone — 30/8/2026, Luis' decision
 
@@ -38,9 +39,10 @@ portal is being brought back to.
 Three deletions on each, then `docker compose restart hermes
 portal-adapter` — a restart is enough, no mount moved:
 
-1. `policy/roles/catalog.json`. **One file turns the whole team UI off**:
-   `manifest()` computes `"roles": ROLES_CATALOG.is_file()`, the portal reads
-   `modules.roles`, and every team surface is gated on it.
+1. `policy/roles/catalog.json`. **One file turned the whole team UI off**:
+   `manifest()` computed `"roles": ROLES_CATALOG.is_file()`, the portal read
+   `modules.roles`, and every team surface was gated on it. (Wave 3 deleted the
+   route and the gate outright — see the correction below.)
 2. `data/profiles/<role>/`. The gateway multiplexes that directory, so the
    role's own door closes on the restart: `/p/support/`, `/p/accounting/`,
    `/p/marketing/` all went 200 → 404, and the default `/health` never moved.
@@ -53,10 +55,13 @@ They are the append-only record of what the client asked for and what they
 named it, `roles()` never reads them without a catalog, and deleting the
 roster is not the same as deleting the evidence that a hire happened.
 
-**`/portal/roles` does not 404 — it answers 200 with `{"available": false,
-"roles": []}`.** `roles()` returns that shape when the catalog is missing, on
-purpose, and `manifest()` gates the tab on the same file. Anything checking
-for a 404 there is checking for something that was never promised.
+**`/portal/roles` did not 404 THAT DAY — it answered 200 with
+`{"available": false, "roles": []}`**, because `roles()` returned that shape
+when the catalog was missing and `manifest()` gated the tab on the same file.
+**That stopped being true in wave 3**: adapter 0.43.0 has no `roles()`, no
+`/portal/roles` and no `roles` key in the manifest, so the route is a plain
+404 — measured on both live agents on 30/8. A check written against the 200 is
+checking for something that no longer exists.
 
 ### What the checks do now, and which ones misfire
 
@@ -87,6 +92,30 @@ shape for the first time:
   agents a solo agent with **no baptism at all** passes on a sentence about a
   shape that no longer exists. This is the one to delete first in wave 5: it
   is hiding the exact thing the product now requires.
+
+### 30/8, wave 5: the checks stopped misfiring
+
+Every bullet above was a measurement of the kit BEFORE waves 3-5 landed. What
+those checks say now, measured on both agents after this wave's install:
+
+- **`kit installed` / `kit skills: external mount` pass.** `expected_skills()`
+  is one function now — the harness plus the skills of the plugins this client
+  bought, through `tools/skill_sources.py` — and there is no split to fail to
+  compute. The demo got its five delivered skills back; the VPS got `artifact`,
+  which it had been missing.
+- **`plugins: the agent's set` passes on both.** The demo's four orphans stopped
+  being orphans the moment `policy/capabilities/purchased.json` said which two
+  capabilities pay for them.
+- **The six `roles: …` checks are gone**, and so is `data/profiles/` on both
+  agents. Nothing runs trivially any more; it does not run.
+- **`SOUL: identity` no longer lies.** A block with a company and no name is a
+  FAIL — «onboarding incomplete: the agent was never named» — which is the VPS
+  agent's true state and the reason its row above is 1 failure and stays that
+  way until Luis names it.
+
+`gateway.multiplex_profiles` is off on both, out of `compose/config.base.yaml`
+and out of each agent's own `data/config.yaml`. `hermes profile list` shows only
+`default` and neither log carries a single "Skipping secondary profile".
 
 ### What the portal did the moment the roster left
 
@@ -182,7 +211,8 @@ and not just `data/`, for the reason in the 14/8 note below.
 **It is deliberately PRISTINE, which is the point of this build**: it exists
 so we can watch what a brand-new client actually sees on day one. Nothing was
 configured that a client would not find themselves. No role hired (the roster
-is on offer, `GET /portal/roles` answers 5 available and 0 hired), no Telegram
+was on offer, `GET /portal/roles` answered 5 available and 0 hired — both the
+roster and the route are gone since wave 3; the route 404s), no Telegram
 token, no business name, no identity, zero sessions, zero tickets, zero
 deliverables, and **US$0.00 charged to its OpenRouter key** — a fresh one
 named `tuagente`, limit 10, minted for it. Observability is on, because that
