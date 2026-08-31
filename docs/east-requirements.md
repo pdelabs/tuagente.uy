@@ -741,7 +741,11 @@ carpetas no entran a trabajarse... puede perderse el cierre de hoy») and
 offering `connection:google-workspace`. **The failure mode §4.4 asks for is the
 one that happened.**
 
-Cost of the whole validation: **US$0.12** on a key minted for it.
+Cost of the whole validation: **US$0.167** on a key minted for it, over four
+agent runs — the interview twice (US$0.027 for the run that stopped on the
+missing key, US$0.042 for the one that delivered), the news item US$0.049, and
+the Drive trigger US$0.031 for the cron turn plus US$0.018 for the dispatched
+ticket that left the loud failure.
 
 ---
 
