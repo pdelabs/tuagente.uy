@@ -747,6 +747,41 @@ missing key, US$0.042 for the one that delivered), the news item US$0.049, and
 the Drive trigger US$0.031 for the cron turn plus US$0.018 for the dispatched
 ticket that left the loud failure.
 
+### 5.5 — What an independent re-run found, 30/8
+
+Three corrections to the section above, each measured rather than argued.
+
+**"Transcribed on the model connection" is true and incomplete.** The
+transcript came from `transcribe.py`, and the *timecodes under every zócalo did
+not*: `transcribe.py` sent only `model` and `language` and kept `res["text"]`,
+which is flat prose. The model wrote its own `get_timestamps.py`, called the
+same endpoint a SECOND time on the same mp3 asking for `verbose_json` +
+segments, and paid for the interview twice — the files are still in
+`workspace/interno/entrevista-HGRy8mSFPEQ/`. The craft's only hard-formatted
+field had no supplier in the code, so the run above is not reproducible by the
+kit as it shipped; it is reproducible by a model that improvises the same tool
+again. Fixed since, with `--timestamps`.
+
+**Rank 2 does not open a ticket or ask for the sí — it did here because the
+model remembered.** Re-run of the same flow on a different Radio Viva URL: the
+draft came out correct and complete (and with two emojis, so the reword above
+IS working), and the board got NOTHING — no ticket, no approval, no trace. Step
+1 and step 4 of that flow have prose behind them and no code, unlike the
+interview path, where `fetch_video.py` opens the ticket with an idempotency
+key. `docs/PENDING.md` carries it.
+
+**The two zócalo files are not one list saved twice.** Five of the ten zócalos
+differ between `…-zo.md` and `…-zo-2.md`, and so does one timecode; the second
+is a revision and the only one the approval cites. The first is a superseded
+client-facing deliverable with nothing marking it stale.
+
+Two smaller ones. The decomposition above lists five numbers over "four agent
+runs": both interview attempts are one session (`api-bb73da8b`, US$0.068), and
+0.027 + 0.042 is that session split by attempt, not two sessions. And US$0.167
+is the agent's own *estimate* (`state.db.sessions`, `cost_status: estimated`);
+the provider billed **US$0.1697**, the difference being the two Whisper calls,
+which the session ledger does not carry at all.
+
 ---
 
 ## Provenance

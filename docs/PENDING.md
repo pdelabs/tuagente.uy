@@ -71,14 +71,49 @@ in `docs/east-requirements.md` §5; what is left is here.
   what a salesperson would want to know before promising one. `interview-production`
   and `drive-inbox` are now two of the eight rows that are real.
 
-- **Small, in the plugin.** The zócalos run saved the list twice
-  (`…-zo.md` and `…-zo-2.md`): `deliver.py` correctly refused to overwrite, the
-  agent asked twice. Costs a file, not a client. Watch whether it repeats before
-  writing a guard — there is no measured failure state yet.
+- **The zócalos run shipped TWO DIFFERENT client-facing lists, and this file
+  said it shipped the same one twice.** The entry here used to read "the agent
+  asked twice, `deliver.py` correctly refused to overwrite, costs a file, not a
+  client". Checked on 30/8 against the files: the md5s differ, and so do FIVE of
+  the ten zócalos («16 ALLANAMIENTOS PERMITIERON DESARTICULAR UNA ORGANIZACIÓN»
+  vs «16 ALLANAMIENTOS SIMULTÁNEOS EN EL DEPARTAMENTO DE MALDONADO», …) plus one
+  timecode (zócalo 8: `02:41–02:53` vs `02:41–02:45`). `-zo-2.md` is a revision,
+  not a duplicate: it is the better list, it is the one the approval request
+  cites, and `-zo.md` is a superseded, slightly worse version of the same
+  deliverable sitting in `entregables/` with NOTHING marking it stale. A client
+  opening Archivos sees two conflicting zócalo lists for one interview and no
+  way to tell which is live. `deliver.py` never refused anything — it was handed
+  two different payloads under two names, which is exactly what it is for. Not
+  "costs a file": decide whether a deliverable can supersede another one, and
+  whether re-delivering into the same flow+ticket should say so.
 
-- **Untested after the fact:** `news-copy` now says the copy CARRIES 1-3 emojis
-  rather than "hasta 1 a 3"; the first run produced zero and the wording changed
-  after it. The next note through that skill is what confirms it.
+- **`news-copy`'s emoji rule now has a second data point, and it holds.** The
+  entry used to say the reworded spec ("the copy CARRIES 1-3 emojis" rather than
+  "up to") was untested, the first run having produced zero before the wording
+  changed. A fresh run through the same skill on 30/8 (a Radio Viva note on the
+  Piriápolis school, session `api-0d53fa3b`, US$0.044) produced TWO — 🏫 and 📍,
+  both inside the copy, neither decorative. One run is not a rule, but the
+  reword is no longer unobserved.
+
+- **THE NEWS FLOW OPENS NO TICKET AND ASKS FOR NO APPROVAL, measured on a
+  re-run.** `flows/noticia-para-publicar/FLOW.md` step 1 is "Abro un ticket
+  «Noticia <tema>»" and step 4 is "Te pido el sí antes de que se publique";
+  `news-copy/SKILL.md` says to request approval "en el ticket de esa noticia",
+  presupposing a ticket that nothing creates. On the from-zero run the agent
+  remembered and both happened (`t_315e5dab`). On an independent re-run of the
+  same flow with a different URL it did NOT: the deliverable came out correct
+  and complete, and the board got nothing — no ticket, no approval, no trace
+  that any work happened. Nothing went out (the draft carries its "no se publicó
+  ni se envió a nadie" line), but the flow's card promises a gate that did not
+  run, and the client has no record.
+
+  This is the kit's own non-negotiable, unfixed for this path: the interview
+  side has `fetch_video.py` opening the ticket from code with an idempotency
+  key, and the news side has prose. Two of the three entry paths into
+  `interview-production` (a file instead of a link, and the whole news flow)
+  have no code behind step 1. **The fix is a script that opens the ticket, not
+  a firmer sentence** — every convention that depended on the agent remembering
+  has failed, and this one now has a measurement to prove it.
 
 ## Open product decisions
 
