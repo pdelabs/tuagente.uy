@@ -273,11 +273,16 @@ def rearm(args):
     path.write_text("---\n" + "\n".join(kept[:at] + added + kept[at:])
                     + "\n---" + body, encoding="utf-8")
 
-    # ONLY NOW does the old job go, and only if there is a new one: removing it
-    # first and failing to create the replacement leaves a flow the portal still
-    # calls active with nothing waking it up.
+    # ONLY NOW does the old job go, and it goes in BOTH directions. Removing it
+    # before the replacement is verified would leave a flow the portal still
+    # calls active with nothing waking it up -- so this is last. And it runs
+    # even when there is no new job, because re-arming back to `request` is a
+    # real move (the client asked us to stop watching, or a trigger is being
+    # dismantled) and leaving the old cron alive there means a flow whose card
+    # says "arranca cuando lo pedís" waking itself up every fifteen minutes and
+    # billing for it. Found by doing exactly that on the validation agent.
     removed = ""
-    if previous and job_id and previous != job_id:
+    if previous and previous != job_id:
         binary = hermes_binary()
         out, err = cron(binary, "remove", previous)
         removed = previous if "error" not in (err or "").lower() else ""
