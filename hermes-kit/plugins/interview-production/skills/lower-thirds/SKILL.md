@@ -26,7 +26,7 @@ python3 /opt/kit/skills/lower-thirds/fetch_video.py \
 ```
 
 Te devuelve dónde quedó el audio, los datos del video (título, canal, duración)
-y **el ticket de esa entrevista**, para que el trabajo se vea en el Pipeline. No
+y **el ticket de esa entrevista**, para que el trabajo se vea en el tablero. No
 bajes el video vos ni por otro camino: el script fija la versión del bajador, el
 tiempo máximo y el tamaño máximo.
 
@@ -36,8 +36,15 @@ tiempo máximo y el tamaño máximo.
 
 ```bash
 python3 /opt/kit/skills/transcribe/transcribe.py \
-  --file <el audio> --output <carpeta de trabajo>/transcripcion.txt
+  --file <el audio> --timestamps \
+  --output <carpeta de trabajo>/transcripcion.txt
 ```
+
+**`--timestamps` no es opcional acá.** Cada zócalo lleva su minuto, y el minuto
+sale de ahí: el script deja un segundo archivo (`timecodes` en el JSON) con
+`[00:19-00:31] lo que se dijo ahí`, una línea por tramo. Sin esa bandera tenés
+el texto sin los minutos y no hay de dónde sacarlos — **no los cuentes de oído
+ni los estimes por dónde cae el párrafo**. No cuesta nada aparte.
 
 **Los subtítulos automáticos de la plataforma no son una transcripción.** Están
 llenos de nombres propios mal escuchados y de cifras cambiadas, y esto es texto
@@ -57,7 +64,9 @@ tipo. Cada uno:
 - **En MAYÚSCULAS**, como va en pantalla.
 - **Corto**: una línea de placa, no una oración con subordinadas.
 - **Con su marca de tiempo**: `Fuente: 00:15–00:20.` El editor tiene que poder ir
-  al minuto y escucharlo.
+  al minuto y escucharlo. Sale del archivo de `timecodes` del paso 2, tal cual:
+  el tramo donde está la frase. Si dos zócalos caen en el mismo tramo, es porque
+  el corte es por tramo y no por frase — está bien, no lo maquilles.
 - **Textual si es una cita.** Si la frase se entiende pero no estás seguro de una
   palabra, un número o un nombre, va igual **con `[VERIFICAR CONTRA EL VIDEO]`
   al lado**. Un zócalo con una cifra inventada es una fe de erratas al aire.

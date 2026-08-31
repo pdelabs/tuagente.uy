@@ -106,7 +106,7 @@ def open_ticket(title, body, key):
     if not binary:
         return None, ("no encontré el CLI de Hermes, así que la entrevista no "
                       "quedó como ticket en el tablero: decilo en el chat en vez "
-                      "de dar el Pipeline por actualizado")
+                      "de dar el tablero por actualizado")
     try:
         proc = subprocess.run(
             [binary, "kanban", "create", "--json",

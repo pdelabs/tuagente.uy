@@ -44,8 +44,27 @@ over: filed in docs/PENDING.md as the decision to take, not a patch to sneak in
 here. `OPENROUTER_API_KEY` stays as a fallback for whatever runs OUTSIDE a
 tool-spawned subprocess, where it is still visible.
 
+`--timestamps` ASKS FOR THE MINUTES, AND UNTIL 30/8/2026 NOTHING DID.
+`lower-thirds` makes a timecode mandatory on every one of its ten zocalos
+(`Fuente: 00:15-00:20.`, so the editor can scrub straight to it) and this script
+returned flat text: Whisper only sends `segments` when the request asks for
+`verbose_json`, and this one asked for nothing. The format had no supplier.
+
+What happened on the validation run instead: the model wrote its own
+`get_timestamps.py`, called this same endpoint a SECOND time on the same audio
+with the parameters below, and paid for the interview twice. It got the right
+answer, which is the worst version of this bug -- the deliverable looked clean
+and the craft was resting on the model reinventing a tool it was never given.
+That is the kit's one non-negotiable, inverted: the model supplied the format
+and the code supplied nothing.
+
+Asking for the segments costs NOTHING extra -- the provider bills the audio, not
+the shape of the reply -- so the only reason it is a flag and not the default is
+that the timecoded file is a second artifact and most callers do not want one.
+
 Usage:
     python3 transcribe.py --file entrevista.mp4 [--language es] [--output out.txt]
+    python3 transcribe.py --file entrevista.mp4 --timestamps   # + .timecodes.txt
 """
 import argparse
 import json
@@ -78,6 +97,18 @@ def fail(msg):
     return 2
 
 
+def clock(seconds) -> str:
+    """Seconds to `MM:SS`, or `H:MM:SS` past the hour.
+
+    THE FORMAT IS THE POINT. `lower-thirds` writes `Fuente: 00:15-00:20.` and an
+    editor scrubs to that number; a float of seconds is not that, and asking the
+    model to convert is asking it to do arithmetic on ten pairs per interview.
+    """
+    total = int(float(seconds or 0))
+    h, m, sec = total // 3600, (total % 3600) // 60, total % 60
+    return f"{h}:{m:02d}:{sec:02d}" if h else f"{m:02d}:{sec:02d}"
+
+
 def to_light_mp3(source: Path) -> Path:
     """Extract the audio to mono 16kHz 32kbps mp3 in a temp file."""
     dest = Path(tempfile.gettempdir()) / f"transcribe-{uuid.uuid4().hex}.mp3"
@@ -90,9 +121,17 @@ def to_light_mp3(source: Path) -> Path:
     return dest
 
 
-def upload(file: Path, language: str, key: str) -> dict:
+def upload(file: Path, language: str, key: str, timestamps: bool = False) -> dict:
     boundary = "--" + uuid.uuid4().hex
     fields = [("model", MODEL), ("language", language)]
+    # SEGMENT TIMESTAMPS ARE A REQUEST PARAMETER, and asking for them costs
+    # nothing extra: the provider bills the audio, not the shape of the answer.
+    # Whisper returns them only for `verbose_json`; the default response has
+    # `text` alone, which is why `lower-thirds` had no way to fill the one
+    # field its format makes mandatory. See the module docstring.
+    if timestamps:
+        fields.append(("response_format", "verbose_json"))
+        fields.append(("timestamp_granularities[]", "segment"))
     body = b""
     for name, value in fields:
         body += (
@@ -123,6 +162,9 @@ def main():
     ap.add_argument("--file", required=True)
     ap.add_argument("--language", default="es")
     ap.add_argument("--output", default="")
+    ap.add_argument("--timestamps", action="store_true",
+                    help="ademas del texto, escribe un .timecodes.txt con "
+                         "[MM:SS-MM:SS] por segmento (lo que necesitan los zocalos)")
     args = ap.parse_args()
 
     # See the module docstring: the first name is the one that survives the
@@ -157,7 +199,7 @@ def main():
             to_upload = source
 
         try:
-            res = upload(to_upload, args.language, key)
+            res = upload(to_upload, args.language, key, args.timestamps)
         except urllib.error.HTTPError as e:
             return fail(f"el proveedor respondio {e.code}: {e.read().decode()[:300]}")
         except OSError as e:
@@ -174,16 +216,38 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(text + "\n", "utf-8")
 
+    timecodes = ""
+    segments = res.get("segments") or []
+    if args.timestamps:
+        if not segments:
+            return fail(
+                "pedi la transcripcion con marcas de tiempo y el proveedor no "
+                "devolvio segmentos. El texto quedo guardado en " + str(output) +
+                ", pero NO tenes los minutos: no los inventes ni los estimes de "
+                "oido. Decilo y frena.")
+        timed = Path(str(output) + ".timecodes.txt")
+        timed.write_text("\n".join(
+            f"[{clock(s.get('start'))}-{clock(s.get('end'))}] "
+            + (s.get("text") or "").strip()
+            for s in segments) + "\n", "utf-8")
+        timecodes = str(timed)
+
     usage = res.get("usage") or {}
-    print(json.dumps({
+    result = {
         "ok": True,
         "transcript": str(output),
         "preview": text[:200],
-        "duration_seconds": usage.get("seconds"),
+        "duration_seconds": usage.get("seconds") or res.get("duration"),
         "cost_usd": usage.get("cost"),
         "language": args.language,
         "note": "El texto completo esta en el archivo 'transcript'; leelo desde ahi.",
-    }, ensure_ascii=False))
+    }
+    if timecodes:
+        result["timecodes"] = timecodes
+        result["segments"] = len(segments)
+        result["note"] = ("El texto completo esta en 'transcript' y los minutos en "
+                          "'timecodes', una linea por segmento; leelos desde ahi.")
+    print(json.dumps(result, ensure_ascii=False))
     return 0
 
 

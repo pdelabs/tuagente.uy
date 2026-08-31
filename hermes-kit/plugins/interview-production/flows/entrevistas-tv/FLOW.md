@@ -11,7 +11,7 @@ status: active
 # Cómo trabajo este flujo
 
 1. Arranco con la entrevista que me pasaste —un link o un archivo—. Si tenés carpetas conectadas como bandeja, miro si llegó algo nuevo; si no hay nada, termino en silencio.
-2. **Por cada entrevista abro su ticket** "Entrevista <lo que sea> → zócalos": así el trabajo de cada una se ve en el Pipeline.
+2. **Por cada entrevista abro su ticket** "Entrevista <lo que sea> → zócalos": así el trabajo de cada una se ve en el tablero.
 3. Saco el audio y lo **transcribo completo con el modelo**, nunca con los subtítulos automáticos de la plataforma.
 4. Elijo los **diez zócalos**: en mayúsculas, con el minuto de cada uno, textuales. Lo que no se entiende va marcado para verificar contra el video, no completado.
 5. Dejo **dos entregables**: la transcripción completa y la lista de zócalos, con sugerencias de imágenes.

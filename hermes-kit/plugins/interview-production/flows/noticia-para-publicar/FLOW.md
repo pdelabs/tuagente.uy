@@ -10,7 +10,7 @@ status: active
 
 # Cómo trabajo este flujo
 
-1. Abro un ticket "Noticia <tema>" para que el trabajo se vea en el Pipeline.
+1. Abro un ticket "Noticia <tema>" para que el trabajo se vea en el tablero.
 2. Si me pasás un link, leo el artículo desde ahí. Si me pasás un archivo o pegás el texto, trabajo con eso. Audio y video no entran por acá: eso va por entrevistas.
 3. Redacto la noticia con tu formato —titular corto y copy breve, con la fuente citada— y la dejo como entregable, con las sugerencias de imágenes.
 4. Te pido el sí antes de que se publique o se mande a ningún lado.
