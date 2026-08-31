@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for agent-check.py's «SOUL: identity» guard.
+"""Tests for agent-check.py's «SOUL: identity» and «credentials» guards.
 
     python3 -m unittest test_agent_check.py
 
@@ -18,9 +18,9 @@ visit. It has to be a failure here too, or the tool says an unfinished agent is
 ready to deliver. Measured on the VPS agent, whose block says «Tu Agente» and
 nothing else.
 
-The check is exercised through its module-level function rather than by running
-the script: the rest of agent-check needs a whole conforming agent to say
-anything.
+Both checks are exercised through their module-level functions rather than by
+running the script: the rest of agent-check needs a whole conforming agent to
+say anything.
 """
 import importlib.util
 import unittest
@@ -91,3 +91,88 @@ class SoulIdentity(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Credentials(unittest.TestCase):
+    """The keys check, which used to read the NAME and not the VALUE.
+
+    THE HOLE THIS CLOSES. `TUAGENTE_MODELS_KEY` exists because the engine strips
+    `OPENROUTER_API_KEY` out of every subprocess the agent spawns, so
+    `transcribe.py` -- the base `transcription` capability, sold to every client
+    -- could not run at all (`notes/auxiliary-models.md`). The guard was written
+    as a FAILURE and not a warning precisely because the symptom is invisible
+    until a client sends their first audio.
+
+    But it asked whether the NAME was in `secrets.env`, and `new-agent.sh` writes
+    that name into every fresh agent with nothing after the `=`. So the single
+    likeliest mistake -- the operator fills the two keys they recognise and
+    leaves the new one at its template default -- passed green, with the
+    capability sold and dead. Reproduced 30/8/2026 against a copy of east-v2's
+    real `secrets.env` with the value blanked: `30 ok - 0 failures`.
+    """
+
+    def filled(self, **over):
+        base = {"API_SERVER_KEY": "a" * 64,
+                "OPENROUTER_API_KEY": "sk-or-v1-real",
+                "TUAGENTE_MODELS_KEY": "sk-or-v1-real",
+                "TELEGRAM_BOT_TOKEN": "123:abc"}
+        base.update(over)
+        return base
+
+    def test_a_filled_secrets_file_is_fine(self):
+        self.assertEqual(agent_check.credentials_problem(self.filled()), "")
+
+    def test_a_missing_models_key_names_the_fix(self):
+        secrets = self.filled()
+        del secrets["TUAGENTE_MODELS_KEY"]
+        problem = agent_check.credentials_problem(secrets)
+        self.assertIn("TUAGENTE_MODELS_KEY is missing", problem)
+        self.assertIn("same value as OPENROUTER_API_KEY", problem)
+
+    def test_the_models_key_present_and_empty_is_the_template_default(self):
+        """What `new-agent.sh` ships, and what used to pass."""
+        problem = agent_check.credentials_problem(
+            self.filled(TUAGENTE_MODELS_KEY=""))
+        self.assertIn("TUAGENTE_MODELS_KEY is empty", problem)
+        self.assertIn("sold", problem)
+
+    def test_a_rotation_that_updated_only_one_of_the_two_is_caught(self):
+        problem = agent_check.credentials_problem(
+            self.filled(OPENROUTER_API_KEY="sk-or-v1-rotated"))
+        self.assertIn("DIFFERENT values", problem)
+
+    def test_another_provider_is_not_a_misconfiguration(self):
+        """No OPENROUTER_API_KEY to compare against: nothing to say."""
+        secrets = self.filled(TUAGENTE_MODELS_KEY="gsk-groq")
+        del secrets["OPENROUTER_API_KEY"]
+        self.assertEqual(agent_check.credentials_problem(secrets), "")
+
+    def test_an_empty_api_server_key_is_not_an_api_server_key(self):
+        problem = agent_check.credentials_problem(
+            self.filled(API_SERVER_KEY=""))
+        self.assertIn("API_SERVER_KEY is empty", problem)
+
+    def test_the_parser_reads_the_file_new_agent_actually_writes(self):
+        """Hints on their own lines, commented-out optionals, real `=` in values."""
+        import tempfile, os as _os
+        fd, path = tempfile.mkstemp(suffix=".env")
+        with _os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write("# The agent's keys. NEVER committed.\n"
+                     "\n"
+                     "# openssl rand -hex 32 — unique per client\n"
+                     "API_SERVER_KEY=abc123\n"
+                     "\n"
+                     "# same value as OPENROUTER_API_KEY\n"
+                     "TUAGENTE_MODELS_KEY=\n"
+                     "\n"
+                     "# SMTP_APP_PASSWORD=\n"
+                     "PADDING=a=b\n")
+        try:
+            values = agent_check.secrets_values(path)
+        finally:
+            _os.unlink(path)
+        self.assertEqual(values["API_SERVER_KEY"], "abc123")
+        self.assertEqual(values["TUAGENTE_MODELS_KEY"], "")
+        self.assertEqual(values["PADDING"], "a=b")
+        self.assertNotIn("SMTP_APP_PASSWORD", values,
+                         "a commented-out optional is not a set variable")

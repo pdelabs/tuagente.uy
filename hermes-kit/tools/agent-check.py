@@ -632,6 +632,87 @@ def risky_comments(text):
     return suspicious
 
 
+def secrets_values(path):
+    """`secrets.env` as {name: value}.
+
+    NAME AND VALUE, because a name on its own proves nothing here: `new-agent.sh`
+    writes this file with every variable present and EMPTY, so "the line is
+    there" is the state a fresh agent ships in, not evidence anybody filled it.
+    """
+    out = {}
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if "=" not in line or line.startswith("#"):
+                continue
+            name, value = line.split("=", 1)
+            out[name.strip()] = value.strip()
+    return out
+
+
+def credentials_problem(secrets):
+    """What is wrong with the agent's keys, or "" if nothing is.
+
+    Split out of the `credentials` check so it can be tested without a whole
+    conforming agent around it — the same reason `soul_identity` is up here.
+    """
+    if "API_SERVER_KEY" not in secrets:
+        return "API_SERVER_KEY is missing — the portal has nothing to authenticate with"
+    if not secrets["API_SERVER_KEY"]:
+        return ("API_SERVER_KEY is empty — the line is there and the value is not, "
+                "which is exactly how new-agent.sh writes the file. The portal has "
+                "nothing to authenticate with. Fill it (openssl rand -hex 32) and "
+                "restart.")
+    # THE ONE THE AGENT CAN ACTUALLY SEE. `OPENROUTER_API_KEY` being in this file
+    # is NOT enough for anything the agent runs itself: the engine blocklists that
+    # exact name out of every terminal and execute_code subprocess
+    # (`tools/environments/local.py`) and `env_passthrough.py` refuses to re-allow
+    # it. So `transcribe.py` -- the base `transcription` capability, promised to
+    # every client as "ya viene puesta" -- returned "la conexion de modelos no
+    # esta configurada" on an agent whose key was funding that very turn. Measured
+    # 2026-08-30 on a from-zero agent, and it is what `docs/east-requirements.md`
+    # 1.6 mistook for an agent inventing a missing connection.
+    #
+    # FAILURES AND NOT WARNINGS, because the symptom is invisible: the capability
+    # is sold, the card says active, and it only comes apart the first time a
+    # client sends an audio.
+    if "TUAGENTE_MODELS_KEY" not in secrets:
+        return ("TUAGENTE_MODELS_KEY is missing — it carries the same value as "
+                "OPENROUTER_API_KEY under a name the engine does not strip from "
+                "the agent's own subprocesses. Without it `transcribe.py` cannot "
+                "run at all and the `transcription` capability is sold and dead. "
+                "Add it to secrets.env (same value) and restart.")
+    # AND IT CHECKS THE VALUE, not the line. The check as first written asked only
+    # whether the NAME appeared in the file — and `new-agent.sh` writes that name
+    # into every fresh agent with nothing after the `=`. So the one way this is
+    # most likely to go wrong (the operator fills the two keys they recognise and
+    # leaves the third at its template default) produced a green `agent-check`
+    # with `transcription` sold and dead: the precise state this failure exists to
+    # make impossible. Reproduced 30/8/2026 on a copy of east-v2's secrets.env
+    # with the value blanked.
+    if not secrets["TUAGENTE_MODELS_KEY"]:
+        return ("TUAGENTE_MODELS_KEY is empty — the line is there and the value is "
+                "not, which is how new-agent.sh writes it. `transcribe.py` reads "
+                "the value, not the line: the `transcription` capability is sold "
+                "and dead exactly as if the line were missing. Copy "
+                "OPENROUTER_API_KEY's value into it and restart.")
+    # SAME VALUE IS THE WHOLE CONTRACT, and the way it comes apart is a rotation:
+    # notes/auxiliary-models.md rotates the client's key "with one PATCH", after
+    # which OPENROUTER_API_KEY gets the new value and this one is left holding a
+    # revoked string. The engine keeps working — it reads OPENROUTER_API_KEY — and
+    # only transcription dies, silently, again. Skipped when there is no
+    # OPENROUTER_API_KEY to compare against: a client on another provider is not a
+    # misconfiguration.
+    if secrets.get("OPENROUTER_API_KEY") and \
+            secrets["TUAGENTE_MODELS_KEY"] != secrets["OPENROUTER_API_KEY"]:
+        return ("TUAGENTE_MODELS_KEY and OPENROUTER_API_KEY hold DIFFERENT values, "
+                "and they are supposed to be the same key under two names. The "
+                "engine bills against OPENROUTER_API_KEY and `transcribe.py` "
+                "against this one, so a rotation that updated only the first "
+                "leaves transcription paying with a revoked key and nothing else "
+                "failing. Set them to the same value and restart.")
+    return ""
+
+
 def review_mode(path):
     """`--review <file>`: the two text checks over a loose SOUL.
 
@@ -2187,9 +2268,7 @@ def main():
         mounts.
         """
         def names(path):
-            with open(path, encoding="utf-8", errors="replace") as fh:
-                return {l.split("=", 1)[0].strip()
-                        for l in fh if "=" in l and not l.startswith("#")}
+            return set(secrets_values(path))
 
         root = os.path.dirname(os.path.abspath(data))
         new = os.path.join(root, "secrets.env")
@@ -2197,31 +2276,14 @@ def main():
         path = new if os.path.isfile(new) else old
         if not os.path.isfile(path):
             raise AssertionError("there is no secrets.env (nor the old data/.env)")
-        keys = names(path)
+        secrets = secrets_values(path)
+        keys = set(secrets)
         leftover = sorted(names(old)) if path == new and os.path.isfile(old) else []
-        if "API_SERVER_KEY" not in keys:
-            raise AssertionError("API_SERVER_KEY is missing — the portal has nothing to authenticate with")
-        # THE ONE THE AGENT CAN ACTUALLY SEE. `OPENROUTER_API_KEY` being in this
-        # file is NOT enough for anything the agent runs itself: the engine
-        # blocklists that exact name out of every terminal and execute_code
-        # subprocess (`tools/environments/local.py`) and `env_passthrough.py`
-        # refuses to re-allow it. So `transcribe.py` -- the base `transcription`
-        # capability, promised to every client as "ya viene puesta" -- returned
-        # "la conexion de modelos no esta configurada" on an agent whose key was
-        # funding that very turn. Measured 2026-08-30 on a from-zero agent, and
-        # it is what `docs/east-requirements.md` 1.6 mistook for an agent
-        # inventing a missing connection.
-        #
-        # A FAILURE AND NOT A WARNING, because the symptom is invisible: the
-        # capability is sold, the card says active, and it only comes apart the
-        # first time a client sends an audio.
-        if "TUAGENTE_MODELS_KEY" not in keys:
-            raise AssertionError(
-                "TUAGENTE_MODELS_KEY is missing — it carries the same value as "
-                "OPENROUTER_API_KEY under a name the engine does not strip from "
-                "the agent's own subprocesses. Without it `transcribe.py` cannot "
-                "run at all and the `transcription` capability is sold and dead. "
-                "Add it to secrets.env (same value) and restart.")
+        # NAME AND VALUE both, and the why of each line is in `credentials_problem`
+        # (module level so it can be tested without a whole conforming agent).
+        problem = credentials_problem(secrets)
+        if problem:
+            raise AssertionError(problem)
         if path == old:
             raise AssertionError(
                 "the keys are in data/.env, which the agent can rewrite — and that "
