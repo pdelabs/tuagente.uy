@@ -59,8 +59,9 @@ Maldonado". Sin signos de admiración, sin preguntas retóricas, sin "increíble
 ### El copy
 
 Entre 50 y 180 palabras. La fuente se nombra **en el primer o segundo párrafo**,
-con el medio o el organismo del que salió. Hasta **1 a 3 emojis**, discretos y
-al servicio de la lectura — no uno por línea.
+con el medio o el organismo del que salió. Van **1 a 3 emojis**, discretos y al
+servicio de la lectura — ni cero ni uno por línea: es el formato del medio, no
+una decisión que se toma nota por nota.
 
 Lo que no va, y no es cuestión de estilo: cifras redondeadas "para que quede
 mejor", cargos o nombres que no aparecen en el material, y conclusiones que la
