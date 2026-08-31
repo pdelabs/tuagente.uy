@@ -69,11 +69,60 @@ curl -X POST https://openrouter.ai/api/v1/audio/transcriptions \
 Conclusion: **a single key per client covers LLM + STT + images.** No need for
 dedicated keys (Groq/OpenAI) unless a concrete case calls for one.
 
+## The engine hides `OPENROUTER_API_KEY` from the agent — measured 30/8/2026
+
+**`transcribe.py` could not run inside an agent. Not once, on any agent we ever
+shipped.** The engine strips `OPENROUTER_API_KEY` by name from every `terminal`
+and `execute_code` subprocess it spawns: a hard blocklist in
+`tools/environments/local.py` (`_build_provider_env_blocklist`), which
+`env_passthrough.py` explicitly refuses to re-allow (GHSA-rhgp-j443-p4rf, "would
+be unrecoverable"). So the script — run the only way an agent can run it —
+answered `falta OPENROUTER_API_KEY: la conexion de modelos no esta configurada`
+on an agent whose key was in its own container environment, funding the very
+turn that called it.
+
+Reproduced from zero on `east-v2`: a real YouTube interview, `fetch_video.py`
+downloaded the audio, `transcribe.py` returned that error, and the agent
+correctly refused to continue. **`transcription` is a `level: base` capability,
+sold to every client as "ya viene puesta", and it was dead on delivery.**
+
+It also settles an accusation. `docs/east-requirements.md` §1.6 records the East
+agent claiming that same missing connection and calls the claim invented — "the
+one place it did invent". It did not invent it. The script said it, because it
+was true, and building the transcript from YouTube's automatic captions was the
+agent working around a broken capability, not dodging a paid step. The five
+`[VERIFICAR CONTRA EL VIDEO]` markers in that deliverable are ours.
+
+**The fix, and what it costs.** `TUAGENTE_MODELS_KEY` carries the same value
+under a name the engine does not strip, in `<agent>/secrets.env` next to the
+others; `transcribe.py` reads it first and falls back to `OPENROUTER_API_KEY` for
+anything running outside a tool-spawned subprocess. `agent-check.py` fails
+without it, because the symptom is invisible until the first audio arrives.
+
+Out loud: **any command the agent runs can now read a spendable model key**,
+which is what the engine's blocklist exists to prevent. The trade is bounded by
+the model this whole note describes — one key per client, a limit we set, rotated
+with a single `PATCH` — and the spend it enables is the capability the client
+bought. It is still the agent holding a credential, and the narrower answer is
+for the ADAPTER to transcribe and never hand the key over: `docs/PENDING.md`, as
+a decision to take rather than a patch to sneak in.
+
+(Note also that the name matters twice: `execute_code` strips by SUBSTRING on
+`KEY`/`SECRET`/`TOKEN`, so `TUAGENTE_MODELS_KEY` reaches `terminal` — where our
+scripts run — and stays stripped from `execute_code`, which is the narrower
+surface and a good place to leave it stripped.)
+
 ## Detection
 
 `auxiliary-models` entry in `connections/catalog.json`: presence of
 `OPENROUTER_API_KEY`. Dedicated keys (Groq/OpenAI) get detected once the skill
 that uses them is in the kit.
+
+**That detection is right for the CONNECTION and wrong for the CAPABILITY**, and
+the section above is why: the key being in the environment is what the adapter
+can see, and it is not what decides whether the agent can transcribe. The card
+says active either way. Whoever revisits this should have it check
+`TUAGENTE_MODELS_KEY` too.
 
 ## First real case
 

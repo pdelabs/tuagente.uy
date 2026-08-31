@@ -128,6 +128,16 @@ API_SERVER_KEY=
 # or whichever model provider's you use
 OPENROUTER_API_KEY=
 
+# THE SAME VALUE AS OPENROUTER_API_KEY, under a name the engine does not strip.
+# It is not a duplicate: the engine blocklists OPENROUTER_API_KEY out of every
+# terminal and execute_code subprocess it spawns, and refuses to re-allow it, so
+# `transcribe.py` -- the base `transcription` capability, sold to every client --
+# saw no key and reported the connection missing on an agent that had one.
+# Measured 2026-08-30; the why and what it costs are in the script's docstring
+# and in notes/auxiliary-models.md. Without this line the agent cannot
+# transcribe anything.
+TUAGENTE_MODELS_KEY=
+
 # from @BotFather
 TELEGRAM_BOT_TOKEN=
 

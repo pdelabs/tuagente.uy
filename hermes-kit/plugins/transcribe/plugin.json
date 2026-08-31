@@ -1,6 +1,6 @@
 {
   "id": "transcribe",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Audio and video to text, on the client's model connection",
   "client_copy": "Convierte una entrevista, reunión o nota de voz en texto.",
   "_comment": [

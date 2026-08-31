@@ -2201,6 +2201,27 @@ def main():
         leftover = sorted(names(old)) if path == new and os.path.isfile(old) else []
         if "API_SERVER_KEY" not in keys:
             raise AssertionError("API_SERVER_KEY is missing — the portal has nothing to authenticate with")
+        # THE ONE THE AGENT CAN ACTUALLY SEE. `OPENROUTER_API_KEY` being in this
+        # file is NOT enough for anything the agent runs itself: the engine
+        # blocklists that exact name out of every terminal and execute_code
+        # subprocess (`tools/environments/local.py`) and `env_passthrough.py`
+        # refuses to re-allow it. So `transcribe.py` -- the base `transcription`
+        # capability, promised to every client as "ya viene puesta" -- returned
+        # "la conexion de modelos no esta configurada" on an agent whose key was
+        # funding that very turn. Measured 2026-08-30 on a from-zero agent, and
+        # it is what `docs/east-requirements.md` 1.6 mistook for an agent
+        # inventing a missing connection.
+        #
+        # A FAILURE AND NOT A WARNING, because the symptom is invisible: the
+        # capability is sold, the card says active, and it only comes apart the
+        # first time a client sends an audio.
+        if "TUAGENTE_MODELS_KEY" not in keys:
+            raise AssertionError(
+                "TUAGENTE_MODELS_KEY is missing — it carries the same value as "
+                "OPENROUTER_API_KEY under a name the engine does not strip from "
+                "the agent's own subprocesses. Without it `transcribe.py` cannot "
+                "run at all and the `transcription` capability is sold and dead. "
+                "Add it to secrets.env (same value) and restart.")
         if path == old:
             raise AssertionError(
                 "the keys are in data/.env, which the agent can rewrite — and that "

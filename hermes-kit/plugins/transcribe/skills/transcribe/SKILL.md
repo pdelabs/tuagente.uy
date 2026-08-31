@@ -38,7 +38,15 @@ que salió bien.
 ## Si falla
 
 El JSON trae `error` en palabras claras. Los dos casos esperables:
-- `falta OPENROUTER_API_KEY` → la conexión de modelos no está configurada:
-  decile al cliente que pida la conexión "Modelos de IA auxiliares".
+
+- **`no tengo la clave de modelos para transcribir`** → esto **no** es una
+  conexión que le falte al cliente. Es un problema de instalación de este
+  agente: decilo así, en una línea ("no puedo transcribir porque me falta una
+  clave de mi instalación, lo estamos viendo"), **no le pidas la conexión de
+  modelos** y no ofrezcas `capability:` ni `connection:` por esto.
 - El archivo no existe → verificá la ruta (¿estás en el directorio del ticket?
   usá rutas absolutas).
+
+**En ningún caso sigas sin la transcripción.** Ni con los subtítulos
+automáticos de una plataforma, ni escribiendo lo que te parece que dice. Si no
+transcribiste, no hay entregable: decís qué pasó y frenás.

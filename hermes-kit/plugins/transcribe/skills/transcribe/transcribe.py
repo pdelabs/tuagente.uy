@@ -14,6 +14,36 @@ Fixed decisions (see the kit's notes/auxiliary-models.md):
   before upload (1 hour ~ 14 MB): whisper-1 cuts off at 25 MB and uploading a
   whole mp4 is wasteful even though the model accepts it.
 
+THE KEY IS NOT READ FROM `OPENROUTER_API_KEY`, AND THAT IS NOT A STYLE CHOICE.
+The engine STRIPS that name from every terminal and execute_code subprocess it
+spawns -- a hard blocklist in `tools/environments/local.py`
+(`_build_provider_env_blocklist`), which `env_passthrough.py` explicitly refuses
+to re-allow (GHSA-rhgp-j443-p4rf). So this script, run the only way an agent can
+run it, saw no key and returned "la conexion de modelos no esta configurada" on
+an agent whose key was sitting in its own container environment, funding the
+very turn that called it.
+
+MEASURED 2026-08-30 on a from-zero agent, and it retroactively settles an
+accusation: `docs/east-requirements.md` 1.6 records an agent claiming that same
+missing connection and calls the claim invented. It was not. The script said it,
+because it was true, and the transcription that never ran was never able to run.
+A base capability sold to every client ("Audios a texto ... ya viene puesta")
+could not work from inside an agent at all, and nothing said so, because the one
+thing that would have said so is this script's own error -- which read exactly
+like a client who had not paid for the connection.
+
+`TUAGENTE_MODELS_KEY` carries the same value under a name the engine does not
+strip, set in `<agent>/secrets.env` next to the others. WHAT IT COSTS, out loud:
+any command the agent runs can read that key, which is what the engine's
+blocklist exists to prevent. The trade is deliberate and bounded -- it is a
+PER-CLIENT key with a spend limit we set, rotated with one PATCH
+(notes/auxiliary-models.md), and spending it on transcription is the capability
+the client bought. It is still the agent holding a spendable credential, and the
+narrower fix is for the ADAPTER to do the transcription and never hand the key
+over: filed in docs/PENDING.md as the decision to take, not a patch to sneak in
+here. `OPENROUTER_API_KEY` stays as a fallback for whatever runs OUTSIDE a
+tool-spawned subprocess, where it is still visible.
+
 Usage:
     python3 transcribe.py --file entrevista.mp4 [--language es] [--output out.txt]
 """
@@ -95,9 +125,18 @@ def main():
     ap.add_argument("--output", default="")
     args = ap.parse_args()
 
-    key = os.environ.get("OPENROUTER_API_KEY", "")
+    # See the module docstring: the first name is the one that survives the
+    # engine's subprocess sanitizer, the second is what is left in a process the
+    # engine did not spawn.
+    key = (os.environ.get("TUAGENTE_MODELS_KEY", "")
+           or os.environ.get("OPENROUTER_API_KEY", ""))
     if not key:
-        return fail("falta OPENROUTER_API_KEY: la conexion de modelos no esta configurada")
+        return fail(
+            "no tengo la clave de modelos para transcribir (falta "
+            "TUAGENTE_MODELS_KEY en el secrets.env de este agente). ESTO ES UN "
+            "PROBLEMA DE INSTALACION, NO ALGO QUE EL CLIENTE TENGA QUE "
+            "CONECTAR: decilo asi, no le pidas la conexion de modelos, y NO "
+            "sigas con los subtitulos automaticos ni inventes el contenido.")
 
     source = Path(args.file)
     if not source.is_file():
