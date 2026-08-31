@@ -95,25 +95,47 @@ in `docs/east-requirements.md` §5; what is left is here.
   both inside the copy, neither decorative. One run is not a rule, but the
   reword is no longer unobserved.
 
-- **THE NEWS FLOW OPENS NO TICKET AND ASKS FOR NO APPROVAL, measured on a
-  re-run.** `flows/noticia-para-publicar/FLOW.md` step 1 is "Abro un ticket
-  «Noticia <tema>»" and step 4 is "Te pido el sí antes de que se publique";
-  `news-copy/SKILL.md` says to request approval "en el ticket de esa noticia",
-  presupposing a ticket that nothing creates. On the from-zero run the agent
-  remembered and both happened (`t_315e5dab`). On an independent re-run of the
-  same flow with a different URL it did NOT: the deliverable came out correct
-  and complete, and the board got nothing — no ticket, no approval, no trace
-  that any work happened. Nothing went out (the draft carries its "no se publicó
-  ni se envió a nadie" line), but the flow's card promises a gate that did not
-  run, and the client has no record.
+- ~~**THE NEWS FLOW OPENS NO TICKET AND ASKS FOR NO APPROVAL, measured on a
+  re-run.**~~ — **CLOSED 30/8/2026: the promise has a supplier.**
+  `skills/news-copy/open_news_ticket.py` opens the ticket before the note is
+  read, keyed on something the code can compute twice with the same answer:
+  the NORMALIZED url for a link (`www.`, `http`, a trailing slash, `?utm_*`
+  and a `#fragment` all fold into one key; the path's case and a routing
+  `?id=` do not), the file's bytes for a file, the text for a paste — so the
+  other two entry paths are covered too. Step 1 of `news-copy/SKILL.md` is
+  running it, with the firmness the interview side uses, and the approval is
+  asked for in that ticket. Where it is FIRMER than `fetch_video.py`: a board
+  that refuses the ticket stops the work instead of carrying on with a
+  warning — that one still has the audio, worth keeping; here the ticket is
+  the approval's only address. `tools/test_open_news_ticket.py` (32 tests) is
+  the proof, and the interview side still has none of its own.
 
-  This is the kit's own non-negotiable, unfixed for this path: the interview
-  side has `fetch_video.py` opening the ticket from code with an idempotency
-  key, and the news side has prose. Two of the three entry paths into
-  `interview-production` (a file instead of a link, and the whole news flow)
-  have no code behind step 1. **The fix is a script that opens the ticket, not
-  a firmer sentence** — every convention that depended on the agent remembering
-  has failed, and this one now has a measurement to prove it.
+  Measured end to end on `east-v2`, two real notes from subrayado.com.uy:
+  the script is the first tool call, the draft is saved with `deliverable` and
+  named in the ticket, the request goes in as a comment and the card is
+  blocked `needs_input` — `t_db70d562`, pending in `/portal/approvals`.
+  Idempotency, live: the same URL again, and the same URL mangled with
+  `www.`/`http`/`?utm_source=whatsapp`/a trailing slash/a fragment, both
+  answered `t_db70d562` and the board stayed at five cards. US$0.0225 +
+  US$0.0252 (sessions `api-36d062a2`, `api-40d6c71b`).
+
+- **A TICKET COMPLETED IN THE SAME BREATH AS THE APPROVAL KILLS IT.** Found by
+  the run above and NOT fixed. On the first of the two notes (`t_f36ecad6`) the
+  turn left the approval as a comment, blocked the card `needs_input` — and
+  then called `kanban_complete` on it. A finished ticket is out of
+  `/portal/approvals`: the sí it was waiting for can no longer be given, and
+  the client sees a closed job for something nobody authorised. It could only
+  surface once there WAS a ticket to finish; the instinct being obeyed is the
+  engine's kanban lifecycle («complete the task you worked»), which knows
+  nothing about a card that is deliberately parked. The second note did not do
+  it, after the script's own `next` note and the SKILL.md started saying the
+  ticket is left BLOCKED and never terminated — but that is prose with one
+  observation behind it, which is exactly what this file has learned not to
+  trust. **The code-side supplier is a rule in `policy/hooks/gate.py`**, which
+  already refuses `kanban unblock` on the agent's own ticket for the same
+  reason: the agent must not resolve the permission it is asking for.
+  Completing a `needs_input` card is that move with a different verb. Not done
+  here because it is a policy change for every agent, not a plugin one.
 
 ## Open product decisions
 

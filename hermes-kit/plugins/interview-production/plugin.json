@@ -1,6 +1,6 @@
 {
   "id": "interview-production",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "An interview becomes what has to go on air: ten timecoded lower-thirds for the TV edit, or a headline-and-copy news item",
   "client_copy": "De cada entrevista te deja lo que va al aire: los diez zócalos para la edición, o la noticia lista para publicar.",
   "_comment": [
@@ -35,6 +35,15 @@
     "per interview and one per note, on the ticket that work already has -- what",
     "the `approval` skill asks for, and not the 'ask for everything' that teaches",
     "a client to approve without reading.",
+    "",
+    "AND THAT TICKET IS OPENED BY CODE ON BOTH HALVES, since 30/8/2026. The",
+    "interview side had `fetch_video.py` doing it from day one, keyed on the video",
+    "id. The news side had a sentence, and a re-run measured what a sentence is",
+    "worth: a correct deliverable, and a board that never heard about it -- no",
+    "ticket, no approval, no trace (docs/east-requirements.md 5.5). So",
+    "`open_news_ticket.py` opens it too, keyed on the normalized source, and the",
+    "SKILL.md's step 1 is running it. The words are still the model's; the ticket",
+    "is not.",
     "",
     "THE SECOND FLOW IS NOT CALLED `radio-viva`, AND THE DOSSIER SAID IT WOULD BE.",
     "Radio Viva is the outlet one client publishes into -- naming a slug after it",

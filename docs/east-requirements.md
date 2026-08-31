@@ -768,7 +768,16 @@ draft came out correct and complete (and with two emojis, so the reword above
 IS working), and the board got NOTHING — no ticket, no approval, no trace. Step
 1 and step 4 of that flow have prose behind them and no code, unlike the
 interview path, where `fetch_video.py` opens the ticket with an idempotency
-key. `docs/PENDING.md` carries it.
+key. **Fixed the same day, with `skills/news-copy/open_news_ticket.py`:** the
+ticket is opened from code before the note is read, keyed on the normalized
+URL (or on the bytes of the file, or the text of the paste — the other two
+entry paths), and running it is step 1 of the SKILL.md. Re-measured on two
+real subrayado.com.uy notes: ticket, deliverable named in it, and a card
+blocked `needs_input` pending in Aprobaciones; the same URL twice, however it
+was mangled, is one card. The same runs surfaced the NEXT link in the chain,
+and that one is open in `docs/PENDING.md`: with a ticket to work inside, the
+first turn blocked it for the sí and then completed it in the same breath,
+which takes the pedido out of the approval queue.
 
 **The two zócalo files are not one list saved twice.** Five of the ten zócalos
 differ between `…-zo.md` and `…-zo-2.md`, and so does one timecode; the second
