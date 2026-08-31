@@ -150,6 +150,13 @@ MD
   `request`, porque una carpeta de Drive es de este cliente y el kit no la
   conoce. El cron viejo se borra recién cuando el nuevo quedó verificado.
 
+  **También al revés**: `--rearm --trigger request` desarma el flujo y borra el
+  cron que lo despertaba. Si el borrado no sale, el script te devuelve
+  `orphan_job` con el id y un `tell_the_client`: **no te lo guardes**. Ese job
+  sigue despertando al agente y facturando por algo que la ficha del flujo ya
+  no promete, y el id ya no está en el FLOW.md, así que esa línea es lo único
+  que lo nombra. Decíselo al cliente y dejá un ticket.
+
 ## Cuando trabajás un flujo
 
 Abrí su FLOW.md y seguilo tal cual. Cada unidad de trabajo real (una

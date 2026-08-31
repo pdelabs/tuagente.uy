@@ -104,6 +104,48 @@ def cron(binary, *args, timeout=30):
     return (r.stdout or ""), (r.stderr or "")
 
 
+def drop_job(job_id):
+    """Remove a cron job and CONFIRM it is gone. Returns (removed, problem).
+
+    THE SAME STANDARD `schedule()` HOLDS ITSELF TO, in the other direction: there
+    it is "the create command printing an id is not enough", here it is that the
+    remove command not complaining is not enough. It matters more here, because
+    a removal that silently does not happen leaves a job that WAKES THE AGENT UP
+    AND BILLS FOR IT, attached to a flow whose card now says it only runs when
+    the client asks.
+
+    What this replaces read the removal's stderr for the word "error". Both of
+    its answers were wrong. A failure whose message does not contain that word
+    -- a non-zero exit with empty stderr, "no such job", the CLI not being there
+    at all -- came back as REMOVED, and the flow reported a job gone that is
+    still running. And a failure that did contain it came back as "nothing
+    removed", indistinguishable in the result from there having been no job:
+    `ok: true`, `removed_job: null`, and the id gone from the frontmatter too,
+    so nothing anywhere still names the thing that is running.
+
+    The kit's worst bug is not the agent failing, it is the agent saying it did
+    something it did not do (`hermes-kit/CLAUDE.md`). This is that bug, reachable
+    from the `--rearm` path 8e33528 had just finished repairing.
+    """
+    binary = hermes_binary()
+    if not binary:
+        return "", ("no encontré el CLI de Hermes (busqué en "
+                    + ", ".join(HERMES_CANDIDATES) + " y en el PATH)")
+    try:
+        r = subprocess.run([binary, "cron", "remove", job_id],
+                           capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return "", str(e)
+    if r.returncode != 0:
+        return "", ((r.stderr or r.stdout or "").strip()[:200]
+                    or f"`hermes cron remove` salió con código {r.returncode}")
+    out, err = cron(binary, "list")
+    if job_id in out:
+        return "", (f"`hermes cron remove {job_id}` no dio error pero el id sigue "
+                    f"apareciendo en `hermes cron list` ({(err or '').strip()[:120]})")
+    return job_id, ""
+
+
 def missing_connections(ids):
     """Of the connections the flow declares, which ones are NOT actually set up.
 
@@ -281,11 +323,15 @@ def rearm(args):
     # dismantled) and leaving the old cron alive there means a flow whose card
     # says "arranca cuando lo pedís" waking itself up every fifteen minutes and
     # billing for it. Found by doing exactly that on the validation agent.
-    removed = ""
+    removed, orphan = "", ""
     if previous and previous != job_id:
-        binary = hermes_binary()
-        out, err = cron(binary, "remove", previous)
-        removed = previous if "error" not in (err or "").lower() else ""
+        removed, problem = drop_job(previous)
+        if problem:
+            orphan = (f"el cron viejo {previous} SIGUE VIVO: {problem}. El gatillo "
+                      f"del flujo ya quedó en `{args.trigger}`, así que ese job va "
+                      "a seguir despertando al agente y facturando por algo que "
+                      "la ficha ya no promete. DECÍSELO al cliente y dejá un "
+                      "ticket: se saca con `hermes cron remove " + previous + "`.")
 
     missing = missing_connections(
         [c.strip() for c in args.connections.split(",")]
@@ -296,15 +342,28 @@ def rearm(args):
         "rearmed": args.trigger,
         "cron_job": job_id or None,
         "removed_job": removed or None,
+        "orphan_job": previous if orphan else None,
         "missing_connections": missing,
         "note": ("Cambié SOLO el gatillo: el nombre, el resumen y los pasos que "
                  "lee el cliente quedaron como estaban."),
     }
+    # `ok` STAYS TRUE: the re-arm did happen, the FLOW.md is written, and telling
+    # the agent it failed invites a retry that would create a SECOND job on top of
+    # the one already there. What it gets instead is the thing to say out loud.
+    say = []
+    if orphan:
+        say.append(orphan)
     if missing:
-        result["tell_the_client"] = (
+        say.append(
             "El gatillo quedó armado, pero HOY no puede dispararse: falta "
             + ", ".join(missing) + ". Decíselo al cliente y pedí la conexión con "
             "la skill capability. No le digas que quedó andando.")
+    # BOTH, when both happened. This used to be one assignment per case, so a
+    # re-arm that left an orphan job AND is missing a connection reported only
+    # the second: the client hears about the connection and never about the cron
+    # that keeps billing them.
+    if say:
+        result["tell_the_client"] = " ".join(say)
     print(json.dumps(result, ensure_ascii=False))
     return 0
 
