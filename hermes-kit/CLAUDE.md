@@ -88,7 +88,8 @@ skills (`no-images`, `no-web-search`) show up in its index **only when the
 tool is missing** and withdraw on their own once it's there, via
 `metadata.hermes.fallback_for_tools`. And the gate — installing software,
 signing as someone it isn't (`--author`, `--created-by`, `HERMES_PROFILE=`),
-unblocking itself — is closed by a hook in `policy/hooks/`, not by prose.
+unblocking itself, finishing the ticket it blocked to ask for permission —
+is closed by a hook in `policy/hooks/`, not by prose.
 It blocks the **family**, not the command, and the message redirects to
 `capability`, saying there's no variant that gets through: that's what
 stops the agent from continuing to try. Details: `notes/knobs-applied.md`.

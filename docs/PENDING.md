@@ -119,23 +119,55 @@ in `docs/east-requirements.md` §5; what is left is here.
   answered `t_db70d562` and the board stayed at five cards. US$0.0225 +
   US$0.0252 (sessions `api-36d062a2`, `api-40d6c71b`).
 
-- **A TICKET COMPLETED IN THE SAME BREATH AS THE APPROVAL KILLS IT.** Found by
-  the run above and NOT fixed. On the first of the two notes (`t_f36ecad6`) the
-  turn left the approval as a comment, blocked the card `needs_input` — and
-  then called `kanban_complete` on it. A finished ticket is out of
-  `/portal/approvals`: the sí it was waiting for can no longer be given, and
-  the client sees a closed job for something nobody authorised. It could only
-  surface once there WAS a ticket to finish; the instinct being obeyed is the
-  engine's kanban lifecycle («complete the task you worked»), which knows
-  nothing about a card that is deliberately parked. The second note did not do
-  it, after the script's own `next` note and the SKILL.md started saying the
-  ticket is left BLOCKED and never terminated — but that is prose with one
+- ~~**A TICKET COMPLETED IN THE SAME BREATH AS THE APPROVAL KILLS IT.**~~ —
+  **CLOSED 30/8/2026: it is family 4 of the gate.** Found by the run above: on
+  the first of the two notes (`t_f36ecad6`) the turn left the approval as a
+  comment, blocked the card `needs_input` — and then called `kanban_complete`
+  on it. A finished ticket is out of `/portal/approvals`: the sí it was waiting
+  for can no longer be given, and the client sees a closed job for something
+  nobody authorised. The instinct being obeyed is the engine's kanban lifecycle
+  («complete the task you worked»), which knows nothing about a card that is
+  deliberately parked. The second note did not do it, after the SKILL.md
+  started saying the ticket is left BLOCKED — but that is prose with one
   observation behind it, which is exactly what this file has learned not to
-  trust. **The code-side supplier is a rule in `policy/hooks/gate.py`**, which
-  already refuses `kanban unblock` on the agent's own ticket for the same
-  reason: the agent must not resolve the permission it is asking for.
-  Completing a `needs_input` card is that move with a different verb. Not done
-  here because it is a policy change for every agent, not a plugin one.
+  trust, and the live proof below is why: told a second time, with the client
+  claiming to have authorised it by phone, the agent called `kanban_complete`
+  TWICE and the hook is what stopped it.
+
+  **The rule**, in `policy/hooks/gate.py` beside the one that already refuses
+  `kanban unblock` for the same reason (the agent must not resolve the
+  permission it is asking for): it may not END a card that is sitting in the
+  client's approvals queue. The verbs are the ones the image actually has, read
+  off `hermes_cli/kanban.py` and `tools/kanban_tools.py` and not guessed —
+  `kanban complete` and `kanban archive` (`archive --rm` deletes the row) on
+  the CLI, and the `kanban_complete` tool, which is the only one in the kanban
+  tool surface that ends anything and whose `task_id` DEFAULTS to the served
+  ticket. With no id, the target is `HERMES_KANBAN_TASK`: that was the shape of
+  the incident. "Waiting for the client" is the adapter's own predicate
+  (`adapter/kanban.py`, `PENDING_WHERE`) verbatim, because what is being
+  protected is exactly that queue not emptying out behind the client's back.
+  The refusal names the ticket and says what to do instead — leave it blocked,
+  the client's Aprobar/Rechazar unblocks it — and closes the retry the way the
+  other three messages do: *«No hay verbo que lo haga bien —completarlo,
+  archivarlo o borrarlo son lo mismo que desbloquearte solo—.»*
+
+  Two things it needed beyond the hook. `config.base.yaml` had to declare a
+  `kanban_complete` matcher: a hook only runs for the tools its matcher names,
+  and that is how this got through with `kanban_unblock` already hooked.
+  And `agent-check.py` now FAILS if any of the four tools is unmatched — the
+  same lesson as always, a rule nobody checks is not a rule — on top of 21 new
+  cases in the gate battery (90 total: every terminating verb, both id routes,
+  the normal lifecycle still closing cards, and the comment that merely
+  *describes* the command not being blocked).
+
+  Measured on `east-v2`: `hermes hooks test` fires the engine's own registered
+  hook and gets the refusal for the tool and for `archive --rm`, lets a card
+  nobody is waiting on through, and leaves `unblock` exactly as it was; and the
+  live turn above is in the gateway log as
+  `WARNING agent.tool_executor: Tool kanban_complete returned error` twice,
+  with the ticket still `blocked` and the agent telling the client *«No: no me
+  dejó cerrarlo porque el ticket está esperando tu aprobación en el portal.»*
+  US$0.0077 for both turns.
 
 ## Open product decisions
 

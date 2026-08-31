@@ -3,7 +3,7 @@
 
 The engine runs this BEFORE every call to `terminal` (a `pre_tool_call` hook
 with a matcher, declared in config.yaml). It receives a JSON on stdin with
-`tool_name` and `tool_input`, and if the command falls into one of the three
+`tool_name` and `tool_input`, and if the command falls into one of the four
 families below it answers `{"action": "block", "message": ...}`: the engine
 does not execute it and returns that message to the model as a tool error.
 
@@ -17,7 +17,7 @@ consequences follow:
      `npm` after `pip`, `'install'` after install;
   b) the MESSAGE matters as much as the pattern. A bare "no" leaves the agent
      looking for a way around it; a "no, and here's what does work" closes the
-     search. The three messages below redirect and explicitly say there is no
+     search. The four messages below redirect and explicitly say there is no
      variant that gets through. That sentence is what turns off the retry.
 
 WHAT IT BLOCKS, AND WHY EACH ONE:
@@ -45,6 +45,12 @@ WHAT IT BLOCKS, AND WHY EACH ONE:
    blocked to ask for permission is skipping the whole gate. (The
    `kanban_unblock` tool is covered by its own matcher; this closes the
    terminal path, which was the one still open.)
+
+4. FINISHING THE TICKET IT IS ASKING PERMISSION WITH. Family 3 with a
+   different verb: `kanban complete` / `kanban archive` on a card that is
+   blocked waiting for the client takes the request out of
+   `/portal/approvals`, so the `sí` can never be given. It needs the board to
+   decide, so it isn't a pattern — see section 5 further down.
 
 WHAT PACKAGE MANAGERS ACTUALLY EXIST (image v2026.7.30, verified on
 2026-08-12 with `for b in ...; do docker exec lab-hermes sh -lc "command -v $b";
@@ -80,9 +86,9 @@ more coverage into it than there is. These aren't oversights: they're
 decisions, and each one has a reason, but if they aren't stated someone will
 mistake them for protection.
 
-  * ONLY THREE TOOLS ARE HOOKED. `config.base.yaml` declares `terminal`,
-    `execute_code` and `kanban_unblock`. Everything else reaches the client's
-    volume WITHOUT going through here:
+  * ONLY FOUR TOOLS ARE HOOKED. `config.base.yaml` declares `terminal`,
+    `execute_code`, `kanban_unblock` and `kanban_complete`. Everything else
+    reaches the client's volume WITHOUT going through here:
       - `write_file` — "always overwrites", its own signature says. Blanking a
         client file (writing "" over it) is NOT covered.
       - `patch` — find-and-replace on any file, not covered either.
@@ -258,6 +264,17 @@ MESSAGES = {
         "desbloquearlo es la respuesta de tu cliente, no un paso tuyo. Esperá el "
         "desbloqueo con su comentario de aprobación. Si el pedido quedó trabado, "
         "avisale por el chat y volvé a pedirlo."
+    ),
+    "finish": (
+        "No termines ese ticket{ticket}: está bloqueado esperando que tu cliente "
+        "conteste. Un ticket terminado se va de la lista de pendientes del "
+        "portal, así que el sí o el no que estás esperando ya no te lo va a "
+        "poder dar nadie, y tu cliente ve cerrado un trabajo que nunca autorizó. "
+        "No hay verbo que lo haga bien —completarlo, archivarlo o borrarlo son "
+        "lo mismo que desbloquearte solo—. Dejalo bloqueado tal como está: "
+        "cuando tu cliente apriete Aprobar o Rechazar, el ticket se destraba y "
+        "recién ahí lo trabajás y lo cerrás. Mientras tanto seguí con lo que no "
+        "dependa de ese permiso."
     ),
 }
 
@@ -910,6 +927,156 @@ def _any_unresolved_request():
     return (True, row[0]) if row else (False, None)
 
 
+# ==========================================================================
+# 5. DON'T FINISH THE TICKET YOU'RE ASKING PERMISSION WITH
+# ==========================================================================
+# MEASURED LIVE (30/8/2026, east-v2, ticket t_f36ecad6): the turn left the
+# approval request as a comment, blocked its own card `needs_input` — and then
+# called `kanban_complete` on it. A finished ticket is out of
+# `/portal/approvals`: the `sí` it was waiting for can no longer be given, the
+# client sees a closed job nobody authorised, and NOTHING LOOKS WRONG. It is
+# family 3 with a different verb — the agent resolving on its own the
+# permission it asked for — and the instinct behind it is the engine's own
+# kanban lifecycle («complete the task you worked»), which knows nothing about
+# a card that was parked on purpose. Prose in a SKILL.md was tried first and is
+# exactly what this kit has learned not to trust.
+#
+# WHICH VERBS END A CARD (image v2026.7.30, read off the argparse table in
+# `hermes_cli/kanban.py` and the tool schemas in `tools/kanban_tools.py`, not
+# guessed):
+#   * CLI: `kanban complete` (-> done) and `kanban archive` (-> archived;
+#     `archive --rm` deletes the row outright). There is no `close` and no
+#     `delete`. `edit` only backfills a task that is ALREADY done and `gc`
+#     only touches archived ones, so neither one ends anything.
+#   * tools: `kanban_complete`, and only that one — there is no
+#     `kanban_archive` tool. Its `task_id` is OPTIONAL and defaults to the
+#     served ticket, which is exactly how the incident came in: with no id,
+#     the target is `HERMES_KANBAN_TASK`.
+#
+# WHAT COUNTS AS "WAITING FOR THE CLIENT" is the adapter's own predicate
+# (`adapter/kanban.py`, PENDING_WHERE) verbatim, because what this protects is
+# precisely that queue not emptying out behind the client's back: `blocked`,
+# plus a `triage` that got there from a `needs_input` block.
+#
+# UNLIKE THE BARRIER ABOVE, WHEN IN DOUBT THIS ONE LETS THROUGH. It names a
+# ticket and asks the board about it; if there's no board to ask, refusing
+# every `complete` would stop all normal work for a state nobody measured.
+
+TERMINATING_TOOLS = {"kanban_complete"}
+TERMINATING_VERBS = {"complete", "archive"}
+TASK_ID = re.compile(r"^t_[0-9a-z][0-9a-z_-]*$")
+
+
+def _tool_task_ids(payload):
+    """The ticket ids named in a kanban tool's arguments."""
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return []
+    # `task_id` is the tool's field and `task_ids` the CLI's; both names come
+    # out of the engine, and which one the payload carries isn't ours to pick.
+    for key in ("task_id", "task_ids"):
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            return [value.strip()]
+        if isinstance(value, (list, tuple)):
+            return [str(v).strip() for v in value if str(v).strip()]
+    return []
+
+
+def _terminated_ids(segment, default):
+    """The tickets a shell segment would take off the board.
+
+    The verb has to be the segment's COMMAND, never a word inside an argument
+    — the same rule `_effect_in_segment` follows, and for the same reason: the
+    agent that writes «cuando apruebes corro `hermes kanban complete t_x`» in
+    the comment ASKING for permission must not get blocked for saying so.
+    With no id the target is the served ticket, which is where the tool's
+    optional `task_id` points too.
+    """
+    cmd, rest = head(segment)
+    if cmd == "hermes":
+        cmd, rest = (rest[0] if rest else ""), rest[1:]
+    if cmd != "kanban" or not rest or rest[0] not in TERMINATING_VERBS:
+        return []
+    # Everything id-shaped after the verb: positionals, `--ids`, `archive --rm`.
+    return [t for t in rest[1:] if TASK_ID.match(t)] or default
+
+
+def _command_lines_in_code(code):
+    """The command lines a block of code would run.
+
+    The same reading `_effect_in_code` does for the barrier —the visible string
+    arguments of every call that runs another program— but returning the line
+    instead of an effect. `terminal("hermes kanban complete t_x")` and
+    `subprocess.run(["hermes","kanban","complete","t_x"])` are the two shapes
+    that reach the CLI from inside `execute_code`, which only exposes seven
+    tools and `terminal` is one of them.
+    """
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError, MemoryError, RecursionError, TypeError):
+        return [code]                    # not Python: read it as a command line
+    lines = []
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.Call):
+            continue
+        module, attribute = _call(n.func, {})
+        if (attribute or "").lower() in RUN_CALLS or module == "subprocess":
+            texts = [t for a in list(n.args) + [k.value for k in n.keywords]
+                     for t in _constants(a)]
+            if texts:
+                lines.append(" ".join(t.strip() for t in texts))
+    return lines
+
+
+def _termination_targets(tool, payload):
+    """The ticket ids this call would take off the board. Empty if it ends none."""
+    served = (os.environ.get("HERMES_KANBAN_TASK") or "").strip()
+    default = [served] if served else []
+    if tool in TERMINATING_TOOLS:
+        return _tool_task_ids(payload) or default
+    lines = (_command_lines_in_code(code_from(payload)) if tool == "execute_code"
+             else [command_from(payload)])
+    targets = []
+    for line in lines:
+        for text, _pipe, _substitution in segments(line):
+            targets += _terminated_ids(text, default)
+    return targets
+
+
+def _awaiting_client(task_id):
+    """Is that ticket sitting in the client's approvals queue right now?"""
+    conn = _board()
+    if conn is None:
+        return False
+    try:
+        row = conn.execute(
+            "SELECT status, block_kind FROM tasks WHERE id = ?",
+            (task_id,)).fetchone()
+    except sqlite3.Error:
+        # A board with no `block_kind` column is the legacy shape, and the
+        # adapter reads it the same way: there, everything blocked is a request.
+        try:
+            row = conn.execute("SELECT status, NULL FROM tasks WHERE id = ?",
+                               (task_id,)).fetchone()
+        except sqlite3.Error:
+            return False
+    finally:
+        conn.close()
+    if not row:
+        return False
+    status, kind = row[0], row[1]
+    return status == "blocked" or (status == "triage" and kind == "needs_input")
+
+
+def terminates_a_request(tool, payload):
+    """The rule. Returns the ticket it would close on the client, or None."""
+    for task_id in _termination_targets(tool, payload):
+        if _awaiting_client(task_id):
+            return task_id
+    return None
+
+
 def has_pending_permission(command, is_code=False):
     """The barrier. Returns (effect, ticket, message) or None if it can proceed."""
     effect = _effect_in_code(command) if is_code else _effect_in_segments(command)
@@ -961,7 +1128,17 @@ def main():
         json.dump({"action": "block", "message": MESSAGES[family]},
                   sys.stdout, ensure_ascii=False)
         return 0
-    # The pending-permission barrier goes AFTER the three families: if the
+    # Family 4 needs the board, so it can't live in `verdict`: it comes right
+    # after the patterns and before the barrier, because "you're closing the
+    # request you're waiting on" is a more precise thing to say than "there's
+    # something pending".
+    closing = terminates_a_request(tool, payload)
+    if closing:
+        json.dump({"action": "block",
+                   "message": MESSAGES["finish"].format(ticket=f" ({closing})")},
+                  sys.stdout, ensure_ascii=False)
+        return 0
+    # The pending-permission barrier goes AFTER the four families: if the
     # command was already forbidden, the right message is the one for its
     # family.
     pending = has_pending_permission(

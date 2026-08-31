@@ -1511,10 +1511,12 @@ def main():
         if d is not None:
             hooks = (d.get("hooks") or {}).get("pre_tool_call") or []
             declared = [h.get("command") for h in hooks if isinstance(h, dict)]
+            matched = [h.get("matcher") for h in hooks if isinstance(h, dict)]
             consents = d.get("hooks_auto_accept") is True
         else:
             block = block_of(text, "hooks")
             declared = re.findall(r"^\s+command:\s*[\"']?([^\"'\n]+)", block, re.M)
+            matched = re.findall(r"^\s+-?\s*matcher:\s*[\"']?([^\"'\n]+)", block, re.M)
             consents = bool(re.search(r"^hooks_auto_accept:\s*true", text, re.M))
         if not declared:
             raise AssertionError(
@@ -1545,6 +1547,24 @@ def main():
                 "THE GATE IS OPEN: a declared hook that will not run — "
                 + ", ".join(broken)
                 + " — and when a hook does not run, the engine lets the tool through anyway"
+            )
+        # THE TOOLS IT IS DECLARED FOR, which is a different thing from the
+        # script working: a hook only runs for the tool names its matcher
+        # covers, so a rule the gate refuses perfectly is never even asked
+        # about if nobody wired the matcher. That is how the escape of
+        # 30/8/2026 got through with `kanban_unblock` already hooked: the agent
+        # did not unblock its card, it COMPLETED it, and `kanban_complete` was
+        # not on the list. (The engine treats the matcher as a regex; the kit
+        # writes them literally, and that is what is compared here.)
+        wired = {(m or "").strip() for m in matched}
+        unwatched = [t for t in ("terminal", "execute_code", "kanban_unblock",
+                                 "kanban_complete") if t not in wired]
+        if unwatched:
+            raise AssertionError(
+                "THE GATE IS OPEN for " + ", ".join(unwatched)
+                + ": there is no `pre_tool_call` matcher for those tools, so the "
+                "hook is never run for them and the engine executes them without "
+                "asking anybody"
             )
         # And that it really blocks. The cases are a summary of the battery: one
         # per family, one for each retry evasion that has already happened to
@@ -1595,7 +1615,14 @@ def main():
 
         board = _board("with", [("t_bloq", "blocked", "needs_input"),
                                 ("t_libre", "ready", None),
-                                ("t_cerrado", "done", None)])
+                                ("t_cerrado", "done", None),
+                                # A request that got stuck: the portal still
+                                # lists it in Approvals, so terminating it
+                                # takes the same answer away.
+                                ("t_triage", "triage", "needs_input"),
+                                # …and a `triage` that is NOT a request: the
+                                # client was never asked anything there.
+                                ("t_triage_flaky", "triage", "transient")])
         # A REAL board, with tickets, where no request is left unresolved: it is
         # the only one that proves the barrier lifts on its own.
         no_requests = _board("without", [("t_hecho", "done", None),
@@ -1613,6 +1640,9 @@ def main():
         with_request = {"HERMES_KANBAN_DB": board, "HERMES_KANBAN_TASK": "t_bloq"}
         without_request = {"HERMES_KANBAN_DB": board, "HERMES_KANBAN_TASK": "t_libre"}
         clean = {"HERMES_KANBAN_DB": no_requests}
+        # A chat session: the board is there, but nothing in the environment
+        # ties the turn to a ticket (measured shape, written up in gate.py).
+        chat = {"HERMES_KANBAN_DB": board}
         cases += [
             # the incident's exact deletion, by both routes
             ("terminal", "rm -- doc1.txt doc2.txt doc3.txt", True, with_request),
@@ -1755,14 +1785,70 @@ def main():
             ("terminal", "rm -- doc1.txt", False,
              {"HERMES_KANBAN_DB": no_requests,
               "PORTAL_POLICY_NOTICE": _notice("t_hecho", {"until": 1})}),
+
+            # FAMILY 4: DO NOT FINISH THE TICKET YOU ARE ASKING PERMISSION
+            # WITH. Measured live on east-v2 (t_f36ecad6, 30/8/2026): the turn
+            # left the request as a comment, blocked its own card
+            # `needs_input` — and then completed it. A finished ticket is out
+            # of /portal/approvals: the `sí` can never be given, the client
+            # sees a closed job nobody authorised, and NOTHING LOOKS WRONG.
+            # The tool's `task_id` is optional and defaults to the served
+            # ticket, which is exactly the shape the incident had.
+            ("kanban_complete", {"summary": "listo"}, True, with_request),
+            ("kanban_complete", {"task_id": "t_bloq", "summary": "listo"}, True, chat),
+            ("terminal", "hermes kanban complete --result=hecho -- t_bloq", True, chat),
+            ("terminal", "kanban complete t_bloq", True, chat),        # without `hermes`
+            ("terminal", "hermes kanban complete", True, with_request),  # implicit id
+            # every verb that ends a card, and there are only these two in the
+            # image's CLI (`archive --rm` deletes the row outright).
+            ("terminal", "hermes kanban archive t_bloq", True, chat),
+            ("terminal", "hermes kanban archive --rm t_bloq", True, chat),
+            ("terminal", "cd /opt/data && hermes kanban complete t_bloq", True, chat),
+            # a request stuck in `triage` is still in the client's queue.
+            ("terminal", "hermes kanban complete t_triage", True, chat),
+            # the two shapes that reach the CLI from inside `execute_code`
+            # (which only exposes seven tools, `terminal` among them).
+            ("execute_code", 'terminal("hermes kanban complete t_bloq")', True, chat),
+            ("execute_code", "import subprocess\n"
+                             'subprocess.run(["hermes","kanban","complete","t_bloq"])',
+             True, chat),
+            # ...AND THE NORMAL LIFECYCLE IS UNTOUCHED: a card nobody is
+            # waiting on gets completed and archived like any other work. This
+            # half matters as much as the other: the engine's whole kanban
+            # cycle ends in `complete`.
+            ("kanban_complete", {"summary": "listo"}, False, without_request),
+            ("kanban_complete", {"task_id": "t_libre"}, False, chat),
+            ("terminal", "hermes kanban complete t_libre", False, chat),
+            # the named id wins over the served one: working t_bloq does not
+            # freeze every other card on the board.
+            ("terminal", "hermes kanban complete t_libre", False, with_request),
+            ("terminal", "hermes kanban archive t_cerrado", False, chat),
+            # a `triage` that is not a request: nobody was ever asked anything.
+            ("terminal", "hermes kanban complete t_triage_flaky", False, chat),
+            # SAYING what it would do is never blocked, same as asking for
+            # permission: the verb has to be the segment's COMMAND, never a
+            # word inside an argument.
+            ("terminal", "hermes kanban comment -- t_bloq "
+                         "'cuando apruebes corro hermes kanban complete t_bloq'",
+             False, chat),
+            ("terminal", "echo 'hermes kanban complete t_bloq' >> notas.md",
+             False, chat),
+            # and the rule this one mirrors stays exactly as it was.
+            ("terminal", "hermes kanban unblock t_bloq", True, chat),
+            ("kanban_unblock", {"task_id": "t_libre"}, True, chat),
         ]
         for tool, cmd, expected_block, *rest in cases:
             extra_env = rest[0] if rest else {}
             # `code` on top of `command`: execute_code sends its own in there,
             # and it is the route the deletion the client had rejected came in
             # through.
+            # A dict case IS the tool_input, verbatim: the kanban tools do not
+            # carry a command, they carry their own arguments (`task_id`), and
+            # that field is what family 4 reads. The engine sends the tool's
+            # `args` dict through as `tool_input` (`agent/shell_hooks.py`).
             payload = json.dumps({"hook_event_name": "pre_tool_call", "tool_name": tool,
-                                  "tool_input": {"command": cmd} if tool != "execute_code"
+                                  "tool_input": cmd if isinstance(cmd, dict)
+                                  else {"command": cmd} if tool != "execute_code"
                                   else {"code": cmd}})
             env = dict(os.environ)
             env.pop("HERMES_KANBAN_TASK", None)

@@ -151,9 +151,10 @@ display:
 # THE GATE, IN CODE AND NOT IN PROSE. The engine runs these scripts BEFORE the
 # tool and, if they answer {"action":"block"}, doesn't run it and hands the
 # message back to the model (agent/shell_hooks.py; registered in
-# gateway/run.py:10499). Covers the three things QA saw or left open:
+# gateway/run.py:10499). Covers the four things QA saw or left open:
 # installing software on the client's volume, signing a comment as `portal`
-# (i.e. forging an approval), and unblocking its own ticket.
+# (i.e. forging an approval), unblocking its own ticket, and finishing the
+# ticket it blocked to ask for permission.
 #
 # Consent goes HERE and in the compose (HERMES_ACCEPT_HOOKS=1), NEVER through
 # data/'s allowlist: that one lives in the volume and the agent can delete it,
@@ -187,6 +188,15 @@ hooks:
       command: "/opt/policy/hooks/gate.py"
       timeout: 10
     - matcher: "kanban_unblock"
+      command: "/opt/policy/hooks/gate.py"
+      timeout: 10
+    # Terminating the card it blocked to ask for permission is `unblock` with
+    # another verb: a finished ticket leaves /portal/approvals and the answer
+    # can no longer be given. `kanban_complete` is the only tool in the
+    # engine's kanban surface that ends a card (there is no `kanban_archive`),
+    # and the CLI verbs (`complete`, `archive`) already come in through
+    # `terminal`.
+    - matcher: "kanban_complete"
       command: "/opt/policy/hooks/gate.py"
       timeout: 10
 
