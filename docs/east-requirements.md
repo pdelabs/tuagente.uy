@@ -619,6 +619,132 @@ asking.
 
 ---
 
+---
+
+## 5. What was built from this, 30/8/2026 — and where the dossier was wrong
+
+Everything in §3 and §4.1/§4.3/§4.5 was built and then RUN, from zero, on a
+fresh agent (`east-v2`, local, ports 8662/8663, its own OpenRouter key). This
+section records the decisions that differ from what §3 recommended, the one
+accusation this file has to withdraw, and what the run actually produced.
+
+### 5.1 The catalog-row pattern for a bespoke plugin: there is no second pattern
+
+`interview-production` is sold by an ordinary `level: menu` row in
+`capabilities/catalog.json`, with the same six client-facing fields as every
+other row. **It does not get a third `level`, and that is the decision.**
+`level` is read by code in three places — `tools/plugin_set.py` splits base from
+bought, `purchased.json` refuses a base row, the portal draws "included" vs a
+button — so a new value means touching every reader to express something the
+client would not understand. What makes a row bespoke is a fact about its
+HISTORY, and history goes in `internal_note`, which is where East is named and
+the only place in the kit that names her.
+
+That is also the product argument, not a shortcut: `plugins/README.md` says a
+plugin is "the reusable unit of custom work: whatever a client pays us to build
+lands here so the second client who asks for it gets it off the shelf." The
+catalog is the shelf. A row hiding behind a special level is a plugin nobody
+else can ever buy.
+
+Three things a bespoke row has to get right, learned writing this one:
+**(1)** `cost` and `effort` describe this row and nothing else — the craft costs
+nothing per run, the transcription costs cents per hour of audio, and the row
+says so; a bespoke row is exactly where the temptation to price the commission
+instead of the capability shows up. **(2)** The row is closed on its own.
+**(3)** Nothing client-specific crosses into the plugin.
+
+### 5.2 Three places this dossier was wrong
+
+**§1.6 — "The agent invented a missing connection." It did not, and this is the
+correction that matters most.** The engine strips `OPENROUTER_API_KEY` by name
+from every `terminal` and `execute_code` subprocess it spawns
+(`tools/environments/local.py`), and `env_passthrough.py` refuses to re-allow
+it. Reproduced from zero on 30/8: `transcribe.py`, run the only way an agent
+can run it, returned *"falta OPENROUTER_API_KEY: la conexion de modelos no esta
+configurada"* on an agent whose key was funding that very turn. **The SCRIPT
+said it, because it was true.** `transcription` is a `level: base` capability
+sold to every client as "ya viene puesta" and it was dead on delivery, on every
+agent ever shipped. So the caption shortcut was an agent working around a broken
+capability, not dodging a paid step — and the five `[VERIFICAR CONTRA EL VIDEO]`
+markers in copy that went to air are ours. Fixed with `TUAGENTE_MODELS_KEY`
+(same value, a name the engine does not strip) and an `agent-check` failure;
+the trade-off and the narrower fix are in `hermes-kit/notes/auxiliary-models.md`
+and `docs/PENDING.md`.
+
+**§3.4 — "the row is closed on its own, so `check-plugins.py`'s rule is
+satisfied."** It was not: the rule exempted only `system` plugins, and
+`transcribe` is `level: base`. The row was refused with advice that would have
+written a purchase for a plugin nobody buys. The rule now exempts both — the
+same pair `plugin_set.py` already adds unconditionally.
+
+**§4.5 — "recommend (a), inside `transcribe`."** Built as a script inside the
+plugin instead (`skills/lower-thirds/fetch_video.py`). `transcribe` is on EVERY
+agent and its contract is FILE → TEXT; teaching it about URLs puts a video
+downloader and its prose in the prompt of every client who never sends one.
+Sources are their own unit — `drive-inbox` is a source, this is a source — and
+both hand `transcribe` a file. **The half of §4.5 that did NOT move is the one
+that mattered:** the transcript comes from the model connection, and
+`fetch_video.py` passes `--no-write-subs --no-write-auto-subs` so the captions
+are not even on disk to be tempted by.
+
+### 5.3 Smaller decisions
+
+- **The second flow is not `radio-viva`.** Radio Viva is the outlet she
+  publishes into; a slug named after it would put a third party's brand in every
+  agent that ever buys the row. It is `noticia-para-publicar`. PRINCIPLE ZERO
+  wins over this dossier's own §3.4.
+- **`entrevistas-tv` ships `trigger_type: request`**, as §3.4 said — a kit file
+  cannot carry one client's folder ids or a per-agent cron job id. Arming it is
+  now a supported command rather than a hand edit: `create_flow.py --rearm`,
+  which rewrites only the five `trigger_*` keys and leaves every word the client
+  reads alone. `--trigger drive` without `--folders` is refused outright (§4.3).
+- **The interview's ticket is opened by `fetch_video.py`**, keyed on the video
+  id, unassigned (the turn that called it is the one doing the work; an assignee
+  would hand the same interview to the dispatcher as well and run it twice).
+  §4.7's first bullet, answered by code.
+- **The Google step and the channel pairing are now in
+  `docs/client-onboarding.md`** (§4.2 and §4.7's second bullet).
+
+### 5.4 What the run produced
+
+Fresh agent, `purchased.json` = `["drive-inbox", "interview-production"]`, nine
+plugins exactly as §3.5 predicted. `agent-check` **30 ok · 0 warn · 0 failures**,
+`portal-check` **16 ok · 0 warn · 0 failures**. Baptized through the portal API
+as the client would — «Selastian», East Comunicación — and the name won in the
+manifest over the compose's `AGENT_NAME` (§4.7's third bullet).
+
+**Rank 1, end to end** on the same YouTube interview she used
+(`HGRy8mSFPEQ`, VTV NOTICIAS, 3:43): downloaded to audio, transcribed on the
+model connection, two deliverables (transcript + the ten zócalos), approval
+requested on the interview's own ticket. **Zero `[VERIFICAR]` markers inside the
+zócalos** — with a real transcription there was nothing to guess. Two of them:
+
+> `4. EL LÍDER DE LA ORGANIZACIÓN RECIBIÓ 3 AÑOS Y 10 MESES DE PENA`
+> `   Fuente: 00:31–00:42.`
+> `10. "ESTA PERSONA EN MENOS DE TRES AÑOS ESTÁ DE VUELTA EN LA CALLE"`
+> `    Fuente: 03:33–03:41.`
+
+**Rank 2, end to end** on the Radio Viva URL from her own message: article read,
+headline (13 words) + copy (~120 words, source in the first sentence), image
+suggestions including the outlet's own published image, closing line, approval
+pending on its ticket. One miss: zero emojis where her format carries 1-3 — the
+skill said "hasta 1 a 3", which reads as optional; reworded after the run and
+not yet re-tested.
+
+**Rank 8, as far as it can go without her consent screen.** The flow armed with
+folder ids, cron created and verified, `missing_connections: ["google-workspace"]`
+reported at arm time. Fired once: `watch.py` answered *"no hay token de Google:
+falta hacer la conexion"* and the run left a blocked ticket — *"Entrevistas TV —
+no se pudo revisar Drive: falta conectar Google"* — saying what is missing, what
+is lost while it stays missing («los videos y audios nuevos que lleguen a esas
+carpetas no entran a trabajarse... puede perderse el cierre de hoy») and
+offering `connection:google-workspace`. **The failure mode §4.4 asks for is the
+one that happened.**
+
+Cost of the whole validation: **US$0.12** on a key minted for it.
+
+---
+
 ## Provenance
 
 Read-only, 30/8/2026, from `~/Desktop/Luis/Projects/agente-east/data/`:

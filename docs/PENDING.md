@@ -28,6 +28,58 @@ What's left open, and who unblocks it. Close it here once it's resolved.
 - **Luna vs Sonnet verdict.** Evidence so far: Luna completes everything, ~1
   guard block per batch and a few tics; zero security or honesty failures.
 
+## Found building East from zero (2026-08-30)
+
+The gate run: `interview-production` + `drive-inbox` on a fresh agent, two
+requirements end to end. What got fixed in the same pass is in the commits and
+in `docs/east-requirements.md` §5; what is left is here.
+
+- **DECISION — where the model key lives, and who holds it.** The engine
+  blocklists `OPENROUTER_API_KEY` out of every `terminal`/`execute_code`
+  subprocess, so `transcribe.py` could not run inside ANY agent we ever shipped
+  (`hermes-kit/notes/auxiliary-models.md`). It runs now because
+  `TUAGENTE_MODELS_KEY` carries the same value under a name the engine does not
+  strip — **which means any command the agent runs can read a spendable model
+  key**, exactly what the blocklist exists to prevent. Bounded by the per-client
+  key with a limit we set, rotated with one `PATCH`. **The narrower answer is
+  for the ADAPTER to do the transcription**: it already has the key, already has
+  `./data` mounted, and the agent cannot execute code inside it — so the agent
+  would POST a path and never see a credential. That is an adapter surface and a
+  statement about where credentials live, so it is Luis's call, not a patch.
+  Until then the key is on the agent and this line is the record of it.
+
+- **A scheduled run that dies BELOW the model still leaves nothing** (dossier
+  §4.4, and it is not closed). The flow prompt now orders a visible ticket when
+  the agent cannot work — verified: the Drive run with no token left a blocked
+  ticket naming what was missing. But 23 of the last 50 runs of the old
+  comparison cron died on `TimeoutError: Cron job idle for 922s` and
+  `RuntimeError: Connection error`, where there is no turn left in which to obey
+  a prompt. **The format has to supply it**: an engine-level failure should mark
+  the board without the agent's cooperation. Nobody has looked at whether
+  `hermes cron runs` exposes enough to build that from the adapter.
+
+- **`transcription`'s `detects` answers the wrong question.**
+  `connections/catalog.json` detects `auxiliary-models` by the presence of
+  `OPENROUTER_API_KEY` — which is true on every agent and says nothing about
+  whether the agent can transcribe. The card reads active either way, which is
+  how the capability stayed sold and dead for months. Should also check
+  `TUAGENTE_MODELS_KEY`, or whatever survives the decision above.
+
+- **Seventeen `level: menu` rows still install a `kit_skills` name nobody has
+  written** (dossier §3.2). `check-plugins.py` does not catch it, on purpose —
+  a menu row may name work that starts when a client buys it — but the count is
+  what a salesperson would want to know before promising one. `interview-production`
+  and `drive-inbox` are now two of the eight rows that are real.
+
+- **Small, in the plugin.** The zócalos run saved the list twice
+  (`…-zo.md` and `…-zo-2.md`): `deliver.py` correctly refused to overwrite, the
+  agent asked twice. Costs a file, not a client. Watch whether it repeats before
+  writing a guard — there is no measured failure state yet.
+
+- **Untested after the fact:** `news-copy` now says the copy CARRIES 1-3 emojis
+  rather than "hasta 1 a 3"; the first run produced zero and the wording changed
+  after it. The next note through that skill is what confirms it.
+
 ## Open product decisions
 
 - **Pricing and offer structure**: the proposal on the table is a small paid

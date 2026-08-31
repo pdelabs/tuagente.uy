@@ -52,6 +52,15 @@ compute**. What gets charged is the operation, not the tokens.
    initial `TELEGRAM_ALLOWED_USERS` carries only our support id.
 3. `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ALLOWED_USERS` in the `.env`, and the home
    channel for proactive notices.
+   **And then check that the home channel is THE CLIENT'S**, which is the step
+   that was missing and cost a whole pilot. On the last one it stayed pointed at
+   us for the agent's entire life, with a comment in `config.yaml` saying
+   «hasta que Cata se empareje» — she never paired, `channel_directory.json`
+   listed exactly one peer (us), and every flow that promised «te aviso por
+   Telegram» would have messaged us instead. A flow that promises a notice
+   cannot keep it until this is true, so: `channel_directory.json` names the
+   client, and the manifest's `notify_channel` is not empty, BEFORE the link
+   goes out.
 4. **The bot's photo**: when the client names their agent, the portal
    captures the chosen agentito and drops it at `data/bot_avatar.png`. It gets
    uploaded with `hermes-kit/tools/avatar-bot.py` (Telethon via MTProto — the
@@ -269,6 +278,57 @@ reads it without rewriting it.
 **Selling one more capability later** is: add the id, re-run the deploy (or
 `install.sh` locally). Removing one is the same edit in reverse, and the
 installer says out loud which plugin is leaving and why.
+
+### If they bought `drive-inbox`: the half only the client can do
+
+**This step is why the first client who bought Drive as their inbox never used
+it.** Our side was in place — our own Desktop OAuth app, the adapter's
+`google-oauth` flow, `connections/google-workspace.md` — and the client's side
+never happened: the handshake was started and no code ever came back, the
+onboarding ticket got archived unfinished, and the flow that was supposed to be
+fed by those folders never fired once in the agent's whole life. Nothing said
+so, because a flow with no folders still shows as active. The row says
+`who: assisted` for exactly this reason (`docs/east-requirements.md`, Rank 8
+and §4.2).
+
+Four things, in this order, and **the install is not done until the fourth**:
+
+1. **Put our client secret on the agent**, which is our half:
+   `<agent-path>/data/google_client_secret.json` (the Desktop-type app of
+   project `tuagente-504715`, reused across clients — the client never creates
+   a Google Cloud project). The runbook for our side is
+   `hermes-kit/connections/google-workspace.md`.
+2. **Walk the client through the dialog** in the portal's Conexiones tab. It is
+   two minutes on their side: Conectar → their Google account → accept → paste
+   back the address Google returns. Do it WITH them on a call the first time;
+   an emailed instruction is what got archived last time.
+3. **Verify `<agent-path>/data/google_token.json` exists.** That file is what
+   `connections/catalog.json` detects and what `watch.py` reads. Without it
+   `watch.py` answers `no hay token de Google: falta hacer la conexion` — loud,
+   and only where nobody is looking.
+4. **Collect the folder ids and arm the flow.** The ids are gathered HERE, at
+   onboarding — `watch.py` says it in its own words: «los dejó el alta — no los
+   inventes ni los pidas por chat». A plugin's curated flow ships with
+   `trigger_type: request`, because a file in the kit cannot carry one client's
+   folder ids or a cron job id that only exists on their agent, so arming it is
+   this command and not a hand edit:
+
+   ```bash
+   docker exec <slug>-hermes python3 /opt/kit/skills/flow/create_flow.py \
+     --slug entrevistas-tv --rearm \
+     --trigger drive --detail "Mira tus carpetas de Drive cada 15 minutos" \
+     --cron "*/15 * * * *" --folders <id1>,<id2> \
+     --connections google-workspace
+   ```
+
+   It rewrites only the trigger — the name, the summary and the steps the
+   client reads are untouched — creates the cron, verifies it stuck, and
+   returns `missing_connections` if step 3 was skipped. `--trigger drive`
+   without `--folders` is refused outright.
+
+**One Drive folder per end client** is the shape that pays off: the deliverable
+comes out tagged with that client, and adding one later is one more id on the
+same command.
 
 ---
 
