@@ -28,6 +28,7 @@ import {
   Zap,
 } from "lucide-react";
 import Reveal from "./Reveal";
+import TeardownButton from "./teardown/TeardownButton";
 import { AgentitoAvatar, AgentitoAnimated, type AgentitoLook } from "./app/lib/agentito";
 
 const WHATSAPP = "https://wa.me/59899002835";
@@ -172,16 +173,26 @@ function Hero() {
             Quiero mi agente
             <ArrowRight size={19} className="transition group-hover:translate-x-1" />
           </a>
-          <a
-            href="#casos"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-pill border border-ink/10 bg-white px-7 py-4 text-base font-bold text-ink shadow-soft transition hover:-translate-y-0.5 sm:w-auto"
-          >
-            Mirá qué le podés pedir
-          </a>
+          {/* The free top of the funnel: type your workflow, get an instant
+              teardown. Sits before the paid diagnóstico. */}
+          <TeardownButton className="group inline-flex w-full items-center justify-center gap-2 rounded-pill border border-primary/30 bg-white px-7 py-4 text-base font-bold text-primary shadow-soft transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:w-auto">
+            <Sparkles size={18} />
+            Probá gratis: contanos tu workflow
+          </TeardownButton>
         </div>
 
         <p
-          className="animate-fadeup mt-6 text-sm font-medium text-ink-soft"
+          className="animate-fadeup mt-4 text-sm font-medium text-ink-soft"
+          style={{ animationDelay: "340ms" }}
+        >
+          ¿Preferís mirar primero?{" "}
+          <a href="#casos" className="font-bold text-primary underline underline-offset-4">
+            Mirá qué le podés pedir
+          </a>
+        </p>
+
+        <p
+          className="animate-fadeup mt-4 text-sm font-medium text-ink-soft"
           style={{ animationDelay: "380ms" }}
         >
           Un agente por empresa, aislado y con su propia clave · vos ves todo lo que hace
@@ -770,6 +781,18 @@ function Pricing() {
             <p className="mt-4 rounded-2xl bg-c-green p-4 text-sm font-semibold text-c-green-ink">
               Si seguís, los {DIAGNOSTIC} se descuentan.
             </p>
+            {/* The free step before paying: type your workflow, get an instant
+                teardown. The diagnóstico is the deeper, paid step after it. */}
+            <div className="mt-5 border-t border-ink/5 pt-5">
+              <p className="text-sm text-ink-soft">
+                ¿Todavía no querés poner un peso? Contanos tu workflow y te armamos un teardown gratis, al
+                toque.
+              </p>
+              <TeardownButton className="group mt-3 inline-flex w-full items-center justify-center gap-2 rounded-pill border border-primary/30 bg-white px-5 py-3 text-sm font-extrabold text-primary transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                <Sparkles size={16} />
+                Probá gratis el teardown
+              </TeardownButton>
+            </div>
           </article>
         </Reveal>
 
