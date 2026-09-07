@@ -1033,6 +1033,12 @@ const JSON_LD = {
 
 /* ─────────────────────────────────────────── Social proof (placeholder) */
 
+// Mr.Wobbles' face, verbatim from ../mrwobbles/voice/wobbles_voice/web/cara.html —
+// the yellow look he ended up keeping: amber, classic antenna, glasses, bow tie.
+const WOBBLES_LOOK: AgentitoLook = {
+  tone: 3, antenna: 0, accessory: 1, pupil: 0, mouth: 0, skin: 0, suit: 1, brows: 1, hat: 0,
+};
+
 function Proof() {
   return (
     <section className="mx-auto max-w-7xl px-5 sm:px-8">
@@ -1041,6 +1047,12 @@ function Proof() {
           <p className="text-sm font-bold uppercase tracking-wider text-c-violet-ink/60">
             Somos nuestro propio cliente
           </p>
+          {/* Mr.Wobbles: pdelabs' own agent, with the yellow face he has always had
+              (the look is verbatim from his voice UI — tone 3, glasses, bow tie). */}
+          <span className="mx-auto mt-6 grid h-24 w-24 place-items-center rounded-3xl bg-white/70">
+            <AgentitoAvatar look={WOBBLES_LOOK} className="h-20 w-20" />
+          </span>
+          <p className="mt-3 text-base font-extrabold text-c-violet-ink">Conocé a Mr.Wobbles</p>
           <h2 className="mt-4 text-3xl font-extrabold leading-snug tracking-tight text-c-violet-ink sm:text-4xl">
             El primer agente que pusimos a trabajar fue el nuestro.
           </h2>
