@@ -28,7 +28,7 @@ import {
   Zap,
 } from "lucide-react";
 import Reveal from "./Reveal";
-import { AgentitoAvatar, type AgentitoLook } from "./app/lib/agentito";
+import { AgentitoAvatar, AgentitoAnimated, type AgentitoLook } from "./app/lib/agentito";
 
 const WHATSAPP = "https://wa.me/59899002835";
 const EMAIL = "mailto:hola@tuagente.uy";
@@ -1043,29 +1043,41 @@ function Proof() {
   return (
     <section className="mx-auto max-w-7xl px-5 sm:px-8">
       <div className="rounded-card bg-c-violet px-6 py-14 sm:px-12">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="text-sm font-bold uppercase tracking-wider text-c-violet-ink/60">
-            Somos nuestro propio cliente
-          </p>
-          {/* Mr.Wobbles: pdelabs' own agent, with the yellow face he has always had
-              (the look is verbatim from his voice UI — tone 3, glasses, bow tie). */}
-          <span className="mx-auto mt-6 grid h-24 w-24 place-items-center rounded-3xl bg-white/70">
-            <AgentitoAvatar look={WOBBLES_LOOK} className="h-20 w-20" />
-          </span>
-          <p className="mt-3 text-base font-extrabold text-c-violet-ink">Conocé a Mr.Wobbles</p>
-          <h2 className="mt-4 text-3xl font-extrabold leading-snug tracking-tight text-c-violet-ink sm:text-4xl">
-            El primer agente que pusimos a trabajar fue el nuestro.
-          </h2>
-          <p className="mt-5 text-lg leading-relaxed text-c-violet-ink/80">
-            Investiga empresas, arma informes, prepara los mails que salen a nombre nuestro y nos
-            los deja esperando aprobación. Todo lo que ves en este sitio lo probamos primero
-            adentro de pdelabs, y el portal que usás vos es el mismo que usamos nosotros todos los
-            días.
-          </p>
-          <p className="mt-6 text-sm font-semibold text-c-violet-ink/70">
-            Estamos arrancando: si buscás una lista larga de logos, todavía no la tenemos. Lo que
-            sí tenemos es un producto andando y la puerta abierta para que lo veas.
-          </p>
+        <div className="mx-auto flex max-w-4xl flex-col items-center gap-10 sm:flex-row sm:items-center sm:gap-14">
+          {/* Mr.Wobbles floating, no card behind him: the Rive character with
+              float, blink and eyes-follow-cursor (state "normal"). His yellow
+              look is verbatim from the mrwobbles voice UI — tone 3, glasses,
+              bow tie. Falls back to the identical static face until Rive loads
+              and under prefers-reduced-motion. */}
+          <div className="shrink-0">
+            <AgentitoAnimated
+              look={WOBBLES_LOOK}
+              celebrations={0}
+              state="normal"
+              className="h-40 w-40 sm:h-52 sm:w-52"
+            />
+            <p className="mt-2 text-center text-base font-extrabold text-c-violet-ink">
+              Mr.Wobbles
+            </p>
+          </div>
+          <div className="text-center sm:text-left">
+            <p className="text-sm font-bold uppercase tracking-wider text-c-violet-ink/60">
+              Somos nuestro propio cliente
+            </p>
+            <h2 className="mt-4 text-3xl font-extrabold leading-snug tracking-tight text-c-violet-ink sm:text-4xl">
+              El primer agente que pusimos a trabajar fue el nuestro.
+            </h2>
+            <p className="mt-5 text-lg leading-relaxed text-c-violet-ink/80">
+              Investiga empresas, arma informes, prepara los mails que salen a nombre nuestro y nos
+              los deja esperando aprobación. Todo lo que ves en este sitio lo probamos primero
+              adentro de pdelabs, y el portal que usás vos es el mismo que usamos nosotros todos los
+              días.
+            </p>
+            <p className="mt-6 text-sm font-semibold text-c-violet-ink/70">
+              Estamos arrancando: si buscás una lista larga de logos, todavía no la tenemos. Lo que
+              sí tenemos es un producto andando y la puerta abierta para que lo veas.
+            </p>
+          </div>
         </div>
       </div>
     </section>
