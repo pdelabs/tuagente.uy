@@ -1044,16 +1044,18 @@ function Proof() {
     <section className="mx-auto max-w-7xl px-5 sm:px-8">
       <div className="rounded-card bg-c-violet px-6 py-14 sm:px-12">
         <div className="mx-auto flex max-w-4xl flex-col items-center gap-10 sm:flex-row sm:items-center sm:gap-14">
-          {/* Mr.Wobbles floating, no card behind him: the Rive character with
-              float, blink and eyes-follow-cursor (state "normal"). His yellow
-              look is verbatim from the mrwobbles voice UI — tone 3, glasses,
-              bow tie. Falls back to the identical static face until Rive loads
-              and under prefers-reduced-motion. */}
+          {/* Mr.Wobbles floating, no card behind him: the Rive character in the
+              "calm" state — nothing pending, so he sips mate every so often
+              (first at ~20-35s, then every 45s-2min) while his eyes still
+              follow the cursor (gaze-tracking runs in calm too; only working
+              gestures park it). His yellow look is verbatim from the mrwobbles
+              voice UI — tone 3, glasses, bow tie. Falls back to the identical
+              static face until Rive loads and under prefers-reduced-motion. */}
           <div className="shrink-0">
             <AgentitoAnimated
               look={WOBBLES_LOOK}
               celebrations={0}
-              state="normal"
+              state="calm"
               className="h-40 w-40 sm:h-52 sm:w-52"
             />
             <p className="mt-2 text-center text-base font-extrabold text-c-violet-ink">
@@ -1070,7 +1072,7 @@ function Proof() {
             <p className="mt-5 text-lg leading-relaxed text-c-violet-ink/80">
               Investiga empresas, arma informes, prepara los mails que salen a nombre nuestro y nos
               los deja esperando aprobación. Todo lo que ves en este sitio lo probamos primero
-              adentro de pdelabs, y el portal que usás vos es el mismo que usamos nosotros todos los
+              adentro de tuagente, y el portal que usás vos es el mismo que usamos nosotros todos los
               días.
             </p>
             <p className="mt-6 text-sm font-semibold text-c-violet-ink/70">
