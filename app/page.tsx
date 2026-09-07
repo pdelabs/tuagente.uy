@@ -905,6 +905,10 @@ const FAQS = [
     a: "Es lo normal, no la excepción: casi todos los plugins que escribimos nacen de un pedido concreto de una empresa. Nos contás el trabajo que te come las horas, lo miramos, te decimos si algo parecido ya existe (y entonces se adapta, que es más rápido y más barato) o cuánto lleva escribirlo de cero. Recién después de eso hay un número, y el número se cotiza antes de escribir una línea.",
   },
   {
+    q: "¿Puedo probar antes de pagar el diagnóstico?",
+    a: `Sí, y es gratis. Contanos en una o dos líneas el trabajo que te come el día y te armamos al toque un teardown de tu workflow: qué agente y qué plugin te escribiríamos primero, qué capacidades nuestras lo cubren, qué hay que conectar de lo que ya usás y cuál es el piloto más chico que ya sirve, con el número para medirlo. Si automatizarlo todavía no te conviene, también te lo decimos. El diagnóstico (${DIAGNOSTIC}) es el paso que sigue y va más a fondo: una llamada y un informe con los números de tu caso.`,
+  },
+  {
     q: "¿Cuánto cuesta?",
     a: `Hay tres números y ninguno tiene letra chica. El diagnóstico sale ${DIAGNOSTIC}, una sola vez, y se descuenta si seguís. El agente con su primer plugin se paga una vez: ${
       SETUP_FROM ? `desde ${SETUP_FROM}` : "el número sale del diagnóstico, con tu caso a la vista"
