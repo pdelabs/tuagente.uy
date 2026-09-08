@@ -8,6 +8,7 @@
 // prefers-reduced-motion respected via Tailwind's motion-safe variant.
 
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   ArrowRight,
@@ -151,7 +152,12 @@ export default function TeardownModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  return (
+  // Portal to <body>: a fixed overlay is trapped inside any ancestor with a
+  // transform (the landing's scroll-reveal wrappers, the pricing card), which
+  // would box the modal into a ~380px sliver instead of covering the viewport.
+  // TeardownModal only ever mounts client-side (behind the button's open
+  // state), so document.body is present.
+  return createPortal(
     <div
       className={`fixed inset-0 z-[100] flex items-stretch justify-center bg-ink/50 p-0 sm:items-center sm:p-6 ${
         mounted ? "opacity-100" : "opacity-0"
@@ -321,7 +327,8 @@ export default function TeardownModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
