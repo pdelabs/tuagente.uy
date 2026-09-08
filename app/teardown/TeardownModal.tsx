@@ -336,6 +336,63 @@ function Result({
 }) {
   const fit = FIT[teardown.automation_fit];
   const notRecommended = teardown.automation_fit === "todavia-no";
+
+  /* Nothing to recommend → show the honest read only. The pilot, KPI,
+   * integrations and "nunca" are meaningless with no plugin behind them, so we
+   * drop those sections and point the visitor at a conversation instead. */
+  if (notRecommended || teardown.capabilities.length === 0) {
+    const waMsg = `Hola! Hice el teardown de este workflow: "${workflow}". Me dijeron que todavía no conviene automatizarlo, pero quería charlarlo con ustedes.`;
+    return (
+      <div className="flex flex-col gap-5">
+        <div>
+          <span className={`inline-flex w-fit items-center gap-2 rounded-pill px-3.5 py-1.5 text-xs font-extrabold ${fit.box} ${fit.ink}`}>
+            <AlertTriangle size={13} /> {fit.label}
+          </span>
+          {teardown.headline && (
+            <h3 className="mt-3 text-2xl font-extrabold leading-tight tracking-tight text-ink">
+              {teardown.headline}
+            </h3>
+          )}
+        </div>
+
+        {teardown.honesty && (
+          <div className="flex items-start gap-2.5 rounded-2xl bg-c-amber p-4">
+            <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/70 text-c-amber-ink">
+              <AlertTriangle size={12} />
+            </span>
+            <p className="text-sm text-c-amber-ink/90">
+              <strong className="font-extrabold">Te lo decimos derecho:</strong> {teardown.honesty}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-1 border-t border-black/[0.07] pt-5">
+          <p className="text-sm text-ink-soft">
+            Por ahora no te conviene automatizar esto. Si querés, escribinos y lo miramos juntos: capaz con el
+            tiempo cambia, o hay otra tarea que sí.
+          </p>
+          <div className="mt-3 flex flex-col gap-2.5 sm:flex-row">
+            <a
+              href={wa(waMsg)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-c-green px-5 py-3 text-sm font-extrabold text-c-green-ink transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              <MessageCircle size={16} /> Hablá con nosotros
+            </a>
+            <button
+              type="button"
+              onClick={onReset}
+              className="inline-flex items-center justify-center gap-2 rounded-pill border border-black/10 bg-white px-5 py-3 text-sm font-bold text-ink transition hover:bg-black/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              Probar otro workflow
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const waMsg = `Hola! Hice el teardown de este workflow: "${workflow}". Quiero avanzar con el diagnóstico.`;
 
   return (
@@ -352,7 +409,7 @@ function Result({
       </div>
 
       <Section icon={Puzzle} title="Lo que te armaríamos">
-        <p className="text-ink-soft">{teardown.recommended}</p>
+        {teardown.recommended && <p className="text-ink-soft">{teardown.recommended}</p>}
         {teardown.capabilities.length > 0 && (
           <ul className="mt-3 space-y-2.5">
             {teardown.capabilities.map((c) => (
@@ -384,26 +441,30 @@ function Result({
         </Section>
       )}
 
-      <div className="flex items-start gap-2.5 rounded-2xl bg-ink/[0.04] p-4">
-        <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-c-coral text-c-coral-ink">
-          <Ban size={12} />
-        </span>
-        <p className="text-sm text-ink-soft">
-          <strong className="font-extrabold text-ink">Nunca</strong> {teardown.nunca}
-        </p>
-      </div>
-
-      <div className="rounded-2xl bg-c-green/60 p-4">
-        <p className="flex items-center gap-2 text-sm font-extrabold text-c-green-ink">
-          <Target size={15} /> El piloto más chico
-        </p>
-        <p className="mt-1.5 text-sm text-c-green-ink/85">{teardown.pilot}</p>
-        {teardown.kpi && (
-          <p className="mt-2 text-sm text-c-green-ink/85">
-            <strong className="font-extrabold">Se mide con:</strong> {teardown.kpi}
+      {teardown.nunca && (
+        <div className="flex items-start gap-2.5 rounded-2xl bg-ink/[0.04] p-4">
+          <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-c-coral text-c-coral-ink">
+            <Ban size={12} />
+          </span>
+          <p className="text-sm text-ink-soft">
+            <strong className="font-extrabold text-ink">Nunca</strong> {teardown.nunca}
           </p>
-        )}
-      </div>
+        </div>
+      )}
+
+      {teardown.pilot && (
+        <div className="rounded-2xl bg-c-green/60 p-4">
+          <p className="flex items-center gap-2 text-sm font-extrabold text-c-green-ink">
+            <Target size={15} /> El piloto más chico
+          </p>
+          <p className="mt-1.5 text-sm text-c-green-ink/85">{teardown.pilot}</p>
+          {teardown.kpi && (
+            <p className="mt-2 text-sm text-c-green-ink/85">
+              <strong className="font-extrabold">Se mide con:</strong> {teardown.kpi}
+            </p>
+          )}
+        </div>
+      )}
 
       {teardown.honesty && (
         <div

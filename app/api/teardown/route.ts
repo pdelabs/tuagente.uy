@@ -148,20 +148,42 @@ function str(v: unknown, max: number): string {
   return typeof v === "string" ? v.trim().slice(0, max) : "";
 }
 
+/* A whole-field value the model drops into a required slot it considers N/A.
+ * Collapse it to "" so the modal can omit the row instead of showing it. */
+const PLACEHOLDER_RE = /^(unknown|n\/?a\.?|-{1,3}|–|—)$/i;
+
+/* Cleanup for a model-filled string field. On unfit/nonsense inputs the model
+ * sometimes appends tag debris (a stray "</invoke>", a garbled "</anesty>") or
+ * fills a required field with a placeholder ("<UNKNOWN>", "N/A", "-"). Measured
+ * on a live OpenRouter run. Strip any XML/HTML-ish tag run (which also covers
+ * the trailing /<\/?[a-z][^>]*>\s*$/i case) and collapse a placeholder to "".
+ * Pure string cleanup: no shape change, no invented content. */
+function clean(v: unknown, max: number): string {
+  if (typeof v !== "string") return "";
+  const stripped = v.replace(/<\/?[a-z][^>]*>/gi, "").trim();
+  if (PLACEHOLDER_RE.test(stripped)) return "";
+  return stripped.slice(0, max);
+}
+
 function normalize(input: any): Teardown | null {
-  const headline = str(input?.headline, 240);
-  const recommended = str(input?.recommended, 500);
-  const nunca = str(input?.nunca, 300);
-  const pilot = str(input?.pilot, 400);
-  const kpi = str(input?.kpi, 200);
-  const honesty = str(input?.honesty, 400);
-  if (!recommended || !nunca || !pilot) return null;
+  const headline = clean(input?.headline, 240);
+  const recommended = clean(input?.recommended, 500);
+  const nunca = clean(input?.nunca, 300);
+  const pilot = clean(input?.pilot, 400);
+  const kpi = clean(input?.kpi, 200);
+  const honesty = clean(input?.honesty, 400);
 
   const fit: Fit = FIT_VALUES.includes(input?.automation_fit) ? input.automation_fit : "parcial";
 
+  /* A usable teardown needs its path's core field: the honest read when it's
+   * not worth automating yet, otherwise the recommendation. The rest can come
+   * back empty — placeholders collapse to "" above and the modal omits empty
+   * rows — so requiring pilot/nunca here would reject a clean unfit result. */
+  if (fit === "todavia-no" ? !honesty : !recommended) return null;
+
   const capabilities = Array.isArray(input?.capabilities)
     ? input.capabilities
-        .map((c: any) => ({ name: str(c?.name, 120), why: str(c?.why, 240) }))
+        .map((c: any) => ({ name: str(c?.name, 120), why: clean(c?.why, 240) }))
         .filter((c: { name: string; why: string }) => c.name)
         .slice(0, 4)
     : [];
