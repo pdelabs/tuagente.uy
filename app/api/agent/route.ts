@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 25;
 
-/* Scoped live-demo agent: cheap model, hard caps, 4 closed tools that act on the page. */
+/* Scoped live-demo agent: cheap model, hard caps, 4 closed tools that act on the page.
+ * Runs on OpenRouter's OpenAI-compatible Chat Completions API (Claude Haiku, via OpenRouter). */
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "anthropic/claude-haiku-4.5";
 const MAX_TURNS = 12; // client messages, hard cap
 const MAX_MSG_CHARS = 600;
 const MAX_LOOPS = 3;
@@ -17,52 +18,66 @@ const BLOG_SLUGS = [
   "cuanto-cuesta-un-agente-de-ia",
 ];
 
+/* OpenAI/OpenRouter tool shape: {type:"function", function:{name, description, parameters}}.
+ * `parameters` is the JSON Schema the model fills in (Anthropic called this `input_schema`). */
 const TOOLS = [
   {
-    name: "goto_section",
-    description:
-      "Desplazá la página del visitante hasta una sección de la landing y resaltala. Usala cuando lo que pide está explicado en una sección.",
-    input_schema: {
-      type: "object",
-      properties: {
-        section: {
-          type: "string",
-          enum: ["casos", "como-funciona", "control", "planes", "faq", "contacto"],
+    type: "function",
+    function: {
+      name: "goto_section",
+      description:
+        "Desplazá la página del visitante hasta una sección de la landing y resaltala. Usala cuando lo que pide está explicado en una sección.",
+      parameters: {
+        type: "object",
+        properties: {
+          section: {
+            type: "string",
+            enum: ["casos", "como-funciona", "control", "planes", "faq", "contacto"],
+          },
         },
+        required: ["section"],
       },
-      required: ["section"],
     },
   },
   {
-    name: "open_article",
-    description: "Abrí un artículo del blog de tuagente en otra pestaña para que el visitante lo lea.",
-    input_schema: {
-      type: "object",
-      properties: { slug: { type: "string", enum: BLOG_SLUGS } },
-      required: ["slug"],
-    },
-  },
-  {
-    name: "show_html",
-    description:
-      "Mostrá una mini-página HTML creada por vos dentro del chat. Usala para armar algo a medida de lo que contó el visitante: una propuesta con el plugin que le escribiríamos primero y las 3 tareas que le sacaría de encima; o una comparación, o lo que pida. Sin precios. REGLAS: solo HTML con estilos inline, sin <script>, sin recursos externos, máx ~150 líneas, colores de marca #5B4BE8 (violeta), #14131F (tinta), fondos suaves #EAE6FF #CFF3E4 #FBEECB, bordes redondeados 16px, tipografía sans-serif.",
-    input_schema: {
-      type: "object",
-      properties: {
-        title: { type: "string", description: "Título corto de lo que armaste" },
-        html: { type: "string" },
+    type: "function",
+    function: {
+      name: "open_article",
+      description: "Abrí un artículo del blog de tuagente en otra pestaña para que el visitante lo lea.",
+      parameters: {
+        type: "object",
+        properties: { slug: { type: "string", enum: BLOG_SLUGS } },
+        required: ["slug"],
       },
-      required: ["title", "html"],
     },
   },
   {
-    name: "prepare_whatsapp",
-    description:
-      "Prepará un botón de WhatsApp con un mensaje ya redactado en primera persona del visitante, resumiendo su caso para que el equipo de tuagente lo reciba con contexto. Usala después de armar una propuesta o cuando el visitante muestre interés real.",
-    input_schema: {
-      type: "object",
-      properties: { message: { type: "string" } },
-      required: ["message"],
+    type: "function",
+    function: {
+      name: "show_html",
+      description:
+        "Mostrá una mini-página HTML creada por vos dentro del chat. Usala para armar algo a medida de lo que contó el visitante: una propuesta con el plugin que le escribiríamos primero y las 3 tareas que le sacaría de encima; o una comparación, o lo que pida. Sin precios. REGLAS: solo HTML con estilos inline, sin <script>, sin recursos externos, máx ~150 líneas, colores de marca #5B4BE8 (violeta), #14131F (tinta), fondos suaves #EAE6FF #CFF3E4 #FBEECB, bordes redondeados 16px, tipografía sans-serif.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Título corto de lo que armaste" },
+          html: { type: "string" },
+        },
+        required: ["title", "html"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "prepare_whatsapp",
+      description:
+        "Prepará un botón de WhatsApp con un mensaje ya redactado en primera persona del visitante, resumiendo su caso para que el equipo de tuagente lo reciba con contexto. Usala después de armar una propuesta o cuando el visitante muestre interés real.",
+      parameters: {
+        type: "object",
+        properties: { message: { type: "string" } },
+        required: ["message"],
+      },
     },
   },
 ];
@@ -107,7 +122,7 @@ function sanitizeHtml(html: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = process.env.OPENROUTER_API_KEY;
   if (!key) {
     return NextResponse.json({
       reply:
@@ -132,48 +147,60 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
 
-  const messages: any[] = [...history];
+  // OpenAI/OpenRouter carries the system prompt as the first message (not a top-level field).
+  const messages: any[] = [{ role: "system", content: SYSTEM }, ...history];
   const actions: Action[] = [];
   let reply = "";
 
   try {
     for (let i = 0; i < MAX_LOOPS; i++) {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
+      const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-api-key": key,
-          "anthropic-version": "2023-06-01",
+          authorization: `Bearer ${key}`,
+          "HTTP-Referer": "https://tuagente.uy",
+          "X-Title": "tuagente",
         },
         body: JSON.stringify({
           model: MODEL,
           max_tokens: 700,
-          system: SYSTEM,
           tools: TOOLS,
           messages,
         }),
       });
-      if (!r.ok) throw new Error(`anthropic ${r.status}`);
+      if (!r.ok) throw new Error(`openrouter ${r.status}`);
       const data = await r.json();
 
-      const toolResults: any[] = [];
-      for (const block of data.content ?? []) {
-        if (block.type === "text") reply += (reply ? "\n" : "") + block.text.trim();
-        if (block.type === "tool_use") {
-          const inp = block.input ?? {};
-          if (block.name === "goto_section" && inp.section) actions.push({ type: "goto", section: inp.section });
-          if (block.name === "open_article" && BLOG_SLUGS.includes(inp.slug)) actions.push({ type: "blog", slug: inp.slug });
-          if (block.name === "show_html" && inp.html)
-            actions.push({ type: "html", title: String(inp.title ?? "A medida"), html: sanitizeHtml(String(inp.html)) });
-          if (block.name === "prepare_whatsapp" && inp.message)
-            actions.push({ type: "whatsapp", message: String(inp.message).slice(0, 500) });
-          toolResults.push({ type: "tool_result", tool_use_id: block.id, content: "done ✅" });
-        }
+      const choice = data.choices?.[0];
+      const msg = choice?.message;
+      if (!msg) break;
+
+      if (typeof msg.content === "string" && msg.content.trim()) {
+        reply += (reply ? "\n" : "") + msg.content.trim();
       }
 
-      if (data.stop_reason === "tool_use" && toolResults.length) {
-        messages.push({ role: "assistant", content: data.content });
-        messages.push({ role: "user", content: toolResults });
+      const toolResults: any[] = [];
+      for (const call of msg.tool_calls ?? []) {
+        const name = call.function?.name;
+        let inp: any = {};
+        try {
+          inp = JSON.parse(call.function?.arguments || "{}");
+        } catch {
+          inp = {};
+        }
+        if (name === "goto_section" && inp.section) actions.push({ type: "goto", section: inp.section });
+        if (name === "open_article" && BLOG_SLUGS.includes(inp.slug)) actions.push({ type: "blog", slug: inp.slug });
+        if (name === "show_html" && inp.html)
+          actions.push({ type: "html", title: String(inp.title ?? "A medida"), html: sanitizeHtml(String(inp.html)) });
+        if (name === "prepare_whatsapp" && inp.message)
+          actions.push({ type: "whatsapp", message: String(inp.message).slice(0, 500) });
+        toolResults.push({ role: "tool", tool_call_id: call.id, content: "done ✅" });
+      }
+
+      if (choice.finish_reason === "tool_calls" && toolResults.length) {
+        messages.push(msg); // the assistant turn verbatim
+        messages.push(...toolResults); // one tool message per call
         continue;
       }
       break;
