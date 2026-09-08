@@ -8,9 +8,10 @@ export const maxDuration = 25;
  * and plugin, the real capabilities and integrations it needs, the hard limit,
  * and the smallest useful pilot. Cheap model, hard caps, structured output.
  *
- * Same model and ANTHROPIC_API_KEY usage as app/api/agent/route.ts. */
+ * Same model and OPENROUTER_API_KEY usage as app/api/agent/route.ts: Claude
+ * Haiku over OpenRouter's OpenAI-compatible Chat Completions API. */
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "anthropic/claude-haiku-4.5";
 const MAX_WORKFLOW_CHARS = 1500;
 const MAX_OUTPUT_TOKENS = 900;
 
@@ -90,51 +91,56 @@ Reglas para armar el teardown:
 - El piloto es lo más chico que ya sirve, con un número (kpi) con el que se mide si valió la pena.
 - Devolvés el resultado ÚNICAMENTE llamando a la herramienta render_teardown. No escribas texto suelto.`;
 
+/* OpenAI/OpenRouter tool shape: {type:"function", function:{name, description, parameters}}.
+ * `parameters` is the JSON Schema the model fills in (Anthropic called this `input_schema`). */
 const TOOL = {
-  name: "render_teardown",
-  description: "Devolvé el teardown del workflow del visitante, estructurado, para que se muestre en la página.",
-  input_schema: {
-    type: "object",
-    properties: {
-      headline: {
-        type: "string",
-        description: "Una línea que le devuelve su workflow en tus palabras, en rioplatense. Sin saludos.",
-      },
-      automation_fit: {
-        type: "string",
-        enum: ["buena", "parcial", "todavia-no"],
-        description: "Qué tan claro es que conviene automatizar esto: buena, parcial o todavia-no.",
-      },
-      recommended: {
-        type: "string",
-        description: "1 a 2 oraciones: el agente y el plugin que le escribiríamos primero para este workflow.",
-      },
-      capabilities: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: "El nombre EXACTO de una capacidad de la lista." },
-            why: { type: "string", description: "En una línea, por qué sirve para ESTE workflow." },
-          },
-          required: ["name", "why"],
+  type: "function",
+  function: {
+    name: "render_teardown",
+    description: "Devolvé el teardown del workflow del visitante, estructurado, para que se muestre en la página.",
+    parameters: {
+      type: "object",
+      properties: {
+        headline: {
+          type: "string",
+          description: "Una línea que le devuelve su workflow en tus palabras, en rioplatense. Sin saludos.",
         },
-        description: "De 2 a 4 capacidades de la lista que cubren el workflow.",
+        automation_fit: {
+          type: "string",
+          enum: ["buena", "parcial", "todavia-no"],
+          description: "Qué tan claro es que conviene automatizar esto: buena, parcial o todavia-no.",
+        },
+        recommended: {
+          type: "string",
+          description: "1 a 2 oraciones: el agente y el plugin que le escribiríamos primero para este workflow.",
+        },
+        capabilities: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "El nombre EXACTO de una capacidad de la lista." },
+              why: { type: "string", description: "En una línea, por qué sirve para ESTE workflow." },
+            },
+            required: ["name", "why"],
+          },
+          description: "De 2 a 4 capacidades de la lista que cubren el workflow.",
+        },
+        integrations: {
+          type: "array",
+          items: { type: "string" },
+          description: "Integraciones de la lista cerrada que hay que conectar. Vacío si no hace falta ninguna.",
+        },
+        nunca: { type: "string", description: "Una línea: el límite duro para este workflow (qué NO va a hacer)." },
+        pilot: { type: "string", description: "El piloto más chico y útil para arrancar." },
+        kpi: { type: "string", description: "El número con el que se mide si el piloto sirvió." },
+        honesty: {
+          type: "string",
+          description: "Una línea honesta: si todavía no conviene automatizar, por qué; si conviene, la salvedad más importante.",
+        },
       },
-      integrations: {
-        type: "array",
-        items: { type: "string" },
-        description: "Integraciones de la lista cerrada que hay que conectar. Vacío si no hace falta ninguna.",
-      },
-      nunca: { type: "string", description: "Una línea: el límite duro para este workflow (qué NO va a hacer)." },
-      pilot: { type: "string", description: "El piloto más chico y útil para arrancar." },
-      kpi: { type: "string", description: "El número con el que se mide si el piloto sirvió." },
-      honesty: {
-        type: "string",
-        description: "Una línea honesta: si todavía no conviene automatizar, por qué; si conviene, la salvedad más importante.",
-      },
+      required: ["headline", "automation_fit", "recommended", "capabilities", "integrations", "nunca", "pilot", "kpi", "honesty"],
     },
-    required: ["headline", "automation_fit", "recommended", "capabilities", "integrations", "nunca", "pilot", "kpi", "honesty"],
   },
 };
 
@@ -252,7 +258,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "workflow too long" }, { status: 400 });
   }
 
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = process.env.OPENROUTER_API_KEY;
   if (!key) {
     // Local dev without a key: tell the modal to show the WhatsApp fallback.
     return NextResponse.json(
@@ -268,27 +274,38 @@ export async function POST(req: NextRequest) {
 
   let teardown: Teardown | null = null;
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
+        authorization: `Bearer ${key}`,
+        "HTTP-Referer": "https://tuagente.uy",
+        "X-Title": "tuagente",
       },
       body: JSON.stringify({
         model: MODEL,
         max_tokens: MAX_OUTPUT_TOKENS,
-        system: SYSTEM,
         tools: [TOOL],
-        tool_choice: { type: "tool", name: "render_teardown" },
-        messages: [{ role: "user", content: `Este es el workflow que quiero mejorar:\n\n${workflow}` }],
+        tool_choice: { type: "function", function: { name: "render_teardown" } },
+        messages: [
+          { role: "system", content: SYSTEM },
+          { role: "user", content: `Este es el workflow que quiero mejorar:\n\n${workflow}` },
+        ],
       }),
     });
-    if (!r.ok) throw new Error(`anthropic ${r.status}`);
+    if (!r.ok) throw new Error(`openrouter ${r.status}`);
     const data = await r.json();
-    for (const block of data.content ?? []) {
-      if (block.type === "tool_use" && block.name === "render_teardown") {
-        teardown = normalize(block.input);
+    // Forced tool call: the structured teardown comes back as a JSON string in
+    // tool_calls[].function.arguments — parse it before normalizing.
+    for (const call of data.choices?.[0]?.message?.tool_calls ?? []) {
+      if (call.function?.name === "render_teardown") {
+        let input: any = {};
+        try {
+          input = JSON.parse(call.function?.arguments || "{}");
+        } catch {
+          input = {};
+        }
+        teardown = normalize(input);
         break;
       }
     }
