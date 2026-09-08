@@ -184,9 +184,18 @@ export default function TeardownModal({ onClose }: { onClose: () => void }) {
           <X size={18} />
         </button>
 
-        <div ref={scrollRef} className="grid flex-1 overflow-y-auto sm:grid-cols-2">
-          {/* Left pane: the pitch + what you get. */}
-          <aside className="flex flex-col gap-6 bg-c-violet p-7 sm:p-9">
+        {/* Two panes (pitch + form) only while asking. Once there's a result
+            — or we're loading/erroring — the pitch pane would just be a very
+            tall empty violet strip beside taller content, so we drop to a
+            single full-width column that scrolls inside the panel. */}
+        <div
+          ref={scrollRef}
+          className={`grid flex-1 overflow-y-auto ${phase === "form" ? "sm:grid-cols-2" : ""}`}
+        >
+          {/* Left pane: the pitch + what you get. Form phase only. */}
+          <aside
+            className={`flex-col gap-6 bg-c-violet p-7 sm:p-9 ${phase === "form" ? "flex" : "hidden"}`}
+          >
             <span className="inline-flex w-fit items-center gap-2 rounded-pill bg-white/70 px-4 py-1.5 text-sm font-bold text-c-violet-ink">
               <Sparkles size={15} /> Gratis y al toque
             </span>
