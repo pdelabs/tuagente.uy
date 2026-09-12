@@ -7,6 +7,7 @@ Wave 2 adds `/portal/approvals*` and `/portal/tickets/{id}` here, Wave 3
 """
 
 import base64
+import binascii
 import json
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,10 @@ router = APIRouter()
 # the client changes from the portal lands in /state and wins when it is there.
 IDENTITY_SEED = config.AGENT_DIR / "identity.json"
 IDENTITY_LIVE = config.STATE_DIR / "identity.json"
+
+# Read by the client: the portal shows `error.message` on the tab she is on.
+NO_FILE = "No hay ningún archivo {path} en el espacio de trabajo."
+BAD_UPLOAD = "No pude leer el archivo: lo que llegó no es base64."
 
 
 def identity() -> dict:
@@ -134,15 +139,30 @@ def files():
 
 @router.get("/portal/files/{path:path}")
 def file_text(path: str):
-    return PlainTextResponse(
-        under(config.WORKSPACE, path).read_text(), media_type="text/plain; charset=utf-8"
-    )
+    """A path that is not a file inside the workspace is a 404 — a name that is
+    not there and a `../` that tries to leave read the same from outside, which
+    is the point. The portal reads a 404 as "not here" and a 500 as an outage.
+    """
+    try:
+        target = under(config.WORKSPACE, path)
+        found = target.is_file()
+    except ValueError:
+        found = False
+    if not found:
+        raise HTTPException(404, NO_FILE.format(path=path))
+    return PlainTextResponse(target.read_text(), media_type="text/plain; charset=utf-8")
 
 
 @router.post("/portal/upload")
 async def upload(request: Request):
     payload = await request.json()
-    blob = base64.b64decode(payload["content_b64"])
+    # `validate=True` on purpose: without it b64decode drops whatever is not an
+    # alphabet character and writes a file out of the remains, so a truncated
+    # upload lands as a plausible-looking corrupt file instead of a 400.
+    try:
+        blob = base64.b64decode(payload["content_b64"], validate=True)
+    except binascii.Error:
+        raise HTTPException(400, BAD_UPLOAD) from None
     target = under(config.WORKSPACE / "entrada", Path(payload["name"]).name)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(blob)

@@ -1,10 +1,14 @@
 """What the portal calls the `endpoint` base: Hermes's native gateway surface."""
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from core import db
 
 router = APIRouter()
+
+# Read by the client: the portal puts what comes back in `error.message` on the
+# screen where she was working.
+NO_TITLE = "Falta el nombre nuevo de la conversación."
 
 
 @router.get("/api/sessions")
@@ -45,7 +49,10 @@ def delete(session_id: str):
 
 @router.patch("/api/sessions/{session_id}")
 async def rename(session_id: str, request: Request):
-    db.rename_session(session_id, (await request.json())["title"])
+    title = (await request.json()).get("title")
+    if title is None:
+        raise HTTPException(400, NO_TITLE)
+    db.rename_session(session_id, title)
     return {"ok": True}
 
 
