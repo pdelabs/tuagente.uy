@@ -61,6 +61,7 @@ def get_agent() -> Agent[Deps, str]:
             config.MODEL,
             deps_type=Deps,
             instructions=instructions,
+            model_settings=config.MODEL_SETTINGS,
             toolsets=[workspace.toolset(), skills.toolset(), *EXTRA_TOOLSETS],
             capabilities=CAPABILITIES or None,
         )

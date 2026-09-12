@@ -83,7 +83,11 @@ def summarizer() -> Agent:
     """
     global _summarizer
     if _summarizer is None:
-        _summarizer = Agent(config.MODEL, instructions=SUMMARY_INSTRUCTIONS)
+        _summarizer = Agent(
+            config.MODEL,
+            instructions=SUMMARY_INSTRUCTIONS,
+            model_settings=config.MODEL_SETTINGS,
+        )
     return _summarizer
 
 

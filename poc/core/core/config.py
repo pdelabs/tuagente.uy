@@ -6,6 +6,12 @@ from pathlib import Path
 # The model the cost baseline was measured on (notes/cost-and-engine-findings.md).
 MODEL = os.environ.get("CORE_MODEL", "openrouter:openai/gpt-5.6-luna")
 
+# Without a cap the request goes out asking for the model's whole output budget
+# (65536 tokens on this one) and OpenRouter's affordability check answers 402
+# "can only afford N tokens" — the key is charged against what the request COULD
+# spend, not what it does. 8192 is above anything a turn of this agent writes.
+MODEL_SETTINGS = {"max_tokens": 8192}
+
 # The client's key. Missing it is fatal on purpose: an engine with no auth is
 # not an engine we would ever hand to a client.
 API_KEY = os.environ["API_SERVER_KEY"]
