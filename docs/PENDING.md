@@ -2,6 +2,15 @@
 
 What's left open, and who unblocks it. Close it here once it's resolved.
 
+## The engine question (2026-09-12)
+
+Luis started second-guessing Hermes. A proof of concept on Pydantic AI was
+built, validated and measured the same day: `docs/poc-core-plan.md` (the
+gates and decisions), `docs/poc-core-verdict.md` (what passed, what the
+validator found, what a migration would cost, and the recommendation: go,
+staged), code in `poc/core/`. The decision is Luis's. Until it is made,
+nothing in `hermes-kit/` changes because of it.
+
 ## Migration to English (2026-08-23)
 
 - ~~**Migrate live agents (Mr.Wobble, East) to the English on-disk layout**~~
