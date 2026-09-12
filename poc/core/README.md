@@ -66,8 +66,10 @@ out of scope in `docs/poc-core-plan.md` and never coming. `approvals` and
 Both chat dialects by hand:
 
 ```bash
-# New conversation — OpenAI-shaped. The whole local history travels; the
-# session is matched from it. Ends in `data: [DONE]`.
+# New conversation — OpenAI-shaped. The whole local history travels and the
+# session is matched from the CLIENT's turns in it (the assistant's are the
+# engine's to rewrite, so the browser's copy of one is not the one on disk).
+# Ends in `data: [DONE]`.
 curl -sN -X POST http://127.0.0.1:8643/portal/chat/stream \
   -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
   -d '{"stream":true,"messages":[{"role":"user","content":"Hola, ¿qué podés hacer por la ferretería?"}]}'
@@ -85,6 +87,16 @@ curl -sN -X POST http://127.0.0.1:8643/portal/sessions/<id>/chat/stream \
 The second one answers, in this order: `run.started`, `tool.started`
 (`{"tool_name": "list_files"}`), `message.started`, `assistant.delta` …,
 `assistant.completed`, `run.completed`, `done`.
+
+Two things both dialects do at the end of a turn. **What was persisted is what
+the bubble ends in**: the session dialect has `assistant.completed`, which the
+portal treats as the authoritative content, and the OpenAI one — which only
+accumulates deltas — reconciles what it streamed against what was persisted and
+sends the difference as one last delta. The promises correction and the pause
+message both arrive that way. **A turn that breaks says so**: one assistant
+line, `No pude responder: <reason>`, persisted, written to Activity as an
+`error` event and streamed in both dialects; then the exception goes on to the
+log with its stack.
 
 ## Gates
 
@@ -107,19 +119,42 @@ The gate is on the TOOL, not on the model remembering to ask: the toolset in
 run stops before the tool body runs. What happens then, in order:
 
 1. The run ends with `DeferredToolRequests` as its output instead of text.
-2. `core/approvals.py` writes the row: the body rendered by `core/render.py`
-   from the tool's arguments and its `ApprovalNote`, the serialized requests,
-   and THE RUN'S MESSAGES. That last one is what survives a `docker kill`.
+2. `core/approvals.py` writes A NEW ROW, one per request: the body rendered by
+   `core/render.py` from the tool's arguments and its `ApprovalNote`, the
+   serialized requests, and THE RUN'S MESSAGES. That last one is what survives
+   a `docker kill`. A row is reused ONLY by the resumed run of that same row,
+   which names it — a second gated turn on the same conversation opens its own
+   row instead of overwriting the card the client is about to approve.
 3. The chat gets the pause message, written by the code and persisted like any
    other. The session's own history does NOT advance: a history that ends in an
    unanswered tool call is not replayable by the next turn.
-4. Reject → the reason is stored as a `cliente` comment and reaches the model as
-   `ToolDenied`; the resumed run proposes again and THE SAME ROW is updated. A
-   "no" never takes the request out of the queue — only `final` closes it.
-5. Approve → `ToolApproved`, and a correction rides as `override_args` with
+4. Approve and reject both CLAIM the row before resuming: unknown id → 404,
+   anything but `pending` → 409, and the row moves to `resolving` with the
+   decision on it BEFORE the run starts. Two clicks on the same card used to
+   run the tool twice, and a crash between the tool and the row's update left
+   the row pending with the mail already sent. A row left in `resolving` by a
+   crash stays there: the retry reads the 409, not a second side effect.
+5. Reject → the reason is stored as a `cliente` comment and reaches the model as
+   `ToolDenied`; the resumed run proposes again on THE SAME ROW, which goes
+   back to `pending` with the new tool call ids (the previous ones are gone
+   from the row and can never be resumed). A "no" never takes the request out
+   of the queue — only `final` closes it.
+6. Approve → `ToolApproved`, and a correction rides as `override_args` with
    `client_correction` merged into the call the model made.
-6. When the resumed run answers in text, the answer is persisted on the session
-   AND appended as an `agente` comment, and the row closes.
+7. When the resumed run answers in text, the answer is persisted on the session
+   AND appended as an `agente` comment, and the row closes as `approved` or
+   `rejected`.
+
+**The resumed branch is appended, never written over the session.** An approval
+can sit in the queue for a day while the client keeps talking to the agent, and
+the branch the row carries was forked when the run paused. What goes onto the
+session's CURRENT history is the branch from the pause point on — the
+`ModelResponse` with the tool call, the `ModelRequest` with its result, and
+whatever the run said after. The provider reads that as a call answered
+immediately, which is what it is. The paused user request itself is not in the
+engine's history until the approval resolves; the client sees it in the chat
+from the moment she sends it, because the displayed messages and the engine's
+history are two different stores.
 
 Approve and reject answer only after the resumed run finished (3–20 s), so the
 portal's refresh reads the outcome and not the row as it was a second ago. The
@@ -225,6 +260,37 @@ preamble and twelve toolsets. But the tool row is also doing less work — four
 tool calls against the baseline's 12 to 42, and no deliverable written — so
 read US$0.000859 as "a light tool turn on a small prompt", not as "the same
 turn for 29× less".
+
+## Known limits
+
+Measured or read in the code, left standing on purpose. None of them is a gate.
+
+- **The compaction summarizer's tokens are not in the turn's usage.**
+  `core/turn_usage.py` writes `usage` off the main run's result, and the
+  summary is a separate `Agent.run()` inside the `ProcessHistory` capability.
+  Its tokens are on the `compaction` event instead, so a turn that compacted
+  cost more than its `turn_usage` row says. The provider's own meter, which is
+  what `GET /portal/usage` shows, has both.
+- **`tests/cost.py`'s per-turn numbers are indicative; the aggregate is what
+  holds.** It polls OpenRouter's `/api/v1/key` for a delta, and spend lands
+  there late and in its own time: the script cannot tell "nothing yet" from
+  "zero", and a turn's spend can land while it is reading the next one's, which
+  moves money from one row of the table to another. Nothing else may be talking
+  to the agent while it runs, and even then read the total, not a cell.
+- **Displaying a message and persisting the history are two commits.** SQLite
+  writes them one after the other (`db.add_message` then `db.save_history`), so
+  a crash in between leaves the client reading an answer the engine will not
+  replay. One transaction would fix it; the POC does not need it to answer the
+  question it exists to answer.
+- **A bash timeout kills the turn instead of the tool.** `subprocess.run(...,
+  timeout=60)` raises, nothing catches it, and 60 s of a command now reach the
+  client as "No pude responder: Command ... timed out". A tool error the model
+  can read and work around would be better, and it is one `except` in
+  `core/tools/workspace.py`.
+- **Session matching is O(sessions × messages).** `match_session` reads every
+  session's messages out of SQLite to compare user turns on every new
+  conversation. At the POC's scale it is microseconds; at a client's it wants
+  a hash of the client's turns on the session row.
 
 ## Where the next waves plug in
 
