@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS approvals (
     tool_name  TEXT NOT NULL,
     requests   TEXT NOT NULL,
     history    TEXT NOT NULL DEFAULT '',
+    decision   TEXT,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -76,12 +77,16 @@ _conn.row_factory = sqlite3.Row
 _conn.execute("PRAGMA journal_mode=WAL")
 _conn.execute("PRAGMA synchronous=NORMAL")
 _conn.executescript(SCHEMA)
-# Appended after Wave 1, so a database that already exists gets it too:
-# `history` is the message list the resumed run replays. It lives on the
-# row and not on the session because a session history that ends in an
-# unanswered tool call is not replayable by the next chat turn.
-if "history" not in {c["name"] for c in _conn.execute("PRAGMA table_info(approvals)")}:
+# Columns added after Wave 1, so a database that already exists gets them too.
+# `history` is the message list the resumed run replays: it lives on the row and
+# not on the session because a session history that ends in an unanswered tool
+# call is not replayable by the next chat turn. `decision` is which verb took
+# the row out of `pending`, written BEFORE the resumed run starts.
+_columns = {c["name"] for c in _conn.execute("PRAGMA table_info(approvals)")}
+if "history" not in _columns:
     _conn.execute("ALTER TABLE approvals ADD COLUMN history TEXT NOT NULL DEFAULT ''")
+if "decision" not in _columns:
+    _conn.execute("ALTER TABLE approvals ADD COLUMN decision TEXT")
 _conn.commit()
 
 

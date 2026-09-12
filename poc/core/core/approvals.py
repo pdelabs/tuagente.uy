@@ -24,6 +24,7 @@ import secrets
 import time
 from dataclasses import dataclass
 
+from fastapi import HTTPException
 from pydantic import TypeAdapter
 from pydantic_ai import DeferredToolRequests, DeferredToolResults, ToolApproved, ToolDenied
 from pydantic_ai.messages import ModelMessagesTypeAdapter
@@ -34,6 +35,13 @@ REQUESTS = TypeAdapter(DeferredToolRequests)
 
 AGENT = "agente"
 CLIENT = "cliente"
+
+PENDING = "pending"
+# Where a row sits while its resumed run is in flight. It is off the queue and
+# nothing can act on it, and a crash mid-run leaves it HERE and not back in
+# `pending`: the tool may already have run, and a second click is not how the
+# client should find that out.
+RESOLVING = "resolving"
 
 # The instruction the model reads on a "no". The client's own words travel
 # inside it; the portal strips the wrapper before showing them to her.
@@ -52,6 +60,14 @@ REJECTION = (
 )
 CORRECTION = "Aprobado CON CORRECCIONES. Tu versión: {correction}"
 APPROVED = "Aprobado desde el portal"
+
+# The two refusals the client can read. In Spanish: the portal shows what comes
+# back in `error.message` on the card she just clicked.
+MISSING = "No existe el pedido {approval_id}."
+ALREADY = (
+    "Ese pedido ya no está esperando tu respuesta: o lo resolviste, o el agente"
+    " lo está resolviendo ahora. Recargá Aprobaciones para ver cómo terminó."
+)
 
 
 @dataclass
@@ -74,31 +90,44 @@ def row_of(approval_id: str):
     return db.one("SELECT * FROM approvals WHERE id = ?", (approval_id,))
 
 
-def record_pending(session_id: str, requests: DeferredToolRequests, history: str) -> str:
-    """The row for a run that stopped at the gate. Reuses the open thread.
+def record_pending(
+    session_id: str,
+    requests: DeferredToolRequests,
+    history: str,
+    continues: str | None = None,
+) -> str:
+    """The row for a run that stopped at the gate.
 
-    A rejection that the agent answers with another proposal is the SAME
-    request, not a new one: reusing the row is what keeps the client from
-    seeing a queue that grows by one card every time she says no.
+    `continues` is the row whose resumed run made this proposal: a rejection the
+    agent answers with another proposal is the same request, not a new one, and
+    reusing the row is what keeps the queue from growing by one card every time
+    the client says no. The re-proposal puts the row back in `pending` with the
+    NEW tool call ids; the ones the previous proposal carried are gone from the
+    row and can never be resumed again — which is what the row being named
+    explicitly is for, now that a row in flight is `resolving` and no longer
+    the session's pending one.
     """
     call = requests.approvals[0]
     args = call.args_as_dict()
     title = render.approval_title(call.tool_name, args)
     body = render.approval_body(call.tool_name, args)
-    open_row = db.one(
-        "SELECT id FROM approvals WHERE session_id = ? AND status = 'pending'"
-        " ORDER BY created_at DESC LIMIT 1",
-        (session_id,),
+    open_row = db.one("SELECT id FROM approvals WHERE id = ?", (continues,)) if continues else (
+        db.one(
+            "SELECT id FROM approvals WHERE session_id = ? AND status = ?"
+            " ORDER BY created_at DESC LIMIT 1",
+            (session_id, PENDING),
+        )
     )
     blob = REQUESTS.dump_json(requests).decode()
     now = time.time()
     if open_row:
         approval_id = open_row["id"]
         db.write(
-            "UPDATE approvals SET title = ?, summary = ?, body = ?, tool_name = ?,"
-            " requests = ?, history = ?, updated_at = ? WHERE id = ?",
-            (title, render.approval_summary(args), body, call.tool_name, blob, history,
-             now, approval_id),
+            "UPDATE approvals SET status = ?, decision = NULL, title = ?, summary = ?,"
+            " body = ?, tool_name = ?, requests = ?, history = ?, updated_at = ?"
+            " WHERE id = ?",
+            (PENDING, title, render.approval_summary(args), body, call.tool_name, blob,
+             history, now, approval_id),
         )
         kind, label = "approval_reproposed", f"Te propuse otra versión: {title}"
     else:
@@ -106,8 +135,8 @@ def record_pending(session_id: str, requests: DeferredToolRequests, history: str
         db.write(
             "INSERT INTO approvals (id, session_id, status, title, summary, body,"
             " tool_name, requests, history, created_at, updated_at)"
-            " VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)",
-            (approval_id, session_id, title, render.approval_summary(args), body,
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (approval_id, session_id, PENDING, title, render.approval_summary(args), body,
              call.tool_name, blob, history, now, now),
         )
         kind, label = "approval_requested", f"Te pedí permiso: {title}"
@@ -126,7 +155,9 @@ def list_pending() -> list[dict]:
             "created_at": int(row["created_at"]),
             "status": row["status"],
         }
-        for row in db.query("SELECT * FROM approvals WHERE status = 'pending' ORDER BY created_at")
+        for row in db.query(
+            "SELECT * FROM approvals WHERE status = ? ORDER BY created_at", (PENDING,)
+        )
     ]
 
 
@@ -145,7 +176,7 @@ def detail(approval_id: str) -> dict | None:
             "id": row["id"],
             "title": row["title"],
             "body": row["body"],
-            "status": "blocked" if row["status"] == "pending" else "done",
+            "status": "blocked" if row["status"] == PENDING else "done",
             "tenant": None,
             "assignee": None,
             "created_at": int(row["created_at"]),
@@ -167,8 +198,10 @@ async def resume(row, results: DeferredToolResults, closed_status: str) -> Outco
     resumed = await session.run_resumed(row["session_id"], history, results)
     if resumed.requests is not None:
         # It asked again. Same row, new body, new tool call id: the negotiation
-        # continues where the client is already looking.
-        record_pending(row["session_id"], resumed.requests, resumed.history)
+        # continues where the client is already looking. The row is named
+        # explicitly because it is no longer the session's pending one — it is
+        # `resolving` until this run says how it ended.
+        record_pending(row["session_id"], resumed.requests, resumed.history, row["id"])
         return Outcome("", True)
     comment(row["id"], AGENT, resumed.text)
     db.write(
@@ -178,8 +211,32 @@ async def resume(row, results: DeferredToolResults, closed_status: str) -> Outco
     return Outcome(resumed.text, False)
 
 
-async def approve(approval_id: str, correction: str | None = None) -> dict:
+def claim(approval_id: str, decision: str):
+    """The row this decision is allowed to act on, taken out of the queue first.
+
+    Approve and reject both resume a run with a real side effect at the end of
+    it, so the row has to leave `pending` BEFORE the run starts and not after
+    it finishes. Two clicks on the same card sent the mail twice; a crash
+    between the tool running and the row being updated left the row `pending`
+    with the mail already sent, and the retry sent a second one.
+
+    Read and write with no `await` between them, so nothing else on the loop
+    gets in the middle.
+    """
     row = row_of(approval_id)
+    if row is None:
+        raise HTTPException(404, MISSING.format(approval_id=approval_id))
+    if row["status"] != PENDING:
+        raise HTTPException(409, ALREADY)
+    db.write(
+        "UPDATE approvals SET status = ?, decision = ?, updated_at = ? WHERE id = ?",
+        (RESOLVING, decision, time.time(), approval_id),
+    )
+    return row
+
+
+async def approve(approval_id: str, correction: str | None = None) -> dict:
+    row = claim(approval_id, "approve")
     requests = REQUESTS.validate_json(row["requests"])
     comment(approval_id, CLIENT,
             CORRECTION.format(correction=correction) if correction else APPROVED)
@@ -203,11 +260,11 @@ async def approve(approval_id: str, correction: str | None = None) -> dict:
 async def reject(approval_id: str, reason: str, final: bool = False) -> dict:
     """Rejecting is answering, not closing.
 
-    The row is NOT touched here: it stays in the queue and the agent proposes
-    again on it. Only `final` ends the thread, and only because the client said
-    she does not want it at all.
+    The row leaves the queue only while the resumed run is in flight: the agent
+    proposes again ON IT and it goes back to `pending`. Only `final` ends the
+    thread, and only because the client said she does not want it at all.
     """
-    row = row_of(approval_id)
+    row = claim(approval_id, "reject")
     requests = REQUESTS.validate_json(row["requests"])
     comment(approval_id, CLIENT, REJECTION.format(reason=reason))
     db.append_event(
