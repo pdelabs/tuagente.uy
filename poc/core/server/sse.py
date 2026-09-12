@@ -12,7 +12,14 @@ side — an event left hanging swallows every text frame after it.
 import json
 from collections.abc import AsyncIterator
 
-from core.session import Event, MessageCompleted, RunCompleted, TextDelta, ToolStarted
+from core.session import (
+    Event,
+    Failed,
+    MessageCompleted,
+    RunCompleted,
+    TextDelta,
+    ToolStarted,
+)
 
 HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
@@ -53,6 +60,12 @@ async def openai_dialect(events: AsyncIterator[Event]) -> AsyncIterator[str]:
             if tail:
                 streamed += tail
                 yield frame(None, {"choices": [{"delta": {"content": tail}}]})
+        elif isinstance(event, Failed):
+            # This dialect has no error event of its own, so the one line the
+            # client reads travels as the last delta. The exception is already
+            # on its way to the log behind it.
+            line = reconcile(streamed, event.content)
+            yield frame(None, {"choices": [{"delta": {"content": line}}]})
     yield "data: [DONE]\n\n"
 
 
@@ -74,4 +87,12 @@ async def session_dialect(events: AsyncIterator[Event], session_id: str) -> Asyn
             yield frame("assistant.completed", {"content": event.content})
         elif isinstance(event, RunCompleted):
             yield frame("run.completed", {"messages": event.messages})
+        elif isinstance(event, Failed):
+            # `assistant.completed` is the authoritative content of the message
+            # that closed, and a turn that broke closed on this one: the portal
+            # replaces the half-written bubble with it.
+            if not opened:
+                yield frame("message.started", {})
+                opened = True
+            yield frame("assistant.completed", {"content": event.content})
     yield frame("done", {})

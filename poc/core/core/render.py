@@ -70,6 +70,12 @@ def approval_body(tool_name: str, args: dict) -> str:
     )
 
 
+def failure_message(reason: str) -> str:
+    """What the chat says when the turn broke. The stack is the log's; hers is
+    this sentence and the one line that says what failed."""
+    return f"No pude responder: {reason}"
+
+
 def pause_message(title: str) -> str:
     """What the chat says when a run stops. Written by the code, not the model:
     the client has to read the same sentence every time this happens."""

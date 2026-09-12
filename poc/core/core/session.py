@@ -66,12 +66,26 @@ class RunCompleted:
     messages: list[dict]
 
 
-Event = TextDelta | ToolStarted | MessageCompleted | RunCompleted
+@dataclass
+class Failed:
+    """The turn that did not answer. It is the last event either dialect sees."""
+
+    content: str
+
+
+Event = TextDelta | ToolStarted | MessageCompleted | RunCompleted | Failed
 
 
 def first_line(text: str) -> str:
     """The first non-empty line, for a label. Empty text gives an empty label."""
     return next((line for line in text.strip().splitlines() if line.strip()), "")[:120]
+
+
+def one_line(exc: BaseException) -> str:
+    """Why the turn broke, in one line. The class name only when there is no
+    message to read, which is the one case where it is the whole reason."""
+    reason = " ".join(str(exc).split())[:300]
+    return reason or type(exc).__name__
 
 
 def new_session_id() -> str:
@@ -119,13 +133,34 @@ def ensure_session(session_id: str | None = None) -> str:
 
 
 async def run_turn(session_id: str, message: str) -> AsyncIterator[Event]:
-    agent = get_agent()
     history = db.load_history(session_id)
     replay = ModelMessagesTypeAdapter.validate_json(history) if history else None
 
     db.add_message(session_id, "user", message)
     db.touch_session(session_id, preview=message.strip()[:200])
 
+    try:
+        async for event in stream_run(session_id, message, replay):
+            yield event
+    except Exception as exc:
+        # A turn that breaks used to end in silence: the client's message sat
+        # there with no answer under it and nothing in Activity said why. Now
+        # she reads one line, the log keeps the stack, and the event is in
+        # Activity next to every other thing that happened.
+        failed = render.failure_message(one_line(exc))
+        db.add_message(session_id, "assistant", failed)
+        db.touch_session(session_id)
+        db.append_event("error", failed, "error", session_id)
+        yield Failed(failed)
+        raise
+
+
+async def stream_run(
+    session_id: str, message: str, replay: list | None
+) -> AsyncIterator[Event]:
+    """The turn itself. It is its own function so that the failure path around
+    it in `run_turn` is one `try`, and not a wrapper around every yield."""
+    agent = get_agent()
     chunks: list[str] = []
     async with agent.run_stream_events(
         message,
