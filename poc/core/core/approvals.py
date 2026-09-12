@@ -115,7 +115,9 @@ def record_pending(
     args = call.args_as_dict()
     title = render.approval_title(call.tool_name, args)
     body = render.approval_body(call.tool_name, args)
-    open_row = db.one("SELECT id FROM approvals WHERE id = ?", (continues,)) if continues else None
+    open_row = (
+        db.one("SELECT id FROM approvals WHERE id = ?", (continues,)) if continues else None
+    )
     blob = REQUESTS.dump_json(requests).decode()
     now = time.time()
     if open_row:
