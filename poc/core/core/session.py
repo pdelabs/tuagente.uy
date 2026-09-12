@@ -83,16 +83,23 @@ def display_messages(session_id: str) -> list[dict]:
 
 
 def match_session(prior: list[dict]) -> str | None:
-    """The session whose displayed messages are exactly `prior`, if any.
+    """The session whose CLIENT turns are exactly the ones in `prior`, if any.
 
     This is what keeps the OpenAI-shaped endpoint — which carries the whole
     local history and no session id — from opening one session per message.
+
+    ONLY THE USER MESSAGES ARE COMPARED. The assistant's are the engine's to
+    transform: the promises check rewrites an answer before it is persisted and
+    a pause replaces the model's preamble with the message the code writes, so
+    the browser's copy of an answer is not the one on disk. Matching on it
+    forked a second session the moment either of those fired, and the client
+    watched her conversation split in two.
     """
-    if not prior:
+    want = [(m["content"] or "").strip() for m in prior if m["role"] == "user"]
+    if not want:
         return None
-    want = [(m["role"], (m["content"] or "").strip()) for m in prior]
     for row in db.sessions():
-        have = [(m["role"], m["content"].strip()) for m in display_messages(row["id"])]
+        have = [m["content"].strip() for m in display_messages(row["id"]) if m["role"] == "user"]
         if have == want:
             return row["id"]
     return None
@@ -157,7 +164,9 @@ async def run_turn(session_id: str, message: str) -> AsyncIterator[Event]:
                 )
                 db.add_message(session_id, "assistant", paused)
                 db.touch_session(session_id)
-                yield TextDelta(("\n\n" if chunks else "") + paused)
+                # The pause message is NOT streamed as a delta: it is the whole
+                # persisted message, and both dialects close a turn on
+                # `MessageCompleted`. Streaming it too would send it twice.
                 yield MessageCompleted(paused)
                 yield RunCompleted(display_messages(session_id))
             elif isinstance(event, AgentRunResultEvent):
