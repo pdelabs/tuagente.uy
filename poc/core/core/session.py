@@ -105,6 +105,12 @@ def match_session(prior: list[dict]) -> str | None:
     return None
 
 
+def history_of(session_id: str) -> list:
+    """The session's engine history as messages, empty when it has none yet."""
+    blob = db.load_history(session_id)
+    return ModelMessagesTypeAdapter.validate_json(blob) if blob else []
+
+
 def ensure_session(session_id: str | None = None) -> str:
     if session_id is None:
         session_id = new_session_id()
@@ -198,7 +204,8 @@ async def run_resumed(
         output_type=OUTPUT,
         deps=Deps(workspace=config.WORKSPACE, session_id=session_id),
     )
-    blob = ModelMessagesTypeAdapter.dump_json(result.all_messages()).decode()
+    branch = result.all_messages()
+    blob = ModelMessagesTypeAdapter.dump_json(branch).decode()
     if isinstance(result.output, DeferredToolRequests):
         return Resumed("", result.output, blob)
 
@@ -206,9 +213,18 @@ async def run_resumed(
     for hook in BEFORE_PERSIST:
         text = hook(session_id, text)
     db.add_message(session_id, "assistant", text)
-    # Only now does the session take the history back: with the tool call
-    # answered, it is replayable again.
-    db.save_history(session_id, blob.encode())
+    # The branch is APPENDED to the session's history, never written over it.
+    # An approval can sit in the queue for a day, and the client keeps talking
+    # to the agent meanwhile: overwriting the session with the branch — which
+    # was forked back when the run paused — dropped every turn taken while she
+    # was deciding. What gets appended starts at the pause point: the
+    # ModelResponse carrying the tool call, the ModelRequest carrying its
+    # result, and whatever the run said after. The provider reads that as a
+    # call answered immediately, which is what it is.
+    db.save_history(
+        session_id,
+        ModelMessagesTypeAdapter.dump_json(history_of(session_id) + branch[len(history) - 1:]),
+    )
     db.touch_session(session_id)
     db.append_event("respuesta", first_line(text), "completed", session_id)
     return Resumed(text, None, blob)
