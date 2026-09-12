@@ -1,0 +1,23 @@
+services:
+  core:
+    build: .
+    container_name: tuagente-core
+    user: "10000:10000"
+    env_file: ./secrets.env
+    environment:
+      CORE_MODEL: openrouter:openai/gpt-5.6-luna
+      CORE_CORS_ORIGINS: http://localhost:8090,http://127.0.0.1:8090
+      TZ: America/Montevideo
+      DELIVERABLES_DIR: /workspace/entregables
+    # One app, two bases: the portal's `endpoint` (/api/*) and its `adapter`
+    # (/portal/*) are the same container.
+    ports:
+      - "127.0.0.1:8642:8643"
+      - "127.0.0.1:8643:8643"
+    volumes:
+      - ./state:/state
+      - ./workspace:/workspace
+      - ./agent:/agent:ro
+      - ../../hermes-kit/plugins:/opt/kit/plugins:ro
+      - ../../hermes-kit/plugins/deliverable/skills/deliverable:/opt/kit/skills/deliverable:ro
+    restart: unless-stopped

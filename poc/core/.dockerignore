@@ -1,0 +1,5 @@
+secrets.env
+state/
+workspace/
+agent/
+README.md
