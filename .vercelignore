@@ -5,3 +5,6 @@ hermes-kit/
 # Instagram kit: templates, a render script and the rendered posts. Never
 # part of the Next app.
 social/
+
+# POC engine on Pydantic AI (docs/poc-core-plan.md). Never part of the Next app.
+poc/
