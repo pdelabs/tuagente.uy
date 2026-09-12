@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <!-- App-icon version of sol-agente: white on the brand violet -->
+  <rect width="120" height="120" rx="28" fill="#5B4BE8"/>
+  <g transform="translate(16 16) scale(0.7333)">
+    <g stroke="#fff" stroke-width="9" stroke-linecap="round">
+      <circle cx="60" cy="62" r="25"/>
+      <line x1="60" y1="27" x2="60" y2="20"/>
+      <line x1="60" y1="97" x2="60" y2="108"/>
+      <line x1="25" y1="62" x2="14" y2="62"/>
+      <line x1="95" y1="62" x2="106" y2="62"/>
+      <line x1="35.3" y1="37.3" x2="27.5" y2="29.5"/>
+      <line x1="84.7" y1="37.3" x2="92.5" y2="29.5"/>
+      <line x1="35.3" y1="86.7" x2="27.5" y2="94.5"/>
+      <line x1="84.7" y1="86.7" x2="92.5" y2="94.5"/>
+    </g>
+    <circle cx="60" cy="12" r="6.5" fill="#fff"/>
+    <circle cx="50" cy="62" r="5.5" fill="#fff"/>
+    <circle cx="70" cy="62" r="5.5" fill="#fff"/>
+  </g>
+</svg>
