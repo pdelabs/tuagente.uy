@@ -98,26 +98,24 @@ def record_pending(
 ) -> str:
     """The row for a run that stopped at the gate.
 
-    `continues` is the row whose resumed run made this proposal: a rejection the
-    agent answers with another proposal is the same request, not a new one, and
-    reusing the row is what keeps the queue from growing by one card every time
-    the client says no. The re-proposal puts the row back in `pending` with the
-    NEW tool call ids; the ones the previous proposal carried are gone from the
-    row and can never be resumed again — which is what the row being named
-    explicitly is for, now that a row in flight is `resolving` and no longer
-    the session's pending one.
+    `continues` is the row whose resumed run made this proposal, and it is THE
+    ONLY way a row is reused. A rejection the agent answers with another
+    proposal is the same request, not a new one, and reusing the row is what
+    keeps the queue from growing by one card every time the client says no —
+    but a proposal from a FRESH turn is a different request, even on the same
+    conversation. Reusing the session's open row for it overwrote the card the
+    client was about to approve with something she had never seen, and her yes
+    then ran the other thing.
+
+    The re-proposal puts the row back in `pending` with the NEW tool call ids;
+    the ones the previous proposal carried are gone from the row, and since
+    approve and reject resume from the row, they can never be resumed again.
     """
     call = requests.approvals[0]
     args = call.args_as_dict()
     title = render.approval_title(call.tool_name, args)
     body = render.approval_body(call.tool_name, args)
-    open_row = db.one("SELECT id FROM approvals WHERE id = ?", (continues,)) if continues else (
-        db.one(
-            "SELECT id FROM approvals WHERE session_id = ? AND status = ?"
-            " ORDER BY created_at DESC LIMIT 1",
-            (session_id, PENDING),
-        )
-    )
+    open_row = db.one("SELECT id FROM approvals WHERE id = ?", (continues,)) if continues else None
     blob = REQUESTS.dump_json(requests).decode()
     now = time.time()
     if open_row:
