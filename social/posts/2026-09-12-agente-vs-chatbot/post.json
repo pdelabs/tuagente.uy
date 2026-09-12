@@ -1,0 +1,64 @@
+{
+  "format": "feed",
+  "theme": "violet",
+  "slides": [
+    {
+      "template": "statement",
+      "eyebrow": "Sin humo",
+      "title": "Te venden chatbots como si fueran <em>agentes.</em>",
+      "body": "No son lo mismo: uno conversa, el otro trabaja. Tres formas de distinguirlos antes de pagar.",
+      "hint": "Deslizá",
+      "agentitoSize": "lg",
+      "alt": "Portada: te venden chatbots como si fueran agentes. Tres diferencias."
+    },
+    {
+      "template": "list",
+      "theme": "light",
+      "num": "1",
+      "title": "Un chatbot contesta. Un agente <em>hace.</em>",
+      "titleSize": "md",
+      "bullets": [
+        "El chatbot te dice el horario.",
+        "El agente agenda el turno, lo anota en tu planilla y te avisa."
+      ],
+      "agentitoSize": "none",
+      "alt": "Diferencia 1: un chatbot contesta, un agente hace."
+    },
+    {
+      "template": "list",
+      "theme": "light",
+      "num": "2",
+      "title": "Un chatbot sigue un guion. Un agente <em>decide.</em>",
+      "titleSize": "md",
+      "bullets": [
+        "Si la pregunta no está en el guion, el chatbot se traba.",
+        "El agente mira lo que tiene, decide, y si no sabe te lo deja marcado."
+      ],
+      "agentitoSize": "none",
+      "alt": "Diferencia 2: un chatbot sigue un guion, un agente decide."
+    },
+    {
+      "template": "list",
+      "theme": "light",
+      "num": "3",
+      "title": "Un chatbot vive en un widget. Un agente, <em>adentro de tu empresa.</em>",
+      "titleSize": "md",
+      "bullets": [
+        "Conectado a tu correo, tu planilla, tu agenda, tu WhatsApp.",
+        "Con un portal donde ves todo lo que hizo."
+      ],
+      "agentitoSize": "none",
+      "alt": "Diferencia 3: un chatbot vive en un widget, un agente adentro de tu empresa."
+    },
+    {
+      "template": "statement",
+      "theme": "ink",
+      "eyebrow": "La pregunta que lo destapa",
+      "title": "“¿Qué hace cuando <em>nadie</em> le escribe?”",
+      "body": "Un chatbot, nada. Un agente sigue trabajando: el seguimiento del presupuesto, las facturas que vencen, los posteos de la semana.",
+      "cta": "Artículo completo en la bio",
+      "agentitoSize": "lg",
+      "alt": "Cierre: qué hace cuando nadie le escribe. Un chatbot, nada. Un agente sigue trabajando."
+    }
+  ]
+}

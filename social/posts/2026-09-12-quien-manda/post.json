@@ -1,0 +1,24 @@
+{
+  "format": "feed",
+  "theme": "light",
+  "slides": [
+    {
+      "template": "chat",
+      "eyebrow": "Cero cajas negras",
+      "title": "¿Y quién manda acá?",
+      "titleSize": "md",
+      "body": "Autónomo no significa descontrolado. Lo dirigís como a cualquiera que trabaja con vos: hablándole.",
+      "agentName": "Tu agente",
+      "agentStatus": "en línea · trabajando",
+      "messages": [
+        { "from": "owner", "text": "¿Cómo venimos hoy?" },
+        { "from": "agent", "text": "Anoche entraron 7 consultas por WhatsApp. Contesté las 6 de precios y horarios; la otra pedía una fecha que no tengo y te la dejé marcada." },
+        { "from": "agent", "text": "Quedaron 2 presupuestos esperando tu ok para salir." },
+        { "from": "owner", "text": "Aprobá el primero. Y de ahora en más contestá más formal, ¿puede ser?" },
+        { "from": "agent", "text": "Hecho: salió el presupuesto y ya ajusté el tono." }
+      ],
+      "hint": "Nada sale para afuera sin tu ok",
+      "alt": "Chat entre el dueño y su agente: el agente reporta las consultas de la noche y espera aprobación para mandar presupuestos."
+    }
+  ]
+}

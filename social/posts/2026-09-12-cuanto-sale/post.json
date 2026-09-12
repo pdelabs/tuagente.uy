@@ -1,0 +1,17 @@
+{
+  "format": "feed",
+  "theme": "ink",
+  "slides": [
+    {
+      "template": "stat",
+      "eyebrow": "Sin letra chica",
+      "value": "USD 200",
+      "valueSize": "md",
+      "label": "El diagnóstico. Y se descuenta si seguís.",
+      "body": "Una llamada y un informe escrito: qué trabajo conviene sacarte de encima primero, cuántas horas te devuelve y qué sale ponerlo a andar. El informe es tuyo aunque no sigas.",
+      "cta": "Quiero el diagnóstico",
+      "agentitoSize": "lg",
+      "alt": "USD 200: el diagnóstico, que se descuenta si seguís."
+    }
+  ]
+}
