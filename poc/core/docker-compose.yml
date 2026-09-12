@@ -9,6 +9,10 @@ services:
       CORE_CORS_ORIGINS: http://localhost:8090,http://127.0.0.1:8090
       TZ: America/Montevideo
       DELIVERABLES_DIR: /workspace/entregables
+      # Passthroughs so `CORE_COMPACT_AT_TOKENS=6000 docker compose up -d`
+      # lowers the compaction threshold for the gate without editing this file.
+      CORE_COMPACT_AT: ${CORE_COMPACT_AT:-0.6}
+      CORE_COMPACT_AT_TOKENS: ${CORE_COMPACT_AT_TOKENS:-60000}
     # One app, two bases: the portal's `endpoint` (/api/*) and its `adapter`
     # (/portal/*) are the same container.
     ports:

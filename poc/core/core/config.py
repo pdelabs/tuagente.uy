@@ -31,14 +31,22 @@ PLUGINS = [p.strip() for p in os.environ.get("CORE_PLUGINS", "deliverable").spli
 TIMEZONE = os.environ.get("TZ", "America/Montevideo")
 ADAPTER_VERSION = "core-0.1.0"
 
+# When to summarize the history away (core/compaction.py). Either one trips it.
+# The fraction is of the MODEL's context window, and the baseline model's is
+# 1_050_000 tokens, so 0.6 of it is 630_000 — unreachable in a client's
+# conversation. The token count is what actually bounds the history here; the
+# fraction is what would bound it on a small-window model.
+COMPACT_AT = float(os.environ.get("CORE_COMPACT_AT", "0.6"))
+COMPACT_AT_TOKENS = int(os.environ.get("CORE_COMPACT_AT_TOKENS", "60000"))
+
 # What the portal draws. A module declared here has to answer, or portal-check
-# fails it: `approvals` is Wave 2's to flip, `usage` is Wave 3's.
+# fails it: `usage` is Wave 3's to flip.
 MODULES = {
     "chat": True,
     "files": True,
     "activity": True,
-    "approvals": False,
-    "usage": False,
+    "approvals": True,
+    "usage": True,
     "kanban": False,
     "artifacts": False,
     "crons": False,

@@ -11,7 +11,16 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from core import config
 
-from . import gateway, portal
+# Imported for the side effect, which is the registration itself: `compaction`
+# and `turn_usage` append their capabilities to `core.agent.CAPABILITIES` and
+# `promises_hook` its transform to `core.session.BEFORE_PERSIST`, all at import
+# time, before the first turn builds the agent.
+from core import compaction, promises_hook, turn_usage  # noqa: F401
+
+# The gated toolset registers itself into `core.agent.EXTRA_TOOLSETS` on import.
+from core.tools import sensitive  # noqa: F401
+
+from . import approvals, extra, gateway, portal
 
 ALLOW_METHODS = b"GET, POST, PATCH, DELETE, OPTIONS"
 ALLOW_HEADERS = b"Authorization, Content-Type"
@@ -105,6 +114,8 @@ app.add_middleware(CanonicalHeaders)
 
 app.include_router(gateway.router, dependencies=[Depends(require_key)])
 app.include_router(portal.router, dependencies=[Depends(require_key)])
+app.include_router(approvals.router, dependencies=[Depends(require_key)])
+app.include_router(extra.router, dependencies=[Depends(require_key)])
 
 
 @app.exception_handler(StarletteHTTPException)

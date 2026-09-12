@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS approvals (
     body       TEXT NOT NULL,
     tool_name  TEXT NOT NULL,
     requests   TEXT NOT NULL,
+    history    TEXT NOT NULL DEFAULT '',
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -75,6 +76,12 @@ _conn.row_factory = sqlite3.Row
 _conn.execute("PRAGMA journal_mode=WAL")
 _conn.execute("PRAGMA synchronous=NORMAL")
 _conn.executescript(SCHEMA)
+# Appended after Wave 1, so a database that already exists gets it too:
+# `history` is the message list the resumed run replays. It lives on the
+# row and not on the session because a session history that ends in an
+# unanswered tool call is not replayable by the next chat turn.
+if "history" not in {c["name"] for c in _conn.execute("PRAGMA table_info(approvals)")}:
+    _conn.execute("ALTER TABLE approvals ADD COLUMN history TEXT NOT NULL DEFAULT ''")
 _conn.commit()
 
 
