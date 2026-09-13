@@ -83,6 +83,13 @@ Read from `app/app/lib/agent.ts`, `app/app/chat/page.tsx`, `app/app/chat/Session
 
 ## Layout
 
+**Superseded on 2026-09-13.** The approval, deliverable and flow mechanisms
+moved out of the engine into the kit's plugins through a `core` surface
+(`hermes-kit/plugins/<id>/core/plugin.py` + `instructions.md`), and the SOUL
+lost every line about mechanisms. `poc/core/README.md` "Plugins" is current;
+the block below is what Wave 1 built and is kept for the record.
+
+
 ```
 poc/core/
   pyproject.toml
