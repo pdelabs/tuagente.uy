@@ -9,7 +9,11 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from core import config
+from core import config, tracing
+
+# Before any agent is built: `instrument_all` only reaches agents created
+# after it runs, and every agent here is built lazily on the first turn.
+tracing.setup()
 
 # Imported for the side effect, which is the registration itself: `compaction`
 # and `turn_usage` append their capabilities to `core.agent.CAPABILITIES` and

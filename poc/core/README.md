@@ -344,3 +344,20 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
   `dict(res.headers)` — the case that came off the wire. Lowercase cost four
   CORS failures and one `Content-Type` failure that were pure artifact. The
   kit's own adapter capitalizes them; so does this now.
+
+## Traces (Phoenix, self-hosted)
+
+Every run is a span tree: `invoke_agent` → one `chat <model>` per model
+request (messages in and out, tokens, cost) → one `execute_tool <name>` per
+tool call (arguments, return). Pydantic AI emits them as OpenTelemetry;
+`core/tracing.py` adds the OpenInference processor Phoenix reads and posts
+them straight to Phoenix's OTLP endpoint. No Logfire, no collector, no
+account.
+
+- Viewer: http://127.0.0.1:6006 (the `phoenix` service in the compose,
+  loopback only, data under `state/phoenix/`).
+- `CORE_OTEL_ENDPOINT` empty = off. The lab compose points it at the
+  service; a client's compose leaves it empty or sets
+  `CORE_OTEL_INCLUDE_CONTENT=0` so the spans carry timings and names but no
+  prompts, completions or tool arguments.
+- REST for scripts: `GET /v1/projects/default/spans?limit=50`.

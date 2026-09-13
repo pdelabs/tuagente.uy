@@ -37,6 +37,14 @@ PLUGINS = [p.strip() for p in os.environ.get("CORE_PLUGINS", "deliverable").spli
 TIMEZONE = os.environ.get("TZ", "America/Montevideo")
 ADAPTER_VERSION = "core-0.1.0"
 
+# Traces (core/tracing.py). Empty means off. Phoenix's OTLP/HTTP endpoint is
+# `http://<phoenix>:6006/v1/traces`. Content (prompts, completions, tool
+# arguments) travels only when INCLUDE_CONTENT is on: on for the lab, off for
+# a client.
+OTEL_ENDPOINT = os.environ.get("CORE_OTEL_ENDPOINT", "").strip()
+OTEL_SERVICE = os.environ.get("CORE_OTEL_SERVICE", "tuagente-core")
+OTEL_INCLUDE_CONTENT = os.environ.get("CORE_OTEL_INCLUDE_CONTENT", "0") == "1"
+
 # When to summarize the history away (core/compaction.py). Either one trips it.
 # The fraction is of the MODEL's context window, and the baseline model's is
 # 1_050_000 tokens, so 0.6 of it is 630_000 — unreachable in a client's

@@ -13,6 +13,11 @@ services:
       # lowers the compaction threshold for the gate without editing this file.
       CORE_COMPACT_AT: ${CORE_COMPACT_AT:-0.6}
       CORE_COMPACT_AT_TOKENS: ${CORE_COMPACT_AT_TOKENS:-60000}
+      # Traces to the phoenix service below. This is the LAB compose, so the
+      # content travels; a client's compose sets INCLUDE_CONTENT to 0 or
+      # leaves the endpoint empty.
+      CORE_OTEL_ENDPOINT: http://phoenix:6006/v1/traces
+      CORE_OTEL_INCLUDE_CONTENT: "1"
     # One app, two bases: the portal's `endpoint` (/api/*) and its `adapter`
     # (/portal/*) are the same container.
     ports:
@@ -24,4 +29,17 @@ services:
       - ./agent:/agent:ro
       - ../../hermes-kit/plugins:/opt/kit/plugins:ro
       - ../../hermes-kit/plugins/deliverable/skills/deliverable:/opt/kit/skills/deliverable:ro
+    restart: unless-stopped
+
+  # The trace viewer: http://127.0.0.1:6006. Loopback only, never 0.0.0.0.
+  # Receives OTLP over HTTP on the same port and keeps its data in ./state.
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: tuagente-core-phoenix
+    ports:
+      - "127.0.0.1:6006:6006"
+    environment:
+      PHOENIX_WORKING_DIR: /data
+    volumes:
+      - ./state/phoenix:/data
     restart: unless-stopped
