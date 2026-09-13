@@ -9,22 +9,24 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from core import config, tracing
+from core import config, plugins, tracing
 
 # Before any agent is built: `instrument_all` only reaches agents created
 # after it runs, and every agent here is built lazily on the first turn.
 tracing.setup()
 
-# Imported for the side effect, which is the registration itself: `compaction`
-# and `turn_usage` append their capabilities to `core.agent.CAPABILITIES` and
-# `promises_hook` its transform to `core.session.BEFORE_PERSIST`, all at import
-# time, before the first turn builds the agent.
-from core import compaction, promises_hook, turn_usage  # noqa: F401
+# The engine's own capabilities, imported for the side effect: `compaction` and
+# `turn_usage` append theirs to `core.agent.CAPABILITIES` at import time,
+# before the first turn builds the agent.
+from core import compaction, turn_usage  # noqa: F401
 
-# The gated toolset registers itself into `core.agent.EXTRA_TOOLSETS` on import.
-from core.tools import sensitive  # noqa: F401
+from . import extra, gateway, portal
 
-from . import approvals, extra, gateway, portal
+# THE KIT PLUGINS, in `CORE_PLUGINS` order. Each one's `core/plugin.py` gets
+# the engine and registers what it brings — the approval gate and its page, the
+# deliverable folders' prose, the promises guard. Nothing here knows what any
+# of them is: what comes back is the routers to serve.
+PLUGIN_ROUTERS = plugins.load()
 
 ALLOW_METHODS = b"GET, POST, PATCH, DELETE, OPTIONS"
 ALLOW_HEADERS = b"Authorization, Content-Type"
@@ -118,8 +120,11 @@ app.add_middleware(CanonicalHeaders)
 
 app.include_router(gateway.router, dependencies=[Depends(require_key)])
 app.include_router(portal.router, dependencies=[Depends(require_key)])
-app.include_router(approvals.router, dependencies=[Depends(require_key)])
 app.include_router(extra.router, dependencies=[Depends(require_key)])
+# After the engine's own, and before the catch-all below: a plugin adds pages,
+# it does not take one over.
+for plugin_router in PLUGIN_ROUTERS:
+    app.include_router(plugin_router, dependencies=[Depends(require_key)])
 
 
 @app.exception_handler(StarletteHTTPException)

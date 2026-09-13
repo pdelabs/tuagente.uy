@@ -2,14 +2,20 @@
 
 Nothing here reaches the outside: `send_email` and `publish_post` write a file
 into `/workspace/outbox/` and that is the whole side effect. What is real is
-the gate. The toolset is exported already wrapped in `approval_required()`, so
-a call stops the run and lands in the client's Approvals tab BEFORE the tool
-body runs — the model cannot forget to ask, because asking is not something it
+the gate. The toolset is registered wrapped in `approval_required()`
+(`plugin.py`), so a call stops the run and lands in the client's Approvals tab
+BEFORE the tool body runs — the model cannot forget to ask, because asking is not something it
 does.
 
-`approval_required()` with no predicate on purpose: every tool in this toolset
-is gated, and one added later is gated too without anyone remembering to put
-its name on a list. Fail closed is the whole gate.
+`approval_required()` with no predicate on purpose, and it is `plugin.py` that
+wraps the toolset: every tool in here is gated, and one added later is gated
+too without anyone remembering to put its name on a list. Fail closed is the
+whole gate.
+
+THE PROSE ABOUT ASKING IS IN THE TOOL AND FIELD DESCRIPTIONS, not in a SOUL
+and not in a skill. What a request has to say — what happens if the client says
+yes, what happens if she says no — is a rule about using THIS tool, so it
+travels with the tool and reaches the model only where the tool does.
 """
 
 import re
@@ -20,16 +26,14 @@ from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
 from pydantic_ai.toolsets import FunctionToolset
 
-from .. import agent as agent_module
-
 OUTBOX = "outbox"
 
 
 class ApprovalNote(BaseModel):
     """The words the client reads on the approval card.
 
-    The model supplies the words, the code supplies the format
-    (`core/render.py`): every request the client sees has the same four
+    The model supplies the words, the code supplies the format (`render.py`,
+    next to this file): every request the client sees has the same four
     sections, whatever the tool. The field descriptions are in Spanish because
     they are what the model is answering, and the client reads the answer.
     """
@@ -108,11 +112,3 @@ def toolset() -> FunctionToolset:
         return f"publicación escrita en {drop(ctx.deps.workspace, 'post', channel, body)}"
 
     return ts
-
-
-TOOLSET = toolset().approval_required()
-
-# Registered on import — the extension point `core/agent.py` documents.
-# `server/app.py` imports this module at startup, well before the first turn
-# builds the agent.
-agent_module.EXTRA_TOOLSETS.append(TOOLSET)

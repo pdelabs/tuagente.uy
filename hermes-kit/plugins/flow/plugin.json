@@ -1,6 +1,6 @@
 {
   "id": "flow",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "The only way to leave work running on its own: a named client flow with a trigger and results, and the cron that actually delivers it",
   "client_copy": "Lo que se repite queda armado como un flujo y anda solo.",
   "_comment": [
@@ -17,6 +17,12 @@
     "read only, and config.yaml's `plugins.enabled` still names it. The engine",
     "reads its plugins from HERMES_HOME/plugins and knows nothing about this",
     "registry; what moved is where the kit keeps the source.",
+    "",
+    "THE CORE SURFACE IS THE SAME GUARD ON THE POC ENGINE (core/). It loads",
+    "engine/promises/promises.py by path -- one copy, two engines -- and",
+    "registers it as a before-persist hook. It brings no skill: create_flow.py",
+    "writes into a Hermes agent's data/flows/ and that engine has no runner for",
+    "it, so what core/instructions.md says is that nothing is scheduled there.",
     "",
     "THE CURATED FLOWS NOBODY ELSE OWNS LIVE HERE, under curated/ and not under",
     "flows/, because they are not this plugin's own work: they are the catalog",
@@ -49,6 +55,7 @@
       "curated/resumen-de-la-bandeja"
     ],
     "engine": "engine/promises",
+    "core": "core/",
     "tab": {
       "builtin": "flows"
     }

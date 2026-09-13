@@ -935,6 +935,19 @@ class TheKitsOwnRegistry(unittest.TestCase):
         self.assertTrue((surface / "promises.py").is_file())
         self.assertTrue((surface / "__init__.py").is_file())
 
+    def test_the_three_plugins_the_core_engine_runs_carry_their_surface(self):
+        """`poc/core` runs `approval,deliverable,flow`, and each brings its own
+        mechanics: the gate and its page, the deliverable folders' prose, the
+        promises guard. Whatever that engine does about any of the three is in
+        the plugin — which is the point: a rule about a mechanism reaches the
+        model only where the mechanism is installed."""
+        plugins = plugin_registry.registry(KIT)
+        for pid in ("approval", "deliverable", "flow"):
+            self.assertEqual(plugins[pid]["surfaces"]["core"], "core/", pid)
+            surface = KIT / "plugins" / pid / "core"
+            self.assertTrue((surface / "plugin.py").is_file(), pid)
+            self.assertTrue((surface / "instructions.md").is_file(), pid)
+
     def test_kanban_carries_no_skill_and_says_why(self):
         """The store is the engine's; the manifest exists for the dependency."""
         kanban = plugin_registry.registry(KIT)["kanban"]

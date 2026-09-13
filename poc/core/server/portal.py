@@ -1,9 +1,10 @@
 """What the portal calls the `adapter` base: everything the native gateway
 does not expose.
 
-Wave 2 adds `/portal/approvals*` and `/portal/tickets/{id}` here, Wave 3
-`/portal/usage` and `/portal/inventory`, and each flips its module in
-`core.config.MODULES`.
+What a PLUGIN adds is not here: `/portal/approvals*` and `/portal/tickets/{id}`
+are the `approval` plugin's router, registered with `engine.router(...)` and
+included after this one. The manifest's `modules` is the engine's base plus
+what those plugins flipped (`core/plugins.py`).
 """
 
 import base64
@@ -16,7 +17,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
-from core import config, db, session
+from core import config, db, plugins, session
 from core.tools.workspace import under
 
 from . import sse
@@ -47,7 +48,7 @@ def manifest():
     return {
         "agent": who["name"],
         "adapter_version": config.ADAPTER_VERSION,
-        "modules": config.MODULES,
+        "modules": plugins.modules(),
         "named": bool(who.get("name")),
         "look": who.get("look"),
         "company": who.get("company"),

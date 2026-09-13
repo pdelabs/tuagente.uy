@@ -29,7 +29,8 @@ from pydantic import TypeAdapter
 from pydantic_ai import DeferredToolRequests, DeferredToolResults, ToolApproved, ToolDenied
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 
-from . import db, render
+import render
+from core import db
 
 REQUESTS = TypeAdapter(DeferredToolRequests)
 
@@ -192,7 +193,7 @@ def detail(approval_id: str) -> dict | None:
 
 async def resume(row, results: DeferredToolResults, closed_status: str) -> Outcome:
     """Run the rest of the turn with the client's answer in its hands."""
-    from . import session
+    from core import session
 
     history = ModelMessagesTypeAdapter.validate_json(row["history"])
     resumed = await session.run_resumed(row["session_id"], history, results)

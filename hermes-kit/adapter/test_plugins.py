@@ -239,13 +239,15 @@ class PluginsEndpoint(unittest.TestCase):
         approval = next(p for p in body["plugins"] if p["id"] == "approval")
         self.assertEqual(set(approval),
                          {"id", "version", "description", "system", "requires", "surfaces"})
-        self.assertEqual(approval["version"], "1.0.0")
+        self.assertEqual(approval["version"], "1.1.0")
         self.assertTrue(approval["system"])
         # `requires` arrives whole even where the manifest left sub-lists out.
         self.assertEqual(approval["requires"],
                          {"plugins": ["kanban"], "connections": [], "toolsets": []})
         # Surfaces: which ones exist, plus the tab object exactly as written.
-        self.assertEqual(approval["surfaces"]["present"], ["skills", "tab"])
+        # `core` is the POC engine's surface: the portal is told the plugin has
+        # one, and nothing on this agent reads what is inside it.
+        self.assertEqual(approval["surfaces"]["present"], ["skills", "core", "tab"])
         self.assertEqual(approval["surfaces"]["tab"], {"builtin": "approvals"})
         # `_dir` is a path on the agent and `_comment` is a note to ourselves.
         self.assertNotIn("_dir", approval)

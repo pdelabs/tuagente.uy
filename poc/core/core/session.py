@@ -20,15 +20,26 @@ from pydantic_ai.messages import (
     TextPartDelta,
 )
 
-from . import approvals, config, db, render
+from . import config, db
 from .agent import Deps, get_agent
 
 # EXTENSION POINT — transforms applied to the agent's text BEFORE it is
 # persisted and before the client is told the message closed. Each hook is
-# `(session_id, text) -> text`; they run in order. Wave 3 registers the
-# promises check here, which is the whole point of the seam: the engine
-# persists what the hook returned, not what the model said.
+# `(session_id, text) -> text`; they run in order. The `flow` plugin registers
+# the promises check here through `engine.before_persist`, which is the whole
+# point of the seam: the engine persists what the hook returned, not what the
+# model said.
 BEFORE_PERSIST: list[Callable[[str, str], str]] = []
+
+# EXTENSION POINT — what happens to a run that ended at a gated tool, set by
+# ONE plugin through `engine.deferred`. The engine knows a run can stop and
+# nothing else: where the pause is written down, what the client reads and how
+# it is resumed are the gating plugin's, and today that is `approval`.
+#
+# NO HANDLER AND A RUN STOPS ANYWAY = a toolset somebody gated with nobody to
+# answer for it. That raises, which is the loud break we want: the alternative
+# is a turn that swallows the request and a client who never sees it.
+DEFERRED_HANDLER: Callable[[str, DeferredToolRequests, str], str] | None = None
 
 # A turn ends in the answer, or in the engine stopping at a gated tool.
 # Declaring the second one as an output type is what turns the gate into a
@@ -79,6 +90,13 @@ Event = TextDelta | ToolStarted | MessageCompleted | RunCompleted | Failed
 def first_line(text: str) -> str:
     """The first non-empty line, for a label. Empty text gives an empty label."""
     return next((line for line in text.strip().splitlines() if line.strip()), "")[:120]
+
+
+def failure_message(reason: str) -> str:
+    """What the chat says when the turn broke. The stack is the log's; hers is
+    this sentence and the one line that says what failed. A turn that breaks is
+    the engine's business, so the sentence lives here."""
+    return f"No pude responder: {reason}"
 
 
 def one_line(exc: BaseException) -> str:
@@ -147,7 +165,7 @@ async def run_turn(session_id: str, message: str) -> AsyncIterator[Event]:
         # there with no answer under it and nothing in Activity said why. Now
         # she reads one line, the log keeps the stack, and the event is in
         # Activity next to every other thing that happened.
-        failed = render.failure_message(one_line(exc))
+        failed = failure_message(one_line(exc))
         db.add_message(session_id, "assistant", failed)
         db.touch_session(session_id)
         db.append_event("error", failed, "error", session_id)
@@ -186,22 +204,20 @@ async def stream_run(
             elif isinstance(event, AgentRunResultEvent) and isinstance(
                 event.result.output, DeferredToolRequests
             ):
-                # The gate stopped the run. The messages go on the approval
-                # row and NOT on the session: a history that ends in an
-                # unanswered tool call is not replayable by the next turn,
-                # and the row is also what makes the pause survive a
-                # restart. What the client reads is written by the code —
-                # whatever the model said on its way to the tool call is in
-                # the request's body, where she decides.
-                requests = event.result.output
-                call = requests.approvals[0]
-                approvals.record_pending(
+                # The gate stopped the run, and what a stopped run becomes is
+                # the gating plugin's business: it gets the requests and the
+                # run's messages — NOT the session, whose history would end in
+                # an unanswered tool call and stop being replayable — and
+                # returns the one line the client reads.
+                if DEFERRED_HANDLER is None:
+                    raise RuntimeError(
+                        "a run ended at a gated tool and no plugin claimed it with "
+                        "engine.deferred(): there is nothing to write the request down"
+                    )
+                paused = DEFERRED_HANDLER(
                     session_id,
-                    requests,
+                    event.result.output,
                     ModelMessagesTypeAdapter.dump_json(event.result.all_messages()).decode(),
-                )
-                paused = render.pause_message(
-                    render.approval_title(call.tool_name, call.args_as_dict())
                 )
                 db.add_message(session_id, "assistant", paused)
                 db.touch_session(session_id)

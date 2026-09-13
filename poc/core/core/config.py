@@ -32,7 +32,14 @@ WORKSPACE = Path(os.environ.get("CORE_WORKSPACE", "/workspace"))
 AGENT_DIR = Path(os.environ.get("CORE_AGENT_DIR", "/agent"))
 KIT_PLUGINS = Path(os.environ.get("CORE_KIT_PLUGINS", "/opt/kit/plugins"))
 
-PLUGINS = [p.strip() for p in os.environ.get("CORE_PLUGINS", "deliverable").split(",") if p.strip()]
+# WHICH KIT PLUGINS THIS AGENT RUNS, in order. Each one may bring skills and a
+# `core/` surface: toolsets, routers, hooks, modules and the prose that belongs
+# to the mechanism it installs (`core/plugins.py`).
+PLUGINS = [
+    p.strip()
+    for p in os.environ.get("CORE_PLUGINS", "approval,deliverable,flow").split(",")
+    if p.strip()
+]
 
 TIMEZONE = os.environ.get("TZ", "America/Montevideo")
 ADAPTER_VERSION = "core-0.1.0"
@@ -53,13 +60,16 @@ OTEL_INCLUDE_CONTENT = os.environ.get("CORE_OTEL_INCLUDE_CONTENT", "0") == "1"
 COMPACT_AT = float(os.environ.get("CORE_COMPACT_AT", "0.6"))
 COMPACT_AT_TOKENS = int(os.environ.get("CORE_COMPACT_AT_TOKENS", "60000"))
 
-# What the portal draws. A module declared here has to answer, or portal-check
-# fails it: `usage` is Wave 3's to flip.
+# What the portal draws BEFORE any plugin is loaded: the four tabs the engine
+# itself answers. Everything else is off until a plugin flips it with
+# `engine.module(...)` — `approvals` is the `approval` plugin's — and what the
+# manifest publishes is `plugins.modules()`, the two put together. A module
+# declared and not answering is a portal-check failure.
 MODULES = {
     "chat": True,
     "files": True,
     "activity": True,
-    "approvals": True,
+    "approvals": False,
     "usage": True,
     "kanban": False,
     "artifacts": False,

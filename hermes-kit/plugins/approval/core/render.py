@@ -3,8 +3,8 @@
 The model supplies the words (the `ApprovalNote` on the tool call); the code
 supplies the format. Every request the client sees has the same four sections
 and the content to review underneath, whatever the tool did — the same shape
-`hermes-kit/plugins/approval/skills/approval/format_request.py` prints, which
-is the one `app/app/approvals/page.tsx` already knows how to draw. The table
+`../skills/approval/format_request.py` prints, which is the one
+`app/app/approvals/page.tsx` already knows how to draw. The table
 is load-bearing: `looksLikeProposal()` in the portal recognizes a proposal by
 a markdown table row, and that is how the card shows the LAST proposal of a
 negotiation instead of the one the client already rejected.
@@ -68,12 +68,6 @@ def approval_body(tool_name: str, args: dict) -> str:
         why=flat(note["why"]),
         content=content(tool_name, args),
     )
-
-
-def failure_message(reason: str) -> str:
-    """What the chat says when the turn broke. The stack is the log's; hers is
-    this sentence and the one line that says what failed."""
-    return f"No pude responder: {reason}"
 
 
 def pause_message(title: str) -> str:

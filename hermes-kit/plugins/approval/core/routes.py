@@ -11,7 +11,7 @@ import json
 
 from fastapi import APIRouter, HTTPException, Request
 
-from core import approvals
+import store
 
 router = APIRouter()
 
@@ -26,12 +26,12 @@ async def payload(request: Request) -> dict:
 
 @router.get("/portal/approvals")
 def pending():
-    return {"approvals": approvals.list_pending()}
+    return {"approvals": store.list_pending()}
 
 
 @router.get("/portal/tickets/{ticket_id}")
 def ticket(ticket_id: str):
-    found = approvals.detail(ticket_id)
+    found = store.detail(ticket_id)
     if found is None:
         raise HTTPException(404, f"there is no request {ticket_id}")
     return found
@@ -40,10 +40,10 @@ def ticket(ticket_id: str):
 @router.post("/portal/approvals/{approval_id}/approve")
 async def approve(approval_id: str, request: Request):
     body = await payload(request)
-    return await approvals.approve(approval_id, body.get("correction"))
+    return await store.approve(approval_id, body.get("correction"))
 
 
 @router.post("/portal/approvals/{approval_id}/reject")
 async def reject(approval_id: str, request: Request):
     body = await payload(request)
-    return await approvals.reject(approval_id, body["reason"], bool(body.get("final")))
+    return await store.reject(approval_id, body["reason"], bool(body.get("final")))
