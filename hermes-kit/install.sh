@@ -221,6 +221,12 @@ done
 # redundant: one is what the engine indexes, the other is what says the plugin
 # is installed (notes/plugin-system-plan.md, phase 3b).
 #
+# THE FOLDER GOES WHOLE, INCLUDING THE SURFACES THIS AGENT DOES NOT RUN. A
+# plugin's `core/` is a plugin of the POC engine (`poc/core`), never of Hermes:
+# it lands in the registry copy like every other file and nothing here imports
+# it, the same way the `engine/` copy inside the registry folder is not the one
+# the compose mounts. Nothing to exclude and nothing to special-case.
+#
 # WHICH ONES IS COMPUTED, NEVER LISTED: tools/plugin_set.py resolves the system
 # plugins, the ones behind a base capability, and the ones the capabilities this
 # client BOUGHT install (policy/capabilities/purchased.json). A list by hand is

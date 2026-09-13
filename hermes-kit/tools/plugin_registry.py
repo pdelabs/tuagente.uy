@@ -48,12 +48,15 @@ REQUIRED_KEYS = ("id", "version", "description", "client_copy", "requires", "sur
 # `_comment` is how every closed catalog in this kit carries its reasoning.
 ALLOWED_KEYS = REQUIRED_KEYS + ("_comment",)
 REQUIRES_KEYS = ("plugins", "connections", "toolsets")
-# The seven surfaces, in the order notes/plugin-system-plan.md lists them.
+# The surfaces, in the order notes/plugin-system-plan.md lists them.
 # `flows` is the one the team pivot left behind: a curated flow used to travel
 # inside the role that claimed it (`roles/<id>/flows/`, packed by
 # `build_role.py`), and with one agent per client the plugin whose skill the
 # flow exercises is what owns it.
-SURFACE_KEYS = ("skills", "flows", "engine", "mcp", "service", "adapter", "tab")
+# `core` is the newest and the only one the plan never drew: a plugin of
+# OUR engine (`poc/core`), next to `engine`, which is a plugin of Hermes'.
+# Neither one reads the other's folder.
+SURFACE_KEYS = ("skills", "flows", "engine", "core", "mcp", "service", "adapter", "tab")
 # The name of the directory a flow lands in on the agent, which the portal reads
 # and the agent edits. The shape is the adapter's (`adapter/flows.py`,
 # FLOW_SLUG_RE): a slug it cannot match is a flow the client will never see.
@@ -161,7 +164,7 @@ def _check_surfaces(path: Path, data: dict, folder_dir: Path) -> None:
                         f"{slug!r} is not a flow slug — it installs at "
                         "data/flows/<slug>/ and the portal skips what it cannot match")
 
-    for key in ("engine", "mcp", "service", "adapter"):
+    for key in ("engine", "core", "mcp", "service", "adapter"):
         value = surfaces.get(key)
         if value is None:
             continue
@@ -186,6 +189,29 @@ def _check_surfaces(path: Path, data: dict, folder_dir: Path) -> None:
         if not (surface_dir / "plugin.yaml").is_file():
             fail(where, f"surfaces.engine {engine!r} has no plugin.yaml — the engine "
                         "discovers a plugin by that file and loads nothing without it")
+
+    # THE CORE SURFACE IS A PLUGIN OF OUR OWN ENGINE, and it is the mirror image
+    # of `engine` above: `engine/` is a plugin of Hermes', `core/` is a plugin of
+    # `poc/core`. The engine imports `core/plugin.py` and calls its
+    # `register(engine)` — toolsets, routers, hooks, modules and the prose that
+    # belongs to the mechanism the plugin brings. Without that file there is
+    # nothing to import, which is the same failure the engine surface is checked
+    # for: installed, off, and a table saying it is there.
+    #
+    # A HERMES AGENT NEVER READS IT. `install.sh` copies the plugin folder whole
+    # into the agent's registry copy, `core/` included, and nothing on that agent
+    # imports it — the same way `engine/` travels into the registry copy of a
+    # plugin whose engine half is what the compose actually mounts.
+    core = surfaces.get("core")
+    if core is not None:
+        surface_dir = folder_dir / core
+        if not surface_dir.is_dir():
+            fail(where, f"surfaces.core points at {core!r}, which is not a directory; "
+                        "the core surface is a folder the engine imports plugin.py from")
+        if not (surface_dir / "plugin.py").is_file():
+            fail(where, f"surfaces.core {core!r} has no plugin.py — the engine imports "
+                        "that file and calls its register(engine), and loads nothing "
+                        "without it")
 
     # TWO SHAPES, NEVER BOTH. `label` is a page the portal does not have yet:
     # the client reads the word and phase 6 draws the generic plugin page under

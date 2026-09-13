@@ -426,6 +426,37 @@ class BrokenRegistry(unittest.TestCase):
             (where / "engine" / "guard" / "guard.py").write_text("", encoding="utf-8")
             self.fails_with(tmp, "has no plugin.yaml")
 
+    def test_a_core_surface_that_is_a_file_and_not_a_folder(self):
+        """The engine imports a DIRECTORY's plugin.py and the siblings next to it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            where = write(tmp, "alpha", manifest(
+                "alpha", surfaces={"skills": ["alpha"], "core": "plugin.py"}),
+                skills=["alpha"])
+            (where / "plugin.py").write_text("def register(engine): pass\n", encoding="utf-8")
+            self.fails_with(tmp, "which is not a directory")
+
+    def test_a_core_surface_with_no_plugin_py(self):
+        """Nothing to import means nothing registers: no toolset, no router, no
+        prose, and a manifest claiming the plugin works on that engine."""
+        with tempfile.TemporaryDirectory() as tmp:
+            where = write(tmp, "alpha", manifest(
+                "alpha", surfaces={"skills": ["alpha"], "core": "core/"}),
+                skills=["alpha"])
+            (where / "core").mkdir()
+            (where / "core" / "instructions.md").write_text("Nada.\n", encoding="utf-8")
+            self.fails_with(tmp, "has no plugin.py")
+
+    def test_a_core_surface_that_is_there_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            where = write(tmp, "alpha", manifest(
+                "alpha", surfaces={"skills": ["alpha"], "core": "core/"}),
+                skills=["alpha"])
+            (where / "core").mkdir()
+            (where / "core" / "plugin.py").write_text(
+                "def register(engine): pass\n", encoding="utf-8")
+            plugins = plugin_registry.registry(Path(tmp))
+            self.assertEqual(plugins["alpha"]["surfaces"]["core"], "core/")
+
     def test_a_tab_that_declares_both_shapes(self):
         """A page the portal has AND a word to draw is two different tabs."""
         with tempfile.TemporaryDirectory() as tmp:

@@ -4,9 +4,11 @@ One directory per plugin, `plugins/<id>/`, with a `plugin.json` manifest at its
 root. A plugin is the reusable unit of custom work: whatever a client pays us
 to build lands here so the second client who asks for it gets it off the shelf.
 
-The full design, the seven surfaces and the phase plan are in
+The full design, the surfaces and the phase plan are in
 [`../notes/plugin-system-plan.md`](../notes/plugin-system-plan.md). Read that
-before adding a surface this registry has never shipped.
+before adding a surface this registry has never shipped. The one the plan never
+drew is `core`, and it came from the other side: `poc/core` is an engine of ours
+and a plugin is how it gets a mechanism.
 
 ## The manifest
 
@@ -20,6 +22,7 @@ before adding a surface this registry has never shipped.
   "surfaces": {
     "skills": ["scrape"],
     "engine": "engine/",
+    "core": "core/",
     "mcp": "mcp/",
     "service": "compose.fragment.yml",
     "adapter": "endpoints.py",
@@ -40,6 +43,7 @@ before adding a surface this registry has never shipped.
 | `requires.toolsets` | engine toolsets the agent needs on |
 | `surfaces` | every one optional; a migrated leaf skill declares `skills` and nothing else |
 | `surfaces.engine` | a directory inside the plugin holding a `plugin.yaml`: a plugin of the ENGINE's, which install.sh copies to the agent's `policy/plugins/<name>/` |
+| `surfaces.core` | a directory inside the plugin holding a `plugin.py` (and optionally an `instructions.md`): a plugin of OUR engine, `poc/core`, which imports it and calls `register(engine)`. A Hermes agent never reads it |
 | `system` | `true` = the FOLDER ships to every agent, so anyone may depend on it |
 
 `requires` sub-lists and `surfaces` entries may be left out; unknown keys are a
@@ -273,6 +277,17 @@ to the agent TWICE: inside the registry folder like everything else, and to
 `/opt/data/plugins` — where the ENGINE looks for its own plugins. That
 destination did not move when the source did (`plugins/flow/engine/promises/`,
 phase 3b).
+
+**The core surface travels and nothing on a Hermes agent opens it.** `core/`
+is a plugin of `poc/core`, the engine the POC runs on, and that engine mounts
+this whole directory read-only at `/opt/kit/plugins` and imports
+`<id>/core/plugin.py` for each id in its `CORE_PLUGINS`. `install.sh` copies it
+into `<agent>/plugins/<id>/core/` because the folder ships whole; no Hermes
+agent imports a `.py` from there, the same way it never imports the `engine/`
+copy inside the registry folder. It is the mechanism's prose too: a plugin's
+`core/instructions.md` is in the model's prompt only where that plugin is
+enabled, which is why nothing about approvals, deliverables or flows is left in
+a SOUL.
 
 **The agent reads the registry at boot** (phase 3a). The adapter scans
 `/opt/plugins` through this same validator — `install.sh` ships
