@@ -160,7 +160,7 @@ that moves over.
 | Streaming the resumed run's answer, abort mid-run persistence, concurrent sessions | Rough edges named in the README. The POC is one process and approve is synchronous. | 2 days |
 | Capability catalog, connections catalog, artifacts, upload/inbox conventions | Adapter code that moves over mostly as is; it reads catalogs and folders, not the engine. | 3 days |
 | The kanban board tab | Decide first whether the product keeps a board at all. The POC suggests approvals plus activity cover what clients used it for. | 0 to 4 days |
-| Plugin surfaces beyond skills: `engine/`, `mcp/`, `service`, `adapter`, `tab` | The manifest format stays; each surface needs a loader. `mcp-guard` re-validated against the MCP client Pydantic AI ships. | 3 days |
+| Plugin surfaces beyond skills: `engine/`, `mcp/`, `service`, `adapter`, `tab` | One of them exists now: `core/` is a surface of the kit's manifest — `plugin.py`, `register(engine)`, optional `instructions.md` — and `approval`, `deliverable` and `flow` carry it, which is where this engine's gate, folders prose and promises guard live. The rest still need a loader each; `mcp-guard` re-validated against the MCP client Pydantic AI ships. | 2 days |
 | Image generation, vision, OCR and document skills, web search | Image gen is one API call; the four document skills are Python libraries; web search is a tool. | 2 days |
 | `new-agent.sh`, `install.sh`, `deploy-remote.sh`, `agent-check.py`, `fleet.md` | Rewrite against a much smaller surface: one container, one env file, no `config.yaml` to guard. | 3 days |
 | Onboarding through the portal (naming, look, business, channel) | `/portal/identity` exists; the brief and the avatar upload do not. | 1 day |

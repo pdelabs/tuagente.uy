@@ -33,7 +33,7 @@ What lives where:
 | `state/promises/` | the `data/` dir the kit's promises module expects — two symlinks, `flows` → `workspace/flows` and `cron` → `state/cron` |
 | `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did |
 | `agent/SOUL.md` | the client section + the `core:base` block, mounted read-only |
-| `/opt/kit/plugins` | `hermes-kit/plugins`, read-only. `CORE_PLUGINS` picks which load |
+| `/opt/kit/plugins` | `hermes-kit/plugins`, read-only. `CORE_PLUGINS` picks which load, and each one's `core/` surface is what it adds to this engine |
 
 ## The magic link
 
@@ -48,6 +48,76 @@ The seeded identity has `contact.channel: "none"`, which the portal reads as
 "offer the notification step again". If the walkthrough should skip it, set
 `"contact": {"channel": "email", "value": "…"}` in `agent/identity.json` (or
 `state/identity.json`, which wins) before opening the link.
+
+## Plugins
+
+**A mechanism is a plugin of the kit, not a module of this engine.** The three
+this engine runs by default — `CORE_PLUGINS=approval,deliverable,flow` — are
+the kit's own plugins, and each one declares `"surfaces": {"core": "core/"}` in
+its `plugin.json`: a directory holding `plugin.py` and, when the mechanism
+needs words, an `instructions.md`. `core/plugins.py` imports that file and
+calls `register(engine)`, in `CORE_PLUGINS` order.
+
+```
+poc/core/                          the engine, and nothing about any mechanism
+  core/config.py                   env -> settings; the base MODULES
+  core/plugins.py                  load the plugins, hand each one the engine
+  core/agent.py                    model, instructions, toolsets, capabilities
+  core/session.py                  a turn: stream, persist, events. BEFORE_PERSIST,
+                                   DEFERRED_HANDLER
+  core/compaction.py               summarize the history away (engine)
+  core/turn_usage.py               what the turn cost (engine)
+  core/tracing.py                  spans to Phoenix (engine)
+  core/tools/workspace.py          bash, read_file, write_file, list_files
+  core/tools/skills.py             the SKILL.md index + skill_view
+  core/db.py, server/*.py          storage, the two bases, the SSE dialects
+
+hermes-kit/plugins/approval/core/  the gate: sensitive.py (the gated toolset),
+                                   store.py (the row), render.py (what she
+                                   reads), routes.py (/portal/approvals*),
+                                   instructions.md, and SKILLS = []
+hermes-kit/plugins/deliverable/core/  nothing to register: instructions.md
+hermes-kit/plugins/flow/core/      the promises guard, reading promises.py from
+                                   the plugin's own engine/promises/
+```
+
+`register(engine)` gets an object with seven verbs and no more:
+
+| verb | what it adds |
+|---|---|
+| `engine.toolset(ts)` | a toolset the agent gets, gate and all (`EXTRA_TOOLSETS`) |
+| `engine.before_persist(fn)` | `(session_id, text) -> text`, run before the answer is persisted |
+| `engine.capability(cap)` | an `AbstractCapability` for the Agent (`CAPABILITIES`) |
+| `engine.router(router)` | an `APIRouter`, included after the engine's own and before the 404 catch-all |
+| `engine.module(name, value)` | what the portal draws; `value` may be a callable, asked when the manifest is read |
+| `engine.instructions(text)` | prose into the system prompt |
+| `engine.deferred(fn)` | the ONE callable that answers a run stopped at a gated tool |
+
+Two things are not verbs. **Skills** load from `surfaces.skills` as on any
+agent, unless the plugin's module defines `SKILLS` — a list that overrides the
+manifest here, and `[]` means it brings none to this engine (`approval`'s
+SKILL.md is Hermes-kanban prose; `flow`'s drives a runner this engine does not
+have). And **`instructions.md`** is read by the loader, not by the plugin: it
+goes into the prompt before anything `register()` adds.
+
+The instructions a run is built from, in order:
+
+```
+agent/SOUL.md  +  each enabled plugin's instructions.md  +  the skills index  +  the date line
+```
+
+**Where a rule lives is decided by what can enforce it.** In CODE if code can
+check it — the gate is on the tool, so asking is not something the model can
+forget. In a TOOL'S DESCRIPTION if it is about using that tool — what a request
+has to explain is in `send_email`'s docstring and in `ApprovalNote`'s fields. In
+the SOUL only if it is about who the agent is: its name, its client, its tone,
+its scope, and the list of what THIS company does not do without permission.
+Nothing about tools, folders, skills or mechanisms goes in the SOUL. Everything
+else is prose about a mechanism, and prose about a mechanism ships WITH the
+mechanism — so it is in the prompt only where that plugin is enabled, and when
+the mechanism changes there is one file to change. `flow`'s `instructions.md`
+says the agent has nothing scheduled *on this engine*; the day flows land, that
+file changes and nothing else does.
 
 ## Check it
 
@@ -114,13 +184,20 @@ leave standing is here.
 
 ## Approvals
 
-The gate is on the TOOL, not on the model remembering to ask: the toolset in
-`core/tools/sensitive.py` is exported wrapped in `approval_required()`, so the
-run stops before the tool body runs. What happens then, in order:
+Approvals are a PLUGIN of this engine, not part of it: everything below is in
+`hermes-kit/plugins/approval/core/`, loaded because `approval` is in
+`CORE_PLUGINS`. Take it out of that list and the engine has no gate, no
+Approvals tab and not a word about permission in its prompt.
 
-1. The run ends with `DeferredToolRequests` as its output instead of text.
-2. `core/approvals.py` writes A NEW ROW, one per request: the body rendered by
-   `core/render.py` from the tool's arguments and its `ApprovalNote`, the
+The gate is on the TOOL, not on the model remembering to ask: the toolset in
+`sensitive.py` is registered wrapped in `approval_required()`, so the run stops
+before the tool body runs. What happens then, in order:
+
+1. The run ends with `DeferredToolRequests` as its output instead of text, and
+   `core/session.py` hands it to the plugin's `paused()` through
+   `DEFERRED_HANDLER` — the engine knows a run can stop and nothing else.
+2. The plugin's `store.py` writes A NEW ROW, one per request: the body rendered
+   by its `render.py` from the tool's arguments and its `ApprovalNote`, the
    serialized requests, and THE RUN'S MESSAGES. That last one is what survives
    a `docker kill`. A row is reused ONLY by the resumed run of that same row,
    which names it — a second gated turn on the same conversation opens its own
@@ -216,13 +293,17 @@ Three things it settled, none of them guessable from the docs:
 python3 poc/core/tests/test_promises.py       # ~30 s, ~US$0.002
 ```
 
-Three parts: the kit's own case through `core/promises_hook.py` with no model
+Three parts: the kit's own case through the BEFORE_PERSIST chain with no model
 (the 8/13 phrase gets the correction, a loose deliverable does not), the
 natural ask (the agent is told to claim a schedule — the SOUL holds and it
 refuses, which is printed), and the seam itself (the agent is made to emit
 the claim verbatim, and `GET /api/sessions/{id}/messages` returns the
 corrected text). The last one is the gate: what the portal reads back is what
 the hook returned, not what the model said.
+
+The guard itself is `hermes-kit/plugins/flow/core/plugin.py`, which loads the
+kit's `promises.py` from the plugin's own `engine/promises/` by path: one copy
+of the module, two engines reading it.
 
 The one-line version of the phrase — "Queda definido: viernes a las 9:30 te
 mando el control de contratos" — does **not** fire, and that is the module
@@ -296,11 +377,13 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
 
 | Seam | Where |
 |---|---|
-| Extra toolsets (sensitive tools, anything gated) | `EXTRA_TOOLSETS` in `core/agent.py`, appended at import time; read on the first turn |
+| Anything a PLUGIN brings | its `core/plugin.py` and the seven verbs of `register(engine)` — see **Plugins** above. Everything below is what those verbs write into |
+| Extra toolsets (sensitive tools, anything gated) | `EXTRA_TOOLSETS` in `core/agent.py`, appended before the first turn; read when the agent is built |
 | Agent capabilities (compaction, `ReinjectSystemPrompt`) | `CAPABILITIES` in `core/agent.py` |
 | Text transform before the message is persisted | `BEFORE_PERSIST` in `core/session.py` — a list of `(session_id, text) -> text`, run in order, and what they return is what gets persisted AND what `assistant.completed` carries |
+| A run that stopped at a gated tool | `DEFERRED_HANDLER` in `core/session.py` — ONE callable, `(session_id, requests, history) -> text` |
 | The event log | `db.append_event(kind, label, status, session_id, payload)` (the plan calls it `events.append`) |
-| New tabs | a route in `server/portal.py` (or a router of its own, like `server/extra.py`) plus its flag in `core/config.py`'s `MODULES` |
+| New tabs | a route in `server/portal.py` (or a router of its own, like `server/extra.py`, or a plugin's) plus its flag in `core/config.py`'s `MODULES` or `engine.module(...)` |
 | Anything that wants the run's result — usage, cost, what it answered | an `AbstractCapability` with `after_run`, like `core/turn_usage.py`. It is where the result exists, and it needs nothing from `core/session.py` |
 
 ## What Pydantic AI 2.43 actually does

@@ -6,9 +6,10 @@ Three parts:
   a. UNIT, no model. The exact case the kit checks every agent against
      (`hermes-kit/tools/agent-check.py`'s `LIE`): the phrase with which, on
      8/13/2026, an agent told a real-estate client "Queda definido: viernes a
-     las 9:30" without having created a single flow. It goes through
-     `core/promises_hook.py` and has to come back with the correction
-     appended — and the kit's counter-case (a loose deliverable) has to come
+     las 9:30" without having created a single flow. It goes through the
+     BEFORE_PERSIST chain — which is where the `flow` plugin registers the
+     guard, so what runs is the hook exactly as a turn would run it — and has
+     to come back with the correction appended — and the kit's counter-case (a loose deliverable) has to come
      back untouched, because a check that dirties good answers gets turned
      off. It runs inside the container with `CORE_STATE_DIR`/`CORE_WORKSPACE`
      pointed at a scratch dir, so the live db and workspace are not touched.
@@ -20,9 +21,9 @@ Three parts:
      carries it in the second line ("para dejarlo andando").
 
   b. LIVE, the natural ask. An instruction shaped to make the agent claim a
-     schedule. The SOUL tells it never to, so it may refuse; that is a pass
-     for the SOUL, not a failure of the seam, and the script prints what it
-     actually said.
+     schedule. The `flow` plugin's instructions.md tells it never to, so it
+     may refuse; that is a pass for the prose, not a failure of the seam, and
+     the script prints what it actually said.
 
   c. LIVE, the seam itself. The agent is made to emit the claim verbatim, and
      then `GET /api/sessions/{id}/messages` — what the PORTAL reads back has
@@ -54,11 +55,19 @@ KEY = next(
     if line.startswith("API_SERVER_KEY=")
 )
 
+# `plugins.load()` and not an import of the module: the guard lives in the kit
+# now (`plugins/flow/core/plugin.py`) and the only supported way in is the one
+# the engine itself uses. What this runs is the whole BEFORE_PERSIST chain, in
+# the order a turn runs it.
 UNIT = """
 import json
-from core import promises_hook
-out = {name: promises_hook.check("test_promises", text)
-       for name, text in json.loads(%r).items()}
+from core import plugins, session
+plugins.load()
+out = {}
+for name, text in json.loads(%r).items():
+    for hook in session.BEFORE_PERSIST:
+        text = hook("test_promises", text)
+    out[name] = text
 print(json.dumps(out))
 """ % json.dumps({"lie": LIE, "loose": LOOSE})
 
@@ -104,7 +113,7 @@ def unit() -> bool:
         input=UNIT, check=True, capture_output=True, text=True,
     )
     out = json.loads(done.stdout)
-    print("a. UNIT — the kit's own case through the hook, no model")
+    print("a. UNIT — the kit's own case through BEFORE_PERSIST, no model")
     print("   the 8/13 phrase, with no flow on disk:")
     show(out["lie"])
     corrected = MARKER in out["lie"]
