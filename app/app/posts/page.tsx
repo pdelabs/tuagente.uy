@@ -610,25 +610,34 @@ function PostCard({ cfg, p, look, handle, flowName, onOpen, wide = false }: {
       <Reactions />
       <Caption handle={handle} p={p} expandable={!wide} />
 
-      <div className="px-3 pb-3 pt-1.5 text-[10px] uppercase tracking-wide text-ink-soft/80">
-        {onOpen ? (
-          <button onClick={onOpen} className="transition hover:text-ink-soft">
-            {dayLine(p.date)}
-          </button>
-        ) : (
-          <span>{dayLine(p.date)}</span>
-        )}
-        {p.flow && (
-          <>
-            {" · "}
-            <Link
-              href={`/app/flows/${p.flow}`}
-              className="underline-offset-4 transition hover:text-primary hover:underline"
-            >
-              del flujo {flowName ?? humanizeSlug(p.flow)}
-            </Link>
-          </>
-        )}
+      {/* The date line, and the shape of the piece on its right: what a feed
+          post says under the caption is meta, and that is what the format is.
+          It sat in the row of buttons below and at 400px it wrapped onto a
+          line of its own, a chip alone in the middle of nothing. */}
+      <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1.5 text-[10px] uppercase tracking-wide text-ink-soft/80">
+        <span className="min-w-0">
+          {onOpen ? (
+            // `uppercase` again on the button: Tailwind's preflight resets
+            // `text-transform` on every <button>, so it does not inherit.
+            <button onClick={onOpen} className="uppercase transition hover:text-ink-soft">
+              {dayLine(p.date)}
+            </button>
+          ) : (
+            dayLine(p.date)
+          )}
+          {p.flow && (
+            <>
+              {" · "}
+              <Link
+                href={`/app/flows/${p.flow}`}
+                className="underline-offset-4 transition hover:text-primary hover:underline"
+              >
+                del flujo {flowName ?? humanizeSlug(p.flow)}
+              </Link>
+            </>
+          )}
+        </span>
+        <span className="ml-auto"><Chip tone={shape.tone}>{shape.label}</Chip></span>
       </div>
 
       {/* The product's own actions. Small and secondary on purpose: the card
@@ -637,7 +646,6 @@ function PostCard({ cfg, p, look, handle, flowName, onOpen, wide = false }: {
       <div className="flex flex-wrap items-center gap-2 border-t border-black/[0.07] px-3 py-2.5">
         <CopyText text={() => forPublishing(p)} label="Copiar texto" />
         {!wide && current && <DownloadImage cfg={cfg} id={p.id} name={current.name} />}
-        <span className="ml-auto"><Chip tone={shape.tone}>{shape.label}</Chip></span>
       </div>
       <div className="px-3 pb-3">
         <AltText alt={p.alt} />
