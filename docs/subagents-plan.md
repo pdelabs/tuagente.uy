@@ -58,6 +58,24 @@ engine/tests/test_image.py       tests generate.generate_image directly inside t
 2. The creator in the social plugin, the tests, `engine/README.md` "Sub-agents" section (same agent, same wave, sequential: it needs 1).
 3. Our own agent rebuilt, one run-now of its flow through the delegation, browser check (me).
 
+## Where reality differed (waves 1 and 2, 14/09)
+
+- **`core/instructions.md` is two lines and not one.** With only «Nunca
+  publicás…», the face answered a delegated post with a bulleted list of file
+  names and did not mention Posteos — which S1 asks for. The second line says
+  what to tell the client when the creator comes back.
+- **The memory injection had to move before any of this worked.** The harness
+  appends the notebook to the last model request, so on a one-tool-call turn
+  the model answered the notebook instead of the client («Recibido. El horario
+  de los sábados es de 9:00 a 13:00»). `kit/plugins/memory/core/injection.py`
+  moves it to the front.
+- **The image plugin's `instructions.md` is gone**: it told the face to look at
+  what it drew, and the face no longer draws.
+- **The gate inside a delegation does not pause, it kills the turn** — the
+  child run raises `UserError` because its own output types have no
+  `DeferredToolRequests`, and that bypasses `contain_errors`. The registration
+  check is the whole answer; nothing was changed on the probe's account.
+
 ## Risks named up front
 
 - **The gate inside a delegation.** The harness says approval signals propagate through `delegate_task`. Not relied on; refused at registration. One probe in the report says what actually happens, for the record.

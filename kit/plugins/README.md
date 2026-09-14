@@ -43,7 +43,7 @@ and a plugin is how it gets a mechanism.
 | `requires.toolsets` | engine toolsets the agent needs on |
 | `surfaces` | every one optional; a migrated leaf skill declares `skills` and nothing else |
 | `surfaces.engine` | a directory inside the plugin holding a `plugin.yaml`: a plugin of the ENGINE's, which install.sh copies to the agent's `policy/plugins/<name>/` |
-| `surfaces.core` | a directory inside the plugin holding a `plugin.py` (and optionally an `instructions.md`): a plugin of OUR engine, `engine`, which imports it and calls `register(engine)`. A Hermes agent never reads it |
+| `surfaces.core` | a directory inside the plugin holding a `plugin.py` (and optionally an `instructions.md`): a plugin of OUR engine, `engine`, which imports it and calls `register(engine)`. A Hermes agent never reads it. The verbs are `toolset`, `before_persist`, `capability`, `router`, `module`, `instructions`, `deferred` and `subagent`, plus `tools`, `identity`, `provide` and `use` for building the agent a `subagent` delegates to; `engine/README.md` has the table |
 | `system` | `true` = the FOLDER ships to every agent, so anyone may depend on it |
 
 `requires` sub-lists and `surfaces` entries may be left out; unknown keys are a
@@ -314,6 +314,15 @@ copy inside the registry folder. It is the mechanism's prose too: a plugin's
 `core/instructions.md` is in the model's prompt only where that plugin is
 enabled, which is why nothing about approvals, deliverables or flows is left in
 a SOUL.
+
+**A `core` surface may also bring a SUB-AGENT.** `engine.subagent(delegate,
+label=…)` registers an agent the client's one agent can hand work to, and
+`engine.tools`, `engine.identity`, `engine.provide` and `engine.use` are what a
+plugin builds it out of — the same tool definitions the face has, the same
+SOUL, and capabilities another plugin offered by name. It is how the `social`
+plugin's creator gets `save_post` and the `image` plugin's capability while the
+face has neither: `docs/subagents-plan.md` and `engine/README.md`,
+**Sub-agents**.
 
 **The agent reads the registry at boot** (phase 3a). The adapter scans
 `/opt/plugins` through this same validator — `install.sh` ships

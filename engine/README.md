@@ -90,6 +90,7 @@ engine/                          the engine, and nothing about any mechanism
   core/agent.py                    model, instructions, toolsets, capabilities
   core/session.py                  a turn: stream, persist, events. BEFORE_PERSIST,
                                    DEFERRED_HANDLER
+  core/delegation.py               a delegation as the client sees it (engine)
   core/compaction.py               summarize the history away (engine)
   core/turn_usage.py               what the turn cost (engine)
   core/tracing.py                  spans to Phoenix (engine)
@@ -107,20 +108,26 @@ kit/plugins/approval/core/  the gate: sensitive.py (the gated toolset),
                                    reads), routes.py (/portal/approvals*),
                                    instructions.md, and SKILLS = []
 kit/plugins/deliverable/core/  nothing to register: instructions.md
-kit/plugins/memory/core/    the notebook: plugin.py (the harness's
-                                   Memory capability and the rule it carries as
-                                   `guidance`), extraction.py (the after_run
-                                   pass that writes what the client said in
-                                   passing). No instructions.md
-kit/plugins/image/core/     one tool: plugin.py (Pydantic AI's
-                                   ImageGeneration capability), generate.py
-                                   (OpenRouter, the PNG, the picture back)
-kit/plugins/social/core/    the post: posts.py (save_post, the reader and
-                                   the /portal/posts* routes), instructions.md,
-                                   and skills/post/SKILL.md, the craft
+kit/plugins/memory/core/    the notebook: plugin.py (the capability, the
+                                   rule it carries as `guidance`, and the
+                                   factory it provides), injection.py (the
+                                   harness's Memory with the injected part
+                                   moved to the front), extraction.py (the
+                                   after_run pass that writes what the client
+                                   said in passing). No instructions.md
+kit/plugins/image/core/     one tool, on nobody: plugin.py PROVIDES
+                                   Pydantic AI's ImageGeneration capability,
+                                   generate.py is OpenRouter, the PNG and the
+                                   picture back. No instructions.md
+kit/plugins/social/core/    the post: creator.py (the SUB-AGENT that
+                                   makes it), posts.py (save_post, the reader
+                                   and the /portal/posts* routes),
+                                   creator.md, instructions.md, and
+                                   skills/post/SKILL.md, the craft
 ```
 
-`register(engine)` gets an object with seven verbs and no more:
+`register(engine)` gets an object with eight verbs that ADD something and no
+more:
 
 | verb | what it adds |
 |---|---|
@@ -131,6 +138,18 @@ kit/plugins/social/core/    the post: posts.py (save_post, the reader and
 | `engine.module(name, value)` | what the portal draws; `value` may be a callable, asked when the manifest is read |
 | `engine.instructions(text)` | prose into the system prompt |
 | `engine.deferred(fn)` | the ONE callable that answers a run stopped at a gated tool |
+| `engine.subagent(sub, label)` | a delegate the face can hand work to, and the Spanish name the client reads it under |
+
+plus four that hand a plugin what it needs to BUILD one, and three attributes
+that make its `Agent(...)` fit this engine — see **Sub-agents** below:
+
+| verb | what it gives back |
+|---|---|
+| `engine.tools(*names)` | some of the engine's own tools, by name, as one filtered toolset |
+| `engine.identity()` | the SOUL and the date, and nothing of the mechanisms only the face has |
+| `engine.provide(name, obj)` | an object for the plugins that load after this one |
+| `engine.use(name)` | one of those, by name |
+| `engine.model` · `engine.model_settings` · `engine.Deps` | what a plugin's `Agent(...)` needs to fit |
 
 Two things are not verbs. **Skills** load from `surfaces.skills` as on any
 agent, unless the plugin's module defines `SKILLS` — a list that overrides the
@@ -144,6 +163,13 @@ The instructions a run is built from, in order:
 ```
 agent/SOUL.md  +  each enabled plugin's instructions.md  +  the skills index  +  the date line
 ```
+
+A CAPABILITY'S OWN INSTRUCTIONS COME BEFORE ALL OF THAT, and that is Pydantic
+AI's ordering, not ours: the memory `guidance` and the sub-agent listing are
+rendered by the capabilities that own them and land at the head of the prompt.
+The date line stays last on purpose — it is the one line that changes by
+itself, and everything above it is a stable prefix the provider's cache keeps,
+which is nearly all of this engine's conversational saving.
 
 **Where a rule lives is decided by what can enforce it.** In CODE if code can
 check it — the gate is on the tool, so asking is not something the model can
@@ -161,7 +187,8 @@ there, next to the tools that make them true.
 **Posts.** `social` is the plugin that turns the engine into something that
 produces work a client looks at, and it is the first one a client BUYS
 (`social-package`, which installs it and `image`). It brings one tool,
-`save_post`, and the tool owns the format: the post lands in
+`save_post` — on its own sub-agent and not on the face, see **Sub-agents** —
+and the tool owns the format: the post lands in
 `workspace/posteos/<YYYY-MM-DD>-<slug>/` as `post.json` (id, date, format,
 caption, alt, hashtags, images, `flow` when the clock started the run),
 `caption.md` — the caption, a blank line, the hashtags — and `01.png`, `02.png`
@@ -180,14 +207,111 @@ and not by `/portal/files`, which answers `text/plain` for everything it has.
 `engine.module("posts", True)` is what makes the portal draw the tab.
 
 ```bash
-python3 engine/tests/test_post.py       # ~60 s, ~US$0.02
+python3 engine/tests/test_post.py       # ~60 s, ~US$0.01
 ```
 
-One chat turn — «Armá el posteo de hoy para Instagram y guardalo» — and six
+One chat turn — «Armá el posteo de hoy para Instagram y guardalo» — and eight
 assertions from outside: the folder with its three kinds of file, the listing,
 the piece downloading as `image/png`, `modules.posts` in the manifest, a
-`post.saved` event in Activity, and an answer that does not claim it published.
-The post is left on disk, because it is the thing to look at.
+`post.saved` event in Activity, an answer that does not claim it published,
+`delegate_task` in the trail and `save_post` NOT in it, and an answer that
+names Posteos. The day's post is moved out of the workspace for the length of
+the run and moved back at the end — one per day is `save_post`'s rule, and
+without that the second run of a day has no folder to assert.
+
+## Sub-agents
+
+**The face is the only entry point** — the chat and every flow run — and what
+it delegates runs in its own context with its own tools and its own prose.
+`docs/subagents-plan.md` is the decision; the mechanism is
+`pydantic_ai_harness.SubAgents`, one `delegate_task` tool on the face over
+every delegate the plugins registered, built at the end of `plugins.load()`
+and added only if there is one.
+
+**A delegate is a real `Agent` the PLUGIN builds**, wrapped in a `SubAgent`.
+The example, and today the only one, is the social plugin's creator
+(`kit/plugins/social/core/creator.py`):
+
+```python
+agent = Agent(
+    engine.model,
+    deps_type=engine.Deps,
+    name="instagram-creator",
+    description="Arma un posteo de Instagram listo para revisar: …",
+    instructions=[engine.identity, PROSE.read_text(), procedure()],
+    toolsets=[engine.tools("read_file", "list_files"), posts.toolset()],
+    capabilities=[engine.use("image"), engine.use("memory")("instagram-creator")],
+    model_settings=engine.model_settings,
+)
+engine.subagent(SubAgent(agent, timeout_seconds=TIMEOUT, max_calls=2),
+                label="creador de posteos")
+```
+
+- **It shares the face's identity and nothing else.** `engine.identity()` is
+  the SOUL and the date; the plugins' prose and the skills index are the
+  face's mechanisms, and a delegate that reads about a tool it does not have
+  will try to use it. It is passed as a CALLABLE, so the SOUL is re-read per
+  delegation like it is per turn.
+- **Its tools come from the same definitions**, filtered by name with
+  `engine.tools(...)` — one `read_file` with one docstring. The flow tools are
+  not on offer: creating a flow is a conversation with the client, and a
+  sub-agent never has one. An unknown name raises at registration.
+- **Its capabilities come from other plugins**, by name. `image` provides its
+  `ImageGeneration` and registers nothing; `memory` provides a factory, so the
+  creator gets `memoria/instagram-creator/MEMORY.md` next to the face's
+  `memoria/main/`.
+- **The skill is read whole, at build time.** `SKILLS = []` in the social
+  plugin: on the face the post skill was an index entry the model had to
+  decide to read, and here there is one job, so the procedure IS the
+  instructions. The face no longer has the tools that skill names.
+
+**A sub-agent has no gated tools and never talks to the client.** Registration
+refuses three shapes: a delegate typed on other deps, one with a fixed output
+type (what comes back to the face is `str(output)`), and one carrying an
+`approval_required` toolset. That last one is not a precaution — measured:
+the gate does NOT come back through `delegate_task` as a pause. The CHILD run
+raises, because its own run has no `DeferredToolRequests` among its output
+types, and that `UserError` bypasses `contain_errors` and kills the turn; the
+client reads «No pude responder: A deferred tool call was present…». Sensitive
+tools stay on the face, which is where the conversation is.
+
+**A failure comes back as a message.** `contain_errors=True` and a per-delegate
+`timeout_seconds` (`CORE_DELEGATION_TIMEOUT`, ten minutes by default): a crash,
+a timeout and an exhausted `max_calls` all return a steering line the face
+reads and answers the client from. An image the provider refuses never even
+gets that far — it is a `ModelRetry` inside the creator, which reports it.
+
+**Both ends are visible and priced.** `core/delegation.py` writes
+`delegation.started` («Le pedí al creador de posteos: <the brief, cut at 120>»)
+and `delegation.finished` («El creador de posteos terminó en N s», or «…no
+pudo: tardó más de lo que tenía») into the events table on ANY run — a chat
+turn, a flow's run, a run resumed after an approval, which has no stream at
+all — and `core/session.py` yields the same two off the stream as tool
+progress, so the chat's trail is not three silent minutes. The Spanish name is
+the `label` the plugin passed; the delegate's id never reaches a screen.
+`forward_usage=True`, so the child's tokens are in the turn's `turn_usage`
+event, which gains `delegations: N` to say how much of it was not the face.
+
+Two things the portal has not caught up with, neither of them a failure: the
+harness's own listing prose in the prompt is English (a library constant, the
+only English the model reads), and `app/app/lib/labels.ts` has a row for
+`delegate_task` («Repartió el trabajo») but none for `delegation.started` /
+`delegation.finished`, so those two trail lines read as the generic «Trabajó un
+rato» until somebody adds them.
+
+```bash
+python3 engine/tests/test_delegation.py   # ~4 min, ~US$0.10
+```
+
+S1-S4 against the running container, sixteen claims: the face delegates and has
+neither `generate_image` nor `save_post`; a flow's run goes through the same
+delegation and the post it saves carries the flow's slug — which is `flow_of`
+still working, and the proof that the creator runs on the FACE's deps; both
+events are in Activity and the usage event says `delegations: 1` against a turn
+that delegated nothing (45_921 in / 1_825 out against 7_540 / 902, US$0.0084
+against US$0.0022); and a refused image and a five-second timeout both come
+back as an answer in Spanish. It moves the day's post out of the workspace and
+puts it back.
 
 ## Check it
 
@@ -332,10 +456,25 @@ below the prompt, because it is written by a model and re-read by one.
 **Where it lives, and who can see it.**
 `workspace/memoria/main/MEMORY.md` — inside the workspace on purpose. What the
 agent believes about a client is the client's to read and to correct, and the
-Files tab lists it like any other file. `main/` is the store's scope segment
-and `MEMORY.md` is the library's constant; the store's journal sits next to it
+Files tab lists it like any other file. `main/` is the FACE's scope segment and
+`MEMORY.md` is the library's constant; the store's journal sits next to it
 as `.memory-store.sqlite3` (it is what makes a write atomic across processes)
-and the Files tab skips it, because it skips every dotfile.
+and the Files tab skips it, because it skips every dotfile. A sub-agent gets
+its own notebook next to it — `memoria/instagram-creator/` — through the
+factory this plugin provides (**Sub-agents** above); the extraction below stays
+on the face alone, because it reads a turn of the CLIENT's conversation and a
+sub-agent never has one.
+
+**The notebook goes FIRST in the request, and that is ours.** The harness
+appends the injected part to the LAST model request of every round trip, so on
+a request carrying a tool return it is the last thing the model reads before
+answering — and it answers it: «Recibido. El horario de los sábados es de 9:00
+a 13:00», twice out of two, on the turn where the client had asked for a post.
+Every tool loop has had that shape; a delegated turn made it the usual answer,
+because it is ONE short tool return where there used to be a long trail of
+them. `injection.Notebook` is the harness's `Memory` with the part moved to the
+front afterwards — background before the thing to answer, which is what the
+guidance already says it is. Nothing is added or rewritten.
 
 **Two write paths, one notebook.**
 
@@ -600,6 +739,14 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
   Its tokens are on the `compaction` event instead, so a turn that compacted
   cost more than its `turn_usage` row says. The provider's own meter, which is
   what `GET /portal/usage` shows, has both.
+- **A delegation that dies uncontained leaves a `delegation.started` with no
+  end.** The harness emits the end event from inside the delegate tool, so an
+  exception that propagates out of it (a shared usage limit, a cancellation, a
+  crash with `contain_errors` off) ends the delegation without one. Activity
+  then shows what was asked for and never how it went — which is honest, since
+  the turn itself ends in the engine's failure line right after it, but a row
+  that closes nothing is a row somebody will read as a delegation still
+  running.
 - **The extraction's tokens are not in the turn's usage either.** Same shape as
   the compaction summarizer above and for the same reason: it is a separate
   `Agent.run()` inside a capability, so a turn that noted something down cost
@@ -644,6 +791,7 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
 | The event log | `db.append_event(kind, label, status, session_id, payload)` (the plan calls it `events.append`) |
 | New tabs | a route in `server/portal.py` (or a router of its own, like `server/extra.py`, or a plugin's) plus its flag in `core/config.py`'s `MODULES` or `engine.module(...)` |
 | Anything that wants the run's result — usage, cost, what it answered | an `AbstractCapability` with `after_run`, like `core/turn_usage.py`. It is where the result exists, and it needs nothing from `core/session.py` |
+| Work that should run in its own context, with its own tools | `engine.subagent(...)` from the plugin that owns it — see **Sub-agents**. The engine mounts one `SubAgents` capability over all of them |
 
 ## What Pydantic AI 2.43 actually does
 
@@ -663,6 +811,12 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
   processed one. `ReinjectSystemPrompt()` is a no-op on an agent that uses
   `instructions=` rather than `system_prompt=`: there is no system prompt in
   the history for a summary to drop.
+- A capability's typed events are part of `AgentStreamEvent`, so
+  `run_stream_events` yields them to the caller like any other event AND
+  dispatches them to every capability with an `@on_event` listener. That is why
+  a delegation is written down in `core/delegation.py` (which fires on a run
+  with no stream too) and shown from `core/session.py` (which is the only place
+  the chat's trail is built).
 - `result.usage` is a property, not a call, and it carries `cost` — a
   `Decimal | None` from genai-prices. `ctx.context_window_used` is the last
   response's `total_tokens` over `model.context_window`, and `None` until the
