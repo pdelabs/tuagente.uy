@@ -103,8 +103,11 @@ Same system as the landing and the portal. No new colors, no new fonts.
   Mr.Wobbles (pillar 4 only) = `{tone:3, antenna:0, accessory:1, pupil:0,
   mouth:0, skin:0, suit:1, brows:1}`. Other looks only for "el bautismo"
   posts showing the dice.
-- **Always on the image:** the mark + `tuagente.uy` top-left. Slide counter
-  top-right on carousels. Nothing else: no handles, no URLs in the body.
+- **Nothing on the image but the piece itself.** No mark, no wordmark, no
+  `tuagente.uy`, no handles, no URLs, no slide counter: the account name is
+  already on the post. On a generated image the only text is the headline
+  the brief lists, word for word. (The template renderer used to stamp the
+  mark top-left; that rule is gone on 2026-09-14 by Luis' decision.)
 - **Formats:** feed `1080x1350` (default, 4:5), square `1080x1080` (only if
   asked), story `1080x1920`. Carousels: 4 to 7 slides, first one is the hook,
   last one is the CTA (`statement` with `cta`).

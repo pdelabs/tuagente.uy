@@ -58,8 +58,9 @@ oración, para quien no la ve.
 
 Armá el brief con los colores de la marca y la idea del posteo, y enumerá
 **palabra por palabra** el único texto que puede aparecer en la pieza. Pedile
-que no agregue ningún otro: ni fechas, ni dominios, ni subtítulos en inglés, ni
-marcas de agua, ni códigos de color dibujados. Todo en español, con sus tildes,
+que no agregue ningún otro: ni fechas, ni dominios, ni logos ni la marca en una
+esquina, ni subtítulos en inglés, ni marcas de agua, ni códigos de color
+dibujados. Todo en español, con sus tildes,
 y con aire arriba y abajo: Instagram recorta los bordes de una pieza vertical.
 
 `generate_image(prompt, format)` con el mismo formato que va a llevar el
