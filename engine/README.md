@@ -111,10 +111,11 @@ kit/plugins/deliverable/core/  nothing to register: instructions.md
 kit/plugins/memory/core/    the notebook: plugin.py (the capability, the
                                    rule it carries as `guidance`, and the
                                    factory it provides), injection.py (the
-                                   harness's Memory with the injected part
-                                   moved to the front), extraction.py (the
-                                   after_run pass that writes what the client
-                                   said in passing). No instructions.md
+                                   harness's Memory rendered into the
+                                   INSTRUCTIONS instead of appended to the
+                                   last message), extraction.py (the after_run
+                                   pass that writes what the client said in
+                                   passing). No instructions.md
 kit/plugins/image/core/     one tool, on nobody: plugin.py PROVIDES
                                    Pydantic AI's ImageGeneration capability,
                                    generate.py is OpenRouter, the PNG and the
@@ -463,10 +464,8 @@ Memory is a PLUGIN too — `kit/plugins/memory/`, loaded because `memory`
 is in `CORE_PLUGINS` — and it is the only one whose mechanism comes from a
 library: `pydantic-ai-harness==0.31.0`, whose `Memory` capability gives the
 agent four tools (`write_memory`, `read_memory`, `search_memory`,
-`delete_memory`) and injects a bounded excerpt of the notebook into every
-request. The injection is a **delimited user-role part**, not instructions:
-what the agent believes about a client arrives as content, one authority level
-below the prompt, because it is written by a model and re-read by one.
+`delete_memory`) and renders a bounded excerpt of the notebook into every
+request, inside `<memory>` markers.
 
 **Where it lives, and who can see it.**
 `workspace/memoria/main/MEMORY.md` — inside the workspace on purpose. What the
@@ -480,16 +479,27 @@ factory this plugin provides (**Sub-agents** above); the extraction below stays
 on the face alone, because it reads a turn of the CLIENT's conversation and a
 sub-agent never has one.
 
-**The notebook goes FIRST in the request, and that is ours.** The harness
-appends the injected part to the LAST model request of every round trip, so on
-a request carrying a tool return it is the last thing the model reads before
+**The notebook is in the INSTRUCTIONS, and that is ours.** The harness appends
+its injected part to the LAST model request of every round trip, so on a
+request carrying a tool return it is the last thing the model reads before
 answering — and it answers it: «Recibido. El horario de los sábados es de 9:00
 a 13:00», twice out of two, on the turn where the client had asked for a post.
 Every tool loop has had that shape; a delegated turn made it the usual answer,
 because it is ONE short tool return where there used to be a long trail of
-them. `injection.Notebook` is the harness's `Memory` with the part moved to the
-front afterwards — background before the thing to answer, which is what the
-guidance already says it is. Nothing is added or rewritten.
+them. Moving the part to the front of the request fixed the answer and left the
+block in the conversation, where a delegated turn's `delegate_task` tool return
+still carried a whole copy of the notebook in front of the creator's report.
+
+So it is not in the conversation at all. `injection.Notebook` is the harness's
+`Memory` with `inject_memory` off and the notebook rendered through
+`get_instructions` instead: read once per run in `for_run`, next to the
+guidance that already lived in the instruction channel, still inside its
+`<memory>` markers. A LITERAL instruction and not a callable, so it stays above
+the date line and inside the run's stable prefix. What it costs is cache — the
+tail of a request is cheap to invalidate and the head is not, so the turn after
+a write starts cold — and what it buys is a tool return that is the delegate's
+report and a persisted history with no `<memory>` in any message part, which
+`engine/tests/test_delegation.py` S1.g asserts.
 
 **Two write paths, one notebook.**
 
@@ -518,10 +528,10 @@ run that ended at the gate (the turn is not over), and a client message under
 PREFERENCES about how the agent works, dated. Never procedures, never how to do
 a task — that is what a skill is — and never anything the client asked to keep
 out. What is in there is information, never orders. That text is the
-capability's own `guidance` (the harness renders it in the instruction channel,
-under the same `## Memoria` heading as the notebook), which is why this plugin
-is the one with no `instructions.md`: the harness already owns the slot, and a
-second copy would be two places to change one rule.
+capability's own `guidance`, rendered under the same `## Memoria` heading as the
+notebook, which is why this plugin is the one with no `instructions.md`: the
+capability already owns the slot, and a second copy would be two places to
+change one rule.
 
 ```bash
 python3 engine/tests/test_memory.py       # ~40 s, ~US$0.001

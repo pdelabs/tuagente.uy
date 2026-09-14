@@ -35,9 +35,11 @@ takes both, and the plugin that builds a delegate writes the rule its delegate
 works under.
 
 THE CAPABILITY IS `injection.Notebook` AND NOT THE HARNESS'S `Memory` ITSELF:
-the same thing, with the injected part moved to the FRONT of the request. The
-measurement that forced it is in that file, and it is the difference between an
-agent that reads its notebook and one that answers it.
+the same thing, rendered into the INSTRUCTIONS instead of appended to the last
+message. The two measurements that forced it are in that file, and it is the
+difference between an agent that reads its notebook and one that answers it —
+and, on a delegated turn, between a tool return that is the delegate's report
+and one that carries a copy of the notebook in front of it.
 
 ONE NOTEBOOK PER AGENT, AND THE FACE'S IS `main`. A sub-agent gets its own
 through the factory this plugin provides (`engine.use("memory")(scope,

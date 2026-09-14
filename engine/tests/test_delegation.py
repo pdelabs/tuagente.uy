@@ -11,7 +11,8 @@ the whole mechanism against the running container:
       `save_post` — the face does not have them — the post lands in `posteos/`
       and the answer names Posteos. The creator's own report is read back out
       of the `delegation.finished` event, which is the only copy of it outside
-      the model's history.
+      the model's history — and in that history the tool return is the report
+      and nothing else: no `<memory>` block in any message part.
   S2. THE DAILY FLOW RUNS THROUGH THE SAME DELEGATION. A flow written by hand,
       run-now: the run's row closes `ok`, the delegation is in THAT session,
       and the post it saved carries the flow's slug — which is `flow_of` still
@@ -62,6 +63,12 @@ BRAND = WORKSPACE / "marca" / "brand.md"
 TOOL = "delegate_task"
 # What the face must NOT have any more. Both are the creator's now.
 CREATORS_OWN = ("generate_image", "save_post")
+
+# How the harness delimits the notebook. It belongs in the instruction channel,
+# so finding it inside a MESSAGE means the injection moved back into the
+# conversation — which is what made a delegated turn answer the notebook
+# instead of the client (`kit/plugins/memory/core/injection.py`).
+MEMORY_BLOCK = "<memory>"
 
 # S1. Not «el de hoy»: the day's post is moved aside before this runs, and a
 # brief that says "today's" is the one the creator has to decide the topic of.
@@ -278,6 +285,22 @@ def report_of(session_id: str) -> str:
     return payload_of(rows[-1]).get("output", "") if rows else ""
 
 
+def history_of(session_id: str) -> list[dict]:
+    """The engine history the session was persisted with."""
+    rows = sql("SELECT messages FROM history WHERE session_id = ?", session_id)
+    return json.loads(rows[0]["messages"]) if rows else []
+
+
+def returns_of(session_id: str, tool: str) -> list[str]:
+    """What each call to that tool returned, as the history kept it."""
+    out = []
+    for message in history_of(session_id):
+        for part in message.get("parts", []):
+            if part.get("part_kind") == "tool-return" and part.get("tool_name") == tool:
+                out.append(json.dumps(part, ensure_ascii=False))
+    return out
+
+
 def main() -> int:
     print(f"adapter  : {ADAPTER}")
     print(f"posteos  : {POSTS}")
@@ -357,6 +380,24 @@ def main() -> int:
             "S1.f the creator ran on the face's session",
             [] if events_of(session_id, "post.saved") else
             ["no post.saved event on the conversation's session"],
+        )
+        # THE TOOL RETURN IS THE REPORT AND NOTHING ELSE. The harness appends
+        # the notebook to the last model request of every round trip, and on a
+        # delegated turn that request IS the tool return: the face read the
+        # whole notebook in front of the creator's report and answered the
+        # notebook. It is in the instructions now (`memory/core/injection.py`),
+        # so no message of this conversation carries a block.
+        returns = returns_of(session_id, TOOL)
+        stray = [
+            json.dumps(part, ensure_ascii=False)[:120]
+            for message in history_of(session_id)
+            for part in message.get("parts", [])
+            if MEMORY_BLOCK in json.dumps(part, ensure_ascii=False)
+        ]
+        failures += judge(
+            "S1.g and the tool return is the report and nothing else",
+            [f"no {TOOL} tool return in the persisted history"] if not returns else
+            [f"{MEMORY_BLOCK} inside a message part: {s}" for s in stray],
         )
 
         # ── S3, on S1's turn ────────────────────────────────────────────────
