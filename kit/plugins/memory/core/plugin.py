@@ -26,6 +26,16 @@ THE RULE IS THE CAPABILITY'S `guidance` AND NOT AN `instructions.md`. The
 harness puts that text in the instruction channel itself, right where the
 tools are described; a second copy in the plugin's prose would be two places to
 change one rule. It is the only thing in this folder the model reads.
+
+ONE NOTEBOOK PER AGENT, AND THE FACE'S IS `main`. A sub-agent gets its own
+through the factory this plugin provides (`engine.use("memory")(scope)`), which
+is the same capability on the same store under another scope segment —
+`memoria/<scope>/MEMORY.md`, next to the face's and just as visible in Files.
+Sharing one notebook was the other option and it is the wrong one: the
+creator's notes are about the craft it was corrected on ("no más de una idea por
+pieza"), the face's are about the client's business, and a notebook that is
+both is one the client cannot read. The EXTRACTION stays on the face alone: it
+reads a turn of the CLIENT's conversation, and a sub-agent never has one.
 """
 
 import extraction
@@ -33,11 +43,15 @@ from pydantic_ai_harness.memory import FileStore, Memory
 
 from core import config
 
-# The store's scope segment: one directory under the store's root, which is
+# The FACE's scope segment: one directory under the store's root, which is
 # what the library isolates a notebook by. Written down here and not left to
 # the default because `extraction.py` addresses the same file by path, and a
 # default the two files agree on by accident is a bug waiting for an upgrade.
 SCOPE = "main"
+
+# The heading the harness renders the notebook under. One constant, because
+# every notebook this plugin hands out reads the same way.
+HEADING = "Memoria"
 NOTEBOOK = config.WORKSPACE / "memoria"
 MAIN = f"{SCOPE}/MEMORY.md"
 
@@ -67,8 +81,19 @@ GUIDANCE = (
 store = FileStore(NOTEBOOK)
 
 
+def notebook(scope: str) -> Memory:
+    """A notebook of its own for one agent, with the same rule on it.
+
+    `agent_name` is the store's scope segment, so this is
+    `memoria/<scope>/MEMORY.md`. What a sub-agent's plugin gets through
+    `engine.use("memory")` is this function and not a capability: an
+    `AbstractCapability` instance is registered into a run, and two agents
+    sharing one would be two agents sharing a notebook.
+    """
+    return Memory(store, agent_name=scope, heading=HEADING, guidance=GUIDANCE)
+
+
 def register(engine) -> None:
-    engine.capability(
-        Memory(store, agent_name=SCOPE, heading="Memoria", guidance=GUIDANCE)
-    )
+    engine.capability(notebook(SCOPE))
     engine.capability(extraction.Extraction(store=store, path=MAIN))
+    engine.provide("memory", notebook)

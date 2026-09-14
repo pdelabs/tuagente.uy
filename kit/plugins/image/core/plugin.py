@@ -8,6 +8,16 @@ What it gives the model today is one tool, and what comes back from that tool
 is a `BinaryImage`, which Pydantic AI hands to the model as an IMAGE and not as
 a filename — the agent sees what it made.
 
+THIS PLUGIN REGISTERS NOTHING ON THE FACE. It PROVIDES the capability, and
+whoever is built after it puts it on the agent that draws — today the social
+plugin's creator (`docs/subagents-plan.md`). The face has no `generate_image`:
+making a picture is craft with a skill behind it (read the brand, enumerate the
+text word by word, look at what came back, fix it once), and the face's job is
+to hand that work over and tell the client what came of it. Which is also why
+this folder has no `instructions.md` any more: the paragraph that told the
+agent to look at what it drew was prose about a tool the face no longer has,
+and the rule now lives where the tool does, in `social/skills/post/SKILL.md` §5.
+
 WHY `local` IS OURS. The capability's direct generators
 (`ImageGenerator('provider:model')`) dispatch on `openai`, `google` and `xai`
 and on nothing else. OpenRouter is not one of them, and one provider and one
@@ -37,6 +47,7 @@ def register(engine) -> None:
     # Two retries, not the default one: the skill tells the agent to try once
     # more with the fix in the prompt when the provider refuses, and a second
     # refusal must reach the model as words, not end the turn.
-    engine.capability(
-        ImageGeneration(native=False, local=Tool(generate.generate_image, max_retries=2))
+    engine.provide(
+        "image",
+        ImageGeneration(native=False, local=Tool(generate.generate_image, max_retries=2)),
     )
