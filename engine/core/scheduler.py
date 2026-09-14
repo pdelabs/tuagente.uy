@@ -22,11 +22,14 @@ green with the mail still sitting in Aprobaciones.
 """
 
 import asyncio
+import logging
 import time
 from datetime import datetime
 
 from . import db, flows, session
 from .flows import Flow
+
+log = logging.getLogger(__name__)
 
 INTERVAL = 30
 
@@ -130,7 +133,11 @@ async def run(flow: Flow, scheduled_at: datetime, manual: bool = False) -> None:
     except Exception as exc:
         # `run_turn` already wrote the client her one line and the `error`
         # event; what belongs here is the RUN's outcome, which is what the
-        # Flows tab reads back as "how did it go".
+        # Flows tab reads back as "how did it go". And the stack: a chat turn
+        # that breaks reaches uvicorn's log through the request, a flow run
+        # reaches nobody, and a row that says `'instagram-creator'` with no
+        # trace behind it was a whole afternoon once.
+        log.exception("flow %s: the run broke", flow.slug)
         reason = session.one_line(exc)
         db.finish_flow_run(flow.slug, stamp, "error", reason)
         db.append_event(

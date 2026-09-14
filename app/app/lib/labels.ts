@@ -44,6 +44,12 @@ const BY_NAME: Record<string, Action> = {
   send_message: { inProgress: "Mandando un mensaje", done: "Mandó un mensaje" },
   cronjob: { inProgress: "Programando una tarea", done: "Programó una tarea" },
   delegate_task: { inProgress: "Repartiendo el trabajo", done: "Repartió el trabajo" },
+  // The engine's delegation events, forwarded into the trail next to the
+  // tool call they belong to: the face handed work to a sub-agent (the
+  // creator of posts, say) and got it back. The event's own text names the
+  // sub-agent in Spanish; these are the fallbacks when only the kind shows.
+  "delegation.started": { inProgress: "Pidiéndole el trabajo a un ayudante", done: "Le pidió el trabajo a un ayudante" },
+  "delegation.finished": { inProgress: "Recibiendo el trabajo del ayudante", done: "Recibió el trabajo del ayudante" },
 };
 
 const BY_FAMILY: { re: RegExp; action: Action }[] = [
@@ -143,6 +149,10 @@ const EVENTS: Record<string, string | ((n: string) => string)> = {
   // not as "Publicó": nothing in the product publishes anything -- the client
   // downloads it and posts it themselves, and the Posteos tab says so.
   "post.saved": "Guardó un posteo",
+  // The face delegated to a sub-agent and got the work back. The Activity
+  // title carries the sub-agent's name and the task; these are the chips.
+  "delegation.started": "Le pidió el trabajo a un ayudante",
+  "delegation.finished": "Recibió el trabajo del ayudante",
   // The engine pulled it out of the queue because it's stuck: approving it
   // from here doesn't work anymore and it has to be asked of the agent again.
   // Said plainly, not hidden.

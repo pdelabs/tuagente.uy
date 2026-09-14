@@ -75,8 +75,16 @@ def count(run_id: str | None) -> int:
 
 
 def label(name: str) -> str:
-    """The delegate's Spanish name. A delegate with none never registered."""
-    return LABELS[name]
+    """The delegate's Spanish name, or the name itself.
+
+    The fallback is a guard against a measured failure: on 2026-09-14 the first
+    run-now of our own agent's flow after a rebuild died with a bare
+    `KeyError: 'instagram-creator'`, the run read `error`, and the rerun
+    passed. The stack was not kept (the scheduler logs it now). Whatever
+    emptied this table for one run, a label is decoration and must never be
+    what kills the work.
+    """
+    return LABELS.get(name, name)
 
 
 def started_line(event: DelegationStartEvent) -> str:
