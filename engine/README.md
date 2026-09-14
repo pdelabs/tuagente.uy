@@ -897,4 +897,9 @@ account.
   service; a client's compose leaves it empty or sets
   `CORE_OTEL_INCLUDE_CONTENT=0` so the spans carry timings and names but no
   prompts, completions or tool arguments.
+- **The bytes of an image never travel**, on the lab either:
+  `InstrumentationSettings(include_binary_content=False)`. Every post this
+  agent makes carries a PNG back through `generate_image` and into the model's
+  history, and base64 in a span turns a few kB of text into megabytes of trace
+  that nobody can read. The part is still in the span; its content is not.
 - REST for scripts: `GET /v1/projects/default/spans?limit=50`.

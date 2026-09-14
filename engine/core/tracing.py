@@ -11,6 +11,13 @@ Off unless `CORE_OTEL_ENDPOINT` is set, so a client's agent ships no traces
 unless its compose says so. `CORE_OTEL_INCLUDE_CONTENT=0` keeps prompts and
 completions out of the spans (span shape and timings only), which is the
 setting for a client's data.
+
+BINARY CONTENT NEVER TRAVELS, on the lab either. Every post this agent makes
+carries a PNG back through `generate_image` and into the model's own history,
+and with `include_binary_content` on that image is base64 in the span — a turn
+of a few kB of text becomes megabytes of trace, the viewer stalls on it and
+nobody reads a picture as a string anyway. The setting is Pydantic AI's own and
+it drops the bytes, not the part: the span still says an image was there.
 """
 
 from openinference.instrumentation.pydantic_ai import OpenInferenceSpanProcessor
@@ -35,6 +42,7 @@ def setup() -> bool:
         InstrumentationSettings(
             tracer_provider=provider,
             include_content=config.OTEL_INCLUDE_CONTENT,
+            include_binary_content=False,
         )
     )
     return True
