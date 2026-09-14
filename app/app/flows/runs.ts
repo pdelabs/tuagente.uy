@@ -49,7 +49,7 @@ import {
 
 export type StatusKey =
   | "unconfirmed" | "paused" | "running" | "no-task" | "delayed"
-  | "failed" | "uncertain" | "incomplete" | "ok" | "never-run";
+  | "failed" | "waiting" | "uncertain" | "incomplete" | "ok" | "never-run";
 
 export type Tone = "violet" | "green" | "coral" | "amber" | "neutral";
 
@@ -131,7 +131,7 @@ type JobWithExecution = CronJob & { latest_execution?: Execution | null };
  *  unknown" when the scheduler restarts mid-run (`cron/executions.py:199`), a
  *  path that also does NOT call `mark_job_run`. Measured: banner "Activo" and
  *  "salió bien" over a run whose outcome the engine itself declares unknown. */
-export type Outcome = "ok" | "failed" | "uncertain" | null;
+export type Outcome = "ok" | "failed" | "waiting" | "uncertain" | null;
 
 // EXACT lists on purpose. A new engine status cannot fall into "went well" by
 // elimination: it falls into "uncertain", which is the truth.
@@ -145,12 +145,19 @@ const FAILED_STATUSES = new Set([
 /** Running: `create_execution` leaves it `claimed` and the engine moves it to
  *  `running` right before launching the agent. */
 const IN_FLIGHT_STATUSES = new Set(["claimed", "running", "pending", "started"]);
+/** The run stopped at the approval gate and is waiting for the client. It is
+ *  neither a success nor a failure: the work is half done and the person who
+ *  unblocks it is the one reading this card. The engine writes it on the RUN
+ *  (`engine/core/scheduler.py`), never on the job -- what the job's `state`
+ *  calls "paused" is the client having stopped the schedule, another thing. */
+const WAITING_STATUSES = new Set(["paused"]);
 
 const readOutcome = (s: string | null | undefined): Outcome => {
   const t = (s ?? "").trim().toLowerCase();
   if (!t) return null;
   if (OK_STATUSES.has(t)) return "ok";
   if (FAILED_STATUSES.has(t)) return "failed";
+  if (WAITING_STATUSES.has(t)) return "waiting";
   return "uncertain";
 };
 
@@ -307,6 +314,22 @@ export function realStatus(f: Flow, cross: Cross, opts: StatusOptions = {}): Rea
     };
   };
 
+  // NOT A FAILURE AND NOT A SUCCESS. The run did its work up to the gate and
+  // stopped there: the mail is written, the client has not said yes. Offering
+  // "Probarlo ahora" here would start a SECOND run of the same work while the
+  // first one waits, so it is not offered; what unblocks this is one click in
+  // Aprobaciones, and that is what the card says.
+  const waitingNote = (): Note => ({
+    tone: "amber",
+    what: "Tu agente frenó a mitad del trabajo para pedirte permiso.",
+    detail: "Lo que hizo hasta ahí no se pierde: sigue solo en cuanto le contestes.",
+    retryable: false,
+    canReschedule: false,
+    notifyUs: false,
+    canDo: "Andá a Aprobaciones y decile que sí o que no.",
+    raw: "",
+  });
+
   const uncertainNote = (): Note => ({
     tone: "amber",
     what: "La corrida se cortó por el medio y tu agente no llegó a anotar cómo salió.",
@@ -349,10 +372,13 @@ export function realStatus(f: Flow, cross: Cross, opts: StatusOptions = {}): Rea
       // we were taking away from them.
       lastRun: !when ? ""
         : outcome === "failed" ? `Última vez: ${when} — no pudo terminar`
+        : outcome === "waiting" ? `Última vez: ${when} — quedó esperando tu aprobación`
         : outcome === "uncertain" ? `Última vez: ${when} — quedó sin confirmar`
         : outcome === "ok" ? `Última vez: ${when} — salió bien`
         : `Última vez: ${when}`,
-      note: outcome === "failed" ? failureNote() : outcome === "uncertain" ? uncertainNote() : null,
+      note: outcome === "failed" ? failureNote()
+        : outcome === "waiting" ? waitingNote()
+        : outcome === "uncertain" ? uncertainNote() : null,
     };
   }
 
@@ -423,6 +449,13 @@ export function realStatus(f: Flow, cross: Cross, opts: StatusOptions = {}): Rea
     };
   }
 
+  if (outcome === "waiting") {
+    return {
+      ...base, key: "waiting", tone: "amber", banner: "Esperando tu aprobación",
+      lastRun: `Corrió ${when} y te dejó un pedido en Aprobaciones`, note: waitingNote(),
+    };
+  }
+
   if (outcome === "uncertain") {
     return {
       ...base, key: "uncertain", tone: "amber", banner: "Quedó sin confirmar",
@@ -460,8 +493,8 @@ export function realStatus(f: Flow, cross: Cross, opts: StatusOptions = {}): Rea
 // at the bottom, below the healthy ones. Whatever asks the client for
 // something goes on top.
 const WEIGHT: Record<StatusKey, number> = {
-  failed: 0, delayed: 1, "no-task": 2, uncertain: 3, incomplete: 4,
-  running: 5, ok: 6, "never-run": 7, unconfirmed: 8, paused: 9,
+  failed: 0, waiting: 1, delayed: 2, "no-task": 3, uncertain: 4, incomplete: 5,
+  running: 6, ok: 7, "never-run": 8, unconfirmed: 9, paused: 10,
 };
 
 export const sortByUrgency = <T extends { status: RealStatus; flow: Flow }>(xs: T[]): T[] =>
@@ -498,6 +531,7 @@ export const sortByUrgency = <T extends { status: RealStatus; flow: Flow }>(xs: 
 // them to look at something they themselves decided to stop.
 const PROBLEMS: { key: StatusKey; singular: string; plural: string }[] = [
   { key: "failed", singular: "no pudo terminar la última vez", plural: "no pudieron terminar la última vez" },
+  { key: "waiting", singular: "está esperando tu aprobación", plural: "están esperando tu aprobación" },
   { key: "delayed", singular: "no arrancó cuando le tocaba", plural: "no arrancaron cuando les tocaba" },
   { key: "no-task", singular: "ya no está programado", plural: "ya no están programados" },
   { key: "uncertain", singular: "quedó sin confirmar", plural: "quedaron sin confirmar" },

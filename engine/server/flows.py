@@ -71,10 +71,15 @@ def card(flow: flows.Flow) -> dict:
 def job(flow: flows.Flow) -> dict:
     """One flow's scheduled task, the `CronJob` shape of `lib/agent.ts`.
 
-    `last_status` is the last FINISHED run and never the one in flight: the
-    portal reads any status it does not know as "uncertain", and a client
+    `last_status` is the last run WITH AN OUTCOME and never the one in flight:
+    the portal reads any status it does not know as "uncertain", and a client
     reading "we are not sure how it went" about a run that is still going is
     worse than reading nothing. What says a run is happening now is `state`.
+
+    `paused` travels as that outcome, and `state` stays what it was: `state` is
+    the JOB's — scheduled, paused by the client, running — and the flow is none
+    of those because one of its runs is waiting for a yes. The portal maps
+    `last_status: "paused"` to «Esperando tu aprobación» (`app/app/flows/runs.ts`).
     """
     last = db.last_finished_flow_run(flow.slug)
     running = db.flow_run_in_flight(flow.slug)

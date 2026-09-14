@@ -14,6 +14,11 @@ A RUN IS THE SAME TURN AS A CHAT TURN. `session.run_turn`, the same tools, the
 same gate, the same hooks, the same compaction. What it is not is a special
 kind of agent: the only difference from the client typing the flow's steps into
 the chat is that nobody typed them.
+
+AND THE SAME TURN CAN STOP AT THE GATE. A run that ends in the approval plugin
+writing a request down did not finish: its row reads `paused` until the client
+answers and `resumed()` closes it. Recording it `ok` is what made the card go
+green with the mail still sitting in Aprobaciones.
 """
 
 import asyncio
@@ -101,9 +106,10 @@ async def run(flow: Flow, scheduled_at: datetime, manual: bool = False) -> None:
         "flow.started", f"Empecé el flujo «{flow.name}»", "running", session_id,
         {"slug": flow.slug, "manual": manual},
     )
+    paused = False
     try:
-        async for _ in session.run_turn(session_id, prompt(flow)):
-            pass
+        async for event in session.run_turn(session_id, prompt(flow)):
+            paused = paused or isinstance(event, session.Paused)
     except Exception as exc:
         # `run_turn` already wrote the client her one line and the `error`
         # event; what belongs here is the RUN's outcome, which is what the
@@ -115,10 +121,45 @@ async def run(flow: Flow, scheduled_at: datetime, manual: bool = False) -> None:
             "error", session_id, {"slug": flow.slug},
         )
         return
+    if paused:
+        # IT DID NOT FINISH, and a card that says it did is the whole lie this
+        # status exists to stop: the mail is sitting in Aprobaciones while the
+        # flow reads «salió bien». What closes this row is the client's answer,
+        # through `resumed()` below.
+        db.pause_flow_run(flow.slug, stamp)
+        db.append_event(
+            "flow.paused", f"Pausé el flujo «{flow.name}»: espera tu aprobación",
+            "pendiente", session_id, {"slug": flow.slug},
+        )
+        return
     db.finish_flow_run(flow.slug, stamp, "ok")
     db.append_event(
         "flow.finished", f"Terminé el flujo «{flow.name}»", "completed", session_id,
         {"slug": flow.slug},
+    )
+
+
+def resumed(session_id: str) -> None:
+    """The client answered and the run finished: the row it left `paused` closes.
+
+    Called from `session.run_resumed`, which is where a paused turn of any kind
+    ends — a chat turn resumed the same way finds no row here and there is
+    nothing to close. A rejection closes it too: the run does not die on a «no»,
+    it answers with what it did instead, so what happened to the RUN is that it
+    finished.
+
+    The flow's file can have been deleted while the request sat in the queue, and
+    a run that already did its work is not the place to find that out: the label
+    falls back to the slug.
+    """
+    row = db.paused_flow_run(session_id)
+    if row is None:
+        return
+    flow = flows.read(row["slug"])
+    db.finish_flow_run(row["slug"], row["scheduled_at"], "ok")
+    db.append_event(
+        "flow.finished", f"Terminé el flujo «{flow.name if flow else row['slug']}»",
+        "completed", session_id, {"slug": row["slug"]},
     )
 
 

@@ -73,6 +73,20 @@ class MessageCompleted:
 
 
 @dataclass
+class Paused:
+    """The turn stopped at a gated tool and is waiting for the client.
+
+    It travels next to the `MessageCompleted` carrying the same line, and not
+    instead of it: both dialects close a turn on `MessageCompleted` and neither
+    has anything to say about a pause. Who reads this is whoever started the
+    turn — the scheduler, which cannot record a run as finished when what
+    happened is that it stopped halfway.
+    """
+
+    content: str
+
+
+@dataclass
 class RunCompleted:
     messages: list[dict]
 
@@ -84,7 +98,7 @@ class Failed:
     content: str
 
 
-Event = TextDelta | ToolStarted | MessageCompleted | RunCompleted | Failed
+Event = TextDelta | ToolStarted | MessageCompleted | Paused | RunCompleted | Failed
 
 
 def first_line(text: str) -> str:
@@ -225,6 +239,7 @@ async def stream_run(
                 # persisted message, and both dialects close a turn on
                 # `MessageCompleted`. Streaming it too would send it twice.
                 yield MessageCompleted(paused)
+                yield Paused(paused)
                 yield RunCompleted(display_messages(session_id))
             elif isinstance(event, AgentRunResultEvent):
                 final = "".join(chunks)
@@ -278,4 +293,10 @@ async def run_resumed(
     )
     db.touch_session(session_id)
     db.append_event("respuesta", first_line(text), "completed", session_id)
+    # A run of a flow that had stopped at the gate ends HERE and not in the
+    # scheduler: the loop that started it walked away the moment it paused. The
+    # import is local because the scheduler is the one that imports this module.
+    from . import scheduler
+
+    scheduler.resumed(session_id)
     return Resumed(text, None, blob)

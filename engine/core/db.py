@@ -231,6 +231,27 @@ def finish_flow_run(slug: str, scheduled_at: float, status: str, error: str | No
     )
 
 
+def pause_flow_run(slug: str, scheduled_at: float) -> None:
+    """The run stopped at the approval gate: it neither finished nor failed.
+
+    `finished_at` STAYS EMPTY, because nothing finished. The row is out of
+    `running` so a restart does not read it as a run the process died holding
+    (`scheduler.recover`) — the pause is written down on the approval's row,
+    and the client's answer is what moves this one to `ok`.
+    """
+    write(
+        "UPDATE flow_runs SET status = 'paused' WHERE slug = ? AND scheduled_at = ?",
+        (slug, scheduled_at),
+    )
+
+
+def paused_flow_run(session_id: str) -> sqlite3.Row | None:
+    """The run of this session that is waiting for the client's answer."""
+    return one(
+        "SELECT * FROM flow_runs WHERE session_id = ? AND status = 'paused'", (session_id,)
+    )
+
+
 def last_flow_run(slug: str) -> sqlite3.Row | None:
     """The most recent occurrence of this flow, finished or not. It is what the
     next tick counts from, so a manual run moves the schedule along too."""
@@ -243,7 +264,10 @@ def last_finished_flow_run(slug: str) -> sqlite3.Row | None:
     """The last run that has an outcome. What the portal calls `last_status` is
     this one and never the row in flight: `running` reaching the card comes back
     as "uncertain", and the client reads that as a flow that may or may not have
-    worked."""
+    worked.
+
+    `paused` IS an outcome for this purpose — it is the one the client has to
+    act on — so it travels, and the card says she is the one holding it up."""
     return one(
         "SELECT * FROM flow_runs WHERE slug = ? AND status != 'running'"
         " ORDER BY scheduled_at DESC LIMIT 1",
