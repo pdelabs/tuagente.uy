@@ -19,3 +19,6 @@ social/posts/*/.build/
 engine/secrets.env
 engine/state/
 engine/workspace/
+engine/instances/*/secrets.env
+engine/instances/*/state/
+engine/instances/*/workspace/

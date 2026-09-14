@@ -34,6 +34,31 @@ What lives where:
 | `agent/SOUL.md` | the client section + the `core:base` block, mounted read-only |
 | `/opt/kit/plugins` | `kit/plugins`, read-only. `CORE_PLUGINS` picks which load, and each one's `core/` surface is what it adds to this engine |
 
+
+## Instances: one client's agent
+
+`docker-compose.yml` is the LAB: the demo agent plus the trace viewer.
+`instance.yml` is the shape every real agent runs in, one container and one
+folder:
+
+```
+engine/instances/<name>/
+  instance.env      INSTANCE=<name>, PORT_GATEWAY, PORT_ADAPTER, CORE_OTEL_* (committed)
+  secrets.env       API_SERVER_KEY, OPENROUTER_API_KEY (gitignored)
+  agent/            SOUL.md, identity.json (committed: the agent's configuration)
+  workspace/        the agent's files, e.g. marca/brand.md (gitignored)
+  state/            core.db (gitignored)
+```
+
+```bash
+docker compose -p <name> -f engine/instance.yml \
+    --env-file engine/instances/<name>/instance.env up -d --build
+```
+
+The container is `tuagente-<name>`; the magic link points `endpoint` and
+`adapter` at the two ports. Our own agent is `instances/tuagente/` on
+8652/8653 (`docs/own-agent-plan.md`).
+
 ## The magic link
 
 ```
