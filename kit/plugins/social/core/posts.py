@@ -1,9 +1,19 @@
-"""The post folder: what `save_post` writes and what the Posts tab reads.
+"""The post: the folder `save_post` writes, and the three routes that read it.
 
     <workspace>/posteos/<YYYY-MM-DD>-<slug>/
         post.json     the whole post; it is also what the route answers
         caption.md    the caption, a blank line, the hashtags on one line
         01.png …      the pieces, in the order the model asked for them
+
+THE ROUTES ARE IN THIS FILE AND NOT IN A `routes.py`, which is what the shape
+of `plugins/approval/core/` would suggest, AND THE REASON IS MEASURED. A
+plugin's surface modules import each other BY PLAIN NAME (`core/plugins.py`,
+`import_surface`), so they share one `sys.modules` namespace with every other
+enabled plugin's: `import routes` here returned the APPROVAL plugin's module,
+already imported under that name, and the app came up with `modules.posts`
+true, approval's router registered twice and no `/portal/posts` at all. Nothing
+failed and nothing was logged. A second plugin's file may only share a name
+with the first's if they are the same file.
 
 THE FORMAT IS CODE AND THE PROSE NEVER NAMES IT. Every convention that
 depended on the agent remembering a path has failed — the Hermes skill told it
@@ -30,6 +40,8 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 
@@ -60,6 +72,10 @@ TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
          ".webp": "image/webp"}
 
 Format = Literal["feed", "square", "story"]
+
+# Read by the client: the portal shows `error.message` on the tab she is on.
+NO_POST = "No hay ningún posteo {post_id} en este agente."
+NO_IMAGE = "El posteo {post_id} no tiene ninguna imagen {name}."
 
 
 def root() -> Path:
@@ -253,3 +269,42 @@ def toolset() -> FunctionToolset:
         return {"saved": post_id, "url": f"/portal/posts/{post_id}"}
 
     return ts
+
+
+# ── the Posts tab ───────────────────────────────────────────────────────────
+
+router = APIRouter()
+
+
+@router.get("/portal/posts")
+def listing():
+    return {"available": True, "posts": read_all()}
+
+
+@router.get("/portal/posts/{post_id}")
+def detail(post_id: str):
+    found = read(post_id)
+    if found is None:
+        raise HTTPException(404, NO_POST.format(post_id=post_id))
+    return found
+
+
+@router.get("/portal/posts/{post_id}/{name}")
+def piece(post_id: str, name: str):
+    """The bytes of one image, with the type that makes it open.
+
+    NOT `/portal/files/<path>`, which answers `text/plain` for everything it
+    has — a PNG through that route arrives as mojibake. The portal fetches this
+    with the bearer header and makes an object URL out of the answer, so the
+    client's key never travels in a query string.
+    """
+    path = image_path(post_id, name)
+    if path is None:
+        raise HTTPException(404, NO_IMAGE.format(post_id=post_id, name=name))
+    # `inline` and not `attachment`: the tab draws the picture, and the
+    # download is a link the portal builds from the same bytes.
+    return Response(
+        path.read_bytes(),
+        media_type=TYPES[path.suffix.lower()],
+        headers={"Content-Disposition": f'inline; filename="{name}"'},
+    )
