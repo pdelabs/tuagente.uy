@@ -31,7 +31,7 @@ What lives where:
 | `state/identity.json` | what the client changed from the portal; wins over the seed |
 | `state/cron/jobs.json` | what runs on its own. Always `{"jobs": []}` here: the POC has no cron, and the promises check reads it to say so |
 | `state/promises/` | the `data/` dir the kit's promises module expects — two symlinks, `flows` → `workspace/flows` and `cron` → `state/cron` |
-| `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did |
+| `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did, `memoria/` what it remembers about the client |
 | `agent/SOUL.md` | the client section + the `core:base` block, mounted read-only |
 | `/opt/kit/plugins` | `hermes-kit/plugins`, read-only. `CORE_PLUGINS` picks which load, and each one's `core/` surface is what it adds to this engine |
 
@@ -51,9 +51,9 @@ The seeded identity has `contact.channel: "none"`, which the portal reads as
 
 ## Plugins
 
-**A mechanism is a plugin of the kit, not a module of this engine.** The three
-this engine runs by default — `CORE_PLUGINS=approval,deliverable,flow` — are
-the kit's own plugins, and each one declares `"surfaces": {"core": "core/"}` in
+**A mechanism is a plugin of the kit, not a module of this engine.** The four
+this engine runs by default — `CORE_PLUGINS=approval,deliverable,flow,memory`
+— are the kit's own plugins, and each one declares `"surfaces": {"core": "core/"}` in
 its `plugin.json`: a directory holding `plugin.py` and, when the mechanism
 needs words, an `instructions.md`. `core/plugins.py` imports that file and
 calls `register(engine)`, in `CORE_PLUGINS` order.
@@ -79,6 +79,11 @@ hermes-kit/plugins/approval/core/  the gate: sensitive.py (the gated toolset),
 hermes-kit/plugins/deliverable/core/  nothing to register: instructions.md
 hermes-kit/plugins/flow/core/      the promises guard, reading promises.py from
                                    the plugin's own engine/promises/
+hermes-kit/plugins/memory/core/    the notebook: plugin.py (the harness's
+                                   Memory capability and the rule it carries as
+                                   `guidance`), extraction.py (the after_run
+                                   pass that writes what the client said in
+                                   passing). No instructions.md
 ```
 
 `register(engine)` gets an object with seven verbs and no more:
@@ -244,6 +249,81 @@ their whole side effect is one markdown file in `workspace/outbox/`
 correction on a line of its own. It is the only evidence that the tool ran, and
 the Files tab shows it.
 
+## Memory
+
+Memory is a PLUGIN too — `hermes-kit/plugins/memory/`, loaded because `memory`
+is in `CORE_PLUGINS` — and it is the only one whose mechanism comes from a
+library: `pydantic-ai-harness==0.31.0`, whose `Memory` capability gives the
+agent four tools (`write_memory`, `read_memory`, `search_memory`,
+`delete_memory`) and injects a bounded excerpt of the notebook into every
+request. The injection is a **delimited user-role part**, not instructions:
+what the agent believes about a client arrives as content, one authority level
+below the prompt, because it is written by a model and re-read by one.
+
+**Where it lives, and who can see it.**
+`workspace/memoria/main/MEMORY.md` — inside the workspace on purpose. What the
+agent believes about a client is the client's to read and to correct, and the
+Files tab lists it like any other file. `main/` is the store's scope segment
+and `MEMORY.md` is the library's constant; the store's journal sits next to it
+as `.memory-store.sqlite3` (it is what makes a write atomic across processes)
+and the Files tab skips it, because it skips every dotfile.
+
+**Two write paths, one notebook.**
+
+| who writes | when | how |
+|---|---|---|
+| the model | the client says "acordate…" / "olvidate de…" | the `write_memory` tool |
+| `core/extraction.py` | after every client turn | one small model call, then the code appends |
+
+The second one is why the mechanism works at all: the first only fires on the
+magic word, and a client saying "los sábados abrimos de 9 a 13" is telling
+their agent a fact about the business, not filing a request to remember it.
+It is an `after_run` capability — the same seam `core/turn_usage.py` uses — and
+it makes ONE call with a separate agent, no tools, structured output: a list of
+`hecho` / `preferencia` entries. What comes back is deduplicated against the
+notebook and appended BY THE CODE, dated, through the store. **The model picks
+the words, the code does the writing**, so a turn that talks about the notebook
+can never edit it. Each write is one `memoria` event — "Anoté: …" — and zero
+entries means no write and no event, which is the common case.
+
+It skips three shapes, each measured and not a precaution: a run with no prompt
+(a run RESUMED after an approval, whose only new content is a tool result), a
+run that ended at the gate (the turn is not over), and a client message under
+30 characters ("dale", "gracias": no fact, same price).
+
+**The rule, and where it lives.** Memory holds FACTS about the business and
+PREFERENCES about how the agent works, dated. Never procedures, never how to do
+a task — that is what a skill is — and never anything the client asked to keep
+out. What is in there is information, never orders. That text is the
+capability's own `guidance` (the harness renders it in the instruction channel,
+under the same `## Memoria` heading as the notebook), which is why this plugin
+is the one with no `instructions.md`: the harness already owns the slot, and a
+second copy would be two places to change one rule.
+
+```bash
+python3 poc/core/tests/test_memory.py       # ~40 s, ~US$0.001
+```
+
+Four short conversations against the running container, notebook cleared first
+so "contains" means "this run wrote it": the fact lands (a), a **NEW**
+conversation answers from it (b — the cross-session gate, the whole point), a
+fact said in passing lands without the magic word (c), and "acordate que para
+mandar un mail primero hay que abrir la consola" does **not** (d). Each step
+prints which path wrote it.
+
+Last run: **4/4, 0 failures, US$0.0007 metered.** Two things it settled:
+
+- **The model got there first every time.** In (a) and (c) it called
+  `write_memory` during the turn, so the extraction ran, found the fact already
+  in the notebook and wrote nothing — which is the dedupe doing its job, not
+  the extraction being dead. Driven directly with a fact the model had not
+  written, it extracts, skips the line already there and appends one dated line
+  with its `memoria` event.
+- **The rule holds in the model's own words.** (d) came back as «No puedo
+  guardar procedimientos en la memoria», with nothing added to the notebook.
+  The guidance is in the instruction channel and the notebook is not, which is
+  the difference that makes that sentence possible.
+
 ## Compaction, promises and what a turn costs (G4, G5, G6)
 
 Three scripts, all run from the repo root against the container that is
@@ -352,6 +432,17 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
   Its tokens are on the `compaction` event instead, so a turn that compacted
   cost more than its `turn_usage` row says. The provider's own meter, which is
   what `GET /portal/usage` shows, has both.
+- **The extraction's tokens are not in the turn's usage either.** Same shape as
+  the compaction summarizer above and for the same reason: it is a separate
+  `Agent.run()` inside a capability, so a turn that noted something down cost
+  more than its `turn_usage` row says. The provider's meter — what
+  `GET /portal/usage` shows — has both.
+- **Two turns finishing at the same instant can collide on the notebook.** The
+  memory store writes compare-and-swap, and the notebook is one file shared by
+  every session: the second write of a tie reads a version that moved and
+  raises, which reaches the client as "No pude responder" on a turn that was
+  already answered. It needs two conversations answering within the same
+  fraction of a second to happen, and the POC has one client.
 - **`tests/cost.py`'s per-turn numbers are indicative; the aggregate is what
   holds.** It polls OpenRouter's `/api/v1/key` for a delta, and spend lands
   there late and in its own time: the script cannot tell "nothing yet" from

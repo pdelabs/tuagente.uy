@@ -60,6 +60,7 @@ string or a list of strings) is allowed and ignored.
 | `artifact` | yes | data understood by looking at it |
 | `flow` | yes | work left running on its own; carries the `promises` engine surface |
 | `capability` | yes | the only way in for what the agent does not have |
+| `memory` | no | what the agent remembers about the client's business — `core` only, so it exists on `poc/core` and nowhere else |
 | `transcribe` | no | audio and video to text — the plugin behind the `transcription` base capability |
 | `invoices-to-data` | no | an invoice becomes one row of data (accounting) |
 | `quotes` | no | a request becomes a priced quote in the client's template (sales) |
@@ -84,6 +85,18 @@ the unit is the WORK and the crafts inside it have their own names. It was
 commissioned by one client; the client is named in the catalog row's
 `internal_note` and nowhere else, which is what PRINCIPLE ZERO means in
 practice — the folder holds a TV-production shape, not a company.
+
+`memory` is the third shape, and it is the first plugin that exists for an
+engine instead of for a client. It declares `core` and nothing else: a Hermes
+agent has the engine's own memory, so there is nothing here for it to install,
+and the folder travels with the registry copy like every other plugin's without
+anything on that agent opening it. It is also `system: false` with NO capability
+row installing it, which anywhere else on this page is the drive-inbox mistake —
+a plugin nobody can buy is a plugin that does not exist. Here it is the honest
+state: what decides that this plugin runs is `CORE_PLUGINS` in `poc/core`, not
+`purchased.json`, and a row would be selling a Hermes client something they
+already have. **The rule is still "a plugin needs a way in"; what changed is
+that `core` is a second way in, and it is not the sales layer.**
 
 ### Harness skills: what `skills/` still holds, and why
 
