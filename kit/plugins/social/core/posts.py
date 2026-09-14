@@ -1,0 +1,255 @@
+"""The post folder: what `save_post` writes and what the Posts tab reads.
+
+    <workspace>/posteos/<YYYY-MM-DD>-<slug>/
+        post.json     the whole post; it is also what the route answers
+        caption.md    the caption, a blank line, the hashtags on one line
+        01.png …      the pieces, in the order the model asked for them
+
+THE FORMAT IS CODE AND THE PROSE NEVER NAMES IT. Every convention that
+depended on the agent remembering a path has failed — the Hermes skill told it
+to copy the picture out of the engine's cache «con un nombre que se entienda»
+and the name was different every day, so the client's folder was a pile. Here
+the model supplies the words and this file supplies the directory, the file
+names and the numbering.
+
+ONE POST PER DAY, and the check is the folder: a run that starts twice after a
+crash finds today's post already there and stops, which is what makes the
+scheduled flow safe to repeat (`docs/own-agent-plan.md`, wave 1).
+
+THE PIECES ARE MOVED AND NOT COPIED. `generate_image` leaves the PNG in
+`imagenes/`, which is scratch: the client sees it in Files and does not know
+whether it is the one that got used. After the move there is one copy and it
+is inside the post, so throwing the post out throws its pictures out too.
+"""
+
+import json
+import re
+import shutil
+from datetime import datetime
+from pathlib import Path
+from typing import Literal
+from zoneinfo import ZoneInfo
+
+from pydantic_ai import ModelRetry, RunContext
+from pydantic_ai.toolsets import FunctionToolset
+
+from core import config, db
+from core.tools.workspace import under
+
+WHERE = "posteos"
+POST = "post.json"
+CAPTION = "caption.md"
+
+# Lowercase, hyphens, short: it is half a directory name and the whole of the
+# post's id, and the id travels into the portal's URLs.
+MAX_SLUG = 40
+SLUG = re.compile(rf"^[a-z0-9][a-z0-9-]{{0,{MAX_SLUG - 1}}}$")
+
+# Instagram's own caps, checked 2026-09-14. The hashtag one moved in December
+# 2025 (30 -> 5) and is the number the old skill got wrong for months.
+MAX_CAPTION = 2200
+MAX_ALT = 1000
+MAX_HASHTAGS = 5
+MAX_IMAGES = 10
+
+# What the route serves a piece as. `generate_image` only ever writes PNG; the
+# other two are here because a client's own picture can land in the workspace
+# and be used, and a downloaded file with the wrong type is a file that does
+# not open.
+TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+         ".webp": "image/webp"}
+
+Format = Literal["feed", "square", "story"]
+
+
+def root() -> Path:
+    return config.WORKSPACE / WHERE
+
+
+def folder(post_id: str) -> Path:
+    return root() / post_id
+
+
+def expand(data: dict) -> dict:
+    """The `Post` the portal reads: the file's object, images filled in.
+
+    `post.json` carries the NAMES, and the size and the URL are computed here
+    from what is on disk. The portal never builds a path of its own: it fetches
+    `url` with the bearer header and makes an object URL out of the bytes, so
+    the client's key never travels in a query string.
+    """
+    directory = folder(data["id"])
+    return data | {
+        "images": [
+            {
+                "name": name,
+                "bytes": (directory / name).stat().st_size,
+                "url": f"/portal/posts/{data['id']}/{name}",
+            }
+            for name in data["images"]
+        ]
+    }
+
+
+def read(post_id: str) -> dict | None:
+    path = folder(post_id) / POST
+    return expand(json.loads(path.read_text())) if path.is_file() else None
+
+
+def read_all() -> list[dict]:
+    """Every post, newest first. The day decides, and `created_at` breaks the
+    tie for the day a post was replaced."""
+    found = [json.loads(path.read_text()) for path in root().glob(f"*/{POST}")]
+    found.sort(key=lambda p: (p["date"], p["created_at"]), reverse=True)
+    return [expand(p) for p in found]
+
+
+def image_path(post_id: str, name: str) -> Path | None:
+    """The bytes of one piece, and only of a piece the post lists.
+
+    The listing is the allowlist, so there is no path to sanitize: a name that
+    is not in `images` is a 404 whatever it is made of.
+    """
+    data = read(post_id)
+    if data is None or name not in [image["name"] for image in data["images"]]:
+        return None
+    return folder(post_id) / name
+
+
+def caption_file(caption: str, hashtags: list[str]) -> str:
+    """What the client copies into Instagram, in one piece: the caption, a
+    blank line, and the hashtags on the last line where they belong."""
+    return f"{caption.strip()}\n\n{' '.join('#' + tag for tag in hashtags)}\n"
+
+
+def flow_of(session_id: str) -> str | None:
+    """The flow this run belongs to, or `None` for a conversation.
+
+    NOT a tool argument. Whether the agent is inside a scheduled run is a fact
+    the engine already has on the row it claimed, and asking the model for it
+    is asking it to remember something it can get wrong in both directions —
+    the morning run that forgets to say so, and the chat that claims it.
+    """
+    row = db.one("SELECT slug FROM flow_runs WHERE session_id = ?", (session_id,))
+    return row["slug"] if row else None
+
+
+def toolset() -> FunctionToolset:
+    ts = FunctionToolset()
+
+    @ts.tool
+    def save_post(
+        ctx: RunContext,
+        slug: str,
+        caption: str,
+        alt: str,
+        hashtags: list[str],
+        format: Format,
+        images: list[str],
+        replace: bool = False,
+    ) -> dict:
+        """Dejar el posteo del día listo para que el cliente lo revise y lo baje.
+
+        Es la ÚNICA forma de guardar un posteo: no escribas vos las carpetas ni
+        los nombres de archivo. Llamala cuando el pie esté escrito y las
+        imágenes miradas, y recién después contale al cliente qué dejaste.
+
+        Es un posteo por día. Si ya hay uno de hoy te frena; `replace=True`
+        pisa el anterior, y eso sólo lo hacés si te lo pidieron.
+
+        Args:
+            slug: el tema en dos o tres palabras, en minúsculas y con guiones.
+            caption: el pie completo, tal como va a salir, sin los hashtags.
+            alt: qué se ve en la imagen, en una oración, para quien no la ve.
+            hashtags: hasta 5, sin el `#`.
+            format: `feed` para un posteo vertical, `square` cuadrado, `story`
+                para una historia. El mismo que le pediste a `generate_image`.
+            images: las imágenes ya generadas, por su ruta en el espacio de
+                trabajo y en el orden en que se ven.
+            replace: pisar el posteo de hoy en vez de frenar.
+        """
+        if not SLUG.match(slug):
+            raise ModelRetry(
+                f"«{slug}» no sirve como slug: minúsculas, números y guiones, "
+                f"hasta {MAX_SLUG} caracteres"
+            )
+        if len(caption) > MAX_CAPTION:
+            raise ModelRetry(
+                f"el pie tiene {len(caption)} caracteres y en Instagram entran "
+                f"{MAX_CAPTION}: cortalo"
+            )
+        if len(alt) > MAX_ALT:
+            raise ModelRetry(
+                f"el texto alternativo tiene {len(alt)} caracteres y el máximo "
+                f"es {MAX_ALT}: una oración alcanza"
+            )
+        # The `#` is stripped and not refused: the model writes the hashtags
+        # the way they look on the screen about half the time, and a retry over
+        # a character the code can take off is a turn spent on nothing.
+        tags = [tag.strip().lstrip("#") for tag in hashtags]
+        if len(tags) > MAX_HASHTAGS:
+            raise ModelRetry(
+                f"{len(tags)} hashtags y el máximo es {MAX_HASHTAGS}: Instagram "
+                "bajó el tope en diciembre de 2025 y treinta se ve viejo"
+            )
+        if not 1 <= len(images) <= MAX_IMAGES:
+            raise ModelRetry(
+                f"un posteo lleva entre 1 y {MAX_IMAGES} imágenes, y me pasaste "
+                f"{len(images)}"
+            )
+        sources = []
+        for relative in images:
+            try:
+                path = under(ctx.deps.workspace, relative)
+            except ValueError:
+                raise ModelRetry(
+                    f"{relative} está fuera del espacio de trabajo"
+                ) from None
+            if not path.is_file():
+                raise ModelRetry(
+                    f"no encuentro {relative}: pasame la ruta que te devolvió "
+                    "`generate_image`"
+                )
+            sources.append(path)
+
+        now = datetime.now(ZoneInfo(config.TIMEZONE))
+        date = now.strftime("%Y-%m-%d")
+        root().mkdir(parents=True, exist_ok=True)
+        taken = sorted(p for p in root().glob(f"{date}-*") if p.is_dir())
+        if taken and not replace:
+            raise ModelRetry(
+                f"ya hay un posteo de hoy ({taken[0].name}): es uno por día. Si "
+                "el cliente te pidió cambiarlo, llamame con `replace=True`"
+            )
+        for old in taken:
+            shutil.rmtree(old)
+
+        post_id = f"{date}-{slug}"
+        directory = folder(post_id)
+        directory.mkdir(parents=True)
+        names = []
+        for number, source in enumerate(sources, 1):
+            name = f"{number:02d}{source.suffix.lower()}"
+            source.rename(directory / name)
+            names.append(name)
+        data = {
+            "id": post_id,
+            "slug": slug,
+            "date": date,
+            "format": format,
+            "caption": caption,
+            "alt": alt,
+            "hashtags": tags,
+            "images": names,
+            "created_at": now.isoformat(timespec="seconds"),
+            "flow": flow_of(ctx.deps.session_id),
+        }
+        (directory / POST).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        (directory / CAPTION).write_text(caption_file(caption, tags))
+        db.append_event(
+            "post.saved", f"Dejé listo el posteo «{slug}»", "completed",
+            ctx.deps.session_id, {"id": post_id},
+        )
+        return {"saved": post_id, "url": f"/portal/posts/{post_id}"}
+
+    return ts

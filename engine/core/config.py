@@ -37,7 +37,7 @@ KIT_PLUGINS = Path(os.environ.get("CORE_KIT_PLUGINS", "/opt/kit/plugins"))
 # to the mechanism it installs (`core/plugins.py`).
 PLUGINS = [
     p.strip()
-    for p in os.environ.get("CORE_PLUGINS", "approval,deliverable,memory,image").split(",")
+    for p in os.environ.get("CORE_PLUGINS", "approval,deliverable,memory,image,social").split(",")
     if p.strip()
 ]
 

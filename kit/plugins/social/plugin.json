@@ -1,0 +1,48 @@
+{
+  "id": "social",
+  "version": "1.0.0",
+  "description": "One Instagram post a day, finished: the skill that writes it in the brand's voice and looks at the image it made, the `save_post` tool that owns the format, and the Posts tab where the client reads it and downloads the pieces",
+  "client_copy": "Posteos para Instagram con tu voz y tu identidad: cada día te deja uno listo para revisar y bajar.",
+  "_comment": [
+    "IT REPLACES social-content, post-image AND brand-kit, and it is not a port",
+    "of them (docs/own-agent-plan.md, wave 3). Those three were Hermes-era: a",
+    "skeleton script, a brief builder and a site scraper, all of them prose and",
+    "scaffolding around an `image_generate` tool that no longer exists. What",
+    "survived is what they LEARNED -- the caption formula, the five-hashtag cap,",
+    "the checklist that looks at the piece before it goes out, «entregá lo que",
+    "está bien aunque falte una pieza» -- and it is in skills/post/SKILL.md, in",
+    "eighty lines instead of four files.",
+    "",
+    "THE BRAND IS A FILE THE WORKSPACE CARRIES, which is why brand-kit is not",
+    "rebuilt. `marca/brand.md` is written at onboarding, the skill reads it and",
+    "the code never parses it: the colours, the voice and the claims a company",
+    "can make are the client's, not a schema of ours.",
+    "",
+    "IT REQUIRES `image` AND NOTHING ELSE. A post without a piece is still a",
+    "post -- that is the fallback when the checklist fails twice -- but a",
+    "capability that sells «tus redes con tu identidad» and cannot make the",
+    "picture is selling half of it, so the dependency is declared and the",
+    "capability row installs both.",
+    "",
+    "THE core SURFACE IS THIS ENGINE'S AND A HERMES AGENT NEVER OPENS IT, the",
+    "same shape as `image` and `memory`. What is new here is that it carries a",
+    "SKILL and a TAB on top of `core/`: the tool and the routes are the format,",
+    "the skill is the craft, and `tab.builtin` names the page app/app/posts/",
+    "draws from `GET /portal/posts`."
+  ],
+  "requires": {
+    "plugins": [
+      "image"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "post"
+    ],
+    "core": "core/",
+    "tab": {
+      "builtin": "posts"
+    }
+  },
+  "system": false
+}
