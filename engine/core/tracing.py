@@ -34,7 +34,13 @@ from . import config
 def setup() -> bool:
     if not config.OTEL_ENDPOINT:
         return False
-    provider = TracerProvider(resource=Resource.create({"service.name": config.OTEL_SERVICE}))
+    # `openinference.project.name` is what Phoenix files a trace under. Without
+    # it every agent that reports to the same Phoenix lands in `default`, and
+    # the lab's traces and a client's interleave in one list.
+    provider = TracerProvider(resource=Resource.create({
+        "service.name": config.OTEL_SERVICE,
+        "openinference.project.name": config.OTEL_SERVICE,
+    }))
     provider.add_span_processor(OpenInferenceSpanProcessor())
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=config.OTEL_ENDPOINT)))
     trace.set_tracer_provider(provider)

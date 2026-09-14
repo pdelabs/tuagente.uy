@@ -66,7 +66,9 @@ LABEL = "creador de posteos"
 DESCRIPTION = (
     "Arma un posteo de Instagram listo para revisar: lee la marca y los posteos"
     " anteriores, escribe el pie, genera la imagen, la mira, y lo guarda en"
-    " Posteos. Pasale la idea o el tema, o «el de hoy»."
+    " Posteos. Pasale la idea o el tema, o «el de hoy», y cualquier corrección"
+    " o preferencia que el cliente haya dicho en esta conversación: el creador"
+    " no la ve."
 )
 
 # Its notebook's scope segment: `memoria/instagram-creator/MEMORY.md`.
