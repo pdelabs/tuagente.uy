@@ -18,7 +18,7 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import RunContext
 
-from . import db
+from . import db, delegation
 from .agent import CAPABILITIES
 
 
@@ -40,6 +40,12 @@ class TurnUsage(AbstractCapability):
                 "input_tokens": usage.input_tokens,
                 "cache_read_tokens": usage.cache_read_tokens,
                 "output_tokens": usage.output_tokens,
+                # How many sub-agent runs are inside those tokens. `SubAgents`
+                # runs with `forward_usage=True`, so a delegated turn's numbers
+                # are the face's AND the delegate's added together, and without
+                # this the row gives no way to tell a five-times-bigger turn
+                # from a five-times-worse one.
+                "delegations": delegation.count(ctx.run_id),
                 # genai-prices' estimate, or None when it cannot price the
                 # model. None is not zero and is not written as zero.
                 "cost_usd": float(usage.cost) if usage.cost is not None else None,

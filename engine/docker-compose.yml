@@ -17,6 +17,10 @@ services:
       # container up with 1 so a minute-by-minute flow is legal for the length
       # of the test, and puts the 5 back on the way out.
       CORE_FLOWS_MIN_MINUTES: ${CORE_FLOWS_MIN_MINUTES:-5}
+      # And for how long a delegation may run before the face is told it did
+      # not make it: `tests/test_delegation.py` brings the container up with 5
+      # so a timeout happens on purpose, and puts the ten minutes back.
+      CORE_DELEGATION_TIMEOUT: ${CORE_DELEGATION_TIMEOUT:-600}
       # Traces to the phoenix service below. This is the LAB compose, so the
       # content travels; a client's compose sets INCLUDE_CONTENT to 0 or
       # leaves the endpoint empty.

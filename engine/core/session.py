@@ -20,7 +20,7 @@ from pydantic_ai.messages import (
     TextPartDelta,
 )
 
-from . import config, db
+from . import config, db, delegation
 from .agent import Deps, get_agent
 
 # EXTENSION POINT — transforms applied to the agent's text BEFORE it is
@@ -226,6 +226,16 @@ async def stream_run(
                 yield TextDelta(event.delta.content_delta)
             elif isinstance(event, FunctionToolCallEvent):
                 yield ToolStarted(event.part.tool_name)
+            elif isinstance(event, delegation.EVENTS):
+                # A delegation is one tool call that takes minutes, and the
+                # child's own tools are not on this stream: without these two
+                # the trail shows «Repartió el trabajo» and then nothing until
+                # the answer. They travel as tool progress because that IS the
+                # trail — the portal builds it from `ToolStarted` and nothing
+                # else — and they are written down in Activity by
+                # `core/delegation.py`, which does it for every run and not
+                # only for the ones somebody is watching.
+                yield ToolStarted(delegation.trail(event))
             elif isinstance(event, AgentRunResultEvent) and isinstance(
                 event.result.output, DeferredToolRequests
             ):
