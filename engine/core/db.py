@@ -58,6 +58,17 @@ CREATE TABLE IF NOT EXISTS approval_comments (
     body        TEXT NOT NULL,
     created_at  REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS flow_runs (
+    slug         TEXT NOT NULL,
+    scheduled_at REAL NOT NULL,
+    session_id   TEXT NOT NULL,
+    started_at   REAL NOT NULL,
+    finished_at  REAL,
+    status       TEXT NOT NULL,
+    error        TEXT,
+    manual       INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (slug, scheduled_at)
+);
 CREATE TABLE IF NOT EXISTS events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     ts         REAL NOT NULL,
@@ -87,6 +98,13 @@ if "history" not in _columns:
     _conn.execute("ALTER TABLE approvals ADD COLUMN history TEXT NOT NULL DEFAULT ''")
 if "decision" not in _columns:
     _conn.execute("ALTER TABLE approvals ADD COLUMN decision TEXT")
+# `kind` tells a conversation the client started from a run the clock started.
+# `source` cannot: the portal counts `api_server` as a human conversation and
+# hides anything else, and a flow's session IS shown — it is the client's, they
+# just did not type in it.
+_session_columns = {c["name"] for c in _conn.execute("PRAGMA table_info(sessions)")}
+if "kind" not in _session_columns:
+    _conn.execute("ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'")
 _conn.commit()
 
 
@@ -108,12 +126,12 @@ def write(sql: str, args: tuple = ()) -> None:
 
 # ── sessions ────────────────────────────────────────────────────────────────
 
-def create_session(session_id: str, source: str = "api_server") -> None:
+def create_session(session_id: str, source: str = "api_server", kind: str = "chat") -> None:
     now = time.time()
     write(
-        "INSERT INTO sessions (id, source, title, preview, created_at, last_active)"
-        " VALUES (?, ?, NULL, NULL, ?, ?)",
-        (session_id, source, now, now),
+        "INSERT INTO sessions (id, source, kind, title, preview, created_at, last_active)"
+        " VALUES (?, ?, ?, NULL, NULL, ?, ?)",
+        (session_id, source, kind, now, now),
     )
 
 
@@ -182,6 +200,63 @@ def save_history(session_id: str, blob: bytes) -> None:
 def load_history(session_id: str) -> bytes | None:
     row = one("SELECT messages FROM history WHERE session_id = ?", (session_id,))
     return row["messages"].encode() if row else None
+
+
+# ── what the clock started ──────────────────────────────────────────────────
+
+def claim_flow_run(slug: str, scheduled_at: float, session_id: str, manual: bool) -> bool:
+    """Write the row for this tick, and say whether THIS caller wrote it.
+
+    The primary key is `(slug, scheduled_at)`, so the insert is the claim: two
+    ticks racing on the same occurrence, or a restart that finds the same
+    occurrence still due, write one row between them and only one of them gets
+    `True` back. Everything a run does happens after this returns `True`.
+    """
+    with _lock:
+        cursor = _conn.execute(
+            "INSERT OR IGNORE INTO flow_runs"
+            " (slug, scheduled_at, session_id, started_at, status, manual)"
+            " VALUES (?, ?, ?, ?, 'running', ?)",
+            (slug, scheduled_at, session_id, time.time(), int(manual)),
+        )
+        _conn.commit()
+        return cursor.rowcount == 1
+
+
+def finish_flow_run(slug: str, scheduled_at: float, status: str, error: str | None = None) -> None:
+    write(
+        "UPDATE flow_runs SET finished_at = ?, status = ?, error = ?"
+        " WHERE slug = ? AND scheduled_at = ?",
+        (time.time(), status, error, slug, scheduled_at),
+    )
+
+
+def last_flow_run(slug: str) -> sqlite3.Row | None:
+    """The most recent occurrence of this flow, finished or not. It is what the
+    next tick counts from, so a manual run moves the schedule along too."""
+    return one(
+        "SELECT * FROM flow_runs WHERE slug = ? ORDER BY scheduled_at DESC LIMIT 1", (slug,)
+    )
+
+
+def last_finished_flow_run(slug: str) -> sqlite3.Row | None:
+    """The last run that has an outcome. What the portal calls `last_status` is
+    this one and never the row in flight: `running` reaching the card comes back
+    as "uncertain", and the client reads that as a flow that may or may not have
+    worked."""
+    return one(
+        "SELECT * FROM flow_runs WHERE slug = ? AND status != 'running'"
+        " ORDER BY scheduled_at DESC LIMIT 1",
+        (slug,),
+    )
+
+
+def flow_run_in_flight(slug: str) -> sqlite3.Row | None:
+    return one("SELECT * FROM flow_runs WHERE slug = ? AND status = 'running'", (slug,))
+
+
+def running_flow_runs() -> list[sqlite3.Row]:
+    return query("SELECT * FROM flow_runs WHERE status = 'running'")
 
 
 # ── the event log ───────────────────────────────────────────────────────────

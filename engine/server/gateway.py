@@ -54,9 +54,3 @@ async def rename(session_id: str, request: Request):
         raise HTTPException(400, NO_TITLE)
     db.rename_session(session_id, title)
     return {"ok": True}
-
-
-@router.get("/api/jobs")
-def jobs():
-    """No cron in the engine. The portal hits it anyway and so does portal-check."""
-    return {"jobs": []}

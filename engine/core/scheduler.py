@@ -1,0 +1,171 @@
+"""The clock. One asyncio task, and a run is a headless session.
+
+Every 30 s it reads the flows off disk and asks each active `schedule` one the
+same question: what is the first occurrence after the last run of this flow,
+and has it passed? If it has, it claims the row and runs. There is no job
+store to drift from the files and no queue to lose: the state a tick needs is
+the FLOW.md and the rows of runs that already happened.
+
+MISSED TICKS COLLAPSE INTO ONE RUN. A tick looks at ONE occurrence — the next
+one after the last run — so an agent that was off for a weekend comes back and
+does Monday's work once, not sixty times.
+
+A RUN IS THE SAME TURN AS A CHAT TURN. `session.run_turn`, the same tools, the
+same gate, the same hooks, the same compaction. What it is not is a special
+kind of agent: the only difference from the client typing the flow's steps into
+the chat is that nobody typed them.
+"""
+
+import asyncio
+import time
+from datetime import datetime
+
+from . import db, flows, session
+from .flows import Flow
+
+INTERVAL = 30
+
+# Read by the client in Activity. A row left `running` means the process died
+# holding it: nothing else can leave one behind, because every other path
+# finishes the row it claimed.
+KILLED = "La corrida se cortó: el agente se apagó mientras la trabajaba."
+
+# When the process started. It is the floor under the first occurrence of a
+# flow that has never run, so an engine that has been up for a week does not
+# replay that week the moment a flow is written.
+_started = 0.0
+
+
+def title(flow: Flow, scheduled_at: datetime) -> str:
+    """What the conversation is called in the client's list."""
+    return f"{flow.name} · {scheduled_at.strftime('%d/%m %H:%M')}"
+
+
+def prompt(flow: Flow) -> str:
+    """The one user turn a run is. Spanish: the agent reads it.
+
+    Both halves of the body travel. The client reads the steps in the portal
+    and the technical notes are trimmed there, but the run needs them: that is
+    where the tools, the folders and the edge cases of this flow are written.
+    """
+    parts = [
+        f"Te toca trabajar el flujo «{flow.name}». Nadie está mirando la pantalla:"
+        " hacé el trabajo y dejá el resultado donde dicen los pasos.",
+        flow.how,
+    ]
+    if flow.notes:
+        parts.append(f"{flows.NOTES_HEADING}\n\n{flow.notes}")
+    return "\n\n".join(parts)
+
+
+def base_time(flow: Flow) -> float:
+    """What the next occurrence is counted from.
+
+    The last run of this flow, and for a flow that has never run the later of
+    the process start and the file's own mtime. The mtime half is what stops a
+    flow written at 14:00 with `0 9 * * *` from firing this morning's nine
+    o'clock the instant it is saved.
+    """
+    row = db.last_flow_run(flow.slug)
+    if row:
+        return row["scheduled_at"]
+    return max(_started, flows.file_of(flow.slug).stat().st_mtime)
+
+
+def due_at(flow: Flow, now: datetime | None = None) -> datetime | None:
+    """The occurrence this flow owes, past or future.
+
+    THE LAST OVERDUE ONE, never the first. Running the first and counting from
+    it would make the agent walk through a weekend's worth of Mondays one tick
+    at a time; what the client wants when their agent comes back is Monday's
+    work done once. When nothing is owed this is the NEXT occurrence, so the
+    card's "próxima vez" and the clock read the same function and cannot
+    disagree.
+    """
+    now = now or datetime.now(flows.zone(flow))
+    previous = flows.previous_run(flow, now)
+    if previous and previous.timestamp() > base_time(flow):
+        return previous
+    return flows.next_run(flow, now)
+
+
+async def run(flow: Flow, scheduled_at: datetime, manual: bool = False) -> None:
+    """One occurrence of one flow, if nobody claimed it first."""
+    session_id = session.new_session_id()
+    if not db.claim_flow_run(flow.slug, scheduled_at.timestamp(), session_id, manual):
+        return
+    stamp = scheduled_at.timestamp()
+    db.create_session(session_id, kind="flow")
+    db.rename_session(session_id, title(flow, scheduled_at))
+    db.append_event(
+        "flow.started", f"Empecé el flujo «{flow.name}»", "running", session_id,
+        {"slug": flow.slug, "manual": manual},
+    )
+    try:
+        async for _ in session.run_turn(session_id, prompt(flow)):
+            pass
+    except Exception as exc:
+        # `run_turn` already wrote the client her one line and the `error`
+        # event; what belongs here is the RUN's outcome, which is what the
+        # Flows tab reads back as "how did it go".
+        reason = session.one_line(exc)
+        db.finish_flow_run(flow.slug, stamp, "error", reason)
+        db.append_event(
+            "flow.failed", f"El flujo «{flow.name}» no pudo terminar: {reason}",
+            "error", session_id, {"slug": flow.slug},
+        )
+        return
+    db.finish_flow_run(flow.slug, stamp, "ok")
+    db.append_event(
+        "flow.finished", f"Terminé el flujo «{flow.name}»", "completed", session_id,
+        {"slug": flow.slug},
+    )
+
+
+def recover() -> None:
+    """Rows left `running` by a process that died holding them.
+
+    Without this a killed run stays `running` forever: the card says the agent
+    is working on it and the next tick counts from an occurrence that never
+    finished. It runs once, before the loop's first tick.
+    """
+    for row in db.running_flow_runs():
+        db.finish_flow_run(row["slug"], row["scheduled_at"], "error", KILLED)
+        db.append_event("flow.failed", KILLED, "error", row["session_id"], {"slug": row["slug"]})
+
+
+async def tick() -> None:
+    now = time.time()
+    for flow in flows.read_all():
+        if flow.trigger != "schedule" or flow.status != "active":
+            continue
+        due = due_at(flow, datetime.fromtimestamp(now, flows.zone(flow)))
+        if due and due.timestamp() <= now:
+            # As a task and not awaited: a run takes as long as a turn takes,
+            # and the flow after it in the list is not waiting for that. The
+            # claim is the first thing `run` does, so the next tick cannot
+            # start this occurrence a second time.
+            asyncio.create_task(run(flow, due))
+
+
+async def loop() -> None:
+    while True:
+        try:
+            await tick()
+        except Exception as exc:
+            # THE LOOP OUTLIVES A BROKEN FLOW, and says so where the client
+            # looks. A FLOW.md the model cannot validate raises in `read_all`,
+            # and letting that kill the task would stop EVERY flow of this
+            # agent for good, silently — the exact shape of failure this whole
+            # mechanism exists to make impossible.
+            db.append_event(
+                "flow.failed", f"No pude mirar los flujos: {session.one_line(exc)}", "error"
+            )
+        await asyncio.sleep(INTERVAL)
+
+
+def start() -> None:
+    global _started
+    _started = time.time()
+    recover()
+    asyncio.create_task(loop())

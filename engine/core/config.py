@@ -37,9 +37,15 @@ KIT_PLUGINS = Path(os.environ.get("CORE_KIT_PLUGINS", "/opt/kit/plugins"))
 # to the mechanism it installs (`core/plugins.py`).
 PLUGINS = [
     p.strip()
-    for p in os.environ.get("CORE_PLUGINS", "approval,deliverable,flow,memory").split(",")
+    for p in os.environ.get("CORE_PLUGINS", "approval,deliverable,memory").split(",")
     if p.strip()
 ]
+
+# The floor under how often a flow may wake the agent up (core/flows.py). Five
+# minutes is the kit's number: an over-eager agent cannot schedule itself
+# infinite wake-ups. `engine/tests/test_flows.sh` drops it to 1 so the clock
+# can be watched in a test instead of in an afternoon.
+FLOWS_MIN_MINUTES = int(os.environ.get("CORE_FLOWS_MIN_MINUTES", "5"))
 
 TIMEZONE = os.environ.get("TZ", "America/Montevideo")
 ADAPTER_VERSION = "core-0.1.0"
@@ -74,7 +80,11 @@ MODULES = {
     "kanban": False,
     "artifacts": False,
     "crons": False,
-    "flows": False,
+    # Flows are the engine's own (core/flows.py, core/scheduler.py,
+    # server/flows.py), not a plugin's: what runs on its own is the engine's
+    # clock. `crons` stays off — the portal's Crons tab is a view of Hermes'
+    # job store, and there is no job store here.
+    "flows": True,
     "connections": False,
     "capabilities": False,
 }

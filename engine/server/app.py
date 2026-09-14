@@ -5,22 +5,25 @@ The portal has two: `endpoint` (the gateway, `/api/*`) and `adapter`
 the magic link can point both at it.
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from core import config, plugins, tracing
+from core import config, plugins, scheduler, tracing
 
 # Before any agent is built: `instrument_all` only reaches agents created
 # after it runs, and every agent here is built lazily on the first turn.
 tracing.setup()
 
-# The engine's own capabilities, imported for the side effect: `compaction` and
-# `turn_usage` append theirs to `core.agent.CAPABILITIES` at import time,
-# before the first turn builds the agent.
-from core import compaction, turn_usage  # noqa: F401
+# The engine's own capabilities and hooks, imported for the side effect:
+# `compaction` and `turn_usage` append theirs to `core.agent.CAPABILITIES` at
+# import time and `promises` appends its check to `BEFORE_PERSIST`, all before
+# the first turn builds the agent.
+from core import compaction, promises, turn_usage  # noqa: F401
 
-from . import extra, gateway, portal
+from . import extra, flows, gateway, portal
 
 # THE KIT PLUGINS, in `CORE_PLUGINS` order. Each one's `core/plugin.py` gets
 # the engine and registers what it brings — the approval gate and its page, the
@@ -113,7 +116,18 @@ def require_key(authorization: str = Header(default="")):
         raise HTTPException(401, "the client's key is missing or is not this agent's")
 
 
-app = FastAPI(title="tuagente core", docs_url=None, redoc_url=None)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """The clock starts with the app and dies with it.
+
+    Here and not at import: the loop is an asyncio task, and at import time
+    there is no loop to put it on.
+    """
+    scheduler.start()
+    yield
+
+
+app = FastAPI(title="tuagente core", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.add_middleware(Cors, origins=config.CORS_ORIGINS)
 # Added last, so it wraps everything and canonicalizes the CORS headers too.
 app.add_middleware(CanonicalHeaders)
@@ -121,6 +135,7 @@ app.add_middleware(CanonicalHeaders)
 app.include_router(gateway.router, dependencies=[Depends(require_key)])
 app.include_router(portal.router, dependencies=[Depends(require_key)])
 app.include_router(extra.router, dependencies=[Depends(require_key)])
+app.include_router(flows.router, dependencies=[Depends(require_key)])
 # After the engine's own, and before the catch-all below: a plugin adds pages,
 # it does not take one over.
 for plugin_router in PLUGIN_ROUTERS:

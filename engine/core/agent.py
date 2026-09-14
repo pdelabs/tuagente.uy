@@ -15,7 +15,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.toolsets import AbstractToolset
 
 from . import config, plugins
-from .tools import skills, workspace
+from .tools import flows, skills, workspace
 
 
 @dataclass
@@ -36,6 +36,23 @@ EXTRA_TOOLSETS: list[AbstractToolset[Deps]] = []
 # `engine.capability(...)`.
 CAPABILITIES: list = []
 
+# THE THREE THINGS CODE CANNOT CHECK about flows. Everything else about them is
+# in the tools' descriptions (how to use them) or in the code (the slug, the
+# cron, the caps): this is what is left, and it is behaviour, not mechanism.
+FLOWS = """\
+## Flujos
+
+Un flujo es trabajo con nombre que se repite solo, y lo creás con `create_flow`.
+
+- **Cerrá el contrato antes de crearlo.** Preguntá dónde termina el trabajo, con
+  qué material y cómo se sabe que salió bien. Decidir mal una tarea cuesta una
+  vuelta; decidir mal un flujo se repite sin que nadie mire.
+- **Creá primero y contá después.** Llamá a la herramienta y recién entonces
+  escribí la respuesta, nombrando la próxima corrida que te devolvió. Nunca
+  digas que quedó armado antes de armarlo.
+- **La primera vuelta hacela ahora.** No la dejes para el horario: hacé el
+  trabajo en esta misma conversación y mostrá el resultado."""
+
 
 def instructions(ctx: RunContext[Deps]) -> str:
     """SOUL + the enabled plugins' prose + the skills index + today's date.
@@ -51,6 +68,7 @@ def instructions(ctx: RunContext[Deps]) -> str:
     now = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%d/%m/%Y %H:%M")
     parts = [
         (config.AGENT_DIR / "SOUL.md").read_text().strip(),
+        FLOWS,
         *plugins.prose(),
         skills.index_text(),
         f"Hoy es {now} en Uruguay ({config.TIMEZONE}). El workspace es {config.WORKSPACE}.",
@@ -69,7 +87,9 @@ def get_agent() -> Agent[Deps, str]:
             deps_type=Deps,
             instructions=instructions,
             model_settings=config.MODEL_SETTINGS,
-            toolsets=[workspace.toolset(), skills.toolset(), *EXTRA_TOOLSETS],
+            toolsets=[
+                workspace.toolset(), skills.toolset(), flows.toolset(), *EXTRA_TOOLSETS
+            ],
             capabilities=CAPABILITIES or None,
         )
     return _agent

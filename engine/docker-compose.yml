@@ -13,6 +13,10 @@ services:
       # lowers the compaction threshold for the gate without editing this file.
       CORE_COMPACT_AT: ${CORE_COMPACT_AT:-0.6}
       CORE_COMPACT_AT_TOKENS: ${CORE_COMPACT_AT_TOKENS:-60000}
+      # Same idea for the flows' floor: `tests/test_flows.sh` brings the
+      # container up with 1 so a minute-by-minute flow is legal for the length
+      # of the test, and puts the 5 back on the way out.
+      CORE_FLOWS_MIN_MINUTES: ${CORE_FLOWS_MIN_MINUTES:-5}
       # Traces to the phoenix service below. This is the LAB compose, so the
       # content travels; a client's compose sets INCLUDE_CONTENT to 0 or
       # leaves the endpoint empty.
