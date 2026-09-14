@@ -210,6 +210,21 @@ def live_seam() -> bool:
     show(answer)
     ok = MARKER in answer
     print(f"   {'PASS' if ok else 'FAIL'}: the persisted message {'carries' if ok else 'does NOT carry'} the correction")
+    if not ok:
+        # WHICH FAILURE IS IT. The guard stays quiet when the claim is TRUE, so
+        # an agent that really does have a flow on Fridays at 9:30 fails this
+        # gate for the right reason and the line above reads like the seam is
+        # broken. Measured 2026-09-14: a leftover `*/1`-style test flow at 9:30
+        # every day made the claim true and cost an hour of looking at
+        # `BEFORE_PERSIST`. Part (b) takes ITS flow back out; it cannot take out
+        # one that was already there, so the gate names what is scheduled.
+        flows = get(f"{ADAPTER}/portal/flows")["flows"]
+        print("   what this agent has scheduled: "
+              + ("nothing — the seam is what failed"
+                 if not flows
+                 else "; ".join(f"«{f['name']}» {f['trigger']}" for f in flows)
+                 + " — if one of those covers Fridays at 9:30 the claim is TRUE"
+                   " and the guard is right to stay quiet"))
     return ok
 
 
