@@ -935,33 +935,45 @@ class TheKitsOwnRegistry(unittest.TestCase):
             "capability": [],
         })
 
-    def test_flow_carries_the_promises_guard_as_its_engine_surface(self):
-        """The one engine surface in the kit, and where it lands is not here.
+    def test_flow_is_a_catalog_of_flows_and_nothing_else(self):
+        """The mechanism moved into the engine and the manifest says so.
 
-        `plugins/flow/engine/promises/` is the SOURCE (phase 3b); install.sh
-        copies it to the agent's `policy/plugins/promises/`, which is what the
-        compose mounts at /opt/data/plugins. The kit's job is that the folder is
-        a plugin the engine can actually load.
+        Until 14/9/2026 `flow` carried four surfaces: the skill that shelled out
+        to `create_flow.py`, the Hermes engine plugin holding the promises
+        guard, the core surface that mounted that guard on our engine, and the
+        Flows tab. A flow is a file the ENGINE reads now
+        (`engine/core/flows.py`) and the tab is the engine's to declare, so what
+        is left here is the seven curated bodies -- and a plugin whose only
+        surface is `flows` is a valid plugin, which is what this pins.
         """
         flow = plugin_registry.registry(KIT)["flow"]
-        self.assertEqual(flow["surfaces"]["engine"], "engine/promises")
-        surface = KIT / "plugins" / "flow" / "engine" / "promises"
-        self.assertTrue((surface / "plugin.yaml").is_file())
-        self.assertTrue((surface / "promises.py").is_file())
-        self.assertTrue((surface / "__init__.py").is_file())
+        self.assertEqual(sorted(flow["surfaces"]), ["flows"])
+        self.assertEqual(len(flow["surfaces"]["flows"]), 7)
 
-    def test_the_three_plugins_the_core_engine_runs_carry_their_surface(self):
-        """`engine` runs `approval,deliverable,flow`, and each brings its own
+    def test_a_plugin_whose_only_surface_is_flows_passes(self):
+        """The shape `flow` now has, from the outside: no skills, no code."""
+        with tempfile.TemporaryDirectory() as tmp:
+            where = write(tmp, "alpha", manifest(
+                "alpha", surfaces={"flows": ["curated/uno"]}), skills=[])
+            flow(where, "curated/uno")
+            code, out = check(tmp)
+            self.assertEqual(code, 0, out)
+            self.assertIn("flows:uno", out)
+
+    def test_the_two_plugins_the_engine_runs_carry_their_surface(self):
+        """`engine` runs `approval,deliverable,memory`, and each brings its own
         mechanics: the gate and its page, the deliverable folders' prose, the
-        promises guard. Whatever that engine does about any of the three is in
-        the plugin — which is the point: a rule about a mechanism reaches the
-        model only where the mechanism is installed."""
+        notebook. Whatever that engine does about any of them is in the plugin
+        — which is the point: a rule about a mechanism reaches the model only
+        where the mechanism is installed. `memory` brings no `instructions.md`:
+        the harness owns that slot (`engine/README.md`)."""
         plugins = plugin_registry.registry(KIT)
-        for pid in ("approval", "deliverable", "flow"):
+        for pid in ("approval", "deliverable", "memory"):
             self.assertEqual(plugins[pid]["surfaces"]["core"], "core/", pid)
-            surface = KIT / "plugins" / pid / "core"
-            self.assertTrue((surface / "plugin.py").is_file(), pid)
-            self.assertTrue((surface / "instructions.md").is_file(), pid)
+            self.assertTrue((KIT / "plugins" / pid / "core" / "plugin.py").is_file(), pid)
+        for pid in ("approval", "deliverable"):
+            self.assertTrue(
+                (KIT / "plugins" / pid / "core" / "instructions.md").is_file(), pid)
 
     def test_kanban_carries_no_skill_and_says_why(self):
         """The store is the engine's; the manifest exists for the dependency."""
@@ -981,7 +993,12 @@ class TheKitsOwnRegistry(unittest.TestCase):
             "approval": {"builtin": "approvals"},
             "deliverable": {"builtin": "files"},
             "artifact": {"builtin": "artifacts"},
-            "flow": {"builtin": "flows"},
+            # `flow` HAD `{"builtin": "flows"}` AND GAVE IT UP. The Flows tab is
+            # not a plugin's to flip any more: what runs on its own is the
+            # engine's clock, so the engine declares the module
+            # (`engine/core/config.py`) and this plugin is only the catalog of
+            # curated bodies.
+            "flow": None,
             # THE ONE SYSTEM PLUGIN WITH NO PAGE, and that is the honest answer:
             # there is no Capabilities tab in app/app/ and there should not be
             # one. The card is drawn inline in the chat where the agent said what
@@ -992,11 +1009,13 @@ class TheKitsOwnRegistry(unittest.TestCase):
 
     def test_their_skills_resolve_to_the_directory_that_holds_the_skill_md(self):
         sources = plugin_registry.skill_sources(KIT)
-        # kanban is the one with nothing to ship; interview-production is the
-        # first whose skills are not named after it.
+        # kanban and flow are the ones with nothing to ship -- kanban never had
+        # a skill, flow's was the `create_flow.py` runner the engine replaced;
+        # interview-production is the first whose skills are not named after it.
         self.assertEqual(
             sorted(sources),
-            sorted((set(SYSTEM + PORTED) - {"kanban"}) | {"lower-thirds", "news-copy"}))
+            sorted((set(SYSTEM + PORTED) - {"kanban", "flow"})
+                   | {"lower-thirds", "news-copy"}))
         registry = plugin_registry.registry(KIT)
         for name, where in sources.items():
             owner = next(pid for pid, data in registry.items()

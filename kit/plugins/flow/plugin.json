@@ -1,39 +1,35 @@
 {
   "id": "flow",
-  "version": "1.3.0",
-  "description": "The only way to leave work running on its own: a named client flow with a trigger and results, and the cron that actually delivers it",
+  "version": "2.0.0",
+  "description": "The catalog of flows the product ships: named client work with a trigger, ready to be armed on an agent",
   "client_copy": "Lo que se repite queda armado como un flujo y anda solo.",
   "_comment": [
-    "IT DEPENDS ON kanban AND approval. Every run lands as a ticket, and a flow",
-    "that acts on the client's behalf goes through the approval gate like",
-    "anything else -- a scheduled job is not a licence to skip the yes.",
+    "THE MECHANISM IS THE ENGINE'S NOW, AND THIS PLUGIN IS ONLY ITS CATALOG.",
+    "Until 14/9/2026 this plugin WAS flows: a skill that shelled out to",
+    "`create_flow.py`, a Hermes engine plugin holding the promises guard, a",
+    "core surface mounting that guard on our engine, and a tab it flipped. All",
+    "four are gone (docs/own-agent-plan.md, wave 1). A flow is a file the",
+    "engine reads -- `engine/core/flows.py` --, the clock that runs it is",
+    "`engine/core/scheduler.py`, the tool that creates it is",
+    "`engine/core/tools/flows.py`, and the promises guard moved to",
+    "`engine/core/promises.py`, where the flows it checks actually live. The",
+    "Flows tab is not a plugin's to flip any more either: the engine declares",
+    "it, because what runs on its own is the engine's clock.",
     "",
-    "THE ENGINE SURFACE IS THE promises GUARD, and it lives here as of phase 3b.",
-    "engine/promises/ (plugin.yaml + promises.py, a transform_llm_output hook) is",
-    "the one place in the kit that uses the ENGINE's own plugin system, and it is",
-    "flow's because what it checks is whether a flow the agent announced really",
-    "exists. WHERE IT LANDS ON THE AGENT DID NOT CHANGE: install.sh still writes",
-    "policy/plugins/promises/, the compose still mounts that at /opt/data/plugins",
-    "read only, and config.yaml's `plugins.enabled` still names it. The engine",
-    "reads its plugins from HERMES_HOME/plugins and knows nothing about this",
-    "registry; what moved is where the kit keeps the source.",
-    "",
-    "THE CORE SURFACE IS THE SAME GUARD ON THE ENGINE (core/). It loads",
-    "engine/promises/promises.py by path -- one copy, two engines -- and",
-    "registers it as a before-persist hook. It brings no skill: create_flow.py",
-    "writes into a Hermes agent's data/flows/ and that engine has no runner for",
-    "it, so what core/instructions.md says is that nothing is scheduled there.",
-    "",
-    "THE CURATED FLOWS NOBODY ELSE OWNS LIVE HERE, under curated/ and not under",
+    "WHAT IS LEFT IS THE SEVEN CURATED FLOWS, under curated/ and not under",
     "flows/, because they are not this plugin's own work: they are the catalog",
-    "of flows the product ships, and `flow` is the plugin that makes a flow a",
-    "thing at all. Each of the seven exercises only system skills -- approval,",
-    "deliverable, artifact -- or a base capability every agent has: answering",
-    "out of hours, the inbox summary, cases left open, a complaint, loading a",
-    "new customer, a report with its sources, the Monday web round-up. There is",
-    "no whatsapp-support or research plugin for them to belong to, and inventing",
-    "one to hold a FLOW.md would be a manifest with nothing behind it. If one is",
-    "ever written, the flow moves into it and this list gets shorter."
+    "of flows the product ships, and each one exercises only system skills --",
+    "approval, deliverable, artifact -- or a base capability every agent has:",
+    "answering out of hours, the inbox summary, cases left open, a complaint,",
+    "loading a new customer, a report with its sources, the Monday web round-up.",
+    "There is no whatsapp-support or research plugin for them to belong to, and",
+    "inventing one to hold a FLOW.md would be a manifest with nothing behind it.",
+    "If one is ever written, the flow moves into it and this list gets shorter.",
+    "",
+    "THEIR FRONTMATTER IS STILL THE HERMES ONE (trigger_type, trigger_cron,",
+    "results) and the engine does not read it. Each one is revalidated against",
+    "engine/core/flows.py the day its capability is rebuilt, which is where the",
+    "plan puts that work."
   ],
   "requires": {
     "plugins": [
@@ -42,9 +38,6 @@
     ]
   },
   "surfaces": {
-    "skills": [
-      "flow"
-    ],
     "flows": [
       "curated/alta-de-cliente",
       "curated/casos-sin-cerrar",
@@ -53,12 +46,7 @@
       "curated/queja-de-cliente",
       "curated/repaso-de-internet",
       "curated/resumen-de-la-bandeja"
-    ],
-    "engine": "engine/promises",
-    "core": "core/",
-    "tab": {
-      "builtin": "flows"
-    }
+    ]
   },
   "system": true
 }

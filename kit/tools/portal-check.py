@@ -208,6 +208,29 @@ def main():
     modcheck("crons", f"{E}/api/jobs?include_disabled=true",
              lambda d, h: f"{len(d['jobs'])} jobs (includes paused)")
 
+    def _flows_ok(d, h):
+        # THE TAB READS TWO ENDPOINTS AND CROSSES THEM. `/portal/flows` says
+        # what the flows are, `/api/jobs` says when each one runs next and how
+        # the last run went, and the portal ties them together by `trigger_job`
+        # or by the `flujo-<slug>` name. A flow whose task is not in the listing
+        # draws as "not scheduled in your agent", which is the state that cost a
+        # client her trust on 13/8/2026 -- so it is checked here and not left to
+        # the eye.
+        if not d.get("available"):
+            raise AssertionError("declared but the flow reader is not answering")
+        listed = d["flows"]
+        jobs, _ = jget(f"{E}/api/jobs?include_disabled=true", K)
+        names = {j.get("id") for j in jobs["jobs"]} | {j.get("name") for j in jobs["jobs"]}
+        orphans = [f["slug"] for f in listed
+                   if f.get("trigger_type") == "schedule"
+                   and (f.get("trigger_job") or f"flujo-{f['slug']}") not in names]
+        if orphans:
+            raise AssertionError(
+                f"these run on the clock and have no scheduled task: {orphans}")
+        return f"{len(listed)} flows, every scheduled one with its task"
+
+    modcheck("flows", f"{A}/portal/flows", _flows_ok)
+
     # Files: on top of the listing, the content must NEVER be served as html.
     if mods.get("files"):
         def _files():

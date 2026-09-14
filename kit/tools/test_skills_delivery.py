@@ -238,16 +238,22 @@ class WhatFollowsThePurchase(unittest.TestCase):
                     self.assertEqual(there.read_bytes(),
                                      (source / "FLOW.md").read_bytes())
 
-    def test_the_engine_surface_lands_where_the_engine_reads_it(self):
-        """`flow` is a system plugin, so the promises guard reaches everyone."""
+    def test_no_plugin_carries_an_engine_surface_any_more(self):
+        """The promises guard was the only one, and it moved into our engine.
+
+        `plugins/flow/engine/promises/` was a plugin of HERMES' that install.sh
+        copied to `policy/plugins/promises/`. The guard lives in
+        `engine/core/promises.py` now, next to the flows it reads
+        (docs/own-agent-plan.md, wave 1), so a Hermes agent installed from this
+        kit no longer gets one -- which is what Hermes dying looks like from
+        here, and is pinned so it is a decision and not a regression.
+        """
+        self.assertEqual(
+            [pid for pid, data in plugin_registry.registry(KIT).items()
+             if data["surfaces"].get("engine")], [])
         for root in (self.fresh, self.buyer):
             with self.subTest(agent=root.name):
-                guard = root / "policy" / "plugins" / "promises"
-                self.assertTrue((guard / "plugin.yaml").is_file())
-                self.assertEqual(
-                    (guard / "promises.py").read_bytes(),
-                    (KIT / "plugins" / "flow" / "engine" / "promises"
-                     / "promises.py").read_bytes())
+                self.assertFalse((root / "policy" / "plugins" / "promises").exists())
 
 
 if __name__ == "__main__":

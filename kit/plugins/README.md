@@ -58,7 +58,7 @@ string or a list of strings) is allowed and ignored.
 | `approval` | yes | nothing sensitive happens without the client's yes |
 | `deliverable` | yes | what the client is meant to read gets saved with a name |
 | `artifact` | yes | data understood by looking at it |
-| `flow` | yes | work left running on its own; carries the `promises` engine surface |
+| `flow` | yes | the catalog of curated flows the product ships. Nothing else: since 14/9/2026 a flow is a file the ENGINE reads (`engine/core/flows.py`), so the skill, the `promises` engine surface, the `core` surface and the tab are gone |
 | `capability` | yes | the only way in for what the agent does not have |
 | `memory` | no | what the agent remembers about the client's business — `core` only, so it exists on `engine` and nowhere else |
 | `transcribe` | no | audio and video to text — the plugin behind the `transcription` base capability |
@@ -174,9 +174,9 @@ is no page to name.
 
 Directories inside the plugin, each holding a `FLOW.md`. `install.sh` delivers
 the ones belonging to THIS agent's plugin set to `data/flows/<slug>/` — where
-the `flow` skill's `create_flow.py` writes, where the adapter's FlowStore reads,
-and where the client can edit one exactly like a flow the agent wrote for them.
-So a flow about quotes never lands on an agent that cannot write a quote.
+the agent writes the flows it creates, where the adapter's FlowStore reads, and
+where the client can edit one exactly like a flow the agent wrote for them. So a
+flow about quotes never lands on an agent that cannot write a quote.
 
 THEY USED TO TRAVEL INSIDE A ROLE (`roles/<id>/flows/`, packed into the profile
 distribution), and ownership is now about the WORK, not the frontmatter.
@@ -276,10 +276,9 @@ replacement for that one: the engine indexes `skills.external_dirs`, never
 `/opt/plugins`.
 
 **The curated flows land in `data/flows/<slug>/`**, which is the only place a
-flow exists on an agent: what `create_flow.py` writes, what the adapter lists
-and what the portal draws. Like the engine surface below, they are on the agent
-twice — inside the registry folder and at their working destination — and the
-working copy is the one that counts. It is in `data/`, which belongs to the
+flow exists on an agent: what the agent writes, what the adapter lists and what
+the portal draws. They are on the agent twice — inside the registry folder and
+at their working destination — and the working copy is the one that counts. It is in `data/`, which belongs to the
 agent, on purpose: a client edits a curated flow the same way they edit one the
 agent wrote, and `install.sh --diff` is what says so before an update overwrites
 the edit.
@@ -287,9 +286,11 @@ the edit.
 **The engine surface is the exception to "whole folder, one place".** It ships
 to the agent TWICE: inside the registry folder like everything else, and to
 `policy/plugins/<name>/`, which is what the compose mounts at
-`/opt/data/plugins` — where the ENGINE looks for its own plugins. That
-destination did not move when the source did (`plugins/flow/engine/promises/`,
-phase 3b).
+`/opt/data/plugins` — where the ENGINE looks for its own plugins. NO PLUGIN
+DECLARES ONE ANY MORE: the only one was `flow`'s promises guard, and it moved
+into our engine (`engine/core/promises.py`) with the flows it checks. The rule
+stays written down because the surface still exists; a Hermes agent installed
+from this kit today simply gets no engine plugin.
 
 **The core surface travels and nothing on a Hermes agent opens it.** `core/`
 is a plugin of `engine/`, our engine, and that engine mounts
