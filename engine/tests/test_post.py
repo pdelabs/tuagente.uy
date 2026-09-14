@@ -3,8 +3,11 @@
 
 One chat turn against a container that runs the `social` plugin
 (`CORE_PLUGINS=…,image,social`) and has `marca/brand.md` in its workspace:
-«Armá el posteo de hoy para Instagram y guardalo». What the gate asks is what
-is asserted, from outside, the way the portal sees it:
+«Armá el posteo de hoy para Instagram y guardalo». The face does not make it
+itself any more — it delegates to the plugin's creator
+(`docs/subagents-plan.md`), and this gate is about what the CLIENT ends up
+with, which is the same thing it always was. What the gate asks is what is
+asserted, from outside, the way the portal sees it:
 
   a. THE FOLDER IS THERE — a new directory under `<workspace>/posteos/` with
      `post.json`, `caption.md` and at least one image. Nothing is written
@@ -21,12 +24,17 @@ is asserted, from outside, the way the portal sees it:
      in the conversation to know there is a post waiting.
   f. IT DID NOT CLAIM TO PUBLISH — the answer says it left the post ready, and
      never that it went up. The one rule of this plugin that no code enforces.
+  g. THE FACE DELEGATED IT — `delegate_task` is in the trail and `save_post` is
+     not: the face has no such tool, and a run where it appears would be a run
+     on an engine that had gone back to one agent doing everything.
+  h. AND IT SENT HER TO POSTEOS — the answer names the tab, because a post she
+     is not told about is a post she does not read.
 
-THE POST IS LEFT ON DISK. It is the thing to look at, and a test that cleaned
-up after itself would delete the only evidence of the run. Which is why IT RUNS
-ONCE A DAY: the second run of the same day finds today's post, the agent
-refuses to overwrite it, and the gate says so and stops instead of failing on
-a folder that was never going to appear.
+IT PUTS THE DAY'S POST BACK. One post per day is `save_post`'s rule, so a post
+that is already there is moved out of the workspace for the length of the run
+and moved back at the end, with the one this run made taken out. That is what
+makes the gate runnable twice in a day; what is left to look at is the caption
+and the claims printed below.
 
 WHERE IT POINTS. The defaults are the main compose's — 8642/8643 and
 `engine/workspace` — and `CORE_ENDPOINT`, `CORE_ADAPTER` and
@@ -38,7 +46,9 @@ WHERE IT POINTS. The defaults are the main compose's — 8642/8643 and
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 import time
 import unicodedata
 import urllib.request
@@ -52,6 +62,10 @@ POSTS = WORKSPACE / "posteos"
 BRAND = WORKSPACE / "marca" / "brand.md"
 
 ASK = "Armá el posteo de hoy para Instagram y guardalo."
+
+# The one tool the face uses to get this done, and the one it does not have.
+DELEGATE = "delegate_task"
+CREATORS_OWN = "save_post"
 
 # What the answer must NOT claim. The agent does not publish, and the words it
 # would use if it thought it had are these. «publicar» is not in the list on
@@ -149,18 +163,20 @@ def main() -> int:
     if not BRAND.is_file():
         print(f"There is no {BRAND}: the skill reads the brand before writing.")
         return 1
+    # ONE POST PER DAY IS THE RULE, so today's goes out of the workspace for
+    # the length of the run and comes back at the end. Without that the creator
+    # reads `posteos/`, finds today's and stops without calling `save_post` --
+    # which is the rule working -- and claim (a) fails with "no new folder",
+    # which reads as the plugin being broken. Measured 2026-09-14: «Ya hay un
+    # posteo guardado para hoy. No lo piso sin permiso.»
+    keep = Path(tempfile.mkdtemp(prefix="post-"))
+    real = next(
+        (d for d in sorted(folders()) if d.name.startswith(time.strftime("%Y-%m-%d-"))), None
+    )
+    if real:
+        shutil.move(str(real), str(keep / real.name))
+        print(f"  today's post moved aside: {real.name} (it goes back at the end)")
     before = folders()
-    # ONE POST PER DAY IS THE RULE, so this gate runs once a day. On the second
-    # run the agent reads `posteos/`, finds today's and stops without calling
-    # `save_post` -- which is the rule working -- and claim (a) then failed with
-    # "no new folder", which reads as the plugin being broken. Measured
-    # 2026-09-14: «Ya hay un posteo guardado para hoy. No lo piso sin permiso.»
-    standing = sorted(d for d in before if d.name.startswith(time.strftime("%Y-%m-%d-")))
-    if standing:
-        print(f"There is already a post for today ({standing[0].name}): one per day is"
-              " the rule `save_post` enforces, so this run has nothing new to assert."
-              " Move that folder aside to run the gate again.")
-        return 1
     print(f"  ({len(before)} post already there; only what this run adds counts)")
 
     before_usd = key_usage()
@@ -232,12 +248,33 @@ def main() -> int:
         [f"the answer says {claimed}"] if claimed else [],
     )
 
+    problems = []
+    if DELEGATE not in tools:
+        problems.append(f"no {DELEGATE} in the trail: {tools}")
+    if CREATORS_OWN in tools:
+        problems.append(f"the face called {CREATORS_OWN} itself")
+    failures += judge("g. the face delegated it", problems)
+
+    failures += judge(
+        "h. and it sent her to Posteos",
+        [] if "posteos" in said else ["the answer does not name Posteos"],
+    )
+
     if post:
         print(f"\n  id       : {post['id']}")
         print(f"  format   : {post['format']} · flow: {post['flow']}")
         print(f"  hashtags : {' '.join('#' + t for t in post['hashtags'])}")
         print(f"  alt      : {post['alt']}")
         print(f"  caption  :\n{post['caption']}")
+
+    # The workspace goes back the way it was: this run's post out, the client's
+    # in. Everything worth keeping is printed above.
+    for directory in fresh:
+        shutil.rmtree(directory, ignore_errors=True)
+    for kept in sorted(keep.glob("*")):
+        shutil.move(str(kept), str(POSTS / kept.name))
+        print(f"\n  back in place: {kept.name}")
+    shutil.rmtree(keep, ignore_errors=True)
 
     print(f"\nOpenRouter key delta   : US${key_usage() - before_usd:.4f}")
     print("POST: PASS" if not failures else "POST: FAIL")

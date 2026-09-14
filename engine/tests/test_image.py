@@ -1,62 +1,74 @@
 #!/usr/bin/env python3
 """Images, gate G4. Run it from anywhere: `python3 engine/tests/test_image.py`.
 
-One conversation against a container that runs the `image` plugin
-(`CORE_PLUGINS=…,image`), asking for a picture AND for a description of it. The
-three things the gate asks are the three things asserted:
+The generator, called DIRECTLY INSIDE THE CONTAINER and with no model in the
+loop: `generate.generate_image(prompt, format)`, the same coroutine Pydantic
+AI's `ImageGeneration` capability puts in front of an agent. Three claims:
 
-  a. THE TOOL RAN — `generate_image` is in the turn's tool trail, read off the
-     SSE stream the portal itself reads.
+  a. THE TOOL ANSWERED WITH BOTH THINGS — the line that says where the file is,
+     and a `BinaryImage` with the provider's own media type and its bytes. That
+     second half is what Pydantic AI hands to a model as an IMAGE rather than
+     as a filename, so it is what makes looking at the piece possible at all.
   b. THE PNG LANDED — a new file under `<workspace>/imagenes/`, which is inside
      the one directory the client can see from the Files tab.
-  c. THE MODEL LOOKED — the answer names what is in the picture. The tool
-     returns a `BinaryImage`, so the model is handed the image and not a
-     filename; an answer that describes it is the only proof of that from
-     outside.
+  c. THE SHAPE IS THE ONE ASKED FOR — the file's own IHDR, read without a
+     decoder. `square` is 1:1 and a provider that quietly served something else
+     would be a post cropped wrong on every phone.
 
-WHERE IT POINTS. The defaults are the main compose's — 8642/8643 and
-`engine/workspace` — and `CORE_ENDPOINT`, `CORE_ADAPTER` and
-`CORE_WORKSPACE_HOST` move it onto a second instance, which is how it was run
-while the main container belonged to somebody else. The two URLs are separate
-because the portal's two bases are, even when one container answers both.
+IT NO LONGER GOES THROUGH A TURN, and that is the point of the change. The face
+has no `generate_image` any more: the tool belongs to the social plugin's
+creator (`docs/subagents-plan.md`), so a chat turn asking for a picture is a
+delegation, and THAT is gated by `tests/test_delegation.py` — which is also
+where the old claim "the model looked" now lives, as S1's post with an image
+the creator checked before saving. What is left here is the generator itself,
+for a third of the price and none of the model's opinions.
 
-~US$0.04: one image (OpenRouter bills image output by the token, ~1300 of them)
-plus the two model turns around it.
+WHERE IT POINTS. The defaults are the main compose's — `tuagente-core` and
+`engine/workspace` — and `CORE_CONTAINER` and `CORE_WORKSPACE_HOST` move it
+onto a second instance.
+
+~US$0.01: one image and no turn around it.
 """
 
 import json
 import os
-import re
+import subprocess
 import sys
 import time
-import unicodedata
 import urllib.request
 from pathlib import Path
 
 CORE = Path(__file__).resolve().parent.parent
-ENDPOINT = os.environ.get("CORE_ENDPOINT", "http://127.0.0.1:8642")
-ADAPTER = os.environ.get("CORE_ADAPTER", "http://127.0.0.1:8643")
+CONTAINER = os.environ.get("CORE_CONTAINER", "tuagente-core")
 WORKSPACE = Path(os.environ.get("CORE_WORKSPACE_HOST", CORE / "workspace"))
 IMAGES = WORKSPACE / "imagenes"
 
-TOOL = "generate_image"
-ASK = "Generá una imagen cuadrada de un martillo sobre fondo violeta y decime qué ves."
-# What the answer has to name for "it looked" to mean anything. Either word is
-# enough: the model may describe the object or the ground, and asking for both
-# would be grading its prose instead of its eyes.
-SEEN = ("martillo", "violeta")
+PROMPT = (
+    "Un martillo de carpintero sobre un fondo violeta liso, ilustración plana,"
+    " sin ningún texto."
+)
+FORMAT = "square"
+# What `square` means, from `kit/plugins/image/core/generate.py`'s table: the
+# provider is asked for a SHAPE and picks the pixels, so the assertion is the
+# ratio and not a size.
+RATIO = 1.0
+TOLERANCE = 0.02
+
+# The plugin's own directory goes on the path the same way `core/plugins.py`
+# puts it there, so `generate` imports by its plain name and finds `core` —
+# the engine's own package — already importable at /app.
+INSIDE = """
+import asyncio, json, sys
+sys.path.insert(0, "/opt/kit/plugins/image/core")
+import generate
+line, image = asyncio.run(generate.generate_image(sys.argv[1], sys.argv[2]))
+print(json.dumps({"line": line, "media_type": image.media_type, "bytes": len(image.data)}))
+"""
 
 secrets = (CORE / "secrets.env").read_text().splitlines()
-KEY = next(l.split("=", 1)[1].strip() for l in secrets if l.startswith("API_SERVER_KEY="))
 OPENROUTER_KEY = next(
     l.split("=", 1)[1].strip() for l in secrets if l.startswith("OPENROUTER_API_KEY=")
 )
-
-
-def get(url: str) -> dict:
-    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {KEY}"})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read())
 
 
 def key_usage() -> float:
@@ -68,58 +80,28 @@ def key_usage() -> float:
         return float(json.loads(response.read())["data"]["usage"])
 
 
-def conversation(opener: str) -> tuple[list[str], str]:
-    """A NEW conversation with that message: (the tools it called, the answer).
-
-    Read frame by frame instead of drained, because the tool trail only exists
-    here: `server/sse.py`'s OpenAI dialect names a tool event
-    `hermes.tool.progress` and everything else arrives unnamed, and a blank
-    line is what closes a frame and clears the name.
-    """
-    request = urllib.request.Request(
-        f"{ADAPTER}/portal/chat/stream",
-        data=json.dumps(
-            {"stream": True, "messages": [{"role": "user", "content": opener}]}
-        ).encode(),
-        headers={"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"},
+def generate(prompt: str, shape: str) -> dict:
+    """One generation, in the container that has the key and the workspace."""
+    done = subprocess.run(
+        ["docker", "exec", CONTAINER, "python3", "-c", INSIDE, prompt, shape],
+        capture_output=True, text=True,
     )
-    tools: list[str] = []
-    chunks: list[str] = []
-    name: str | None = None
-    with urllib.request.urlopen(request, timeout=900) as response:
-        for raw in response:
-            line = raw.decode().rstrip("\n")
-            if not line:
-                name = None
-            elif line.startswith("event: "):
-                name = line[len("event: "):]
-            elif line.startswith("data: "):
-                body = line[len("data: "):]
-                if body == "[DONE]":
-                    continue
-                data = json.loads(body)
-                if name == "hermes.tool.progress":
-                    tools.append(data["tool"])
-                elif name is None:
-                    chunks.append(data["choices"][0]["delta"]["content"])
-    return tools, "".join(chunks)
+    if done.returncode != 0:
+        # A `ModelRetry` is what a refusal looks like from in here, and its
+        # message is the provider's own words: it belongs on the screen whole.
+        print(done.stderr.strip()[-800:])
+        return {}
+    return json.loads(done.stdout)
 
 
-def pngs() -> set[Path]:
-    return set(IMAGES.glob("*.png")) if IMAGES.is_dir() else set()
+def pictures() -> set[Path]:
+    return {p for p in IMAGES.glob("*") if p.is_file()} if IMAGES.is_dir() else set()
 
 
-def dimensions(path: Path) -> str:
-    """The PNG's own IHDR, so the shape can be printed without a decoder."""
+def dimensions(path: Path) -> tuple[int, int]:
+    """The PNG's own IHDR, so the shape can be read without a decoder."""
     header = path.read_bytes()[16:24]
-    return f"{int.from_bytes(header[:4], 'big')}×{int.from_bytes(header[4:], 'big')}"
-
-
-def plain(text: str) -> str:
-    """Lowercase, unaccented, punctuation-free — how the answer is searched."""
-    letters = unicodedata.normalize("NFD", text.lower())
-    letters = "".join(c for c in letters if unicodedata.category(c) != "Mn")
-    return re.sub(r"[^a-z0-9]+", " ", letters).strip()
+    return int.from_bytes(header[:4], "big"), int.from_bytes(header[4:], "big")
 
 
 def judge(name: str, problems: list[str]) -> list[str]:
@@ -129,31 +111,44 @@ def judge(name: str, problems: list[str]) -> list[str]:
 
 
 def main() -> int:
-    get(f"{ADAPTER}/portal/manifest")
-    print(f"adapter  : {ADAPTER}")
+    print(f"container: {CONTAINER}")
     print(f"imagenes : {IMAGES}")
-    before = pngs()
-    print(f"  ({len(before)} PNG already there; only what this run adds counts)")
+    before = pictures()
+    print(f"  ({len(before)} already there; only what this run adds counts)")
 
     before_usd = key_usage()
     started = time.time()
-    print(f"\ncliente: {ASK}")
-    tools, answer = conversation(ASK)
-    print(f"agente : {' '.join(answer.split())[:400]}")
-    print(f"{int(time.time() - started)} s · tools: {', '.join(tools) or '(none)'}")
+    print(f"\nprompt: {PROMPT}  [{FORMAT}]")
+    answered = generate(PROMPT, FORMAT)
+    print(f"{int(time.time() - started)} s · {answered or '(the call failed)'}")
 
-    fresh = sorted(pngs() - before)
-    for path in fresh:
-        print(f"  + {path}  {dimensions(path)}  {path.stat().st_size // 1024} KB")
-
+    fresh = sorted(pictures() - before)
     failures = []
-    failures += judge("a. the tool ran", [] if TOOL in tools else [f"no {TOOL} in the trail"])
-    failures += judge("b. the PNG landed", [] if fresh else [f"no new PNG under {IMAGES}"])
+    problems = []
+    if not answered:
+        problems.append("the tool raised instead of answering")
+    else:
+        if "imagenes" not in answered["line"]:
+            problems.append(f"the line does not say where it saved it: {answered['line']!r}")
+        if not answered["media_type"].startswith("image/"):
+            problems.append(f"media type {answered['media_type']!r}")
+        if answered["bytes"] < 1024:
+            problems.append(f"the picture is {answered['bytes']} bytes")
+    failures += judge("a. the tool answered with both things", problems)
+
     failures += judge(
-        "c. the model looked",
-        [] if any(word in plain(answer) for word in SEEN)
-        else [f"the answer names none of {SEEN}"],
+        "b. the PNG landed", [] if fresh else [f"no new file under {IMAGES}"]
     )
+
+    problems = []
+    if fresh:
+        width, height = dimensions(fresh[0])
+        print(f"  + {fresh[0]}  {width}×{height}  {fresh[0].stat().st_size // 1024} KB")
+        if abs(width / height - RATIO) > TOLERANCE:
+            problems.append(f"{width}×{height} is not {RATIO}")
+    else:
+        problems.append("there was no file to measure")
+    failures += judge("c. the shape is the one asked for", problems)
 
     print(f"OpenRouter key delta   : US${key_usage() - before_usd:.4f}")
     print("IMAGE: PASS" if not failures else "IMAGE: FAIL")
