@@ -1,0 +1,34 @@
+{
+  "id": "memory",
+  "version": "1.0.0",
+  "description": "A dated notebook of what the client told the agent about their business and how they want it to work: injected into every turn, written by the model when it is asked to remember and by an extraction pass after each turn",
+  "client_copy": "Se acuerda de lo que le contás de tu negocio y de cómo te gusta que trabaje.",
+  "_comment": [
+    "THIS PLUGIN IS THE core ENGINE'S AND NOBODY ELSE'S, which is why the only",
+    "surface is `core/`. A Hermes agent already has the engine's own memory, so",
+    "there is nothing here for it to install: the folder travels with the",
+    "registry copy like every other plugin's and no Hermes agent opens it.",
+    "",
+    "IT IS `system: false` AND NO CAPABILITY ROW INSTALLS IT, which anywhere",
+    "else in this registry would be the drive-inbox mistake -- a plugin nobody",
+    "can buy is a plugin that does not exist. Here it is the honest state:",
+    "what decides that this plugin runs is `CORE_PLUGINS` in poc/core, not",
+    "`purchased.json`, and a row would promise a Hermes client something they",
+    "already have.",
+    "",
+    "THE NOTEBOOK LIVES IN THE WORKSPACE on purpose, under `memoria/`. What the",
+    "agent believes about the client is the client's to read, and the Files tab",
+    "is where they read it -- a memory the client cannot see is a memory they",
+    "cannot correct.",
+    "",
+    "THERE IS NO instructions.md. The rule about what memory holds is the",
+    "harness's own `guidance`, the trusted instruction channel the Memory",
+    "capability already puts in the prompt next to the notebook; writing it",
+    "twice would be two copies of one rule."
+  ],
+  "requires": {},
+  "surfaces": {
+    "core": "core/"
+  },
+  "system": false
+}

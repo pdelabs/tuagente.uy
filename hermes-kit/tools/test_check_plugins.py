@@ -809,6 +809,14 @@ PORTED = ["brand-kit", "drive-inbox", "invoices-to-data", "post-image",
 # these lists are what say which shape a given plugin is claiming.
 WRITTEN = ["interview-production"]
 CLIENT = sorted(PORTED + WRITTEN)
+# THE THIRD SHAPE: a plugin of OUR ENGINE and of nothing else. `memory` carries
+# `core/` and no skills surface, because what it installs is a capability of
+# `poc/core` — a Hermes agent has the engine's own memory and never opens the
+# folder. It is `system: false` and no capability row installs it, which for
+# any other client plugin would be the drive-inbox mistake; here it is the
+# honest state, because `CORE_PLUGINS` is what decides that it runs and
+# `purchased.json` has nothing to say about it.
+CORE_ONLY = ["memory"]
 
 
 class TheKitsOwnRegistry(unittest.TestCase):
@@ -817,9 +825,16 @@ class TheKitsOwnRegistry(unittest.TestCase):
 
     def test_the_registry_is_the_five_defaults_plus_every_ported_skill(self):
         plugins = plugin_registry.registry(KIT)
-        self.assertEqual(sorted(plugins), sorted(SYSTEM + CLIENT))
+        self.assertEqual(sorted(plugins), sorted(SYSTEM + CLIENT + CORE_ONLY))
         for pid in SYSTEM:
             self.assertTrue(plugins[pid]["system"], pid)
+        # A PLUGIN OF poc/core CARRIES `core/` AND NOTHING ELSE. The day one of
+        # these grows a skills surface it stops being this shape: the skill
+        # would be indexed on every Hermes agent that installs the folder, and
+        # nothing on a Hermes agent can run it.
+        for pid in CORE_ONLY:
+            self.assertFalse(plugins[pid]["system"], pid)
+            self.assertEqual(sorted(plugins[pid]["surfaces"]), ["core"], pid)
         for pid in CLIENT:
             self.assertFalse(plugins[pid]["system"], pid)
             # A client plugin carries its skills surface, the curated flows that

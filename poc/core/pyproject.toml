@@ -6,6 +6,10 @@ requires-python = ">=3.12"
 dependencies = [
     # The `openrouter` extra exists for 2.43.0 (checked against PyPI metadata).
     "pydantic-ai-slim[openrouter]==2.43.0",
+    # The `memory` plugin's capability: the notebook, its four tools and the
+    # bounded injection. Pinned, like the engine it plugs into — the harness is
+    # on 0.x and says so, and its API moves between minor releases.
+    "pydantic-ai-harness==0.31.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "python-frontmatter>=1.1",
