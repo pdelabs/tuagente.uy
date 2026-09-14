@@ -28,6 +28,10 @@ export type Manifest = {
   look?: Record<string, number> | null;
   /** true if the client has ever named it from the portal. */
   named?: boolean;
+  /** What the client's BUSINESS is called, as they wrote it at onboarding
+   *  (adapter 0.32+). The agent has always sent it; the portal only started
+   *  reading it when Posts needed an account name to sign the feed with. */
+  company?: string | null;
   /** Where the agent notifies: `telegram`, `email` or `none` -- whatever the
    *  client answered at onboarding. Absent on older adapters and on anyone who
    *  never got around to answering; `"none"` is an explicit answer ("not right
