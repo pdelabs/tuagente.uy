@@ -996,7 +996,11 @@ export type Post = {
    *  network as-is, and rendering it would eat the `#` and the line breaks
    *  that are part of what the client publishes. */
   caption: string;
+  /** The first slide's; a carousel carries one per image in `alts`. */
   alt: string;
+  /** One per image, same order as `images`, when the post is a carousel
+   *  (social plugin >= carousel). Absent on a one-image post. */
+  alts?: string[];
   /** Without the "#": the portal writes it when it copies them. */
   hashtags: string[];
   /** `url` is relative to the adapter (`/portal/posts/<id>/01.png`) and the

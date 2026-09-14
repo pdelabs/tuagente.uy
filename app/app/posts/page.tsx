@@ -311,7 +311,7 @@ function Gallery({ cfg, p, index, onIndex }: {
                   cfg={cfg}
                   id={p.id}
                   name={img.name}
-                  alt={p.alt}
+                  alt={altOf(p, i)}
                   onRatio={i === 0 ? (r) => setRatio(frameRatio(r)) : undefined}
                 />
               )}
@@ -535,6 +535,10 @@ function Caption({ handle, p, expandable }: { handle: string; p: Post; expandabl
 /** The alt text, folded away: it is the one piece of the post that isn't
  *  pasted with the caption (it goes in the network's accessibility field), so
  *  it stays out of the way until it's asked for. */
+/** The alt text of one slide: a carousel carries one per image, a single
+ *  image carries the post's. Never slide 1's text on slide 3. */
+const altOf = (p: Post, i: number): string => p.alts?.[i] ?? p.alt;
+
 function AltText({ alt }: { alt: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -648,7 +652,7 @@ function PostCard({ cfg, p, look, handle, flowName, onOpen, wide = false }: {
         {!wide && current && <DownloadImage cfg={cfg} id={p.id} name={current.name} />}
       </div>
       <div className="px-3 pb-3">
-        <AltText alt={p.alt} />
+        <AltText alt={wide ? (p.alts ?? [p.alt]).map((a, i) => (p.images.length > 1 ? `${i + 1}. ${a}` : a)).join("\n") : altOf(p, index)} />
       </div>
     </article>
   );
@@ -661,7 +665,7 @@ function StackedImage({ cfg, p, name }: { cfg: PortalConfig | null; p: Post; nam
   return (
     <div>
       <Frame ratio={ratio}>
-        <PostImage cfg={cfg} id={p.id} name={name} alt={p.alt} onRatio={(r) => setRatio(frameRatio(r))} />
+        <PostImage cfg={cfg} id={p.id} name={name} alt={altOf(p, p.images.findIndex((im) => im.name === name))} onRatio={(r) => setRatio(frameRatio(r))} />
       </Frame>
       <div className="flex flex-wrap items-center gap-2 px-3 py-2">
         <DownloadImage cfg={cfg} id={p.id} name={name} />
