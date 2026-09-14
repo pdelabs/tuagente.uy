@@ -29,8 +29,14 @@ is only read to fill the `load_capability` catalogue, which nothing here builds.
 """
 
 import generate
+from pydantic_ai import Tool
 from pydantic_ai.capabilities import ImageGeneration
 
 
 def register(engine) -> None:
-    engine.capability(ImageGeneration(native=False, local=generate.generate_image))
+    # Two retries, not the default one: the skill tells the agent to try once
+    # more with the fix in the prompt when the provider refuses, and a second
+    # refusal must reach the model as words, not end the turn.
+    engine.capability(
+        ImageGeneration(native=False, local=Tool(generate.generate_image, max_retries=2))
+    )

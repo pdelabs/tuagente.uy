@@ -87,7 +87,12 @@ cleanup() {
   # The FLOW.md goes FIRST: `*/1` is illegal under the default floor, and a
   # flow the model cannot validate is one the tab cannot draw.
   rm -rf "$FLOW_DIR" "$OUT_DIR"
-  python3 -c '
+  # THE WRITE HAPPENS INSIDE THE CONTAINER. A write from the host while the
+  # engine holds the database open corrupted it once ("Rowid out of order"):
+  # Docker Desktop does not share SQLite's shm across the bind mount. The
+  # read-only reads above stay on the host because they must also work while
+  # the container is dead.
+  docker exec tuagente-core python3 -c '
 import sqlite3, sys
 db = sqlite3.connect(sys.argv[1])
 ids = [r[0] for r in db.execute("SELECT session_id FROM flow_runs WHERE slug = ?", (sys.argv[2],))]
@@ -98,7 +103,7 @@ for table in ("messages", "history", "sessions"):
                    [(i,) for i in ids])
 db.commit()
 print(f"took out {len(ids)} run(s) and their conversations")
-' "$DB" "$SLUG"
+' /state/core.db "$SLUG"
   up 5
   printf 'the container is back on the default floor\n'
 }

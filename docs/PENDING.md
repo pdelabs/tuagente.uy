@@ -25,9 +25,18 @@ both engines any more. Rules from that day on:
 
 The record of why: `docs/engine-plan.md`, `docs/engine-verdict.md`.
 
-First workload on the engine, planned 2026-09-14: our own agent posting daily,
-which brings flows into the engine, an image plugin and a social plugin with
-its Posts tab. `docs/own-agent-plan.md`.
+First workload on the engine, built 2026-09-14: our own agent posting daily,
+which brought flows into the engine, an image plugin and a social plugin with
+its Posts tab. `docs/own-agent-plan.md`, `docs/own-agent-verdict.md`. Open
+after it, and whose:
+
+- **The mascot** (Luis): generative 3D robot that drifts daily, or the HTML
+  renderer in `social/` for the brand's SVG agentito.
+- **The agent's name** (Luis): «Tu Agente» for now.
+- **Telegram**, so a morning post announces itself; **publishing** through an
+  Instagram connection behind the gate; the **VPS deploy** of an instance.
+- The Flows card's "Trabajando ahora" needs `latest_execution` published from
+  `flow_runs`.
 
 ## Migration to English (2026-08-23)
 
