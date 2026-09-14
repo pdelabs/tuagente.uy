@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home,
+  Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home, Images,
   LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Plug, Puzzle, Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -53,6 +53,13 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   { key: "home", path: "/app/home", label: "Inicio", icon: Home },
   { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
   { key: "flows", path: "/app/flows", label: "Flujos", icon: Workflow },
+  // Posteos right after Flujos because that is where they come from: a daily
+  // flow writes one every morning and leaves it here. A generic icon and not
+  // lucide's `Instagram`: the module is "what your agent left ready to
+  // publish", and naming one network in the nav would promise the portal
+  // knows which one it goes to -- it doesn't, and tomorrow the same tab holds
+  // another.
+  { key: "posts", path: "/app/posts", label: "Posteos", icon: Images },
   // Actividad left "Más" (8/13) and sits right next to Flujos. Both blind-QA
   // clients went looking for it and both said the same thing: "it's where the
   // truth is" and "it should be up top". One of them discovered THERE that her

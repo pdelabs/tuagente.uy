@@ -971,6 +971,51 @@ export const getArtifact = (c: PortalConfig, id: string) =>
 export const deleteArtifact = (c: PortalConfig, id: string) =>
   del<{ ok: boolean }>(c.adapter, `/portal/artifacts/${encodeURIComponent(id)}`, c);
 
+/** A post the agent left READY TO PUBLISH: the image, the text and the
+ *  hashtags. Served by the social plugin's own router, and only present when
+ *  the manifest flips `posts`.
+ *
+ *  Nothing here publishes anything: the client copies the caption, downloads
+ *  the images and posts them from their own account. The tab says so.
+ *
+ *  `format` is left open like an artifact's `kind`: the plugin can grow a
+ *  shape tomorrow and the tab draws it raw instead of hiding it. */
+export type Post = {
+  /** `<YYYY-MM-DD>-<slug>`, the name of its folder in `posteos/`. */
+  id: string;
+  slug: string;
+  /** The day the post is FOR, as a bare calendar day ("2026-09-15"): no
+   *  offset, because it isn't an instant. `created_at` is the instant. */
+  date: string;
+  format: "feed" | "square" | "story" | string;
+  /** PLAIN TEXT with line breaks, not markdown: it gets pasted into the
+   *  network as-is, and rendering it would eat the `#` and the line breaks
+   *  that are part of what the client publishes. */
+  caption: string;
+  alt: string;
+  /** Without the "#": the portal writes it when it copies them. */
+  hashtags: string[];
+  /** `url` is relative to the adapter (`/portal/posts/<id>/01.png`) and the
+   *  bytes need the bearer, so it never goes into an `<img src>`. */
+  images: { name: string; bytes: number; url: string }[];
+  created_at: string;
+  /** The slug of the flow that produced it, if a flow did. */
+  flow: string | null;
+};
+export const getPosts = (c: PortalConfig) =>
+  get<{ available: boolean; posts: Post[] }>(c.adapter, "/portal/posts", c);
+export const getPost = (c: PortalConfig, id: string) =>
+  get<Post>(c.adapter, `/portal/posts/${encodeURIComponent(id)}`, c);
+/** One image's raw bytes. Same reason as `getFileBytes`: a PNG that goes
+ *  through `res.text()` comes back with every invalid byte replaced, and both
+ *  the preview and the download would be broken. */
+export const getPostImage = async (c: PortalConfig, id: string, name: string) => {
+  const path = `/portal/posts/${encodeURIComponent(id)}/${encodeURIComponent(name)}`;
+  const res = await fetch(c.adapter + path, { headers: headers(c) });
+  if (!res.ok) throw httpError(res.status, path);
+  return res.arrayBuffer();
+};
+
 // ── Writing to the board (the adapter does it via CLI, never via SQL) ──
 export const createTicket = (c: PortalConfig, t: { title: string; body?: string; tenant?: string }) =>
   post<{ ok: boolean; id: string | null }>(c.adapter, "/portal/tickets", c, t);

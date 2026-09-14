@@ -139,6 +139,10 @@ const EVENTS: Record<string, string | ((n: string) => string)> = {
   sent: "Enviada",
   status_changed: "Cambió de estado",
   scheduled: "Quedó programada",
+  // The social plugin writing a post into `posteos/`. Worded as a fact and
+  // not as "Publicó": nothing in the product publishes anything -- the client
+  // downloads it and posts it themselves, and the Posteos tab says so.
+  "post.saved": "Guardó un posteo",
   // The engine pulled it out of the queue because it's stuck: approving it
   // from here doesn't work anymore and it has to be asked of the agent again.
   // Said plainly, not hidden.
