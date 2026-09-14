@@ -231,7 +231,7 @@ and not by `/portal/files`, which answers `text/plain` for everything it has.
 `engine.module("posts", True)` is what makes the portal draw the tab.
 
 ```bash
-python3 engine/tests/test_post.py       # ~4 min, ~US$0.03
+python3 engine/tests/test_post.py       # ~3 min, ~US$0.07
 ```
 
 One chat turn — «Armá el posteo de hoy para Instagram y guardalo» — and nine
@@ -334,18 +334,20 @@ only English the model reads), and `app/app/lib/labels.ts` has a row for
 rato» until somebody adds them.
 
 ```bash
-python3 engine/tests/test_delegation.py   # ~4 min, ~US$0.10
+python3 engine/tests/test_delegation.py   # ~8 min, ~US$0.23
 ```
 
-S1-S4 against the running container, sixteen claims: the face delegates and has
-neither `generate_image` nor `save_post`; a flow's run goes through the same
-delegation and the post it saves carries the flow's slug — which is `flow_of`
-still working, and the proof that the creator runs on the FACE's deps; both
-events are in Activity and the usage event says `delegations: 1` against a turn
-that delegated nothing (45_921 in / 1_825 out against 7_540 / 902, US$0.0084
-against US$0.0022); and a refused image and a five-second timeout both come
-back as an answer in Spanish. It moves the day's post out of the workspace and
-puts it back.
+S1-S4 against the running container, nineteen claims: the face delegates and
+has neither `generate_image` nor `save_post`; what lands is a CAROUSEL, three
+slides or more with one alt each, `01`…`NN` on disk and listed in that order; a
+flow's run goes through the same delegation and the post it saves carries the
+flow's slug — which is `flow_of` still working, and the proof that the creator
+runs on the FACE's deps; both events are in Activity and the usage event says
+`delegations: 1` against a turn that delegated nothing (119_587 in / 2_636 out
+against 12_884 / 836, US$0.0194 against US$0.0017 — a carousel turn reads five
+images, which is where the input tokens are); and a refused image and a
+five-second timeout both come back as an answer in Spanish. It moves the day's
+post out of the workspace and puts it back.
 
 ## Check it
 

@@ -45,7 +45,9 @@ WHERE IT POINTS. The defaults are the main compose's — 8642/8643 and
 `engine/workspace` — and `CORE_ENDPOINT`, `CORE_ADAPTER` and
 `CORE_WORKSPACE_HOST` move it onto a second instance.
 
-~US$0.03: a carousel's three to five images plus the turn around them.
+~3 min and ~US$0.07, measured 2026-09-14 on a four-slide carousel: the
+turn's tokens are about US$0.02 of it and the four images the rest, so the
+day's post costs three to four times what one image cost.
 """
 
 import json

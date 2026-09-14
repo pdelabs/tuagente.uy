@@ -38,8 +38,8 @@ WHERE IT POINTS. The defaults are the main compose's — 8642/8643 and
 `engine/workspace` — and `CORE_ENDPOINT`, `CORE_ADAPTER`, `CORE_WORKSPACE_HOST`
 and `CORE_CONTAINER` move it onto a second instance.
 
-~12 min, ~US$0.12: two carousels with their slides, two failed delegations and
-two small turns.
+~8 min, ~US$0.23 (measured 2026-09-14): two carousels with their slides, two
+failed delegations and two small turns.
 """
 
 import json
