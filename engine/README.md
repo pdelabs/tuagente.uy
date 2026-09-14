@@ -30,9 +30,7 @@ What lives where:
 |---|---|
 | `state/core.db` | SQLite (WAL): sessions, messages, history, approvals, events |
 | `state/identity.json` | what the client changed from the portal; wins over the seed |
-| `state/cron/jobs.json` | what runs on its own. Always `{"jobs": []}` here: the engine has no cron, and the promises check reads it to say so |
-| `state/promises/` | the `data/` dir the kit's promises module expects — two symlinks, `flows` → `workspace/flows` and `cron` → `state/cron` |
-| `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did, `memoria/` what it remembers about the client |
+| `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did, `memoria/` what it remembers about the client, `flows/` what runs on its own |
 | `agent/SOUL.md` | the client section + the `core:base` block, mounted read-only |
 | `/opt/kit/plugins` | `kit/plugins`, read-only. `CORE_PLUGINS` picks which load, and each one's `core/` surface is what it adds to this engine |
 
@@ -52,8 +50,9 @@ The seeded identity has `contact.channel: "none"`, which the portal reads as
 
 ## Plugins
 
-**A mechanism is a plugin of the kit, not a module of this engine.** The four
-this engine runs by default — `CORE_PLUGINS=approval,deliverable,flow,memory`
+**A mechanism is a plugin of the kit, not a module of this engine** — unless it
+is the clock, which is the engine's own (see **Flows** below). The three this
+engine runs by default — `CORE_PLUGINS=approval,deliverable,memory`
 — are the kit's own plugins, and each one declares `"surfaces": {"core": "core/"}` in
 its `plugin.json`: a directory holding `plugin.py` and, when the mechanism
 needs words, an `instructions.md`. `core/plugins.py` imports that file and
@@ -69,17 +68,20 @@ engine/                          the engine, and nothing about any mechanism
   core/compaction.py               summarize the history away (engine)
   core/turn_usage.py               what the turn cost (engine)
   core/tracing.py                  spans to Phoenix (engine)
+  core/flows.py                    a flow is a file: the model, read/write, next run
+  core/scheduler.py                the clock: the 30 s loop, a run, the rows
+  core/promises.py                 what it SAID it left running, against the flows
   core/tools/workspace.py          bash, read_file, write_file, list_files
   core/tools/skills.py             the SKILL.md index + skill_view
+  core/tools/flows.py              create_flow, set_flow_status
   core/db.py, server/*.py          storage, the two bases, the SSE dialects
+  server/flows.py                  /portal/flows*, /api/jobs*
 
 kit/plugins/approval/core/  the gate: sensitive.py (the gated toolset),
                                    store.py (the row), render.py (what she
                                    reads), routes.py (/portal/approvals*),
                                    instructions.md, and SKILLS = []
 kit/plugins/deliverable/core/  nothing to register: instructions.md
-kit/plugins/flow/core/      the promises guard, reading promises.py from
-                                   the plugin's own engine/promises/
 kit/plugins/memory/core/    the notebook: plugin.py (the harness's
                                    Memory capability and the rule it carries as
                                    `guidance`), extraction.py (the after_run
@@ -102,9 +104,9 @@ kit/plugins/memory/core/    the notebook: plugin.py (the harness's
 Two things are not verbs. **Skills** load from `surfaces.skills` as on any
 agent, unless the plugin's module defines `SKILLS` — a list that overrides the
 manifest here, and `[]` means it brings none to this engine (`approval`'s
-SKILL.md is Hermes-kanban prose; `flow`'s drives a runner this engine does not
-have). And **`instructions.md`** is read by the loader, not by the plugin: it
-goes into the prompt before anything `register()` adds.
+SKILL.md is Hermes-kanban prose). And **`instructions.md`** is read by the
+loader, not by the plugin: it goes into the prompt before anything `register()`
+adds.
 
 The instructions a run is built from, in order:
 
@@ -121,9 +123,9 @@ its scope, and the list of what THIS company does not do without permission.
 Nothing about tools, folders, skills or mechanisms goes in the SOUL. Everything
 else is prose about a mechanism, and prose about a mechanism ships WITH the
 mechanism — so it is in the prompt only where that plugin is enabled, and when
-the mechanism changes there is one file to change. `flow`'s `instructions.md`
-says the agent has nothing scheduled *on this engine*; the day flows land, that
-file changes and nothing else does.
+the mechanism changes there is one file to change. The engine's own mechanisms
+follow the same rule from `core/agent.py`: the three lines about flows are
+there, next to the tools that make them true.
 
 ## Check it
 
@@ -134,10 +136,12 @@ python3 kit/tools/portal-check.py --key "$KEY" \
     --origin http://localhost:8090
 ```
 
-Last run: **13 ok · 3 warnings · 0 failures**. The three warnings are the
+Last run: **14 ok · 3 warnings · 0 failures**. The three warnings are the
 modules the manifest does not declare — `kanban`, `artifacts` and `crons`,
-out of scope in `docs/engine-plan.md` and never coming. `approvals` and
-`usage` are declared and answer.
+out of scope in `docs/engine-plan.md` and never coming. `approvals`, `usage`
+and `flows` are declared and answer; the flows check also crosses the listing
+against `/api/jobs`, so a flow that runs on the clock with no task in the
+gateway is a failure and not something to notice in the browser.
 
 Both chat dialects by hand:
 
@@ -325,6 +329,104 @@ Last run: **4/4, 0 failures, US$0.0007 metered.** Two things it settled:
   The guidance is in the instruction channel and the notebook is not, which is
   the difference that makes that sentence possible.
 
+## Flows
+
+A flow is **named client work that repeats**, and on this engine it is the
+engine's own mechanism, not a plugin's: what runs on its own is the clock, and
+the clock is here. `config.MODULES["flows"]` is `True` out of the box.
+
+**`workspace/flows/<slug>/FLOW.md` is the only source of truth.** There is no
+job store. The scheduler derives what is due from the frontmatter on every
+tick, so nothing can be created and not scheduled, nothing can be orphaned, and
+changing when a flow runs is editing one line of one file — which the client
+can read in the Files tab and the agent can edit with `write_file`.
+
+```
+---
+name: Resumen de la bandeja
+client_summary: "Todos los días te digo qué preguntaron y qué no supe contestar."
+trigger: schedule            # schedule | request
+trigger_detail: Todos los días a las 18:00
+cron: '0 18 * * *'           # required iff schedule, forbidden otherwise
+timezone: America/Montevideo # defaults to TZ
+status: active               # active | paused
+connections: []
+---
+
+1. Junto los mensajes del día y lo que se respondió.
+2. Marco aparte lo que no supe contestar y por qué faltaba el dato.
+
+## Notas técnicas
+
+- Lo que va acá no lo ve el cliente, y la corrida sí lo lee.
+```
+
+`core/flows.py` is the model and the reader. Its validators are the rules:
+the slug shape, `cron` iff `schedule`, a real cron expression, and a floor of
+five minutes between runs (`CORE_FLOWS_MIN_MINUTES`) so an over-eager agent
+cannot schedule itself infinite wake-ups. A FLOW.md that does not validate
+raises — it takes the tab and the tick with it, which is the point: a flow that
+is half a flow is the state nobody notices.
+
+**The loop** (`core/scheduler.py`) is one asyncio task started with the app.
+Every 30 s, for each active `schedule` flow, it asks what occurrence is owed —
+the last one that has passed since the flow's previous run — and if one is, it
+claims the row and runs. **Missed ticks collapse into one run**: an agent that
+was off over a weekend does Monday's work once, not sixty times.
+
+**A run is a headless session**, kind `flow`, titled `<name> · <dd/mm HH:MM>`,
+one user turn built from the body and the notes, through the same
+`session.run_turn` a chat turn goes through: same tools, same gate, same hooks,
+same compaction. It shows up in Chat like any other conversation, because it is
+the client's — they just did not type in it. A run that stops at the approval
+gate pauses exactly like a chat turn does.
+
+**Runs are rows.** `flow_runs(slug, scheduled_at, session_id, started_at,
+finished_at, status, error, manual)`, primary key `(slug, scheduled_at)`. **The
+insert is the claim**: two ticks racing on one occurrence write one row between
+them, and everything a run does happens after the claim comes back true. A row
+left `running` is a process that died holding it, and the next start turns it
+into an `error` that says so. Every transition writes an event — `flow.started`,
+`flow.finished`, `flow.failed` — so Activity shows a failed run without any
+prose asking the agent to mention it.
+
+**Two tools**, in `core/tools/flows.py`: `create_flow(spec)` (the rules are the
+model's — up to 7 steps of 320 characters, the connections question answered
+even if the answer is `ninguna`) and `set_flow_status(slug, active|paused)`.
+Editing a flow's body is editing its file, so there is no third tool for it.
+The three things code cannot check — close the contract before creating, create
+first and tell after, do the first round right now — are the only flow prose in
+the prompt (`core/agent.py`).
+
+**The portal contract, from one reader** (`server/flows.py`):
+
+| endpoint | what |
+|---|---|
+| `GET /portal/flows` | `{available, flows: [Flow]}` — the tab's listing |
+| `GET /portal/flows/{slug}` | the same plus `how`, the steps the client reads. 404 if it is not there |
+| `GET /api/jobs?include_disabled=true` | one `CronJob` per `schedule` flow, id and name `flujo-<slug>` |
+| `POST /api/jobs/{id}/{pause\|resume\|run}` | pause and resume are one line of the FLOW.md; `run` claims this instant and answers at once |
+
+`last_status` is the last FINISHED run and never the one in flight: the portal
+reads a status it does not know as "uncertain", and a client reading "we are not
+sure how it went" about a run that is still going is worse than reading nothing.
+What says a run is happening now is `state`. `results` and `results_total`
+travel empty — where a flow's output lands is the business of the plugin that
+produces it, and that plugin brings its own view.
+
+```bash
+bash engine/tests/test_flows.sh     # ~9 min, ~US$0.005
+```
+
+G1, against the running container. It writes a flow with `*/1 * * * *`, brings
+the container up with `CORE_FLOWS_MIN_MINUTES=1` through the compose
+passthrough, and then: two ticks, two rows a minute apart, one session each;
+`docker kill` mid-run and back up 75 s later, where the killed run reads `error`
+and the minutes it was away collapse into ONE catch-up run; pause stops the
+clock and resume starts it; run-now answers in milliseconds and the row is
+marked manual. It takes the flow, its rows and its conversations out on the way
+out and puts the container back on the default floor.
+
 ## Compaction, promises and what a turn costs (G4, G5, G6)
 
 Three scripts, all run from the repo root against the container that is
@@ -382,9 +484,10 @@ the claim verbatim, and `GET /api/sessions/{id}/messages` returns the
 corrected text). The last one is the gate: what the portal reads back is what
 the hook returned, not what the model said.
 
-The guard itself is `kit/plugins/flow/core/plugin.py`, which loads the
-kit's `promises.py` from the plugin's own `engine/promises/` by path: one copy
-of the module, two engines reading it.
+The guard itself is `core/promises.py`, registered into `BEFORE_PERSIST` at
+import like the engine's other hooks, and what it reads is `flows.read_all()`.
+It used to be the `flow` plugin's, loading one copy of the module for two
+engines; the flows are the engine's now and so is the check that reads them.
 
 The one-line version of the phrase — "Queda definido: viernes a las 9:30 te
 mando el control de contratos" — does **not** fire, and that is the module
