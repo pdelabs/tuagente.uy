@@ -84,6 +84,7 @@ def job(flow: flows.Flow) -> dict:
     last = db.last_finished_flow_run(flow.slug)
     running = db.flow_run_in_flight(flow.slug)
     upcoming = scheduler.due_at(flow)
+    latest = db.last_flow_run(flow.slug)
     return {
         "id": job_id(flow.slug),
         "name": job_id(flow.slug),
@@ -100,6 +101,25 @@ def job(flow: flows.Flow) -> dict:
         "paused_at": (
             iso(flows.file_of(flow.slug).stat().st_mtime) if flow.status == "paused" else None
         ),
+        # The run in flight or the last one, as the Flows tab reads it by
+        # structure (`runs.ts`, `Execution`): it is what draws «Trabajando
+        # ahora» while a run is going, since `last_status` is never the one in
+        # flight. The same row, in the tab's vocabulary.
+        "latest_execution": execution(latest) if latest else None,
+    }
+
+
+EXECUTION_STATUS = {"running": "running", "ok": "completed", "error": "failed", "paused": "paused"}
+
+
+def execution(run) -> dict:
+    return {
+        "id": f"{run['slug']}/{int(run['scheduled_at'])}",
+        "status": EXECUTION_STATUS[run["status"]],
+        "claimed_at": iso(run["started_at"]) if run["started_at"] else None,
+        "started_at": iso(run["started_at"]) if run["started_at"] else None,
+        "finished_at": iso(run["finished_at"]) if run["finished_at"] else None,
+        "error": run["error"],
     }
 
 
