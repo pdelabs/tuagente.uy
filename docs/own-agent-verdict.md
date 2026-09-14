@@ -96,3 +96,33 @@ and each key is 401 against the other's adapter.
   The row has every field it needs.
 - **Telegram**, so a morning post announces itself; **publishing** through an
   Instagram connection behind the gate; the **VPS deploy** of an instance.
+
+## Addendum, the same evening: the face delegates
+
+After the verdict, Luis decided the main agent is the only entry point and
+delegates specialized work to sub-agents the plugins define
+(`docs/subagents-plan.md`). Built and gated the same evening on the harness's
+`SubAgents`: the engine verbs (`subagent`, `tools`, `identity`, `provide` /
+`use`), the delegation events in Activity and the Chat trail, the image and
+memory plugins providing their capabilities instead of registering them on the
+face, and the Instagram creator as a sub-agent of the social plugin with the
+`post` skill moved to it. The face no longer has `generate_image` or
+`save_post`; delegating is the only path.
+
+Gates S1–S5 pass (`engine/tests/test_delegation.py`, 16 claims). A chat turn
+that delegates costs about US$0.008 against US$0.002 for one that does not.
+Our own agent's flow, run once through the delegation: «Le pedí al creador de
+posteos…», «El creador de posteos terminó en 13 s», and the face's answer says
+today's post already existed and is in Posteos.
+
+Two things learned: the memory notebook was injected at the END of the request,
+so on a delegated turn the model answered the notebook instead of the tool's
+return; it goes first now. And the harness's claim that an approval inside a
+delegation propagates is not what happens: the child run raises and the
+parent turn dies, which is why the engine refuses a gated toolset on a
+delegate at registration.
+
+One unexplained failure: the first run-now after a rebuild died with a bare
+`KeyError: 'instagram-creator'` and the rerun passed. The scheduler now logs a
+broken run's stack, and the delegate's Activity label falls back to its name
+so a missing label can never be what kills the work.
