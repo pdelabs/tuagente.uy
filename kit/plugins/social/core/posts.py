@@ -3,7 +3,12 @@
     <workspace>/posteos/<YYYY-MM-DD>-<slug>/
         post.json     the whole post; it is also what the route answers
         caption.md    the caption, a blank line, the hashtags on one line
-        01.png …      the pieces, in the order the model asked for them
+        01.png …      the slides, in the order they are flipped through
+
+THE DAY'S POST IS A CAROUSEL: several slides, `01.png` the hook and the last
+one the close, and `alts` carries one description per slide in that same
+order. `alt` stays what it was — the post's own description — and it is the
+FIRST slide's, because that is the field the portal's `Post` reads.
 
 THE ROUTES ARE IN THIS FILE AND NOT IN A `routes.py`, which is what the shape
 of `plugins/approval/core/` would suggest, AND THE REASON IS MEASURED. A
@@ -71,7 +76,15 @@ MAX_IMAGES = 10
 TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
          ".webp": "image/webp"}
 
-Format = Literal["feed", "square", "story"]
+# THE FORMAT OF A POST IS NOT THE FORMAT OF A PIECE, and that is why
+# `carousel` is here and NOT in the image plugin's `RATIO`. A carousel's slides
+# are 4:5, exactly what `feed` already asks for, so a fourth ratio would be the
+# same geometry under a second name — a new key, a new `Literal` and a new line
+# of docstring in another plugin, for nothing. The skill tells the creator to
+# generate every slide as `feed`, this word says what the client ends up
+# flipping through, and the image plugin's vocabulary stays the three shapes a
+# picture is ever cut to.
+Format = Literal["feed", "square", "story", "carousel"]
 
 # Read by the client: the portal shows `error.message` on the tab she is on.
 NO_POST = "No hay ningún posteo {post_id} en este agente."
@@ -102,6 +115,9 @@ def expand(data: dict) -> dict:
     from what is on disk. The portal never builds a path of its own: it fetches
     `url` with the bearer header and makes an object URL out of the bytes, so
     the client's key never travels in a query string.
+
+    Everything else of the file travels as it was written, `alts` included:
+    one description per image and in the same order as `images`.
     """
     directory = folder(data["id"])
     return data | {
@@ -167,10 +183,11 @@ def toolset() -> FunctionToolset:
         ctx: RunContext,
         slug: str,
         caption: str,
-        alt: str,
         hashtags: list[str],
         format: Format,
         images: list[str],
+        alt: str | None = None,
+        alts: list[str] | None = None,
         replace: bool = False,
     ) -> dict:
         """Dejar el posteo del día listo para que el cliente lo revise y lo baje.
@@ -179,18 +196,27 @@ def toolset() -> FunctionToolset:
         los nombres de archivo. Llamala cuando el pie esté escrito y las
         imágenes miradas, y recién después contale al cliente qué dejaste.
 
+        UN CARRUSEL es un posteo de varias imágenes que se pasan de a una:
+        pasámelas en `images` EN EL ORDEN EN QUE SE VEN —la primera es el
+        gancho, la última es el cierre— y en `alts` un texto alternativo por
+        imagen, en ese mismo orden. Las piezas se generan todas como `feed`,
+        que es la proporción 4:5 de un carrusel, y acá el formato es
+        `carousel`, que es lo que el cliente termina pasando con el dedo.
+
         Es un posteo por día. Si ya hay uno de hoy te frena; `replace=True`
         pisa el anterior, y eso sólo lo hacés si te lo pidieron.
 
         Args:
             slug: el tema en dos o tres palabras, en minúsculas y con guiones.
             caption: el pie completo, tal como va a salir, sin los hashtags.
-            alt: qué se ve en la imagen, en una oración, para quien no la ve.
             hashtags: hasta 5, sin el `#`.
-            format: `feed` para un posteo vertical, `square` cuadrado, `story`
-                para una historia. El mismo que le pediste a `generate_image`.
+            format: `carousel` para varias imágenes, `feed` para una sola
+                vertical, `square` cuadrada, `story` para una historia.
             images: las imágenes ya generadas, por su ruta en el espacio de
                 trabajo y en el orden en que se ven.
+            alt: qué se ve en la imagen, en una oración, para quien no la ve.
+                Es el de una imagen sola; en un carrusel va `alts` en su lugar.
+            alts: uno por imagen y en el mismo orden que `images`.
             replace: pisar el posteo de hoy en vez de frenar.
         """
         if not SLUG.match(slug):
@@ -203,11 +229,6 @@ def toolset() -> FunctionToolset:
             raise ModelRetry(
                 f"el pie tiene {len(caption)} caracteres y en Instagram entran "
                 f"{MAX_CAPTION}: cortalo"
-            )
-        if len(alt) > MAX_ALT:
-            raise ModelRetry(
-                f"el texto alternativo tiene {len(alt)} caracteres y el máximo "
-                f"es {MAX_ALT}: una oración alcanza"
             )
         # The `#` is stripped and not refused: the model writes the hashtags
         # the way they look on the screen about half the time, and a retry over
@@ -223,6 +244,27 @@ def toolset() -> FunctionToolset:
                 f"un posteo lleva entre 1 y {MAX_IMAGES} imágenes, y me pasaste "
                 f"{len(images)}"
             )
+        # ONE DESCRIPTION PER IMAGE. `alts` is the carousel's way of saying it
+        # and `alt` the single image's, and `post.json` keeps both: the list,
+        # and its first item as the post's `alt`, which is the field the portal
+        # has always read.
+        if alts is not None and len(alts) != len(images):
+            raise ModelRetry(
+                f"me pasaste {len(images)} imágenes y {len(alts)} textos "
+                "alternativos: va uno por imagen y en el mismo orden"
+            )
+        if alts is None and not alt:
+            raise ModelRetry(
+                "falta el texto alternativo: `alt` si es una sola imagen, "
+                "`alts` con uno por imagen si es un carrusel"
+            )
+        descriptions = alts if alts is not None else [alt]
+        for description in descriptions:
+            if len(description) > MAX_ALT:
+                raise ModelRetry(
+                    f"un texto alternativo tiene {len(description)} caracteres "
+                    f"y el máximo es {MAX_ALT}: una oración alcanza"
+                )
         sources = []
         for relative in images:
             try:
@@ -272,7 +314,8 @@ def toolset() -> FunctionToolset:
             "date": date,
             "format": format,
             "caption": caption,
-            "alt": alt,
+            "alt": descriptions[0],
+            "alts": descriptions,
             "hashtags": tags,
             "images": names,
             "created_at": now.isoformat(timespec="seconds"),
@@ -284,7 +327,10 @@ def toolset() -> FunctionToolset:
             "post.saved", f"Dejé listo el posteo «{slug}»", "completed",
             ctx.deps.session_id, {"id": post_id},
         )
-        return {"saved": post_id, "url": f"/portal/posts/{post_id}"}
+        # `slides` so the report the creator writes says how many the client is
+        # going to find, without counting them again from memory.
+        return {"saved": post_id, "slides": len(names),
+                "url": f"/portal/posts/{post_id}"}
 
     return ts
 
