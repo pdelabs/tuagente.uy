@@ -173,12 +173,14 @@ python3 kit/tools/portal-check.py --key "$KEY" \
     --origin http://localhost:8090
 ```
 
-Last run: **14 ok · 3 warnings · 0 failures**. The three warnings are the
+Last run: **15 ok · 3 warnings · 0 failures**. The three warnings are the
 modules the manifest does not declare — `kanban`, `artifacts` and `crons`,
-out of scope in `docs/engine-plan.md` and never coming. `approvals`, `usage`
-and `flows` are declared and answer; the flows check also crosses the listing
-against `/api/jobs`, so a flow that runs on the clock with no task in the
-gateway is a failure and not something to notice in the browser.
+out of scope in `docs/engine-plan.md` and never coming. `approvals`, `usage`,
+`flows` and `posts` are declared and answer, and two of those checks look past
+the listing: flows crosses it against `/api/jobs`, so a flow that runs on the
+clock with no task in the gateway is a failure and not something to notice in
+the browser, and posts downloads the newest post's first piece, so a card whose
+picture does not come back is one too.
 
 Both chat dialects by hand:
 
