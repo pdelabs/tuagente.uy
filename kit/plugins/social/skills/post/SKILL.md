@@ -1,8 +1,8 @@
 ---
 title: Posteos para Instagram
-client_summary: "Escribe el posteo del día con tu voz, le hace la imagen con tus colores y te lo deja listo para revisar."
+client_summary: "Escribe el posteo del día con tu voz, le hace el carrusel con tus colores y te lo deja listo para revisar."
 name: post
-description: "Escribe un posteo de Instagram con la voz de la marca y le genera la imagen: lee marca/brand.md, arma el pie con la formula (gancho, una idea, un solo pedido, hasta 5 hashtags), genera la pieza con generate_image, la MIRA contra una lista de cinco puntos y la guarda con save_post. Usala cada vez que haya que dejar un posteo, un pie de foto o contenido para Instagram."
+description: "Escribe un posteo de Instagram con la voz de la marca y le genera el carrusel: lee marca/brand.md, arma el pie con la formula (gancho, una idea, un solo pedido, hasta 5 hashtags), genera de 3 a 5 slides con generate_image, MIRA cada una contra una lista de cinco puntos y las guarda con save_post. Usala cada vez que haya que dejar un posteo, un pie de foto o contenido para Instagram."
 version: 1.0.0
 license: MIT
 ---
@@ -51,41 +51,58 @@ Y cómo suena:
 - Cuando muestres lo que el agente hace, mostrá también lo que **nunca** hace.
   Es lo que hace creíble la promesa.
 
-Escribí también el **texto alternativo**: qué se ve en la imagen, en una
-oración, para quien no la ve.
+De cada slide vas a escribir también su **texto alternativo**: qué se ve en
+esa imagen, en una oración, para quien no la ve.
 
-## 4. Hacé la imagen
+## 4. Hacé el carrusel
 
-Armá el brief con los colores de la marca y la idea del posteo, y enumerá
-**palabra por palabra** el único texto que puede aparecer en la pieza. Pedile
-que no agregue ningún otro: ni fechas, ni dominios, ni logos ni la marca en una
-esquina, ni subtítulos en inglés, ni marcas de agua, ni códigos de color
-dibujados. Todo en español, con sus tildes,
-y con aire arriba y abajo: Instagram recorta los bordes de una pieza vertical.
+El posteo del día es un **carrusel de 3 a 5 slides**, y cada una dice una sola
+cosa: la **1 es el gancho** —la frase más fuerte, grande, la que frena el
+scroll—, **las del medio una idea cada una** —las del cuerpo del pie dichas con
+otras palabras, una oración corta, nunca el pie copiado— y la **última cierra**
+con el único pedido del posteo.
 
-`generate_image(prompt, format)` con el mismo formato que va a llevar el
-posteo: `feed` para el vertical de siempre, `story` para una historia.
+Se leen como un solo posteo, así que **todas comparten el sistema visual**: el
+mismo formato, la misma paleta, la misma tipografía, el mismo lugar del texto,
+el agentito o su ausencia. Ese sistema va **palabra por palabra en el brief de
+cada slide** —color de fondo, cómo se ve la tipografía, si aparece el agentito
+o no, cómo está armada la grilla— y recién después el texto de esa slide. Un
+brief que dice «igual que la anterior» no dice nada: cada pedido empieza de
+cero y el modelo no vio la slide anterior.
 
-## 5. Mirala. Siempre
+Y en cada brief enumerá **palabra por palabra** el único texto que puede
+aparecer en esa pieza: ningún otro, ni fechas, ni dominios, ni logos ni la
+marca en una esquina, ni subtítulos en inglés, ni marcas de agua, ni el número
+de slide, ni códigos de color dibujados. Todo en español, con sus tildes, y con
+aire arriba y abajo: Instagram recorta los bordes de una pieza vertical.
 
-La herramienta te devuelve la imagen y la ves. Recorrela contra estos cinco
-puntos:
+`generate_image(prompt, format="feed")`, **una slide por vez y en orden**:
+`feed` es la proporción 4:5 del carrusel y todas las piezas van iguales.
+
+## 5. Mirá cada una. Siempre
+
+La herramienta te devuelve la imagen y la ves, apenas la generás. Recorrela
+contra estos cinco puntos:
 
 1. **Se lee**: el texto entra, no se corta y no se pisa con el fondo.
-2. **Es de la marca**: los colores y el aire son los de `brand.md`.
+2. **Es de la marca**: los colores y el aire son los de `brand.md`, y son los
+   mismos que los de las slides anteriores.
 3. **No tiene texto que no pediste.** Es la falla más común y la más fácil de
    pasar por alto, porque el texto de más suele estar bien escrito.
 4. **No hay palabras rotas.** Mirá adentro de los dibujos, no sólo los
    titulares: ahí es donde el modelo escribe mal el español.
-5. **El formato es el que pediste.**
+5. **Dice lo suyo**: la línea de esa slide y no la de otra.
 
-Si falla algo, generá **una vez más** con la corrección adentro del prompt.
-Si a la segunda sigue mal, dejale el pie en el chat sin guardar el posteo —no
-se guarda sin imagen— y decí en una línea qué no pudiste resolver: un pie bueno
-sirve, y guardarte lo que está bien porque una parte falló deja al cliente con
-nada.
+Si una falla, generá **esa sola una vez más** con la corrección adentro del
+prompt, y seguí. Si a la segunda sigue mal, dejala afuera: el carrusel sale con
+las que pasaron, siempre que estén el gancho y el cierre, y decís en una línea
+cuál quedó afuera y por qué. Si la que no pasa es la 1, no guardes el posteo
+—no se guarda sin el gancho—: volvé con el pie escrito y con qué no pudiste
+resolver, que un pie bueno sirve.
 
 ## 6. Guardalo
 
-`save_post(slug, caption, alt, hashtags, format, images)`. La herramienta pone
-la carpeta, los nombres y la fecha; vos ponés las palabras. Es uno por día.
+`save_post(slug, caption, hashtags, format="carousel", images=[…], alts=[…])`:
+las imágenes en el orden en que se ven y un texto alternativo por cada una, en
+ese mismo orden. La herramienta pone la carpeta, los nombres y la fecha; vos
+ponés las palabras. Es uno por día.

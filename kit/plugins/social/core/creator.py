@@ -35,11 +35,14 @@ WHAT IT IS BUILT FROM, and why each piece:
   face's notebook, from the two plugins that load before this one.
 
 `max_calls=2` is one delegation and one retry: if the face has to ask twice in
-one turn, the second answer is the last word. `timeout_seconds` is ten minutes,
-which is a generous version of the longest measured run (a brand read, a
-caption, an image, a look, a second image); `CORE_DELEGATION_TIMEOUT` moves it,
-and `engine/tests/test_delegation.py` sets it to 5 to watch a timeout come back
-as a message instead of as a dead turn.
+one turn, the second answer is the last word. `timeout_seconds` is fifteen
+minutes, and the number moved there from ten when the day's post became a
+CAROUSEL: five slides at about half a minute each, a look at every one of them
+and the odd regeneration is a run two to three times the length of the single
+image this was measured against. `CORE_DELEGATION_TIMEOUT` moves it — the lab's
+compose passes it, so that file carries the same number — and
+`engine/tests/test_delegation.py` sets it to 5 to watch a timeout come back as
+a message instead of as a dead turn.
 """
 
 import os
@@ -65,10 +68,10 @@ LABEL = "creador de posteos"
 # the task, and nothing else of the conversation.
 DESCRIPTION = (
     "Arma un posteo de Instagram listo para revisar: lee la marca y los posteos"
-    " anteriores, escribe el pie, genera la imagen, la mira, y lo guarda en"
-    " Posteos. Pasale la idea o el tema, o «el de hoy», y cualquier corrección"
-    " o preferencia que el cliente haya dicho en esta conversación: el creador"
-    " no la ve."
+    " anteriores, escribe el pie, genera el carrusel de imágenes, las mira, y"
+    " lo guarda en Posteos. Pasale la idea o el tema, o «el de hoy», y cualquier"
+    " corrección o preferencia que el cliente haya dicho en esta conversación:"
+    " el creador no la ve."
 )
 
 # Its notebook's scope segment: `memoria/instagram-creator/MEMORY.md`.
@@ -89,7 +92,7 @@ MEMORY = (
 )
 
 MAX_CALLS = 2
-TIMEOUT = float(os.environ.get("CORE_DELEGATION_TIMEOUT", "600"))
+TIMEOUT = float(os.environ.get("CORE_DELEGATION_TIMEOUT", "900"))
 
 
 def procedure() -> str:

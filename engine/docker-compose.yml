@@ -19,8 +19,10 @@ services:
       CORE_FLOWS_MIN_MINUTES: ${CORE_FLOWS_MIN_MINUTES:-5}
       # And for how long a delegation may run before the face is told it did
       # not make it: `tests/test_delegation.py` brings the container up with 5
-      # so a timeout happens on purpose, and puts the ten minutes back.
-      CORE_DELEGATION_TIMEOUT: ${CORE_DELEGATION_TIMEOUT:-600}
+      # so a timeout happens on purpose, and puts the fifteen minutes back. The
+      # number is the creator's own default, repeated here because this line
+      # OVERRIDES it: without it the passthrough has nothing to pass.
+      CORE_DELEGATION_TIMEOUT: ${CORE_DELEGATION_TIMEOUT:-900}
       # Traces to the phoenix service below. This is the LAB compose, so the
       # content travels; a client's compose sets INCLUDE_CONTENT to 0 or
       # leaves the endpoint empty.
