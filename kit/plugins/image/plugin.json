@@ -1,0 +1,34 @@
+{
+  "id": "image",
+  "version": "1.0.0",
+  "description": "One `generate_image` tool on Pydantic AI's ImageGeneration capability, generating through OpenRouter's image API: the PNG lands in the client's workspace and the picture goes back to the model, so it sees what it made",
+  "client_copy": "Genera imágenes con IA: una pieza para un posteo, una ilustración, una portada.",
+  "_comment": [
+    "THIS PLUGIN IS THE core ENGINE'S AND NOBODY ELSE'S, which is why the only",
+    "surface is `core/`. What it installs is a CAPABILITY of Pydantic AI, and a",
+    "Hermes agent has nothing to mount one into: the folder travels with the",
+    "registry copy like every other plugin's and no Hermes agent opens it. The",
+    "same shape as `memory`.",
+    "",
+    "IT IS `system: false` AND NO CAPABILITY ROW INSTALLS IT, which anywhere",
+    "else in this registry would be the drive-inbox mistake -- a plugin nobody",
+    "can buy is a plugin that does not exist. Here it is the honest state: what",
+    "decides that this plugin runs is `CORE_PLUGINS` in engine, not",
+    "`purchased.json`. The row arrives with the social capability that sells the",
+    "images (docs/own-agent-plan.md, wave 3), and it will install both.",
+    "",
+    "THE PNGs LIVE IN THE WORKSPACE, under `imagenes/`. The Files tab is where",
+    "the client sees what their agent made, and an image they cannot open is an",
+    "image they cannot throw out.",
+    "",
+    "THERE IS NO CONNECTION TO DECLARE. It generates through the same",
+    "OPENROUTER_API_KEY the engine already runs on -- one provider, one key --",
+    "so there is no account for the client to connect and nothing for",
+    "`requires.connections` to name."
+  ],
+  "requires": {},
+  "surfaces": {
+    "core": "core/"
+  },
+  "system": false
+}
