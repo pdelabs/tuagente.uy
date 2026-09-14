@@ -62,20 +62,61 @@ def soul() -> str:
 
 
 def today() -> str:
-    """When and where the run is happening."""
+    """When and where the run is happening.
+
+    A CALLABLE, and it is the last instruction every agent of this client is
+    built with. Pydantic AI sorts static instruction parts before dynamic ones
+    (`InstructionPart.sorted`), so a callable lands after every literal string
+    whatever order it was written in — which is where the one line that changes
+    by itself belongs: everything above it is the stable prefix the provider's
+    cache keeps.
+    """
     now = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%d/%m/%Y %H:%M")
     return f"Hoy es {now} en Uruguay ({config.TIMEZONE}). El workspace es {config.WORKSPACE}."
 
 
-def identity() -> str:
-    """What ANY agent of this client shares: who it is, and when it is.
+# The line that opens the block every SOUL of the fleet ends with. Above it is
+# the client's own half of the file; below it is the paragraph all of them share.
+BASE = "<!-- core:base v2 -->"
 
-    The face reads the same two pieces below, and a sub-agent gets these and
-    nothing else (`core/plugins.py`, `engine.identity`): the plugins' prose and
-    the skills index are the face's mechanisms, and a delegate that reads about
-    a tool it does not have will try to use it.
+# And the last line of that block, which is NOT shared: it is the face's
+# manners in the chat, and a sub-agent has no chat.
+CHAT_MANNERS = "En el chat, respuestas cortas."
+
+
+def identity() -> str:
+    """WHAT EVERY AGENT OF THIS CLIENT SHARES, and nothing else.
+
+    Two pieces of the SOUL, and each one is here because a delegate that does
+    not read it is a different company's agent:
+
+    - the SOUL's OPENING, up to its first `## ` heading — who the client is and
+      what the company does. A creator that does not know that writes for
+      nobody;
+    - the `core:base` block, MINUS its last line. That block is the fleet's own
+      paragraph (never a person, never promise what you do not have); the last
+      line is «En el chat, respuestas cortas», which is manners for the chat and
+      the face is the only one in it.
+
+    NOT «Tu alcance», NOT «Cómo escribís», NOT «Horarios»: those are the face's
+    job description, and a delegate reading «Lo que te pidan por el chat…» in
+    its own prompt is a delegate answering a chat it is not in. The measurement
+    that forced this split is in `docs/subagents-plan.md`: with the whole SOUL
+    at the END of the creator's prompt, the last thing it read before working
+    was the face's scope.
+
+    ITS VALUE IS FIXED AT LOAD (`IDENTITY` below) and not read per run, which is
+    what makes it a plain string in a delegate's `instructions` and therefore
+    the FIRST thing in its prompt. Editing a SOUL needs a restart to reach a
+    delegate — the same restart `engine/README.md` already asks for.
     """
-    return f"{soul()}\n\n{today()}"
+    head, base = soul().split(BASE)
+    opening = head.split("\n## ")[0].strip()
+    shared = base.strip().removesuffix(CHAT_MANNERS).strip()
+    return f"{opening}\n\n{shared}"
+
+
+IDENTITY = identity()
 
 
 def instructions(ctx: RunContext[Deps]) -> str:
@@ -85,12 +126,15 @@ def instructions(ctx: RunContext[Deps]) -> str:
     each mechanism's rules arrive with the plugin that brings the mechanism, so
     a client who does not have approvals never reads a word about approvals.
 
-    AND THE DATE STAYS LAST, which is why this is not literally `identity()`
-    plus the rest: it is the one line that changes by itself, and everything
-    above it is a stable prefix the provider's cache keeps. Cache is nearly all
-    of this engine's conversational saving (`kit/notes/image-cost-anatomy.md`:
-    96-97% on a session), and moving the clock to the top would end that prefix
-    at the SOUL. The two pieces are still built in one place each.
+    AND THE DATE STAYS LAST: it is the one line that changes by itself, and
+    everything above it is a stable prefix the provider's cache keeps. Cache is
+    nearly all of this engine's conversational saving
+    (`kit/notes/image-cost-anatomy.md`: 96-97% on a session), and moving the
+    clock to the top would end that prefix at the SOUL.
+
+    THE FACE READS ITS SOUL WHOLE, and `identity()` is the part of it a
+    delegate gets. Not the same text and not meant to be: the face is the one
+    with a scope, a chat and manners in it.
     """
     parts = [soul(), FLOWS, *plugins.prose(), skills.index_text(), today()]
     return "\n\n".join(p for p in parts if p)

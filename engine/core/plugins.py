@@ -24,13 +24,14 @@ something and no more:
     engine.subagent(sub, label) a delegate the face can hand work to, and the
                                 Spanish name the client reads it under
 
-plus four that hand a plugin what it needs to BUILD one, and three attributes
+plus five that hand a plugin what it needs to BUILD one, and three attributes
 that make its `Agent(...)` fit this engine:
 
     engine.tools(*names)        some of the engine's own tools, by name
-    engine.identity()           the SOUL and the date: what a sub-agent shares
-                                with the face, and nothing of the mechanisms
-                                only the face has
+    engine.identity             what EVERY agent of this client shares: the
+                                SOUL's opening and the `core:base` block. A
+                                string, so it renders first
+    engine.today                the date line, a callable, so it renders last
     engine.provide(name, obj)   an object for the plugins loaded after this one
     engine.use(name)            one of those, by name
     engine.model / .model_settings / .Deps
@@ -241,18 +242,36 @@ class Engine:
 
         return agent.tools(*names)
 
+    @property
     def identity(self) -> str:
-        """The SOUL and the date: what a sub-agent shares with the face.
+        """What every agent of this client shares: the SOUL's opening and the
+        `core:base` block, minus the line about the chat (`core/agent.py`).
 
-        Not the plugins' prose and not the skills index: those are the face's
-        mechanisms, and a delegate that reads about a tool it does not have is
-        a delegate that will try to use it. It is passed as a CALLABLE into the
-        sub-agent's `instructions`, so the SOUL is re-read and the date is
-        right on every delegation, exactly as it is on every turn of the face.
+        Not the plugins' prose, not the skills index, and not the face's scope:
+        those are the face's mechanisms and the face's job, and a delegate that
+        reads about a tool it does not have is a delegate that will try to use
+        it.
+
+        A PLAIN STRING, fixed at load. That is what puts it FIRST in a
+        delegate's prompt: Pydantic AI renders every literal instruction before
+        every callable one, so as a callable it landed LAST — after the skill,
+        after the memory guidance — which is the bug this shape fixes.
         """
         from . import agent
 
-        return agent.identity()
+        return agent.IDENTITY
+
+    @property
+    def today(self) -> Callable[[], str]:
+        """The date line, as a CALLABLE a delegate puts last in its list.
+
+        Separate from `identity` precisely because it is the one line that
+        changes by itself: a callable sorts after the literals, so the stable
+        prefix above it is what the provider's cache keeps.
+        """
+        from . import agent
+
+        return agent.today
 
     def provide(self, name: str, obj: Any) -> None:
         """Offer an object to the plugins that load after this one."""

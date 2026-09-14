@@ -8,14 +8,16 @@ the client in two lines.
 
 WHAT IT IS BUILT FROM, and why each piece:
 
-- `engine.identity()` — the SOUL and the date, as a callable, so the client's
-  agent is the same agent here: same name, same client, same voice. Not the
-  plugins' prose and not the skills index, which are the face's mechanisms.
-  Pydantic AI renders the static instructions first and the callables after,
-  so it lands at the END of this prompt whatever order it is written in. That
-  is where it belongs anyway: everything above it is stable, and the one line
-  that changes by itself — the clock — is last, where the provider's cache
-  keeps the prefix.
+- `engine.identity` — who the client is and what any agent of theirs is, so
+  the client's agent is the same agent here: same company, same voice. A plain
+  STRING and the first item of the list, which is what puts it first in the
+  prompt: Pydantic AI renders every literal instruction before every callable
+  one. As a callable it landed LAST, after the skill and after the memory
+  guidance, and the last thing this agent read before working was the FACE's
+  scope («Lo que te pidan por el chat…») — measured in a trace on 14/09.
+- `engine.today` — the clock, a callable, and therefore the last line of the
+  prompt: everything above it is stable, which is the prefix the provider's
+  cache keeps.
 - `creator.md` — who this hand is and what it comes back with. The one thing
   the skill cannot say, because the skill was written for whoever does the
   work and this is about the work arriving as a brief and leaving as a report.
@@ -91,7 +93,7 @@ def build(engine) -> SubAgent:
         deps_type=engine.Deps,
         name=NAME,
         description=DESCRIPTION,
-        instructions=[engine.identity, PROSE.read_text(), procedure()],
+        instructions=[engine.identity, PROSE.read_text(), procedure(), engine.today],
         toolsets=[engine.tools("read_file", "list_files"), posts.toolset()],
         capabilities=[engine.use("image"), engine.use("memory")(SCOPE)],
         model_settings=engine.model_settings,

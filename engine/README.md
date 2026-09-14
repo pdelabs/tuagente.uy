@@ -140,13 +140,14 @@ more:
 | `engine.deferred(fn)` | the ONE callable that answers a run stopped at a gated tool |
 | `engine.subagent(sub, label)` | a delegate the face can hand work to, and the Spanish name the client reads it under |
 
-plus four that hand a plugin what it needs to BUILD one, and three attributes
+plus five that hand a plugin what it needs to BUILD one, and three attributes
 that make its `Agent(...)` fit this engine — see **Sub-agents** below:
 
 | verb | what it gives back |
 |---|---|
 | `engine.tools(*names)` | some of the engine's own tools, by name, as one filtered toolset |
-| `engine.identity()` | the SOUL and the date, and nothing of the mechanisms only the face has |
+| `engine.identity` | what every agent of this client shares — the SOUL's opening and the `core:base` block. A string, so it renders FIRST |
+| `engine.today` | the date line, a callable, so it renders LAST |
 | `engine.provide(name, obj)` | an object for the plugins that load after this one |
 | `engine.use(name)` | one of those, by name |
 | `engine.model` · `engine.model_settings` · `engine.Deps` | what a plugin's `Agent(...)` needs to fit |
@@ -165,11 +166,19 @@ agent/SOUL.md  +  each enabled plugin's instructions.md  +  the skills index  + 
 ```
 
 A CAPABILITY'S OWN INSTRUCTIONS COME BEFORE ALL OF THAT, and that is Pydantic
-AI's ordering, not ours: the memory `guidance` and the sub-agent listing are
-rendered by the capabilities that own them and land at the head of the prompt.
-The date line stays last on purpose — it is the one line that changes by
-itself, and everything above it is a stable prefix the provider's cache keeps,
-which is nearly all of this engine's conversational saving.
+AI's ordering, not ours: the memory guidance, the notebook and the sub-agent
+listing are rendered by the capabilities that own them and land at the head of
+the prompt, because `InstructionPart.sorted` puts every LITERAL instruction
+before every CALLABLE one and the face's whole prompt is one callable. The date
+line stays last on purpose — it is the one line that changes by itself, and
+everything above it is a stable prefix the provider's cache keeps, which is
+nearly all of this engine's conversational saving.
+
+**That sorting is the whole reason a delegate's prompt is a LIST** (see
+**Sub-agents**): `engine.identity` is a string and comes first, `engine.today`
+is a callable and comes last, and everything the plugin wrote sits between
+them. Handing `identity` over as a callable — what it was until 14/09 — put the
+SOUL at the END of the creator's prompt, under the memory guidance.
 
 **Where a rule lives is decided by what can enforce it.** In CODE if code can
 check it — the gate is on the tool, so asking is not something the model can
@@ -238,7 +247,7 @@ agent = Agent(
     deps_type=engine.Deps,
     name="instagram-creator",
     description="Arma un posteo de Instagram listo para revisar: …",
-    instructions=[engine.identity, PROSE.read_text(), procedure()],
+    instructions=[engine.identity, PROSE.read_text(), procedure(), engine.today],
     toolsets=[engine.tools("read_file", "list_files"), posts.toolset()],
     capabilities=[engine.use("image"), engine.use("memory")("instagram-creator")],
     model_settings=engine.model_settings,
@@ -247,11 +256,17 @@ engine.subagent(SubAgent(agent, timeout_seconds=TIMEOUT, max_calls=2),
                 label="creador de posteos")
 ```
 
-- **It shares the face's identity and nothing else.** `engine.identity()` is
-  the SOUL and the date; the plugins' prose and the skills index are the
-  face's mechanisms, and a delegate that reads about a tool it does not have
-  will try to use it. It is passed as a CALLABLE, so the SOUL is re-read per
-  delegation like it is per turn.
+- **It shares the client's identity and nothing else.** `engine.identity` is
+  the SOUL's OPENING — who the client is, what the company does — plus the
+  `core:base` block minus its last line, «En el chat, respuestas cortas»,
+  which is manners for a chat a delegate is not in. Not «Tu alcance», not
+  «Cómo escribís», not «Horarios»: that is the FACE's job description. Not the
+  plugins' prose and not the skills index either, because a delegate that
+  reads about a tool it does not have will try to use it. It is a plain STRING
+  and the first item of the list, which is what puts it first in the prompt; a
+  SOUL edit reaches a delegate on the next restart.
+  `python3 engine/tests/test_identity.py` is the split, asserted against the
+  running container and the file on disk — free, no model.
 - **Its tools come from the same definitions**, filtered by name with
   `engine.tools(...)` — one `read_file` with one docstring. The flow tools are
   not on offer: creating a flow is a conversation with the client, and a
