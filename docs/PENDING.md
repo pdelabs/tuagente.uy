@@ -35,8 +35,6 @@ after it, and whose:
 - **The agent's name** (Luis): «Tu Agente» for now.
 - **Telegram**, so a morning post announces itself; **publishing** through an
   Instagram connection behind the gate; the **VPS deploy** of an instance.
-- The Flows card's "Trabajando ahora" needs `latest_execution` published from
-  `flow_runs`.
 
 ## Migration to English (2026-08-23)
 

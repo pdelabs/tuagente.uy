@@ -91,9 +91,6 @@ and each key is 401 against the other's adapter.
 - **The agent's name** (Luis). «Tu Agente» for now.
 - **Both agents' traces land in one Phoenix** with content on. Fine for the
   lab; a client's instance leaves the endpoint empty.
-- **The Flows card's "Trabajando ahora"** reads a `latest_execution` object
-  the engine does not publish, so a run in flight shows the previous outcome.
-  The row has every field it needs.
 - **Telegram**, so a morning post announces itself; **publishing** through an
   Instagram connection behind the gate; the **VPS deploy** of an instance.
 
