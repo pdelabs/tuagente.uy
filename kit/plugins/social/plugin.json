@@ -1,8 +1,8 @@
 {
   "id": "social",
   "version": "1.0.0",
-  "description": "One Instagram post a day, finished: the skill that writes it in the brand's voice and looks at the image it made, the `save_post` tool that owns the format, and the Posts tab where the client reads it and downloads the pieces",
-  "client_copy": "Posteos para Instagram con tu voz y tu identidad: cada día te deja uno listo para revisar y bajar.",
+  "description": "One Instagram carousel a day, finished: the skill that writes it in the brand's voice and looks at every slide it made, the `save_post` tool that owns the format, and the Posts tab where the client reads it and downloads the pieces",
+  "client_copy": "Posteos para Instagram con tu voz y tu identidad: cada día te deja un carrusel listo para revisar y bajar.",
   "_comment": [
     "IT REPLACES social-content, post-image AND brand-kit, and it is not a port",
     "of them (docs/own-agent-plan.md, wave 3). Those three were Hermes-era: a",

@@ -202,14 +202,26 @@ produces work a client looks at, and it is the first one a client BUYS
 `save_post` — on its own sub-agent and not on the face, see **Sub-agents** —
 and the tool owns the format: the post lands in
 `workspace/posteos/<YYYY-MM-DD>-<slug>/` as `post.json` (id, date, format,
-caption, alt, hashtags, images, `flow` when the clock started the run),
+caption, alt, alts, hashtags, images, `flow` when the clock started the run),
 `caption.md` — the caption, a blank line, the hashtags — and `01.png`, `02.png`
 …, MOVED out of `imagenes/` so there is one copy of each picture and it is
 inside the post. One post per day, and the folder is the check: `replace=True`
 is the only way past it. Prose never says any of that; the tool does, and what
 the model cannot be given by code is in `skills/post/SKILL.md` — read
-`marca/brand.md` first, the caption formula, and the five-point checklist the
-generated image has to pass before it counts.
+`marca/brand.md` first, the caption formula, and the five-point checklist every
+generated slide has to pass before it counts.
+
+**The day's post is a CAROUSEL**, 3 to 5 slides: `01.png` is the hook, the ones
+in the middle carry one idea of the caption each in their own words, the last
+one is the close with the single ask, and `alts` carries one description per
+slide in the same order (`alt` stays the first one's, which is the field the
+portal's `Post` reads). The format that says so is `carousel` and it lives in
+`save_post` ALONE: a slide is 4:5, which is what `generate_image`'s `feed`
+already asks for, so the skill tells the creator to generate every slide as
+`feed` and the image plugin's vocabulary stays the three shapes a picture is
+cut to. What holds the slides together is not code either — the brief of each
+one repeats the shared visual system word for word, because the model never
+sees the slide it drew a minute ago.
 
 Its three routes are the Posts tab: `GET /portal/posts` (newest first, each
 image expanded to `{name, bytes, url}`), `GET /portal/posts/{id}` and
@@ -219,15 +231,16 @@ and not by `/portal/files`, which answers `text/plain` for everything it has.
 `engine.module("posts", True)` is what makes the portal draw the tab.
 
 ```bash
-python3 engine/tests/test_post.py       # ~60 s, ~US$0.01
+python3 engine/tests/test_post.py       # ~4 min, ~US$0.03
 ```
 
-One chat turn — «Armá el posteo de hoy para Instagram y guardalo» — and eight
+One chat turn — «Armá el posteo de hoy para Instagram y guardalo» — and nine
 assertions from outside: the folder with its three kinds of file, the listing,
 the piece downloading as `image/png`, `modules.posts` in the manifest, a
 `post.saved` event in Activity, an answer that does not claim it published,
-`delegate_task` in the trail and `save_post` NOT in it, and an answer that
-names Posteos. The day's post is moved out of the workspace for the length of
+`delegate_task` in the trail and `save_post` NOT in it, an answer that
+names Posteos, and the carousel itself — `format` `carousel`, three slides or
+more, one alt each, every `NN.png` on disk and listed in order. The day's post is moved out of the workspace for the length of
 the run and moved back at the end — one per day is `save_post`'s rule, and
 without that the second run of a day has no folder to assert.
 
@@ -296,7 +309,8 @@ client reads «No pude responder: A deferred tool call was present…». Sensiti
 tools stay on the face, which is where the conversation is.
 
 **A failure comes back as a message.** `contain_errors=True` and a per-delegate
-`timeout_seconds` (`CORE_DELEGATION_TIMEOUT`, ten minutes by default): a crash,
+`timeout_seconds` (`CORE_DELEGATION_TIMEOUT`, fifteen minutes by default — a
+carousel is five images and five looks): a crash,
 a timeout and an exhausted `max_calls` all return a steering line the face
 reads and answers the client from. An image the provider refuses never even
 gets that far — it is a `ModelRetry` inside the creator, which reports it.
