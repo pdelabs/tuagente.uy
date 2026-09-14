@@ -27,6 +27,11 @@ harness puts that text in the instruction channel itself, right where the
 tools are described; a second copy in the plugin's prose would be two places to
 change one rule. It is the only thing in this folder the model reads.
 
+THE CAPABILITY IS `injection.Notebook` AND NOT THE HARNESS'S `Memory` ITSELF:
+the same thing, with the injected part moved to the FRONT of the request. The
+measurement that forced it is in that file, and it is the difference between an
+agent that reads its notebook and one that answers it.
+
 ONE NOTEBOOK PER AGENT, AND THE FACE'S IS `main`. A sub-agent gets its own
 through the factory this plugin provides (`engine.use("memory")(scope)`), which
 is the same capability on the same store under another scope segment —
@@ -39,7 +44,8 @@ reads a turn of the CLIENT's conversation, and a sub-agent never has one.
 """
 
 import extraction
-from pydantic_ai_harness.memory import FileStore, Memory
+import injection
+from pydantic_ai_harness.memory import FileStore
 
 from core import config
 
@@ -81,7 +87,7 @@ GUIDANCE = (
 store = FileStore(NOTEBOOK)
 
 
-def notebook(scope: str) -> Memory:
+def notebook(scope: str) -> injection.Notebook:
     """A notebook of its own for one agent, with the same rule on it.
 
     `agent_name` is the store's scope segment, so this is
@@ -90,7 +96,7 @@ def notebook(scope: str) -> Memory:
     `AbstractCapability` instance is registered into a run, and two agents
     sharing one would be two agents sharing a notebook.
     """
-    return Memory(store, agent_name=scope, heading=HEADING, guidance=GUIDANCE)
+    return injection.Notebook(store, agent_name=scope, heading=HEADING, guidance=GUIDANCE)
 
 
 def register(engine) -> None:
