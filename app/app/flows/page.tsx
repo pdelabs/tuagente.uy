@@ -27,8 +27,9 @@ import {
   WifiOff, Workflow, Zap, type LucideIcon,
 } from "lucide-react";
 import {
-  connectionLabel, getConnections, getFlows, getJobs, loadConfig,
-  type Connection, type CronJob, type Flow, type HttpError, type PortalConfig,
+  connectionLabel, getConnections, getFlows, getJobs, getManifest, loadConfig,
+  type Connection, type CronJob, type Flow, type HttpError, type Manifest,
+  type PortalConfig,
 } from "../lib/agent";
 import {
   crossTask, inFlight, realStatus, sortByUrgency, summarizeFlows,
@@ -101,11 +102,13 @@ function MissingConnection({ ids, connections }: {
   );
 }
 
-function FlowCard({ f, e, cfg, connections, onChange }: {
+function FlowCard({ f, e, cfg, connections, posts, onChange }: {
   f: Flow;
   e: RealStatus;
   cfg: PortalConfig;
   connections: Connection[] | null;
+  /** The agent has the Posteos tab: that is where this flow's work shows up. */
+  posts: boolean;
   onChange: () => void;
 }) {
   const Icon = TRIGGER_ICON[f.trigger_type] ?? Workflow;
@@ -190,10 +193,14 @@ function FlowCard({ f, e, cfg, connections, onChange }: {
           flow that ran and failed was the same lie said quietly: there it is
           not that it hasn't produced yet, it is that it couldn't. It stays
           quiet whenever there is something to say -- even paused, which is
-          how a broken flow the client stopped ends up looking. */}
+          how a broken flow the client stopped ends up looking.
+          AND IT NO LONGER PROMISES THAT THEY WILL SHOW UP HERE. Nothing fills
+          `results` on this engine and nothing is going to: where a flow's work
+          lands is the business of whatever capability produces it, and that
+          capability brings its own tab. So the line says where to go look. */}
       {!e.note && e.missingConnections.length === 0 && !e.unconfirmed && f.results.length === 0 && (
         <p className="text-[12px] text-ink-soft/80">
-          Todavía no produjo resultados: van a aparecer acá solos.
+          {posts ? "Lo que arma te queda en Posteos." : "Lo que produce te queda en Archivos."}
         </p>
       )}
 
@@ -289,6 +296,8 @@ export default function FlowsPage() {
   const [loading, setLoading] = useState(false);
   // Only so the missing connection can be named and its purpose said.
   const [connections, setConnections] = useState<Connection[] | null>(null);
+  // Which modules this agent has, to say where its flows leave their work.
+  const [manifest, setManifest] = useState<Manifest | null>(null);
 
   useEffect(() => setCfg(loadConfig()), []);
 
@@ -297,6 +306,9 @@ export default function FlowsPage() {
     getConnections(cfg)
       .then((r) => setConnections(r.connections ?? []))
       .catch(() => { /* without the catalog we fall back to the known labels */ });
+    getManifest(cfg)
+      .then(setManifest)
+      .catch(() => { /* without it, Archivos: the tab every agent has */ });
   }, [cfg]);
 
   const load = useCallback(() => {
@@ -372,6 +384,7 @@ export default function FlowsPage() {
               e={status}
               cfg={cfg}
               connections={connections}
+              posts={Boolean(manifest?.modules?.posts)}
               onChange={reread}
             />
           ))}
