@@ -77,6 +77,14 @@ const humanizeSlug = (slug: string) => {
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
+/** The first lines of the caption, for the card. WITHOUT the blank lines a
+ *  caption is full of: clamped to three lines, the first blank one eats a
+ *  third of the preview and the card ends on an ellipsis having said almost
+ *  nothing. They come back whole in the detail, which is where the text is
+ *  read. */
+const preview = (caption: string) =>
+  caption.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 3).join("\n");
+
 /** What gets pasted into the network: the text, a blank line, and the
  *  hashtags with their `#`. The client copies once and pastes once — copying
  *  the caption and then hunting for the tags was two trips for one post. */
@@ -265,7 +273,7 @@ function PostCard({ cfg, p, flowName, onOpen }: {
           <span className="ml-auto"><Chip tone={shape.tone}>{shape.label}</Chip></span>
         </div>
         <p className="line-clamp-3 whitespace-pre-wrap text-[13px] leading-snug text-ink">
-          {p.caption}
+          {preview(p.caption)}
         </p>
         {p.flow && (
           <div className="mt-auto pt-1">
@@ -312,12 +320,16 @@ function PostDetail({ cfg, p, flowName, onClose }: {
           before deciding whether it goes up. */}
       {p.images.map((img) => (
         <Card key={img.name} className="flex flex-col gap-3">
+          {/* Full width, but never taller than the screen: a feed image is
+              4:5 and a story 9:16, so at the full width of the column one
+              image alone is two screenfuls and the text it goes with ends up
+              below the fold. Capped, the whole post is one look. */}
           <PostImage
             cfg={cfg}
             id={p.id}
             name={img.name}
             alt={p.alt}
-            className="w-full rounded-lg bg-black/[0.03] object-contain"
+            className="max-h-[70vh] w-full rounded-lg bg-black/[0.03] object-contain"
           />
           <div className="flex flex-wrap items-center gap-2">
             <DownloadImage cfg={cfg} id={p.id} name={img.name} />
