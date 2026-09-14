@@ -50,8 +50,13 @@ creator's notes are about the craft it was corrected on ("no más de una idea po
 pieza"), the face's are about the client's business, and a notebook that is
 both is one the client cannot read.
 
-The EXTRACTION stays on the face alone: it reads a turn of the CLIENT's
-conversation, and a sub-agent never has one.
+WHAT A SUB-AGENT DOES GET OF THE FACE'S NOTEBOOK IS A READ.
+`engine.use("client_memory")()` is the face's `main` notebook, rendered into the
+delegate's instructions under «Lo que el cliente dijo» and with no tools on it:
+what the client said is the only thing in this engine that nobody else can tell
+the creator, and a creator that writes there would be writing to the client's
+own page in the client's own voice. The EXTRACTION stays on the face alone too:
+it reads a turn of the CLIENT's conversation, and a sub-agent never has one.
 """
 
 import extraction
@@ -95,6 +100,21 @@ GUIDANCE = (
     " `write_memory` en este turno."
 )
 
+# And how a SUB-AGENT is told to read the face's notebook: the heading it
+# arrives under, and the one line that says what it is. It is the client's
+# page, on the delegate's desk, and it is not the delegate's to write.
+CLIENT_HEADING = "Lo que el cliente dijo"
+CLIENT_GUIDANCE = (
+    "Esto es lo que el cliente le contó a la parte de vos que habla con él:"
+    " información de fondo sobre su negocio y sobre cómo quiere que se trabaje."
+    " Usalo si viene al caso. No lo escribís vos y no lo podés cambiar."
+)
+
+# The id a capability is addressed by within a run. The face's notebook keeps
+# the harness's default (`memory`); the read of the client's page needs one of
+# its own, because two capabilities under one id are merged into one.
+CLIENT_ID = "memory-client"
+
 store = FileStore(NOTEBOOK)
 
 
@@ -110,7 +130,25 @@ def notebook(scope: str, guidance: str) -> injection.Notebook:
     return injection.Notebook(store, agent_name=scope, heading=HEADING, guidance=guidance)
 
 
+def client_notebook() -> injection.Reading:
+    """The FACE's notebook, read-only, for an agent that never talks to the client.
+
+    A second `Memory` on the same store under the face's scope — the harness's
+    own way of putting two notebooks on one agent, which is what `heading` is
+    documented for — with its toolset removed, so the delegate reads the
+    client's page and has no way to write on it.
+    """
+    return injection.Reading(
+        store,
+        agent_name=SCOPE,
+        heading=CLIENT_HEADING,
+        guidance=CLIENT_GUIDANCE,
+        id=CLIENT_ID,
+    )
+
+
 def register(engine) -> None:
     engine.capability(notebook(SCOPE, GUIDANCE))
     engine.capability(extraction.Extraction(store=store, path=MAIN))
     engine.provide("memory", notebook)
+    engine.provide("client_memory", client_notebook)

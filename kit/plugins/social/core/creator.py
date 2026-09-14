@@ -30,9 +30,9 @@ WHAT IT IS BUILT FROM, and why each piece:
   No `write_file`: what this agent leaves behind is a post, and `save_post` is
   the only thing that writes one.
 - `posts.toolset()` — `save_post`, which now exists only here.
-- the image capability and a notebook of its own WITH ITS OWN RULE (`MEMORY`
-  below: the face's talks about a chat this agent is not in), from the two
-  plugins that load before this one.
+- the image capability, a notebook of its own WITH ITS OWN RULE (`MEMORY`
+  below: the face's talks about a chat this agent is not in), and a READ of the
+  face's notebook, from the two plugins that load before this one.
 
 `max_calls=2` is one delegation and one retry: if the face has to ask twice in
 one turn, the second answer is the last word. `timeout_seconds` is ten minutes,
@@ -110,7 +110,13 @@ def build(engine) -> SubAgent:
         description=DESCRIPTION,
         instructions=[engine.identity, PROSE.read_text(), procedure(), engine.today],
         toolsets=[engine.tools("read_file", "list_files"), posts.toolset()],
-        capabilities=[engine.use("image"), engine.use("memory")(SCOPE, MEMORY)],
+        capabilities=[
+            engine.use("image"),
+            engine.use("memory")(SCOPE, MEMORY),
+            # The client's own page, read-only: what she told the face is the
+            # one thing about this business nobody else can tell the creator.
+            engine.use("client_memory")(),
+        ],
         model_settings=engine.model_settings,
     )
     return SubAgent(agent, timeout_seconds=TIMEOUT, max_calls=MAX_CALLS)

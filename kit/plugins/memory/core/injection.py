@@ -111,3 +111,17 @@ class Notebook(Memory):
     def get_instructions(self) -> str | None:
         """The rule and the notebook, in that order, as one instruction."""
         return "\n\n".join(p for p in (self._render_guidance(), self._rendered) if p) or None
+
+
+@dataclass
+class Reading(Notebook):
+    """Someone else's notebook: rendered, and no tools to write in it.
+
+    `get_toolset` is the whole difference. The harness has no read-only flag and
+    two `Memory` capabilities on one agent would otherwise be two `write_memory`
+    tools with one name; this one contributes its lines and nothing else, which
+    is what a sub-agent needs of the notebook that belongs to the face.
+    """
+
+    def get_toolset(self) -> None:
+        return None

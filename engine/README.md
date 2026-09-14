@@ -109,13 +109,15 @@ kit/plugins/approval/core/  the gate: sensitive.py (the gated toolset),
                                    instructions.md, and SKILLS = []
 kit/plugins/deliverable/core/  nothing to register: instructions.md
 kit/plugins/memory/core/    the notebook: plugin.py (the capability, the
-                                   rule it carries as `guidance`, and the
-                                   factory it provides), injection.py (the
-                                   harness's Memory rendered into the
-                                   INSTRUCTIONS instead of appended to the
-                                   last message), extraction.py (the after_run
-                                   pass that writes what the client said in
-                                   passing). No instructions.md
+                                   rule it carries as `guidance`, and the two
+                                   factories it provides — a notebook of its
+                                   own, and a read of the client's),
+                                   injection.py (the harness's Memory
+                                   rendered into the INSTRUCTIONS instead of
+                                   appended to the last message),
+                                   extraction.py (the after_run pass that
+                                   writes what the client said in passing).
+                                   No instructions.md
 kit/plugins/image/core/     one tool, on nobody: plugin.py PROVIDES
                                    Pydantic AI's ImageGeneration capability,
                                    generate.py is OpenRouter, the PNG and the
@@ -273,9 +275,11 @@ engine.subagent(SubAgent(agent, timeout_seconds=TIMEOUT, max_calls=2),
   not on offer: creating a flow is a conversation with the client, and a
   sub-agent never has one. An unknown name raises at registration.
 - **Its capabilities come from other plugins**, by name. `image` provides its
-  `ImageGeneration` and registers nothing; `memory` provides a factory, so the
-  creator gets `memoria/instagram-creator/MEMORY.md` next to the face's
-  `memoria/main/`.
+  `ImageGeneration` and registers nothing; `memory` provides two factories, so
+  the creator gets `memoria/instagram-creator/MEMORY.md` next to the face's
+  `memoria/main/` — under a rule the social plugin wrote for a worker with no
+  chat — and a READ of `memoria/main/` under «Lo que el cliente dijo», with no
+  tools on it.
 - **The skill is read whole, at build time.** `SKILLS = []` in the social
   plugin: on the face the post skill was an index entry the model had to
   decide to read, and here there is one job, so the procedure IS the
@@ -500,6 +504,18 @@ tail of a request is cheap to invalidate and the head is not, so the turn after
 a write starts cold — and what it buys is a tool return that is the delegate's
 report and a persisted history with no `<memory>` in any message part, which
 `engine/tests/test_delegation.py` S1.g asserts.
+
+**A sub-agent's rule is its own, and it can read the client's page.** The
+factory is `notebook(scope, guidance)`: the face's guidance is written for
+someone in a conversation («cuando te dice acordate…») and the creator has no
+conversation, so the social plugin writes the three lines its delegate works
+under (`creator.MEMORY`: what topic on what day, what the pedido corrected,
+what a review found wrong in an image — a dated fact, never a procedure). On
+top of its own notebook a delegate may ask for `engine.use("client_memory")()`,
+which is the FACE's `main` notebook rendered into its instructions under «Lo
+que el cliente dijo», bounded by the same token cap and with its toolset
+removed: what the client said is the one thing about her business nobody else
+can tell the creator, and the page is hers to write, not its.
 
 **Two write paths, one notebook.**
 
