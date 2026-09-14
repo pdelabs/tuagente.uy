@@ -29,6 +29,11 @@ asserted, from outside, the way the portal sees it:
      on an engine that had gone back to one agent doing everything.
   h. AND IT SENT HER TO POSTEOS — the answer names the tab, because a post she
      is not told about is a post she does not read.
+  i. AND IT IS A CAROUSEL — `format` is `carousel`, there are three slides or
+     more, one alt per slide in `alts`, every name the post lists is a file on
+     disk, and the listing hands them over in order. The day's post stopped
+     being one image on 2026-09-14, and a run that quietly went back to one
+     would pass every claim above it.
 
 IT PUTS THE DAY'S POST BACK. One post per day is `save_post`'s rule, so a post
 that is already there is moved out of the workspace for the length of the run
@@ -40,7 +45,7 @@ WHERE IT POINTS. The defaults are the main compose's — 8642/8643 and
 `engine/workspace` — and `CORE_ENDPOINT`, `CORE_ADAPTER` and
 `CORE_WORKSPACE_HOST` move it onto a second instance.
 
-~US$0.02: one image plus the turn around it.
+~US$0.03: a carousel's three to five images plus the turn around them.
 """
 
 import json
@@ -66,6 +71,12 @@ ASK = "Armá el posteo de hoy para Instagram y guardalo."
 # The one tool the face uses to get this done, and the one it does not have.
 DELEGATE = "delegate_task"
 CREATORS_OWN = "save_post"
+
+# What the day's post is since 2026-09-14: several slides, the first the hook
+# and the last the close. Three is the floor the skill asks for; five is the
+# ceiling, and a post above it is not a failure of this gate.
+CAROUSEL = "carousel"
+MIN_SLIDES = 3
 
 # What the answer must NOT claim. The agent does not publish, and the words it
 # would use if it thought it had are these. «publicar» is not in the list on
@@ -260,11 +271,36 @@ def main() -> int:
         [] if "posteos" in said else ["the answer does not name Posteos"],
     )
 
+    problems = []
+    if post is None:
+        problems.append("there is no post to look at")
+    else:
+        names = [image["name"] for image in post["images"]]
+        alts = post.get("alts") or []
+        if post["format"] != CAROUSEL:
+            problems.append(f"format is {post['format']!r} and not {CAROUSEL!r}")
+        if len(names) < MIN_SLIDES:
+            problems.append(f"{len(names)} slide(s) and a carousel is {MIN_SLIDES} or more")
+        if len(alts) != len(names):
+            problems.append(f"{len(alts)} alts for {len(names)} slides")
+        # The names are the tool's and the ORDER is the post's: `01` is the
+        # hook and the last one is the close, and a listing that hands them
+        # over any other way is a carousel the client reads backwards.
+        if [Path(n).stem for n in names] != [f"{n:02d}" for n in range(1, len(names) + 1)]:
+            problems.append(f"the listing is not 01..NN in order: {names}")
+        missing = [name for name in names if not (fresh[0] / name).is_file()] if fresh else []
+        if missing:
+            problems.append(f"listed but not on disk: {missing}")
+    failures += judge("i. and it is a carousel", problems)
+
     if post:
         print(f"\n  id       : {post['id']}")
         print(f"  format   : {post['format']} · flow: {post['flow']}")
+        print(f"  slides   : {len(post['images'])} · "
+              f"{', '.join(i['name'] for i in post['images'])}")
         print(f"  hashtags : {' '.join('#' + t for t in post['hashtags'])}")
-        print(f"  alt      : {post['alt']}")
+        for number, alt in enumerate(post.get("alts") or [post["alt"]], 1):
+            print(f"  alt {number:02d}   : {alt}")
         print(f"  caption  :\n{post['caption']}")
 
     # The workspace goes back the way it was: this run's post out, the client's

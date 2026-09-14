@@ -9,10 +9,12 @@ the whole mechanism against the running container:
   S1. THE FACE DELEGATES INSTEAD OF DOING THE WORK. Asked for a post in the
       chat, the trail shows `delegate_task` and NOT `generate_image` or
       `save_post` — the face does not have them — the post lands in `posteos/`
-      and the answer names Posteos. The creator's own report is read back out
-      of the `delegation.finished` event, which is the only copy of it outside
-      the model's history — and in that history the tool return is the report
-      and nothing else: no `<memory>` block in any message part.
+      as a CAROUSEL (three slides or more, one alt each, `01`…`NN` on disk and
+      listed in that order) and the answer names Posteos. The creator's own
+      report is read back out of the `delegation.finished` event, which is the
+      only copy of it outside the model's history — and in that history the
+      tool return is the report and nothing else: no `<memory>` block in any
+      message part.
   S2. THE DAILY FLOW RUNS THROUGH THE SAME DELEGATION. A flow written by hand,
       run-now: the run's row closes `ok`, the delegation is in THAT session,
       and the post it saved carries the flow's slug — which is `flow_of` still
@@ -36,8 +38,8 @@ WHERE IT POINTS. The defaults are the main compose's — 8642/8643 and
 `engine/workspace` — and `CORE_ENDPOINT`, `CORE_ADAPTER`, `CORE_WORKSPACE_HOST`
 and `CORE_CONTAINER` move it onto a second instance.
 
-~7 min, ~US$0.08: two posts with their images, two failed delegations and two
-small turns.
+~12 min, ~US$0.12: two carousels with their slides, two failed delegations and
+two small turns.
 """
 
 import json
@@ -63,6 +65,11 @@ BRAND = WORKSPACE / "marca" / "brand.md"
 TOOL = "delegate_task"
 # What the face must NOT have any more. Both are the creator's now.
 CREATORS_OWN = ("generate_image", "save_post")
+
+# What the creator comes back with since 2026-09-14: a carousel, the first
+# slide the hook and the last the close. Three is the floor the skill asks for.
+CAROUSEL = "carousel"
+MIN_SLIDES = 3
 
 # How the harness delimits the notebook. It belongs in the instruction channel,
 # so finding it inside a MESSAGE means the injection moved back into the
@@ -363,13 +370,45 @@ def main() -> int:
                 problems.append(f"no 01.* in {fresh[0].name}")
         failures += judge("S1.c the post is there", problems)
 
+        # AND IT IS A CAROUSEL. The creator's job grew on 2026-09-14 and the
+        # claims above it do not notice: a post of one image passes every one
+        # of them. What is read here is the FILE, because this is about what
+        # the creator wrote and not about what the route shows.
+        problems = []
+        if fresh:
+            saved = json.loads((fresh[0] / "post.json").read_text())
+            slides = saved["images"]
+            alts = saved.get("alts") or []
+            print(f"  carrusel: {saved['format']} · {len(slides)} slides ·"
+                  f" {len(alts)} alts · {', '.join(slides)}")
+            if saved["format"] != CAROUSEL:
+                problems.append(f"format is {saved['format']!r} and not {CAROUSEL!r}")
+            if len(slides) < MIN_SLIDES:
+                problems.append(f"{len(slides)} slide(s) and a carousel is"
+                                f" {MIN_SLIDES} or more")
+            if len(alts) != len(slides):
+                problems.append(f"{len(alts)} alts for {len(slides)} slides")
+            if [Path(n).stem for n in slides] != [
+                f"{n:02d}" for n in range(1, len(slides) + 1)
+            ]:
+                problems.append(f"the slides are not 01..NN in order: {slides}")
+            missing = [n for n in slides if not (fresh[0] / n).is_file()]
+            if missing:
+                problems.append(f"listed but not on disk: {missing}")
+        else:
+            problems.append("there is no post to look at")
+        failures += judge("S1.c2 and it is a carousel", problems)
+
         listing = get(f"{ADAPTER}/portal/posts")
         chat_post = listing["posts"][0] if listing.get("posts") else None
-        failures += judge(
-            "S1.d the tab lists it",
-            [] if chat_post and (chat_post.get("images") or [{}])[0].get("url")
-            else ["the listing has no post with an image"],
-        )
+        problems = []
+        if not (chat_post and (chat_post.get("images") or [{}])[0].get("url")):
+            problems.append("the listing has no post with an image")
+        elif fresh:
+            shown = [image["name"] for image in chat_post["images"]]
+            if shown != json.loads((fresh[0] / "post.json").read_text())["images"]:
+                problems.append(f"the tab shows {shown} and not the post's own order")
+        failures += judge("S1.d the tab lists every slide, in order", problems)
         failures += judge(
             "S1.e the answer names Posteos",
             [] if "posteos" in plain(answer) else ["the answer does not name Posteos"],
