@@ -25,6 +25,10 @@ both engines any more. Rules from that day on:
 
 The record of why: `docs/engine-plan.md`, `docs/engine-verdict.md`.
 
+First workload on the engine, planned 2026-09-14: our own agent posting daily,
+which brings flows into the engine, an image plugin and a social plugin with
+its Posts tab. `docs/own-agent-plan.md`.
+
 ## Migration to English (2026-08-23)
 
 - ~~**Migrate live agents (Mr.Wobble, East) to the English on-disk layout**~~
