@@ -14,6 +14,22 @@ It used to be two repos (`tuagente.uy` and `hermes-kit`); since 22/8/2026 it's
 this monorepo. The old `hermes-kit` repo is now archived. Vercel builds the
 root (the Next app) and `.vercelignore` keeps the kit out of the deploy.
 
+## Engine decision — 2026-09-14, read before touching the kit
+
+**The product moves from Hermes to the Pydantic AI engine in `poc/core/`, and
+Hermes gets killed slowly.** Decided by Luis on 2026-09-14 after the POC in
+`docs/poc-core-verdict.md`. What that means for any change:
+
+- New work goes to `poc/core/` and to the plugins' `core/` surface. Nothing
+  new gets a Hermes counterpart.
+- **No conditionals that make a thing work on both engines.** Where the kit
+  already has one to coexist with Hermes, remove it when you touch that file;
+  never add another.
+- The Hermes agents in `hermes-kit/fleet.md` keep running until the new engine
+  covers what they use (Telegram, flows, cron). Then they are rebuilt on it and
+  the Hermes half of the kit is deleted. `docs/PENDING.md` tracks it.
+- Every mention of Hermes below is history until this section is removed.
+
 ## Code rules — no exceptions
 
 - **All code AND internal documentation are written in English**: comments,

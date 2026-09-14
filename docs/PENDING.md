@@ -2,14 +2,28 @@
 
 What's left open, and who unblocks it. Close it here once it's resolved.
 
-## The engine question (2026-09-12)
+## The engine: Pydantic AI, decided (2026-09-14)
 
-Luis started second-guessing Hermes. A proof of concept on Pydantic AI was
-built, validated and measured the same day: `docs/poc-core-plan.md` (the
-gates and decisions), `docs/poc-core-verdict.md` (what passed, what the
-validator found, what a migration would cost, and the recommendation: go,
-staged), code in `poc/core/`. The decision is Luis's. Until it is made,
-nothing in `hermes-kit/` changes because of it.
+Luis decided on 2026-09-14: **the product moves to the Pydantic AI engine
+(`poc/core/`) and Hermes gets killed slowly.** Nothing is maintained for
+both engines any more. Rules from that day on:
+
+- New work targets `poc/core/` only. No feature, plugin surface, check or doc
+  gets a Hermes variant.
+- **No conditionals to keep both engines working.** The seams the POC added
+  to coexist with Hermes are the first things to remove, not to extend:
+  `SKILLS = []` overrides in `approval/core/plugin.py` and
+  `flow/core/plugin.py` (they exist to hide Hermes-only `SKILL.md`s),
+  `CORE_ONLY` in `hermes-kit/tools/check-plugins.py`, and the `flow` plugin's
+  "no scheduled flows on this engine" prose.
+- The Hermes agents in `hermes-kit/fleet.md` (the local demo, the VPS
+  `tuagente`) stay up until the new engine has what they use — Telegram,
+  flows and cron — then they get rebuilt on it and the Hermes half of the kit
+  (`adapter/`, `compose/`, `mcp-guard/`, `install.sh`, `new-agent.sh`,
+  `deploy-remote.sh`, `notes/` on engine knobs, `engine/` and `mcp` plugin
+  surfaces) is deleted, not archived.
+
+The record of why: `docs/poc-core-plan.md`, `docs/poc-core-verdict.md`.
 
 ## Migration to English (2026-08-23)
 
