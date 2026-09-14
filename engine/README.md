@@ -30,7 +30,7 @@ What lives where:
 |---|---|
 | `state/core.db` | SQLite (WAL): sessions, messages, history, approvals, events |
 | `state/identity.json` | what the client changed from the portal; wins over the seed |
-| `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did, `memoria/` what it remembers about the client, `flows/` what runs on its own |
+| `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did, `memoria/` what it remembers about the client, `flows/` what runs on its own, `imagenes/` what it drew, `posteos/` the finished posts, `marca/brand.md` the brand it writes with |
 | `agent/SOUL.md` | the client section + the `core:base` block, mounted read-only |
 | `/opt/kit/plugins` | `kit/plugins`, read-only. `CORE_PLUGINS` picks which load, and each one's `core/` surface is what it adds to this engine |
 
@@ -51,8 +51,8 @@ The seeded identity has `contact.channel: "none"`, which the portal reads as
 ## Plugins
 
 **A mechanism is a plugin of the kit, not a module of this engine** — unless it
-is the clock, which is the engine's own (see **Flows** below). The three this
-engine runs by default — `CORE_PLUGINS=approval,deliverable,memory`
+is the clock, which is the engine's own (see **Flows** below). The five this
+engine runs by default — `CORE_PLUGINS=approval,deliverable,memory,image,social`
 — are the kit's own plugins, and each one declares `"surfaces": {"core": "core/"}` in
 its `plugin.json`: a directory holding `plugin.py` and, when the mechanism
 needs words, an `instructions.md`. `core/plugins.py` imports that file and
@@ -87,6 +87,12 @@ kit/plugins/memory/core/    the notebook: plugin.py (the harness's
                                    `guidance`), extraction.py (the after_run
                                    pass that writes what the client said in
                                    passing). No instructions.md
+kit/plugins/image/core/     one tool: plugin.py (Pydantic AI's
+                                   ImageGeneration capability), generate.py
+                                   (OpenRouter, the PNG, the picture back)
+kit/plugins/social/core/    the post: posts.py (save_post, the reader and
+                                   the /portal/posts* routes), instructions.md,
+                                   and skills/post/SKILL.md, the craft
 ```
 
 `register(engine)` gets an object with seven verbs and no more:
@@ -126,6 +132,37 @@ mechanism — so it is in the prompt only where that plugin is enabled, and when
 the mechanism changes there is one file to change. The engine's own mechanisms
 follow the same rule from `core/agent.py`: the three lines about flows are
 there, next to the tools that make them true.
+
+**Posts.** `social` is the plugin that turns the engine into something that
+produces work a client looks at, and it is the first one a client BUYS
+(`social-package`, which installs it and `image`). It brings one tool,
+`save_post`, and the tool owns the format: the post lands in
+`workspace/posteos/<YYYY-MM-DD>-<slug>/` as `post.json` (id, date, format,
+caption, alt, hashtags, images, `flow` when the clock started the run),
+`caption.md` — the caption, a blank line, the hashtags — and `01.png`, `02.png`
+…, MOVED out of `imagenes/` so there is one copy of each picture and it is
+inside the post. One post per day, and the folder is the check: `replace=True`
+is the only way past it. Prose never says any of that; the tool does, and what
+the model cannot be given by code is in `skills/post/SKILL.md` — read
+`marca/brand.md` first, the caption formula, and the five-point checklist the
+generated image has to pass before it counts.
+
+Its three routes are the Posts tab: `GET /portal/posts` (newest first, each
+image expanded to `{name, bytes, url}`), `GET /portal/posts/{id}` and
+`GET /portal/posts/{id}/{file}`, which answers the bytes with a real
+`Content-Type` and an inline `Content-Disposition`. The bytes are served here
+and not by `/portal/files`, which answers `text/plain` for everything it has.
+`engine.module("posts", True)` is what makes the portal draw the tab.
+
+```bash
+python3 engine/tests/test_post.py       # ~60 s, ~US$0.02
+```
+
+One chat turn — «Armá el posteo de hoy para Instagram y guardalo» — and six
+assertions from outside: the folder with its three kinds of file, the listing,
+the piece downloading as `image/png`, `modules.posts` in the manifest, a
+`post.saved` event in Activity, and an answer that does not claim it published.
+The post is left on disk, because it is the thing to look at.
 
 ## Check it
 

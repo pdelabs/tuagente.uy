@@ -77,6 +77,15 @@ Format = Literal["feed", "square", "story"]
 NO_POST = "No hay ningún posteo {post_id} en este agente."
 NO_IMAGE = "El posteo {post_id} no tiene ninguna imagen {name}."
 
+# A TRAILING BLOCK OF HASHTAG LINES COMES OFF THE CAPTION. They have a field of
+# their own and `caption.md` puts them back at the end, so a caption that
+# carries them too is the same five tags printed twice — which is what the very
+# first run of `tests/test_post.py` produced, with the tool's own docstring
+# saying «sin los hashtags» right there in the prompt. The model supplies the
+# words; the code supplies the format. Only a run of hashtag-ONLY lines at the
+# END goes: a `#` inside a sentence is part of the sentence.
+HASHTAG_LINES = re.compile(r"(?:^[ \t]*(?:#\S+[ \t]*)+$\n?)+\Z", re.MULTILINE)
+
 
 def root() -> Path:
     return config.WORKSPACE / WHERE
@@ -189,6 +198,7 @@ def toolset() -> FunctionToolset:
                 f"«{slug}» no sirve como slug: minúsculas, números y guiones, "
                 f"hasta {MAX_SLUG} caracteres"
             )
+        caption = HASHTAG_LINES.sub("", caption).strip()
         if len(caption) > MAX_CAPTION:
             raise ModelRetry(
                 f"el pie tiene {len(caption)} caracteres y en Instagram entran "
@@ -225,6 +235,14 @@ def toolset() -> FunctionToolset:
                 raise ModelRetry(
                     f"no encuentro {relative}: pasame la ruta que te devolvió "
                     "`generate_image`"
+                )
+            # The route answers the type off the extension, so a file it has no
+            # type for would be a 500 on the tab instead of a picture. The
+            # format is this tool's business, which is why it is caught here.
+            if path.suffix.lower() not in TYPES:
+                raise ModelRetry(
+                    f"{relative} no es una imagen que el portal pueda mostrar: "
+                    f"{', '.join(sorted(TYPES))}"
                 )
             sources.append(path)
 

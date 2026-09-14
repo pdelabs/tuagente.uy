@@ -44,7 +44,17 @@ MODEL = "openai/gpt-5.4-image-2"
 # The model reads the NAME and never the ratio: the tool argument is what a
 # client asks for out loud ("una historia", "un posteo"), and the geometry is
 # the only thing this table is for.
-RATIO = {"feed": "4:5", "square": "1:1", "story": "9:16"}
+#
+# `feed` IS 3:4 AND NOT THE 4:5 INSTAGRAM PREFERS, because the provider does
+# not serve 4:5: `{"aspect_ratio": "4:5"}` comes back 400 with the whole
+# accepted vocabulary in the body — 1:1, 3:2, 2:3, 4:3, 3:4, 16:9, 9:16, 21:9,
+# auto (measured 2026-09-14, and only `square` had ever been asked for before,
+# so the shape every post actually uses was the broken one). 3:4 is the nearest
+# vertical, it is honoured exactly (1152×1536), and Instagram crops it to 4:5,
+# which takes about 6% off the top and the bottom: whatever matters stays out
+# of those bands. The old Hermes plugin hit the same wall and answered 1:1,
+# which is honest and gives up the vertical — the thing a feed post is for.
+RATIO = {"feed": "3:4", "square": "1:1", "story": "9:16"}
 
 Format = Literal["feed", "square", "story"]
 

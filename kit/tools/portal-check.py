@@ -231,6 +231,27 @@ def main():
 
     modcheck("flows", f"{A}/portal/flows", _flows_ok)
 
+    def _posts_ok(d, h):
+        # THE TAB IS A LIST AND A DOWNLOAD, so both are checked. A post whose
+        # picture does not come back is a card with a hole in it, and the
+        # picture is the half the client is there for. The bytes are served by
+        # the plugin that wrote them and NOT by `/portal/files`, which answers
+        # `text/plain` for everything it has -- a PNG through that route
+        # arrives as mojibake, which is why the type is asserted here.
+        if not d.get("available"):
+            raise AssertionError("declared but the posts reader is not answering")
+        listed = d["posts"]
+        if listed:
+            first = listed[0]["images"][0]
+            _, hdrs = http(f"{A}{first['url']}", K)
+            ctype = hdrs.get("Content-Type", "")
+            if not ctype.startswith("image/"):
+                raise AssertionError(
+                    f"serves {first['name']} as {ctype!r}, has to be an image type")
+        return f"{len(listed)} posts, the newest one with its pieces"
+
+    modcheck("posts", f"{A}/portal/posts", _posts_ok)
+
     # Files: on top of the listing, the content must NEVER be served as html.
     if mods.get("files"):
         def _files():

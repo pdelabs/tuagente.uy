@@ -36,7 +36,7 @@ La fórmula, en este orden:
   Concretas, una idea por línea.
 - **Cierre con un solo pedido.** Guardá *y* comentá *y* escribinos es no pedir
   nada.
-- **Hasta 5 hashtags**, al final y en una línea.
+- **Hasta 5 hashtags**, que van aparte y no adentro del pie.
 
 Y cómo suena:
 
@@ -59,7 +59,8 @@ oración, para quien no la ve.
 Armá el brief con los colores de la marca y la idea del posteo, y enumerá
 **palabra por palabra** el único texto que puede aparecer en la pieza. Pedile
 que no agregue ningún otro: ni fechas, ni dominios, ni subtítulos en inglés, ni
-marcas de agua, ni códigos de color dibujados. Todo en español, con sus tildes.
+marcas de agua, ni códigos de color dibujados. Todo en español, con sus tildes,
+y con aire arriba y abajo: Instagram recorta los bordes de una pieza vertical.
 
 `generate_image(prompt, format)` con el mismo formato que va a llevar el
 posteo: `feed` para el vertical de siempre, `story` para una historia.
@@ -78,9 +79,10 @@ puntos:
 5. **El formato es el que pediste.**
 
 Si falla algo, generá **una vez más** con la corrección adentro del prompt.
-Si a la segunda sigue mal, entregá el pie sin imagen y decí en una línea qué no
-pudiste resolver: un posteo con buen texto y sin pieza sirve, y guardarte lo
-que está bien porque una parte falló deja al cliente con nada.
+Si a la segunda sigue mal, dejale el pie en el chat sin guardar el posteo —no
+se guarda sin imagen— y decí en una línea qué no pudiste resolver: un pie bueno
+sirve, y guardarte lo que está bien porque una parte falló deja al cliente con
+nada.
 
 ## 6. Guardalo
 
