@@ -1,11 +1,10 @@
-"""Memory on the `core` engine: one notebook, two ways of writing in it.
+"""Memory on the `core` engine: one notebook per agent, two ways of writing in it.
 
 The mechanism is `pydantic-ai-harness`'s `Memory` capability. It gives the
 agent four tools (`write_memory`, `read_memory`, `search_memory`,
-`delete_memory`) and injects a bounded excerpt of `MEMORY.md` into every
-request as a delimited user-role part — so what the agent knows about the
-client arrives as CONTENT and not as instructions, which is the whole reason
-the injection is not in the system prompt.
+`delete_memory`) and renders a bounded excerpt of `MEMORY.md` into every
+request, delimited by `<memory>` markers — so what the agent knows about the
+client is marked as content written by a model and not as an order.
 
 WHERE THE NOTEBOOK IS, AND WHY IT IS THERE. `<workspace>/memoria/`, inside the
 one directory the client can see from the portal. What the agent believes about
@@ -27,20 +26,30 @@ harness puts that text in the instruction channel itself, right where the
 tools are described; a second copy in the plugin's prose would be two places to
 change one rule. It is the only thing in this folder the model reads.
 
+AND THE RULE IS PER AGENT, because the job is. The face's rule is written for
+someone in a conversation — «acordate», «olvidate», facts about the business —
+and a sub-agent has no conversation and no client: it is a worker, its notebook
+is about the craft it was corrected on, and the same six lines in its prompt
+would be six lines about a chat it is not in. So `notebook(scope, guidance)`
+takes both, and the plugin that builds a delegate writes the rule its delegate
+works under.
+
 THE CAPABILITY IS `injection.Notebook` AND NOT THE HARNESS'S `Memory` ITSELF:
 the same thing, with the injected part moved to the FRONT of the request. The
 measurement that forced it is in that file, and it is the difference between an
 agent that reads its notebook and one that answers it.
 
 ONE NOTEBOOK PER AGENT, AND THE FACE'S IS `main`. A sub-agent gets its own
-through the factory this plugin provides (`engine.use("memory")(scope)`), which
-is the same capability on the same store under another scope segment —
-`memoria/<scope>/MEMORY.md`, next to the face's and just as visible in Files.
-Sharing one notebook was the other option and it is the wrong one: the
+through the factory this plugin provides (`engine.use("memory")(scope,
+guidance)`), which is the same capability on the same store under another scope
+segment — `memoria/<scope>/MEMORY.md`, next to the face's and just as visible in
+Files. Sharing one notebook was the other option and it is the wrong one: the
 creator's notes are about the craft it was corrected on ("no más de una idea por
 pieza"), the face's are about the client's business, and a notebook that is
-both is one the client cannot read. The EXTRACTION stays on the face alone: it
-reads a turn of the CLIENT's conversation, and a sub-agent never has one.
+both is one the client cannot read.
+
+The EXTRACTION stays on the face alone: it reads a turn of the CLIENT's
+conversation, and a sub-agent never has one.
 """
 
 import extraction
@@ -55,13 +64,13 @@ from core import config
 # default the two files agree on by accident is a bug waiting for an upgrade.
 SCOPE = "main"
 
-# The heading the harness renders the notebook under. One constant, because
-# every notebook this plugin hands out reads the same way.
+# The heading a notebook's own agent reads it under. One constant, because
+# every notebook this plugin hands out to its owner reads the same way.
 HEADING = "Memoria"
 NOTEBOOK = config.WORKSPACE / "memoria"
 MAIN = f"{SCOPE}/MEMORY.md"
 
-# What the model is told about its own memory. Spanish, because it is prose the
+# What the FACE is told about its own memory. Spanish, because it is prose the
 # agent works from, and short, because every turn pays for it: the harness
 # renders it above the notebook under the same `## Memoria` heading and counts
 # it against the same injection budget (2_000 tokens by default, which is the
@@ -87,8 +96,8 @@ GUIDANCE = (
 store = FileStore(NOTEBOOK)
 
 
-def notebook(scope: str) -> injection.Notebook:
-    """A notebook of its own for one agent, with the same rule on it.
+def notebook(scope: str, guidance: str) -> injection.Notebook:
+    """A notebook of its own for one agent, with the rule its job needs.
 
     `agent_name` is the store's scope segment, so this is
     `memoria/<scope>/MEMORY.md`. What a sub-agent's plugin gets through
@@ -96,10 +105,10 @@ def notebook(scope: str) -> injection.Notebook:
     `AbstractCapability` instance is registered into a run, and two agents
     sharing one would be two agents sharing a notebook.
     """
-    return injection.Notebook(store, agent_name=scope, heading=HEADING, guidance=GUIDANCE)
+    return injection.Notebook(store, agent_name=scope, heading=HEADING, guidance=guidance)
 
 
 def register(engine) -> None:
-    engine.capability(notebook(SCOPE))
+    engine.capability(notebook(SCOPE, GUIDANCE))
     engine.capability(extraction.Extraction(store=store, path=MAIN))
     engine.provide("memory", notebook)
