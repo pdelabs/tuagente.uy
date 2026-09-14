@@ -23,7 +23,10 @@ is asserted, from outside, the way the portal sees it:
      never that it went up. The one rule of this plugin that no code enforces.
 
 THE POST IS LEFT ON DISK. It is the thing to look at, and a test that cleaned
-up after itself would delete the only evidence of the run.
+up after itself would delete the only evidence of the run. Which is why IT RUNS
+ONCE A DAY: the second run of the same day finds today's post, the agent
+refuses to overwrite it, and the gate says so and stops instead of failing on
+a folder that was never going to appear.
 
 WHERE IT POINTS. The defaults are the main compose's — 8642/8643 and
 `engine/workspace` — and `CORE_ENDPOINT`, `CORE_ADAPTER` and
@@ -147,6 +150,17 @@ def main() -> int:
         print(f"There is no {BRAND}: the skill reads the brand before writing.")
         return 1
     before = folders()
+    # ONE POST PER DAY IS THE RULE, so this gate runs once a day. On the second
+    # run the agent reads `posteos/`, finds today's and stops without calling
+    # `save_post` -- which is the rule working -- and claim (a) then failed with
+    # "no new folder", which reads as the plugin being broken. Measured
+    # 2026-09-14: «Ya hay un posteo guardado para hoy. No lo piso sin permiso.»
+    standing = sorted(d for d in before if d.name.startswith(time.strftime("%Y-%m-%d-")))
+    if standing:
+        print(f"There is already a post for today ({standing[0].name}): one per day is"
+              " the rule `save_post` enforces, so this run has nothing new to assert."
+              " Move that folder aside to run the gate again.")
+        return 1
     print(f"  ({len(before)} post already there; only what this run adds counts)")
 
     before_usd = key_usage()
