@@ -28,7 +28,15 @@
     "same shape as `image` and `memory`. What is new here is that it carries a",
     "SKILL and a TAB on top of `core/`: the tool and the routes are the format,",
     "the skill is the craft, and `tab.builtin` names the page app/app/posts/",
-    "draws from `GET /portal/posts`."
+    "draws from `GET /portal/posts`.",
+    "",
+    "ON `core` THE SKILL AND THE TOOL ARE A SUB-AGENT'S, not the face's",
+    "(docs/subagents-plan.md). `core/creator.py` builds the agent that makes",
+    "the post -- the only one with `save_post` and with the image capability --",
+    "and the face delegates to it and reads its report out to the client. That",
+    "is why the module declares `SKILLS = []`: the skill file is still this",
+    "plugin's and still travels, it is this engine's INDEX it stays out of,",
+    "because the face no longer has the tools the procedure names."
   ],
   "requires": {
     "plugins": [
