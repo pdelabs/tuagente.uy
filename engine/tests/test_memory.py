@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Memory. Run it from anywhere: `python3 poc/core/tests/test_memory.py`.
+"""Memory. Run it from anywhere: `python3 engine/tests/test_memory.py`.
 
 Four short conversations against the container that is already up, one per
 thing the mechanism has to do:

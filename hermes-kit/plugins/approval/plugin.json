@@ -8,7 +8,7 @@
     "message, it is a block on the ticket the agent is working. An approval",
     "with no board to sit on is a question nobody ever answers.",
     "",
-    "THE CORE SURFACE IS THE GATE ITSELF ON THE POC ENGINE (core/): the",
+    "THE CORE SURFACE IS THE GATE ITSELF ON THE ENGINE (core/): the",
     "sensitive toolset wrapped in approval_required(), the row store, the",
     "rendered body and the /portal/approvals routes. On a Hermes agent none of",
     "that is read -- there the gate is the engine's own -- and the folder just",

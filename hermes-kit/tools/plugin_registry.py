@@ -54,7 +54,7 @@ REQUIRES_KEYS = ("plugins", "connections", "toolsets")
 # `build_role.py`), and with one agent per client the plugin whose skill the
 # flow exercises is what owns it.
 # `core` is the newest and the only one the plan never drew: a plugin of
-# OUR engine (`poc/core`), next to `engine`, which is a plugin of Hermes'.
+# OUR engine (`engine`), next to `engine`, which is a plugin of Hermes'.
 # Neither one reads the other's folder.
 SURFACE_KEYS = ("skills", "flows", "engine", "core", "mcp", "service", "adapter", "tab")
 # The name of the directory a flow lands in on the agent, which the portal reads
@@ -192,7 +192,7 @@ def _check_surfaces(path: Path, data: dict, folder_dir: Path) -> None:
 
     # THE CORE SURFACE IS A PLUGIN OF OUR OWN ENGINE, and it is the mirror image
     # of `engine` above: `engine/` is a plugin of Hermes', `core/` is a plugin of
-    # `poc/core`. The engine imports `core/plugin.py` and calls its
+    # `engine`. The engine imports `core/plugin.py` and calls its
     # `register(engine)` — toolsets, routers, hooks, modules and the prose that
     # belongs to the mechanism the plugin brings. Without that file there is
     # nothing to import, which is the same failure the engine surface is checked

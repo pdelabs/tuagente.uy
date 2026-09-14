@@ -1,7 +1,7 @@
 [project]
 name = "tuagente-core"
 version = "0.1.0"
-description = "POC engine: the tuagente.uy portal served by Pydantic AI instead of Hermes"
+description = "The tuagente.uy agent engine: the portal served by Pydantic AI"
 requires-python = ">=3.12"
 dependencies = [
     # The `openrouter` extra exists for 2.43.0 (checked against PyPI metadata).

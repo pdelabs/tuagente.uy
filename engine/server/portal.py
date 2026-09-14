@@ -105,7 +105,7 @@ async def session_chat_stream(session_id: str, request: Request):
 
 @router.get("/portal/tickets")
 def tickets():
-    """No board in the POC: approvals are on the tool, not on a ticket."""
+    """No board in the engine: approvals are on the tool, not on a ticket."""
     return {"tickets": []}
 
 

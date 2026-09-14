@@ -245,7 +245,7 @@ class PluginsEndpoint(unittest.TestCase):
         self.assertEqual(approval["requires"],
                          {"plugins": ["kanban"], "connections": [], "toolsets": []})
         # Surfaces: which ones exist, plus the tab object exactly as written.
-        # `core` is the POC engine's surface: the portal is told the plugin has
+        # `core` is the engine's surface: the portal is told the plugin has
         # one, and nothing on this agent reads what is inside it.
         self.assertEqual(approval["surfaces"]["present"], ["skills", "core", "tab"])
         self.assertEqual(approval["surfaces"]["tab"], {"builtin": "approvals"})

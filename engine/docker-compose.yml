@@ -27,8 +27,8 @@ services:
       - ./state:/state
       - ./workspace:/workspace
       - ./agent:/agent:ro
-      - ../../hermes-kit/plugins:/opt/kit/plugins:ro
-      - ../../hermes-kit/plugins/deliverable/skills/deliverable:/opt/kit/skills/deliverable:ro
+      - ../hermes-kit/plugins:/opt/kit/plugins:ro
+      - ../hermes-kit/plugins/deliverable/skills/deliverable:/opt/kit/skills/deliverable:ro
     restart: unless-stopped
 
   # The trace viewer: http://127.0.0.1:6006. Loopback only, never 0.0.0.0.

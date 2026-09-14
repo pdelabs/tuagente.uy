@@ -6,7 +6,7 @@ plugin's own `engine/promises/` — the folder Hermes reads as a plugin of its
 own — by path and not as a package: the `__init__.py` next to it is the Hermes
 side of the wiring and imports `hermes_constants`, which does not exist here.
 The file itself imports nothing of either engine, which is why one copy can
-answer for both. The POC used to keep a verbatim copy in `core/promises.py`;
+answer for both. The engine used to keep a verbatim copy in `core/promises.py`;
 two copies of a rule are two answers.
 
 WHAT IT CHECKS is a `data/` dir with `flows/` and `cron/jobs.json` under it. In

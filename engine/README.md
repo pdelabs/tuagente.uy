@@ -1,8 +1,9 @@
-# core — the POC engine
+# engine — the tuagente.uy agent engine
 
-The portal of `app/app/`, unchanged, pointed at an engine built on Pydantic AI
-2.43 instead of Hermes. The plan, the decisions and the gates are in
-`docs/poc-core-plan.md`; this file is how to run it.
+The engine every client's agent runs on: Pydantic AI 2.43 behind the portal
+of `app/app/`. It replaces Hermes (decided 2026-09-14, `docs/PENDING.md`);
+how it was proven is in `docs/engine-plan.md` and `docs/engine-verdict.md`.
+This file is how to run it.
 
 One FastAPI app serves both of the portal's bases — the gateway (`/api/*`) and
 the adapter (`/portal/*`) — and the compose publishes it on `127.0.0.1:8642`
@@ -11,7 +12,7 @@ and `127.0.0.1:8643` so the magic link can point both at the same container.
 ## Run it
 
 ```bash
-cd poc/core
+cd engine
 cp secrets.env.example secrets.env    # OPENROUTER_API_KEY + API_SERVER_KEY
 docker compose up --build -d
 docker compose logs -f
@@ -29,7 +30,7 @@ What lives where:
 |---|---|
 | `state/core.db` | SQLite (WAL): sessions, messages, history, approvals, events |
 | `state/identity.json` | what the client changed from the portal; wins over the seed |
-| `state/cron/jobs.json` | what runs on its own. Always `{"jobs": []}` here: the POC has no cron, and the promises check reads it to say so |
+| `state/cron/jobs.json` | what runs on its own. Always `{"jobs": []}` here: the engine has no cron, and the promises check reads it to say so |
 | `state/promises/` | the `data/` dir the kit's promises module expects — two symlinks, `flows` → `workspace/flows` and `cron` → `state/cron` |
 | `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did, `memoria/` what it remembers about the client |
 | `agent/SOUL.md` | the client section + the `core:base` block, mounted read-only |
@@ -59,7 +60,7 @@ needs words, an `instructions.md`. `core/plugins.py` imports that file and
 calls `register(engine)`, in `CORE_PLUGINS` order.
 
 ```
-poc/core/                          the engine, and nothing about any mechanism
+engine/                          the engine, and nothing about any mechanism
   core/config.py                   env -> settings; the base MODULES
   core/plugins.py                  load the plugins, hand each one the engine
   core/agent.py                    model, instructions, toolsets, capabilities
@@ -127,7 +128,7 @@ file changes and nothing else does.
 ## Check it
 
 ```bash
-KEY=$(grep '^API_SERVER_KEY=' poc/core/secrets.env | cut -d= -f2-)
+KEY=$(grep '^API_SERVER_KEY=' engine/secrets.env | cut -d= -f2-)
 python3 hermes-kit/tools/portal-check.py --key "$KEY" \
     --endpoint http://127.0.0.1:8642 --adapter http://127.0.0.1:8643 \
     --origin http://localhost:8090
@@ -135,7 +136,7 @@ python3 hermes-kit/tools/portal-check.py --key "$KEY" \
 
 Last run: **13 ok · 3 warnings · 0 failures**. The three warnings are the
 modules the manifest does not declare — `kanban`, `artifacts` and `crons`,
-out of scope in `docs/poc-core-plan.md` and never coming. `approvals` and
+out of scope in `docs/engine-plan.md` and never coming. `approvals` and
 `usage` are declared and answer.
 
 Both chat dialects by hand:
@@ -175,7 +176,7 @@ log with its stack.
 
 ## Gates
 
-From `docs/poc-core-plan.md`. Wave 1 owns none of them outright; what it had to
+From `docs/engine-plan.md`. Wave 1 owns none of them outright; what it had to
 leave standing is here.
 
 | # | Gate | State |
@@ -241,7 +242,7 @@ history are two different stores.
 Approve and reject answer only after the resumed run finished (3–20 s), so the
 portal's refresh reads the outcome and not the row as it was a second ago. The
 resumed run has no stream attached: its answer shows up in the chat on the next
-load, which the plan takes as acceptable for the POC.
+load, which the plan takes as acceptable for the engine.
 
 **The outbox.** `send_email` and `publish_post` are fake, and deliberately so:
 their whole side effect is one markdown file in `workspace/outbox/`
@@ -301,7 +302,7 @@ is the one with no `instructions.md`: the harness already owns the slot, and a
 second copy would be two places to change one rule.
 
 ```bash
-python3 poc/core/tests/test_memory.py       # ~40 s, ~US$0.001
+python3 engine/tests/test_memory.py       # ~40 s, ~US$0.001
 ```
 
 Four short conversations against the running container, notebook cleared first
@@ -332,7 +333,7 @@ already up. None of them needs anything installed on the host.
 ### G4 — compaction
 
 ```bash
-python3 poc/core/tests/test_compaction.py     # ~4 min, ~US$0.02
+python3 engine/tests/test_compaction.py     # ~4 min, ~US$0.02
 ```
 
 It restarts the container with `CORE_COMPACT_AT_TOKENS=6000` through the
@@ -350,7 +351,7 @@ Three things it settled, none of them guessable from the docs:
   back to the run state (`_agent_graph.py`: `ctx.state.message_history[:] =
   messages`), so `result.all_messages()` at the end of the run is the
   compacted history and `core/session.py` stores it unchanged. Nothing in
-  session.py had to move, and the risk `docs/poc-core-plan.md` names —
+  session.py had to move, and the risk `docs/engine-plan.md` names —
   "persisted vs sent history under a processor" — does not exist here.
 - **The context-window fraction is a dead knob on this model.** `CORE_COMPACT_AT`
   is a fraction of the model's window and `openai/gpt-5.6-luna`'s window is
@@ -370,7 +371,7 @@ Three things it settled, none of them guessable from the docs:
 ### G5 — the promises check rewrites the persisted message
 
 ```bash
-python3 poc/core/tests/test_promises.py       # ~30 s, ~US$0.002
+python3 engine/tests/test_promises.py       # ~30 s, ~US$0.002
 ```
 
 Three parts: the kit's own case through the BEFORE_PERSIST chain with no model
@@ -394,7 +395,7 @@ line ("para dejarlo andando").
 ### G6 — what a turn costs
 
 ```bash
-python3 poc/core/tests/cost.py                # ~2 min, ~US$0.002
+python3 engine/tests/cost.py                # ~2 min, ~US$0.002
 ```
 
 Priced the way `hermes-kit/notes/cost-and-engine-findings.md` §1 prices one:
@@ -442,7 +443,7 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
   every session: the second write of a tie reads a version that moved and
   raises, which reaches the client as "No pude responder" on a turn that was
   already answered. It needs two conversations answering within the same
-  fraction of a second to happen, and the POC has one client.
+  fraction of a second to happen, and the engine has one client.
 - **`tests/cost.py`'s per-turn numbers are indicative; the aggregate is what
   holds.** It polls OpenRouter's `/api/v1/key` for a delta, and spend lands
   there late and in its own time: the script cannot tell "nothing yet" from
@@ -452,7 +453,7 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
 - **Displaying a message and persisting the history are two commits.** SQLite
   writes them one after the other (`db.add_message` then `db.save_history`), so
   a crash in between leaves the client reading an answer the engine will not
-  replay. One transaction would fix it; the POC does not need it to answer the
+  replay. One transaction would fix it; the engine does not need it to answer the
   question it exists to answer.
 - **A bash timeout kills the turn instead of the tool.** `subprocess.run(...,
   timeout=60)` raises, nothing catches it, and 60 s of a command now reach the
@@ -461,7 +462,7 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
   `core/tools/workspace.py`.
 - **Session matching is O(sessions × messages).** `match_session` reads every
   session's messages out of SQLite to compare user turns on every new
-  conversation. At the POC's scale it is microseconds; at a client's it wants
+  conversation. At the engine's scale it is microseconds; at a client's it wants
   a hash of the client's turns on the session row.
 
 ## Where the next waves plug in

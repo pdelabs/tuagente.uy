@@ -1,11 +1,12 @@
 # tuagente.uy — monorepo, context for a new session
 
-One repo with the three pieces of the product:
+One repo with the four pieces of the product:
 
 | Where | What it is |
 |---|---|
 | `app/page.tsx`, `app/blog/` | **the public landing** — marketing, SEO |
 | `app/app/` | **the client portal** — the interface a client uses to see and direct their agent. Static; all the logic lives in the browser |
+| `engine/` | **the agent engine** — Pydantic AI behind the portal; one container per client serving the gateway (`:8642`) and the adapter (`:8643`) shapes. `engine/README.md` is how to run it |
 | `hermes-kit/` | **what gets installed on each client's agent** — portal adapter, skills, plugins, SOULs, capabilities, compose and conformance checks. Has its own `CLAUDE.md` with the deep context: read it before touching the kit |
 | `docs/` | the project's memory (portal + client onboarding) |
 | `hermes-kit/notes/` | the kit's memory (measurements, engine knobs, the plugin plan) |
@@ -16,11 +17,11 @@ root (the Next app) and `.vercelignore` keeps the kit out of the deploy.
 
 ## Engine decision — 2026-09-14, read before touching the kit
 
-**The product moves from Hermes to the Pydantic AI engine in `poc/core/`, and
-Hermes gets killed slowly.** Decided by Luis on 2026-09-14 after the POC in
-`docs/poc-core-verdict.md`. What that means for any change:
+**The product moves from Hermes to the Pydantic AI engine in `engine/`, and
+Hermes gets killed slowly.** Decided by Luis on 2026-09-14 on the strength of
+`docs/engine-verdict.md`. It is not a proof of concept and is not called one. What that means for any change:
 
-- New work goes to `poc/core/` and to the plugins' `core/` surface. Nothing
+- New work goes to `engine/` and to the plugins' `core/` surface. Nothing
   new gets a Hermes counterpart.
 - **No conditionals that make a thing work on both engines.** Where the kit
   already has one to coexist with Hermes, remove it when you touch that file;

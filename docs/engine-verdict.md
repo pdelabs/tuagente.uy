@@ -1,7 +1,12 @@
-# POC verdict: the portal on a Pydantic AI engine
+# The engine — verdict
 
-Built and measured on 2026-09-12 against the plan in `docs/poc-core-plan.md`.
-Code in `poc/core/` (about 1,800 lines of engine and server, 900 of tests,
+> Written on 2026-09-12 as the verdict of a proof of concept. On 2026-09-14
+> Luis decided the engine stays and Hermes goes (`docs/PENDING.md`); the
+> code moved from `poc/core/` to `engine/`. The numbers and findings are
+> as measured that day.
+
+Built and measured on 2026-09-12 against the plan in `docs/engine-plan.md`.
+Code in `engine/` (about 1,800 lines of engine and server, 900 of tests,
 plus the kit's `promises.py` copied verbatim). Three implementation waves on
 Opus, one independent validation pass with a fresh context, and a browser
 walkthrough of the unchanged portal. Total spend on the key for the whole
@@ -36,7 +41,7 @@ Hermes, where the prompt carries a 9 KB skills index, a 4.6 KB kanban
 protocol and a memory lecture on every request. This engine ships the SOUL
 and one line per skill.
 
-## The four reasons to leave Hermes, checked against the POC
+## The four reasons to leave Hermes, checked against the engine
 
 1. **The gate fails open under load.** Closed by construction. The gate is on
    the tool (`approval_required`), the run ENDS in a `DeferredToolRequests`
@@ -46,7 +51,7 @@ and one line per skill.
    Closed. `BEFORE_PERSIST` hooks run before the display message is written
    and before the `assistant.completed` event goes out. G5 proves it through
    the portal's own read path.
-3. **The version freeze.** Different in kind. The POC pins Pydantic AI 2.43
+3. **The version freeze.** Different in kind. The engine pins Pydantic AI 2.43
    but every coupling is through public API: `run_stream_events`,
    `FunctionToolset.approval_required`, `DeferredToolRequests` and
    `DeferredToolResults`, `ProcessHistory`, `ReinjectSystemPrompt`,
@@ -62,12 +67,12 @@ and one line per skill.
 ## What the portal looked like
 
 The same product. The client would not know the engine changed. One cosmetic
-thing surfaced, in the POC's data and not in the portal: **Activity chips
+thing surfaced, in the engine's data and not in the portal: **Activity chips
 show the event kinds in English** (`approval_requested`, `turn_usage`,
 `compaction`), because the Activity page renders unknown kinds raw. One
-rename in the POC.
+rename in the engine.
 
-One product gap that is the POC's, not the portal's: the resumed run after
+One product gap that is the engine's, not the portal's: the resumed run after
 an approval has no stream attached, so its answer appears in the chat on the
 next load and on the approval card right away. A real engine pushes it.
 
@@ -85,7 +90,7 @@ next load and on the approval card right away. A real engine pushes it.
   planted fact with a list of files after 39 rounds. The fix carries the
   previous summary forward verbatim and only summarizes unseen turns.
 - **`portal-check.py` reads headers case-sensitively** and uvicorn lowercases
-  them. The POC serves canonical-case headers through h11 to pass; the right
+  them. The engine serves canonical-case headers through h11 to pass; the right
   fix is in the check script, which should be case-insensitive. Filed here,
   not fixed.
 - **The one-line "Queda definido: viernes a las 9:30" does not trip the
@@ -149,7 +154,7 @@ worth topping up before anyone runs the compaction test again.
 
 ## What a real migration would cost
 
-What the POC does not have, grouped by whether it is engine work or kit work
+What the engine does not have, grouped by whether it is engine work or kit work
 that moves over.
 
 | Area | State | Estimate |
@@ -157,22 +162,22 @@ that moves over.
 | Telegram channel (the client's notify path and a chat surface) | Not built. One library, the pairing flow, message formatting. | 2 days |
 | Cron and flows (`FLOW.md`, `create_flow.py`, the Flows tab, `/api/jobs`) | Not built. A scheduler over the same session runner, the flows tab's contract, the promises check already reads the dir. | 3 days |
 | Memory | Not built. A memory file the agent edits plus a post-turn extraction with a cheap model. Hermes has no extraction either. | 1 day |
-| Streaming the resumed run's answer, abort mid-run persistence, concurrent sessions | Rough edges named in the README. The POC is one process and approve is synchronous. | 2 days |
+| Streaming the resumed run's answer, abort mid-run persistence, concurrent sessions | Rough edges named in the README. The engine is one process and approve is synchronous. | 2 days |
 | Capability catalog, connections catalog, artifacts, upload/inbox conventions | Adapter code that moves over mostly as is; it reads catalogs and folders, not the engine. | 3 days |
-| The kanban board tab | Decide first whether the product keeps a board at all. The POC suggests approvals plus activity cover what clients used it for. | 0 to 4 days |
+| The kanban board tab | Decide first whether the product keeps a board at all. The engine suggests approvals plus activity cover what clients used it for. | 0 to 4 days |
 | Plugin surfaces beyond skills: `engine/`, `mcp/`, `service`, `adapter`, `tab` | One of them exists now: `core/` is a surface of the kit's manifest — `plugin.py`, `register(engine)`, optional `instructions.md` — and `approval`, `deliverable` and `flow` carry it, which is where this engine's gate, folders prose and promises guard live. The rest still need a loader each; `mcp-guard` re-validated against the MCP client Pydantic AI ships. | 2 days |
 | Image generation, vision, OCR and document skills, web search | Image gen is one API call; the four document skills are Python libraries; web search is a tool. | 2 days |
 | `new-agent.sh`, `install.sh`, `deploy-remote.sh`, `agent-check.py`, `fleet.md` | Rewrite against a much smaller surface: one container, one env file, no `config.yaml` to guard. | 3 days |
 | Onboarding through the portal (naming, look, business, channel) | `/portal/identity` exists; the brief and the avatar upload do not. | 1 day |
 
 Roughly four working weeks to parity on what the fleet actually uses, done
-the way the POC was done. Against that: the parked Hermes upgrade wave was
+the way the engine was done. Against that: the parked Hermes upgrade wave was
 already estimated at a week of reconciling seven couplings, with the gate
 and the persist bug still open at the end of it.
 
 ## Recommendation
 
-Go, staged. The POC closed the four problems that made the question worth
+Go, staged. The engine closed the four problems that made the question worth
 asking, with 1,800 lines and one afternoon, and the portal did not notice.
 The risk moved from "the engine fights us" to "we own the loop's edge
 cases". The validation pass is the honest picture of that: the first cut of

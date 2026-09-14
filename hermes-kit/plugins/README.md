@@ -7,7 +7,7 @@ to build lands here so the second client who asks for it gets it off the shelf.
 The full design, the surfaces and the phase plan are in
 [`../notes/plugin-system-plan.md`](../notes/plugin-system-plan.md). Read that
 before adding a surface this registry has never shipped. The one the plan never
-drew is `core`, and it came from the other side: `poc/core` is an engine of ours
+drew is `core`, and it came from the other side: `engine` is an engine of ours
 and a plugin is how it gets a mechanism.
 
 ## The manifest
@@ -43,7 +43,7 @@ and a plugin is how it gets a mechanism.
 | `requires.toolsets` | engine toolsets the agent needs on |
 | `surfaces` | every one optional; a migrated leaf skill declares `skills` and nothing else |
 | `surfaces.engine` | a directory inside the plugin holding a `plugin.yaml`: a plugin of the ENGINE's, which install.sh copies to the agent's `policy/plugins/<name>/` |
-| `surfaces.core` | a directory inside the plugin holding a `plugin.py` (and optionally an `instructions.md`): a plugin of OUR engine, `poc/core`, which imports it and calls `register(engine)`. A Hermes agent never reads it |
+| `surfaces.core` | a directory inside the plugin holding a `plugin.py` (and optionally an `instructions.md`): a plugin of OUR engine, `engine`, which imports it and calls `register(engine)`. A Hermes agent never reads it |
 | `system` | `true` = the FOLDER ships to every agent, so anyone may depend on it |
 
 `requires` sub-lists and `surfaces` entries may be left out; unknown keys are a
@@ -60,7 +60,7 @@ string or a list of strings) is allowed and ignored.
 | `artifact` | yes | data understood by looking at it |
 | `flow` | yes | work left running on its own; carries the `promises` engine surface |
 | `capability` | yes | the only way in for what the agent does not have |
-| `memory` | no | what the agent remembers about the client's business — `core` only, so it exists on `poc/core` and nowhere else |
+| `memory` | no | what the agent remembers about the client's business — `core` only, so it exists on `engine` and nowhere else |
 | `transcribe` | no | audio and video to text — the plugin behind the `transcription` base capability |
 | `invoices-to-data` | no | an invoice becomes one row of data (accounting) |
 | `quotes` | no | a request becomes a priced quote in the client's template (sales) |
@@ -93,7 +93,7 @@ and the folder travels with the registry copy like every other plugin's without
 anything on that agent opening it. It is also `system: false` with NO capability
 row installing it, which anywhere else on this page is the drive-inbox mistake —
 a plugin nobody can buy is a plugin that does not exist. Here it is the honest
-state: what decides that this plugin runs is `CORE_PLUGINS` in `poc/core`, not
+state: what decides that this plugin runs is `CORE_PLUGINS` in `engine`, not
 `purchased.json`, and a row would be selling a Hermes client something they
 already have. **The rule is still "a plugin needs a way in"; what changed is
 that `core` is a second way in, and it is not the sales layer.**
@@ -292,7 +292,7 @@ destination did not move when the source did (`plugins/flow/engine/promises/`,
 phase 3b).
 
 **The core surface travels and nothing on a Hermes agent opens it.** `core/`
-is a plugin of `poc/core`, the engine the POC runs on, and that engine mounts
+is a plugin of `engine/`, our engine, and that engine mounts
 this whole directory read-only at `/opt/kit/plugins` and imports
 `<id>/core/plugin.py` for each id in its `CORE_PLUGINS`. `install.sh` copies it
 into `<agent>/plugins/<id>/core/` because the folder ships whole; no Hermes

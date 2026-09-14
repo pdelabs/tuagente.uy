@@ -1,6 +1,6 @@
 """One user turn on one session: replay the history, stream the run, persist.
 
-The stream this yields is the POC's OWN event vocabulary; `server/sse.py`
+The stream this yields is the engine's OWN event vocabulary; `server/sse.py`
 translates it into the portal's two dialects. Nothing above this module knows
 what Pydantic AI calls its events.
 """
@@ -247,7 +247,7 @@ async def run_resumed(
 
     No client message (she already spoke in Approvals) and no stream attached:
     the answer lands in the session and she reads it on the next load. Pushing
-    it over SSE is out of scope for the POC, on purpose.
+    it over SSE is out of scope for the engine, on purpose.
     """
     result = await get_agent().run(
         message_history=history,

@@ -18,7 +18,7 @@
     "reads its plugins from HERMES_HOME/plugins and knows nothing about this",
     "registry; what moved is where the kit keeps the source.",
     "",
-    "THE CORE SURFACE IS THE SAME GUARD ON THE POC ENGINE (core/). It loads",
+    "THE CORE SURFACE IS THE SAME GUARD ON THE ENGINE (core/). It loads",
     "engine/promises/promises.py by path -- one copy, two engines -- and",
     "registers it as a before-persist hook. It brings no skill: create_flow.py",
     "writes into a Hermes agent's data/flows/ and that engine has no runner for",

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""G4 — compaction. Run it from anywhere: `python3 poc/core/tests/test_compaction.py`.
+"""G4 — compaction. Run it from anywhere: `python3 engine/tests/test_compaction.py`.
 
 Restarts the container with `CORE_COMPACT_AT_TOKENS=6000` (the compose
 passthrough), drives ONE session through 40 tool-heavy turns with a fact

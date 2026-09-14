@@ -1,7 +1,7 @@
 """The Approvals tab: the queue, the thread, and the client's two verbs.
 
 Approve and reject answer AFTER the resumed run finished. It blocks the
-request for as long as the model takes, and for the POC that is the right
+request for as long as the model takes, and for the engine that is the right
 trade: the portal reloads the queue the moment the call returns, and what it
 reads is the outcome — the tool ran, or the agent proposed again — instead of
 a row that is still what it was a second ago.

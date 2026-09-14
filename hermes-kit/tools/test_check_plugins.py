@@ -811,7 +811,7 @@ WRITTEN = ["interview-production"]
 CLIENT = sorted(PORTED + WRITTEN)
 # THE THIRD SHAPE: a plugin of OUR ENGINE and of nothing else. `memory` carries
 # `core/` and no skills surface, because what it installs is a capability of
-# `poc/core` — a Hermes agent has the engine's own memory and never opens the
+# `engine` — a Hermes agent has the engine's own memory and never opens the
 # folder. It is `system: false` and no capability row installs it, which for
 # any other client plugin would be the drive-inbox mistake; here it is the
 # honest state, because `CORE_PLUGINS` is what decides that it runs and
@@ -828,7 +828,7 @@ class TheKitsOwnRegistry(unittest.TestCase):
         self.assertEqual(sorted(plugins), sorted(SYSTEM + CLIENT + CORE_ONLY))
         for pid in SYSTEM:
             self.assertTrue(plugins[pid]["system"], pid)
-        # A PLUGIN OF poc/core CARRIES `core/` AND NOTHING ELSE. The day one of
+        # A PLUGIN OF engine CARRIES `core/` AND NOTHING ELSE. The day one of
         # these grows a skills surface it stops being this shape: the skill
         # would be indexed on every Hermes agent that installs the folder, and
         # nothing on a Hermes agent can run it.
@@ -951,7 +951,7 @@ class TheKitsOwnRegistry(unittest.TestCase):
         self.assertTrue((surface / "__init__.py").is_file())
 
     def test_the_three_plugins_the_core_engine_runs_carry_their_surface(self):
-        """`poc/core` runs `approval,deliverable,flow`, and each brings its own
+        """`engine` runs `approval,deliverable,flow`, and each brings its own
         mechanics: the gate and its page, the deliverable folders' prose, the
         promises guard. Whatever that engine does about any of the three is in
         the plugin — which is the point: a rule about a mechanism reaches the

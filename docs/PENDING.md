@@ -5,12 +5,12 @@ What's left open, and who unblocks it. Close it here once it's resolved.
 ## The engine: Pydantic AI, decided (2026-09-14)
 
 Luis decided on 2026-09-14: **the product moves to the Pydantic AI engine
-(`poc/core/`) and Hermes gets killed slowly.** Nothing is maintained for
+(`engine/`) and Hermes gets killed slowly.** Nothing is maintained for
 both engines any more. Rules from that day on:
 
-- New work targets `poc/core/` only. No feature, plugin surface, check or doc
+- New work targets `engine/` only. No feature, plugin surface, check or doc
   gets a Hermes variant.
-- **No conditionals to keep both engines working.** The seams the POC added
+- **No conditionals to keep both engines working.** The seams added
   to coexist with Hermes are the first things to remove, not to extend:
   `SKILLS = []` overrides in `approval/core/plugin.py` and
   `flow/core/plugin.py` (they exist to hide Hermes-only `SKILL.md`s),
@@ -23,7 +23,7 @@ both engines any more. Rules from that day on:
   `deploy-remote.sh`, `notes/` on engine knobs, `engine/` and `mcp` plugin
   surfaces) is deleted, not archived.
 
-The record of why: `docs/poc-core-plan.md`, `docs/poc-core-verdict.md`.
+The record of why: `docs/engine-plan.md`, `docs/engine-verdict.md`.
 
 ## Migration to English (2026-08-23)
 

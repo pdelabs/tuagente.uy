@@ -41,7 +41,7 @@ def instructions(ctx: RunContext[Deps]) -> str:
     """SOUL + the enabled plugins' prose + the skills index + today's date.
 
     Rebuilt every run, and the SOUL read from disk each time on purpose: it is
-    a read-only mount and editing it should not need a restart while the POC is
+    a read-only mount and editing it should not need a restart while the engine is
     being poked at.
 
     THE ORDER IS THE POINT. The SOUL says who the agent is and nothing else;

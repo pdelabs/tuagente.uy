@@ -222,7 +222,7 @@ done
 # is installed (notes/plugin-system-plan.md, phase 3b).
 #
 # THE FOLDER GOES WHOLE, INCLUDING THE SURFACES THIS AGENT DOES NOT RUN. A
-# plugin's `core/` is a plugin of the POC engine (`poc/core`), never of Hermes:
+# plugin's `core/` is a plugin of the engine (`engine`), never of Hermes:
 # it lands in the registry copy like every other file and nothing here imports
 # it, the same way the `engine/` copy inside the registry folder is not the one
 # the compose mounts. Nothing to exclude and nothing to special-case.

@@ -1,4 +1,4 @@
-"""Environment to settings. Everything the POC reads from outside lives here."""
+"""Environment to settings. Everything the engine reads from outside lives here."""
 
 import os
 from pathlib import Path

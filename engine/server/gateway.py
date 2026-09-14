@@ -58,5 +58,5 @@ async def rename(session_id: str, request: Request):
 
 @router.get("/api/jobs")
 def jobs():
-    """No cron in the POC. The portal hits it anyway and so does portal-check."""
+    """No cron in the engine. The portal hits it anyway and so does portal-check."""
     return {"jobs": []}

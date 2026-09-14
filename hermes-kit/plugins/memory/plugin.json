@@ -12,7 +12,7 @@
     "IT IS `system: false` AND NO CAPABILITY ROW INSTALLS IT, which anywhere",
     "else in this registry would be the drive-inbox mistake -- a plugin nobody",
     "can buy is a plugin that does not exist. Here it is the honest state:",
-    "what decides that this plugin runs is `CORE_PLUGINS` in poc/core, not",
+    "what decides that this plugin runs is `CORE_PLUGINS` in engine, not",
     "`purchased.json`, and a row would promise a Hermes client something they",
     "already have.",
     "",

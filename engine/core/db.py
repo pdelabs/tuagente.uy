@@ -196,7 +196,7 @@ def append_event(
     """Append-only: every state change writes one and Activity is its projection.
 
     `kind` reaches the client's screen raw when the portal has no label for it
-    (`app/app/activity/page.tsx`), so the ones the POC invents are written the
+    (`app/app/activity/page.tsx`), so the ones the engine invents are written the
     way the client should read them.
     """
     write(
