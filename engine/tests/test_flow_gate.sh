@@ -13,7 +13,8 @@
 # row:
 #
 #   a. the run stops: the row reads `paused` and `/api/jobs.last_status` too
-#   b. the client approves and the row closes `ok`, with the file in outbox
+#   b. the request says which flow asked for it
+#   c. the client approves and the row closes `ok`, with the file in outbox
 #
 # The only Spanish is what the agent and the client read.
 set -uo pipefail
@@ -150,10 +151,20 @@ SID="$(session_of)"
 assert "$(sql "SELECT kind FROM events WHERE session_id = ? AND kind = ?" "$SID" "flow.finished" \
   | jq 'length')" "0" "nothing says this run finished"
 
-step "(c) the client approves and the run finishes"
+step "(c) the request says which flow asked"
 new="$(comm -13 <(printf '%s\n' "$before") <(pending_ids))"
+assert "$(grep -c . <<<"$new")" "1" "exactly one new request appeared"
 ID="$(head -1 <<<"$new")"
 [ -n "$ID" ] || { bad "no approval id: nothing else can be checked"; exit 1; }
+api "$ADAPTER/portal/approvals" | jq -r --arg i "$ID" '.approvals[] | select(.id == $i) | .title' \
+  | grep -q "^Flujo «${NAME}»: " \
+  && ok "the title names the flow" \
+  || bad "the title does not name the flow: $(api "$ADAPTER/portal/approvals" | jq -r --arg i "$ID" '.approvals[] | select(.id == $i) | .title')"
+api "$ADAPTER/portal/tickets/$ID" | jq -r '.ticket.body' | head -1 | grep -q "Lo pidió el flujo «${NAME}»." \
+  && ok "and the body's first line says it too" \
+  || bad "the body does not say which flow asked: $(api "$ADAPTER/portal/tickets/$ID" | jq -r '.ticket.body' | head -1)"
+
+step "(d) the client approves and the run finishes"
 assert "$(post "$ADAPTER/portal/approvals/$ID/approve" '{}' | jq -r '.ok')" "true" \
   "the approval answered ok"
 assert "$(status)" "ok" "the row closed ok"
@@ -170,7 +181,7 @@ written="$(find "$ROOT/workspace/outbox" -type f -newer "$mark" 2>/dev/null)"
   || bad "nothing new landed in outbox"
 rm -f "$written" "$mark"
 
-step "(d) result"
+step "(e) result"
 printf 'runs: %s\n' "$(runs | jq -c '[.[] | {status, manual}]')"
 [ "$FAILURES" -eq 0 ] && printf 'GATE PASS - 0 failures\n' || printf 'GATE FAIL - %s failures\n' "$FAILURES"
 exit $((FAILURES > 0))

@@ -152,6 +152,12 @@ def touch_session(session_id: str, preview: str | None = None) -> None:
     )
 
 
+def session_kind(session_id: str) -> str | None:
+    """`chat` or `flow`: who opened the conversation, the client or the clock."""
+    row = one("SELECT kind FROM sessions WHERE id = ?", (session_id,))
+    return row["kind"] if row else None
+
+
 def rename_session(session_id: str, title: str) -> None:
     write("UPDATE sessions SET title = ? WHERE id = ?", (title, session_id))
 
@@ -243,6 +249,11 @@ def pause_flow_run(slug: str, scheduled_at: float) -> None:
         "UPDATE flow_runs SET status = 'paused' WHERE slug = ? AND scheduled_at = ?",
         (slug, scheduled_at),
     )
+
+
+def flow_run_of_session(session_id: str) -> sqlite3.Row | None:
+    """The run this session IS, when the clock is what opened it."""
+    return one("SELECT * FROM flow_runs WHERE session_id = ?", (session_id,))
 
 
 def paused_flow_run(session_id: str) -> sqlite3.Row | None:

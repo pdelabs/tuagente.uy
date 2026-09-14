@@ -70,6 +70,19 @@ def approval_body(tool_name: str, args: dict) -> str:
     )
 
 
+# WHO ASKED. A request that arrives while nobody is typing has no
+# conversation around it to explain itself: the client opens Aprobaciones in
+# the morning and finds a mail to send with no idea what asked for it. The
+# flow's name is the answer, and it is the code's to write — asking the model
+# to mention it in its `note` is the convention that always ends up forgotten.
+def flow_title(name: str, title: str) -> str:
+    return flat(f"Flujo «{name}»: {title}")[:120]
+
+
+def flow_body(name: str, body: str) -> str:
+    return f"Lo pidió el flujo «{name}».\n\n{body}"
+
+
 def pause_message(title: str) -> str:
     """What the chat says when a run stops. Written by the code, not the model:
     the client has to read the same sentence every time this happens."""

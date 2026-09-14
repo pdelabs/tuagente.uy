@@ -91,6 +91,24 @@ def row_of(approval_id: str):
     return db.one("SELECT * FROM approvals WHERE id = ?", (approval_id,))
 
 
+def asked_by(session_id: str) -> str | None:
+    """The NAME of the flow whose run stopped here, or `None` for a chat turn.
+
+    Two questions, because either one alone can lie: the session's kind says
+    the clock opened it, and the run row says which flow it is. Reading the
+    FLOW.md is what turns a slug into the words the client gave it.
+    """
+    if db.session_kind(session_id) != "flow":
+        return None
+    row = db.flow_run_of_session(session_id)
+    if row is None:
+        return None
+    from core import flows
+
+    flow = flows.read(row["slug"])
+    return flow.name if flow else row["slug"]
+
+
 def record_pending(
     session_id: str,
     requests: DeferredToolRequests,
@@ -116,6 +134,10 @@ def record_pending(
     args = call.args_as_dict()
     title = render.approval_title(call.tool_name, args)
     body = render.approval_body(call.tool_name, args)
+    flow = asked_by(session_id)
+    if flow:
+        title = render.flow_title(flow, title)
+        body = render.flow_body(flow, body)
     open_row = (
         db.one("SELECT id FROM approvals WHERE id = ?", (continues,)) if continues else None
     )
