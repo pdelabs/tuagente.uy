@@ -32,6 +32,7 @@ in their portal and that we'll take them there as soon as they enter).
 | Board | `/app/pipeline` |
 | Approvals | `/app/approvals` |
 | Artifacts | `/app/artifacts` |
+| Posts | `/app/posts` |
 | Connections | `/app/connections` |
 | Activity | `/app/activity` |
 | Files | `/app/files` |
@@ -80,6 +81,7 @@ one.
 | A board task | `/app/pipeline?task=<ticket id>` | `/app/pipeline?task=t_b1fb02ad` | opens |
 | An approval request | `/app/approvals?request=<ticket id>` | `/app/approvals?request=t_36dbdd23` | opens · stale id |
 | An artifact | `/app/artifacts?artifact=<id>` | `/app/artifacts?artifact=art_1786584384_sales-by-branch` | opens |
+| A post | `/app/posts?post=<post id>` | `/app/posts?post=2026-09-15-agente-que-contesta` | opens · stale id (9/14, against a mock adapter) |
 | A folder | `/app/files?folder=<path>` | `/app/files?folder=interno` | opens |
 | A file | `/app/files?file=<path>` | `/app/files?file=workspace/entregables/2026-08-12-instagram-post-trash-bags-20-off.md` | opens (with the `workspace/` prefix) |
 | A flow | `/app/flows/<slug>` | `/app/flows/revision-precios-proveedores` | opens · stale id |
@@ -175,6 +177,18 @@ any real id, even when the one actually missing was a different one).
 A `/app/flows/<slug>` that doesn't exist does the same thing: a plain-spoken
 notice and the list of flows the agent actually has. It used to answer
 "I couldn't reach your agent", which on top of being ugly was a lie.
+
+`?post=` **takes the whole screen**, it doesn't open a modal like the other
+details. A post is an image at full width plus the text that goes with it,
+and both come out squeezed inside a modal — the client opens it precisely to
+look at the image before deciding whether it goes up. The consequence for a
+link: there's no background list behind it, and «Cerrar» goes back to the
+tab. An id that no longer exists falls back to the same rule as everyone
+else: a notice up top and the full list below.
+
+The id is the post's folder in `posteos/`, `<YYYY-MM-DD>-<slug>`
+(`2026-09-15-agente-que-contesta`). It's the one id in this table that reads
+like a sentence, which is why the tab shows the date and not the id.
 
 `?request=` **also brings the card into view** (same helper), since the
 afternoon of 8/12. Before that it didn't: measured in the lab, `scrollY` at

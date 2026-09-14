@@ -37,6 +37,8 @@ export const PARAM = {
   request: "request",
   /** /app/artifacts?artifact=<artifact id> */
   artifact: "artifact",
+  /** /app/posts?post=<post id, `<YYYY-MM-DD>-<slug>`> */
+  post: "post",
   /** /app/files?folder=<path> */
   folder: "folder",
   /** /app/files?file=<path> */
