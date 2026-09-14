@@ -809,14 +809,16 @@ PORTED = ["brand-kit", "drive-inbox", "invoices-to-data", "post-image",
 # these lists are what say which shape a given plugin is claiming.
 WRITTEN = ["interview-production"]
 CLIENT = sorted(PORTED + WRITTEN)
-# THE THIRD SHAPE: a plugin of OUR ENGINE and of nothing else. `memory` carries
+# THE THIRD SHAPE: a plugin of OUR ENGINE and of nothing else. Each one carries
 # `core/` and no skills surface, because what it installs is a capability of
-# `engine` — a Hermes agent has the engine's own memory and never opens the
-# folder. It is `system: false` and no capability row installs it, which for
-# any other client plugin would be the drive-inbox mistake; here it is the
-# honest state, because `CORE_PLUGINS` is what decides that it runs and
-# `purchased.json` has nothing to say about it.
-CORE_ONLY = ["memory"]
+# `engine` — a Hermes agent has the engine's own memory, has nowhere to mount an
+# `ImageGeneration`, and never opens either folder. They are `system: false` and
+# no capability row installs them, which for any other client plugin would be
+# the drive-inbox mistake; here it is the honest state, because `CORE_PLUGINS`
+# is what decides that they run and `purchased.json` has nothing to say about
+# it. `image` gets its row with the social capability that sells the pictures
+# (docs/own-agent-plan.md, wave 3).
+CORE_ONLY = ["image", "memory"]
 
 
 class TheKitsOwnRegistry(unittest.TestCase):
