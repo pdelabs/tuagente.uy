@@ -164,12 +164,23 @@ def ensure_session(session_id: str | None = None) -> str:
     return session_id
 
 
-async def run_turn(session_id: str, message: str) -> AsyncIterator[Event]:
+async def run_turn(
+    session_id: str, message: str, display: str | None = None
+) -> AsyncIterator[Event]:
+    """One turn. `message` is what the MODEL reads; `display` what the CLIENT
+    reads in the conversation, when the two are not the same thing.
+
+    A chat turn passes nothing: the client typed the message and that is what
+    she sees. A flow's run is the other case — the model's prompt carries the
+    technical notes, the tool names and the folders, and Chat is not where any
+    of that belongs (`core/scheduler.py`).
+    """
     history = db.load_history(session_id)
     replay = ModelMessagesTypeAdapter.validate_json(history) if history else None
 
-    db.add_message(session_id, "user", message)
-    db.touch_session(session_id, preview=message.strip()[:200])
+    shown = display or message
+    db.add_message(session_id, "user", shown)
+    db.touch_session(session_id, preview=shown.strip()[:200])
 
     try:
         async for event in stream_run(session_id, message, replay):

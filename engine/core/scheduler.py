@@ -47,7 +47,8 @@ def title(flow: Flow, scheduled_at: datetime) -> str:
 
 
 def prompt(flow: Flow) -> str:
-    """The one user turn a run is. Spanish: the agent reads it.
+    """The one user turn a run is, AS THE MODEL READS IT. Spanish: the agent
+    reads it.
 
     Both halves of the body travel. The client reads the steps in the portal
     and the technical notes are trimmed there, but the run needs them: that is
@@ -61,6 +62,20 @@ def prompt(flow: Flow) -> str:
     if flow.notes:
         parts.append(f"{flows.NOTES_HEADING}\n\n{flow.notes}")
     return "\n\n".join(parts)
+
+
+def display(flow: Flow, scheduled_at: datetime) -> str:
+    """The same turn AS THE CLIENT READS IT, in Chat.
+
+    The prompt above is not something a client should ever see: it names the
+    tools, the folders and the edge cases, under a `## Notas técnicas` heading
+    the portal strips everywhere else. What is shown instead is what started
+    the run and the steps she already reads on the flow's page.
+    """
+    return (
+        f"Corrida del flujo «{flow.name}» ({scheduled_at.strftime('%d/%m %H:%M')})."
+        f"\n\n{flow.how}"
+    )
 
 
 def base_time(flow: Flow) -> float:
@@ -108,7 +123,9 @@ async def run(flow: Flow, scheduled_at: datetime, manual: bool = False) -> None:
     )
     paused = False
     try:
-        async for event in session.run_turn(session_id, prompt(flow)):
+        async for event in session.run_turn(
+            session_id, prompt(flow), display(flow, scheduled_at)
+        ):
             paused = paused or isinstance(event, session.Paused)
     except Exception as exc:
         # `run_turn` already wrote the client her one line and the `error`

@@ -164,7 +164,17 @@ api "$ADAPTER/portal/tickets/$ID" | jq -r '.ticket.body' | head -1 | grep -q "Lo
   && ok "and the body's first line says it too" \
   || bad "the body does not say which flow asked: $(api "$ADAPTER/portal/tickets/$ID" | jq -r '.ticket.body' | head -1)"
 
-step "(d) the client approves and the run finishes"
+step "(d) the chat shows the client's line and not the technical notes"
+first="$(api "$ENDPOINT/api/sessions/$SID/messages" | jq -r '.data[0] | "\(.role)|\(.content)"')"
+grep -q "^user|Corrida del flujo «${NAME}» " <<<"$first" \
+  && ok "the run's user message is the short client line" \
+  || bad "the user message is something else: $(head -c 120 <<<"$first")"
+grep -q 'Notas técnicas' <<<"$first" && bad "the technical notes reached the chat" \
+  || ok "the technical notes are not in the chat"
+grep -q 'send_email' <<<"$first" && bad "the tool name reached the chat" \
+  || ok "no tool name in the chat"
+
+step "(e) the client approves and the run finishes"
 assert "$(post "$ADAPTER/portal/approvals/$ID/approve" '{}' | jq -r '.ok')" "true" \
   "the approval answered ok"
 assert "$(status)" "ok" "the row closed ok"
@@ -181,7 +191,7 @@ written="$(find "$ROOT/workspace/outbox" -type f -newer "$mark" 2>/dev/null)"
   || bad "nothing new landed in outbox"
 rm -f "$written" "$mark"
 
-step "(e) result"
+step "(f) result"
 printf 'runs: %s\n' "$(runs | jq -c '[.[] | {status, manual}]')"
 [ "$FAILURES" -eq 0 ] && printf 'GATE PASS - 0 failures\n' || printf 'GATE FAIL - %s failures\n' "$FAILURES"
 exit $((FAILURES > 0))
