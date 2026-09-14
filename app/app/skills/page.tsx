@@ -96,7 +96,7 @@ const ENGLISH_WORDS =
  *  AGENT when to use it (in English, in the imperative, naming libraries) and
  *  `client_summary` tells THE CLIENT what it gets them. The adapter builds the
  *  `summary` from the second one and FALLS BACK TO THE FIRST when it's
- *  missing (`hermes-kit/adapter/portal_adapter.py:439`). That's how things
+ *  missing (`kit/adapter/portal_adapter.py:439`). That's how things
  *  like "Create, read, edit Word .docx documents and templates." or "Extract
  *  text from PDFs/scans (pymupdf, marker-pdf)" used to reach this screen --
  *  measured against the lab agent, 16 skills -- the showcase of what the

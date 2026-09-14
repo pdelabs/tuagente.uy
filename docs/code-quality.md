@@ -7,7 +7,7 @@ prevents a demonstrated failure mode.
 ## Language
 
 Code and internal documentation are English: identifiers, comments, commit
-messages, `docs/**`, `hermes-kit/notes/**`, `CLAUDE.md`, READMEs. The one
+messages, `docs/**`, `kit/notes/**`, `CLAUDE.md`, READMEs. The one
 exception is copy the client actually reads or receives — portal UI strings,
 messages the agent sends the client, SOUL and skill instruction prose,
 catalog `label`/`purpose` values — which stays in plain Rioplatense Spanish,

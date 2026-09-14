@@ -34,7 +34,7 @@ What lives where:
 | `state/promises/` | the `data/` dir the kit's promises module expects — two symlinks, `flows` → `workspace/flows` and `cron` → `state/cron` |
 | `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did, `memoria/` what it remembers about the client |
 | `agent/SOUL.md` | the client section + the `core:base` block, mounted read-only |
-| `/opt/kit/plugins` | `hermes-kit/plugins`, read-only. `CORE_PLUGINS` picks which load, and each one's `core/` surface is what it adds to this engine |
+| `/opt/kit/plugins` | `kit/plugins`, read-only. `CORE_PLUGINS` picks which load, and each one's `core/` surface is what it adds to this engine |
 
 ## The magic link
 
@@ -73,14 +73,14 @@ engine/                          the engine, and nothing about any mechanism
   core/tools/skills.py             the SKILL.md index + skill_view
   core/db.py, server/*.py          storage, the two bases, the SSE dialects
 
-hermes-kit/plugins/approval/core/  the gate: sensitive.py (the gated toolset),
+kit/plugins/approval/core/  the gate: sensitive.py (the gated toolset),
                                    store.py (the row), render.py (what she
                                    reads), routes.py (/portal/approvals*),
                                    instructions.md, and SKILLS = []
-hermes-kit/plugins/deliverable/core/  nothing to register: instructions.md
-hermes-kit/plugins/flow/core/      the promises guard, reading promises.py from
+kit/plugins/deliverable/core/  nothing to register: instructions.md
+kit/plugins/flow/core/      the promises guard, reading promises.py from
                                    the plugin's own engine/promises/
-hermes-kit/plugins/memory/core/    the notebook: plugin.py (the harness's
+kit/plugins/memory/core/    the notebook: plugin.py (the harness's
                                    Memory capability and the rule it carries as
                                    `guidance`), extraction.py (the after_run
                                    pass that writes what the client said in
@@ -129,7 +129,7 @@ file changes and nothing else does.
 
 ```bash
 KEY=$(grep '^API_SERVER_KEY=' engine/secrets.env | cut -d= -f2-)
-python3 hermes-kit/tools/portal-check.py --key "$KEY" \
+python3 kit/tools/portal-check.py --key "$KEY" \
     --endpoint http://127.0.0.1:8642 --adapter http://127.0.0.1:8643 \
     --origin http://localhost:8090
 ```
@@ -191,7 +191,7 @@ leave standing is here.
 ## Approvals
 
 Approvals are a PLUGIN of this engine, not part of it: everything below is in
-`hermes-kit/plugins/approval/core/`, loaded because `approval` is in
+`kit/plugins/approval/core/`, loaded because `approval` is in
 `CORE_PLUGINS`. Take it out of that list and the engine has no gate, no
 Approvals tab and not a word about permission in its prompt.
 
@@ -252,7 +252,7 @@ the Files tab shows it.
 
 ## Memory
 
-Memory is a PLUGIN too — `hermes-kit/plugins/memory/`, loaded because `memory`
+Memory is a PLUGIN too — `kit/plugins/memory/`, loaded because `memory`
 is in `CORE_PLUGINS` — and it is the only one whose mechanism comes from a
 library: `pydantic-ai-harness==0.31.0`, whose `Memory` capability gives the
 agent four tools (`write_memory`, `read_memory`, `search_memory`,
@@ -382,7 +382,7 @@ the claim verbatim, and `GET /api/sessions/{id}/messages` returns the
 corrected text). The last one is the gate: what the portal reads back is what
 the hook returned, not what the model said.
 
-The guard itself is `hermes-kit/plugins/flow/core/plugin.py`, which loads the
+The guard itself is `kit/plugins/flow/core/plugin.py`, which loads the
 kit's `promises.py` from the plugin's own `engine/promises/` by path: one copy
 of the module, two engines reading it.
 
@@ -398,7 +398,7 @@ line ("para dejarlo andando").
 python3 engine/tests/cost.py                # ~2 min, ~US$0.002
 ```
 
-Priced the way `hermes-kit/notes/cost-and-engine-findings.md` §1 prices one:
+Priced the way `kit/notes/cost-and-engine-findings.md` §1 prices one:
 the turn goes through `POST /portal/chat/stream` with the whole history, and
 `GET /api/v1/key` is polled until the delta stops moving for 20 s. **Nothing
 else can be talking to this agent while it runs** — the first attempt read

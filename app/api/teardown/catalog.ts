@@ -2,9 +2,9 @@
  * Compact grounding snapshot for the workflow-teardown model.
  *
  * WHY THIS FILE EXISTS AS A COPY. The source of truth is
- * `hermes-kit/capabilities/catalog.json` and `hermes-kit/connections/catalog.json`,
+ * `kit/capabilities/catalog.json` and `kit/connections/catalog.json`,
  * but the kit is kept out of the Vercel deploy (`.vercelignore`) and out of the
- * TypeScript build (`tsconfig.json` excludes `hermes-kit`), so the serverless
+ * TypeScript build (`tsconfig.json` excludes `kit`), so the serverless
  * function can neither read those files at runtime nor import them at build time.
  * This is a hand-trimmed snapshot of the CLIENT-FACING fields only (label,
  * group, and a one-line `does` derived from `purpose`) plus the closed
@@ -35,7 +35,7 @@ export const GROUP_LABELS: Record<string, string> = {
 
 /**
  * The closed capability catalog (menu + base), snapshot of
- * hermes-kit/capabilities/catalog.json. `does` is a trimmed one-liner.
+ * kit/capabilities/catalog.json. `does` is a trimmed one-liner.
  */
 export const CAPABILITIES: Capability[] = [
   { label: "Cálculos, planillas y documentos", group: "documents-and-data", does: "hace las cuentas y arma la planilla, el Word o el PDF con tus datos" },
@@ -69,7 +69,7 @@ export const CAPABILITIES: Capability[] = [
 
 /**
  * The closed connections catalog, snapshot of
- * hermes-kit/connections/catalog.json. These are the integrations a workflow
+ * kit/connections/catalog.json. These are the integrations a workflow
  * can rely on today; anything else is a custom connection we write.
  */
 export const CONNECTIONS: Connection[] = [

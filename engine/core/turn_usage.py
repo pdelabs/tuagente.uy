@@ -1,6 +1,6 @@
 """One `turn_usage` event per run: what the turn cost, from the engine's side.
 
-`hermes-kit/notes/cost-and-engine-findings.md` §2 is the reason this exists.
+`kit/notes/cost-and-engine-findings.md` §2 is the reason this exists.
 There, the engine's own `estimated_cost_usd` matched OpenRouter to the last
 decimal on every session, which is what made the polling harness unnecessary.
 This is the same number for this engine: Pydantic AI prices each request with

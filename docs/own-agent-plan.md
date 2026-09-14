@@ -44,13 +44,13 @@ reads. The mechanism is rebuilt in the engine, smaller.
 
 ### Images are a plugin on Pydantic AI's capability
 
-- **`hermes-kit/plugins/image/`**, core surface only. It registers Pydantic AI's `ImageGeneration(native=False, local=<ours>, dimensions=…)` capability, which gives the model one `generate_image` tool and returns the picture to the model as an image, so it looks at what it made.
+- **`kit/plugins/image/`**, core surface only. It registers Pydantic AI's `ImageGeneration(native=False, local=<ours>, dimensions=…)` capability, which gives the model one `generate_image` tool and returns the picture to the model as an image, so it looks at what it made.
 - **The generator is ours** because the capability's direct generators dispatch only on `openai`, `google` and `xai`. Ours calls OpenRouter's chat completions with `openai/gpt-5.4-image-2` (checked 2026-09-14: listed, image output, US$0.000015 per token) using the same key as everything else, decodes the returned image, writes it to `workspace/imagenes/<date>-<n>.png`, and returns the `BinaryImage`. One provider, one key.
 - Formats: `feed` (1080×1350), `square` (1080×1080), `story` (1080×1920), mapped to the model's supported sizes by the generator; the tool argument is the format name, not pixels.
 
 ### The social capability owns its files and its view
 
-- **`hermes-kit/plugins/social/`** replaces `social-content`, `post-image` and `brand-kit` for this engine. Those three are Hermes-era; their skills and scripts are read for what they learned (the checklist, the caption formula, the 5-hashtag cap, "deliver what is good even if a piece failed") and rewritten, not mounted. `brand-kit` is not needed: the brand is data the client's workspace carries.
+- **`kit/plugins/social/`** replaces `social-content`, `post-image` and `brand-kit` for this engine. Those three are Hermes-era; their skills and scripts are read for what they learned (the checklist, the caption formula, the 5-hashtag cap, "deliver what is good even if a piece failed") and rewritten, not mounted. `brand-kit` is not needed: the brand is data the client's workspace carries.
 - **Brand data is a file**: `marca/brand.md` in the workspace, written at onboarding. For our own agent it is `social/brand.md` copied over. The skill reads it; the code does not parse it.
 - **The format is code.** `save_post(slug, caption, alt, hashtags ≤ 5, format, images)` writes `posteos/<YYYY-MM-DD>-<slug>/post.json`, `caption.md` and `01.png…`, and refuses a second post for the same day unless `replace=True`. Prose never tells the agent where files go.
 - **The view is a portal module**, `app/app/posts/`, shown when the manifest flips `posts`. It reads `GET /portal/posts` (newest first: `id, date, format, caption, alt, hashtags, images: [url]`), `GET /portal/posts/{id}` and `GET /portal/posts/{id}/{file}` for the bytes, all served by the plugin's router from its own folder. Cards with the image, the caption with a copy button, alt text, and a download per image. Portal conventions as in `CLAUDE.md`; a route param documented in `docs/portal-routes.md`.
@@ -73,8 +73,8 @@ engine/server/flows.py          /portal/flows*, /api/jobs*
 engine/tests/test_flows.sh      G1
 engine/tests/test_image.py      G4
 
-hermes-kit/plugins/image/       plugin.json, core/plugin.py, core/generate.py
-hermes-kit/plugins/social/      plugin.json, core/plugin.py, core/posts.py (save_post + routes),
+kit/plugins/image/       plugin.json, core/plugin.py, core/generate.py
+kit/plugins/social/      plugin.json, core/plugin.py, core/posts.py (save_post + routes),
                                 core/instructions.md, skills/post/SKILL.md (voice, checklist, formula)
 app/app/posts/                  the module: page.tsx, api.ts, an intro in lib/intros/
 ```

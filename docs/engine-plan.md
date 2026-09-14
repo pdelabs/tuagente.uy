@@ -16,7 +16,7 @@ whether those four close by construction and what the portal looks like on
 top.
 
 It lives in `engine/`, it is excluded from Vercel, and at the time nothing
-in `app/` or `hermes-kit/` changed because of it. The verdict goes in
+in `app/` or `kit/` changed because of it. The verdict goes in
 `docs/engine-verdict.md` at the end.
 
 ## What it must prove (the gates)
@@ -28,7 +28,7 @@ in `app/` or `hermes-kit/` changed because of it. The verdict goes in
 | G3 | **Kit plugins load as toolsets, SKILL.md unchanged.** The `deliverable` plugin's skill is indexed from its frontmatter, its script runs from the mounted kit path, the deliverable lands in `workspace/entregables/` and Files shows it. | Ask for a deliverable in chat; check the file and the Files tab. |
 | G4 | **Compaction.** With the threshold lowered by env, a tool-heavy session of 40 turns keeps the persisted history bounded and the agent still answers a question about turn 2. | `engine/tests/test_compaction.py` (uses the real model, cheap). |
 | G5 | **The promises check rewrites the PERSISTED message.** A response claiming a scheduled flow with no flow on disk goes out with the correction appended, and `GET /api/sessions/{id}/messages` returns the corrected text. | `engine/tests/test_promises.py` (unit, no model) + one live turn. |
-| G6 | **Cost per turn on the baseline model.** One conversational and one tool-heavy turn priced off the run's usage and checked against OpenRouter's `/api/v1/key` delta, compared with `hermes-kit/notes/cost-and-engine-findings.md` §3 (US$0.0036 conversational, US$0.0247 with tools, on `openai/gpt-5.6-luna`). | `engine/tests/cost.py` prints the table. |
+| G6 | **Cost per turn on the baseline model.** One conversational and one tool-heavy turn priced off the run's usage and checked against OpenRouter's `/api/v1/key` delta, compared with `kit/notes/cost-and-engine-findings.md` §3 (US$0.0036 conversational, US$0.0247 with tools, on `openai/gpt-5.6-luna`). | `engine/tests/cost.py` prints the table. |
 
 ## Decisions (made, not to be re-derived by the implementers)
 
@@ -46,14 +46,14 @@ in `app/` or `hermes-kit/` changed because of it. The verdict goes in
 - **The approval plugin's SKILL.md does not load.** Its prose is about blocking kanban tickets; the engine replaces that mechanism with tool gating. Said here so nobody reports it as a gap.
 - **SOUL**: `engine/agent/SOUL.md` = the client section of the local demo agent's SOUL (its first ~66 lines, "Sos Agente Local…" through "Horarios y contexto local"), followed by a short `core:base` block written for this engine (Spanish, rioplatense): sensitive actions go through the tool and the client's yes, deliverables go through the skill, never claim a flow exists. Identity from a copy of the demo agent's `portal_identity.json` (name Tuca, company Ferretería Demo).
 - **Compaction**: a `ProcessHistory` capability. When `ctx.context_window_used` exceeds `CORE_COMPACT_AT` (default 0.6; the test sets 0.05) or, if the provider reports no window, when the estimated token count exceeds `CORE_COMPACT_AT_TOKENS`, summarize everything except the last two user turns with one model call into a single user-prompt part ("Resumen de la conversación hasta acá: …") and keep the tail. The PERSISTED history must be the compacted one; the implementer verifies this in the test (message count bounded across 40 turns). Add `ReinjectSystemPrompt()`.
-- **Promises**: copy `hermes-kit/plugins/flow/engine/promises/promises.py` into `engine/core/promises.py` unchanged (it imports nothing from the engine) and run its check on the final text before persisting, with the flows dir at `/workspace/flows` and the cron file at `/state/cron/jobs.json`. The correction is appended to the text that is persisted, streamed in `assistant.completed`, and logged as a `correction` event.
+- **Promises**: copy `kit/plugins/flow/engine/promises/promises.py` into `engine/core/promises.py` unchanged (it imports nothing from the engine) and run its check on the final text before persisting, with the flows dir at `/workspace/flows` and the cron file at `/state/cron/jobs.json`. The correction is appended to the text that is persisted, streamed in `assistant.completed`, and logged as a `correction` event.
 - **Usage**: `GET /portal/usage` asks OpenRouter `/api/v1/key` with the agent's key, no cache. Same shape as the adapter: `{available, today_usd, month_usd, total_usd, limit_usd, updated_at}`.
 - **Streaming**: use whichever of `agent.run_stream_events()` / `agent.iter()` in 2.43 yields text deltas and tool-call events with the least code. Map to the portal's two dialects exactly (contract below).
 - **No protective programming.** Bad input is a 400 with a message; anything else raises and shows in the log.
 
 ## The portal contract the engine serves
 
-Read from `app/app/lib/agent.ts`, `app/app/chat/page.tsx`, `app/app/chat/Sessions.tsx`, `app/app/approvals/page.tsx` and `hermes-kit/tools/portal-check.py` on 2026-09-12.
+Read from `app/app/lib/agent.ts`, `app/app/chat/page.tsx`, `app/app/chat/Sessions.tsx`, `app/app/approvals/page.tsx` and `kit/tools/portal-check.py` on 2026-09-12.
 
 ### Gateway-shaped (`endpoint` base)
 
@@ -90,7 +90,7 @@ Read from `app/app/lib/agent.ts`, `app/app/chat/page.tsx`, `app/app/chat/Session
 
 **Superseded on 2026-09-13.** The approval, deliverable and flow mechanisms
 moved out of the engine into the kit's plugins through a `core` surface
-(`hermes-kit/plugins/<id>/core/plugin.py` + `instructions.md`), and the SOUL
+(`kit/plugins/<id>/core/plugin.py` + `instructions.md`), and the SOUL
 lost every line about mechanisms. `engine/README.md` "Plugins" is current;
 the block below is what Wave 1 built and is kept for the record.
 

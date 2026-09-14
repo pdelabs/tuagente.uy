@@ -2,7 +2,7 @@
 
 > **SUPERSEDED — 30/8/2026, Luis' decision: East is a TEST client and restarts
 > from zero on the single-agent + plugins model. This cutover will never be
-> run, and every East instance has been deleted** (see `hermes-kit/fleet.md`,
+> run, and every East instance has been deleted** (see `kit/fleet.md`,
 > "East: what remains, and what does not"). **The file stays because the
 > migration-script fixes it documents are real**: `tools/migrate-agent-to-english.sh`
 > had three bugs that only a run against a real agent could find, they are
@@ -67,7 +67,7 @@ file is a tar of a file mid-write. Keep both; the old one costs 9 MB.
 
 ## The cutover
 
-Everything below is run from `hermes-kit/` on Luis' machine, except where it
+Everything below is run from `kit/` on Luis' machine, except where it
 says otherwise. Expected client-visible downtime: **none, because there is no
 client on it.** Wall-clock for the operator: about 25 minutes, of which ~4 are
 the two container restarts.

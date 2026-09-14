@@ -14,9 +14,9 @@ both engines any more. Rules from that day on:
   to coexist with Hermes are the first things to remove, not to extend:
   `SKILLS = []` overrides in `approval/core/plugin.py` and
   `flow/core/plugin.py` (they exist to hide Hermes-only `SKILL.md`s),
-  `CORE_ONLY` in `hermes-kit/tools/check-plugins.py`, and the `flow` plugin's
+  `CORE_ONLY` in `kit/tools/check-plugins.py`, and the `flow` plugin's
   "no scheduled flows on this engine" prose.
-- The Hermes agents in `hermes-kit/fleet.md` (the local demo, the VPS
+- The Hermes agents in `kit/fleet.md` (the local demo, the VPS
   `tuagente`) stay up until the new engine has what they use — Telegram,
   flows and cron — then they get rebuilt on it and the Hermes half of the kit
   (`adapter/`, `compose/`, `mcp-guard/`, `install.sh`, `new-agent.sh`,
@@ -34,7 +34,7 @@ its Posts tab. `docs/own-agent-plan.md`.
 - ~~**Migrate live agents (Mr.Wobble, East) to the English on-disk layout**~~
   — **CLOSED 30/8/2026: there is nobody left to migrate.** Mr.Wobble was
   decommissioned 24/8; East was retired and every instance deleted 30/8 (test
-  client, restarting from zero — `hermes-kit/fleet.md`, "East: what remains,
+  client, restarting from zero — `kit/fleet.md`, "East: what remains,
   and what does not", and `docs/east-requirements.md` for what it needed).
   Every agent alive was built by the current installer. The script and its
   runbook (`docs/east-cutover.md`) stay for the next old agent that turns up;
@@ -64,7 +64,7 @@ in `docs/east-requirements.md` §5; what is left is here.
 - **DECISION — where the model key lives, and who holds it.** The engine
   blocklists `OPENROUTER_API_KEY` out of every `terminal`/`execute_code`
   subprocess, so `transcribe.py` could not run inside ANY agent we ever shipped
-  (`hermes-kit/notes/auxiliary-models.md`). It runs now because
+  (`kit/notes/auxiliary-models.md`). It runs now because
   `TUAGENTE_MODELS_KEY` carries the same value under a name the engine does not
   strip — **which means any command the agent runs can read a spendable model
   key**, exactly what the blocklist exists to prevent. Bounded by the per-client
@@ -237,7 +237,7 @@ in `docs/east-requirements.md` §5; what is left is here.
 1. ~~The `kanban` toolset gate~~ **RESOLVED on 8/4**: needs
    `toolsets: [kanban]` **and** `platform_toolsets` with kanban per platform.
    The plugin was removed from the kit. Recipe and repro in
-   `hermes-kit/notes/native-kanban.md`. Still need to **file the issue
+   `kit/notes/native-kanban.md`. Still need to **file the issue
    upstream** with that repro (a toolset gated by `check_fn` and not declared
    configurable is unreachable via config, with no message saying so).
 2. ~~Migrate La Mano to the new recipe~~ **DONE on 8/5 (overnight)**: plugin
@@ -268,7 +268,7 @@ in `docs/east-requirements.md` §5; what is left is here.
 
 - **Create tuagente's Google OAuth app.** It's the step that unblocks
   Sheets/Drive/Calendar for every client, and also the stalled email task.
-  Full runbook in `hermes-kit/connections/google-workspace.md`.
+  Full runbook in `kit/connections/google-workspace.md`.
 - **Connections: the write path is missing.** Today the portal shows status
   and lets you *request* the connection (creates a ticket); we still do the
   actual connecting by hand. This is deliberate: asking a non-technical
@@ -309,7 +309,7 @@ Files stays under "Más" as a raw view of the workspace.
   four read ones, the payment link, the refund (with its idempotency and its
   pre-check) and a **genuinely signed** webhook. Until that happens, no
   client gets promised this. The code is in
-  `hermes-kit/connections/mercadopago/`, with three bugs already fixed that
+  `kit/connections/mercadopago/`, with three bugs already fixed that
   came out of reading the currently popular reference integration — the two
   most popular unofficial MCPs still have them.
 
@@ -380,7 +380,7 @@ Files stays under "Más" as a raw view of the workspace.
     escalation to a **permanent ban**. With WhatsApp the risk is acceptable
     because the number is disposable; a brand account isn't.
 
-  The full reasoning is in `hermes-kit/connections/instagram/README.md`.
+  The full reasoning is in `kit/connections/instagram/README.md`.
 
 ## Rejecting an approval — CLOSED on 8/12, and why the detail matters
 
@@ -1001,7 +1001,7 @@ out lets the tool through** (`agent/shell_hooks.py:509-515`), with a
 `logger.warning` nobody watches. In other words: **under load, the approval
 barrier stops being a barrier**, and the only trace is left in a log. It
 can't be closed from the config. Detail in
-`hermes-kit/notes/engine-knobs.md` §8.
+`kit/notes/engine-knobs.md` §8.
 
 It's the most serious hole still open today, because it nullifies from the
 outside all the day's work on the gate.

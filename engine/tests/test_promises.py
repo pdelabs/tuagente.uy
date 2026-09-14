@@ -4,7 +4,7 @@
 Three parts:
 
   a. UNIT, no model. The exact case the kit checks every agent against
-     (`hermes-kit/tools/agent-check.py`'s `LIE`): the phrase with which, on
+     (`kit/tools/agent-check.py`'s `LIE`): the phrase with which, on
      8/13/2026, an agent told a real-estate client "Queda definido: viernes a
      las 9:30" without having created a single flow. It goes through the
      BEFORE_PERSIST chain — which is where the `flow` plugin registers the
@@ -42,7 +42,7 @@ ADAPTER = "http://127.0.0.1:8643"
 ENDPOINT = "http://127.0.0.1:8642"
 MARKER = "Chequeo automático del portal"
 
-# Both verbatim from `hermes-kit/tools/agent-check.py`.
+# Both verbatim from `kit/tools/agent-check.py`.
 LIE = (
     "Queda definido: **viernes a las 9:30**, con dos bloques.\n"
     "Para dejarlo andando me falta de dónde leer los contratos."

@@ -683,7 +683,7 @@ function Portal() {
 /* ─────────────────────────────────────────── Integrations */
 
 // What's TODAY in the curated catalog that gets installed on every agent
-// (hermes-kit/connections/catalog.json). The previous list promised HubSpot,
+// (kit/connections/catalog.json). The previous list promised HubSpot,
 // Odoo, Mercado Libre, Notion, PostgreSQL and "+50 more" without the
 // connector existing: that gets found out in the first meeting and burns
 // trust right when it's needed most. What isn't there gets built — and

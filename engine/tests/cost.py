@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """G6 — what a turn costs on this engine, measured the way the baseline was.
 
-`hermes-kit/notes/cost-and-engine-findings.md` §1: send the turn the way
+`kit/notes/cost-and-engine-findings.md` §1: send the turn the way
 `chat/page.tsx` sends it (`POST /portal/chat/stream`, `stream: true`), read
 `GET https://openrouter.ai/api/v1/key` before and after, and poll the key
 until the delta stops moving. §1 also names the trap: THE DELTA IS ONLY
@@ -159,7 +159,7 @@ def main() -> None:
             f" · out {u['output_tokens']:>5} · {u['requests']} requests · {u['tool_calls']} tool calls"
         )
     print()
-    print("baseline: hermes-kit/notes/cost-and-engine-findings.md §3 —")
+    print("baseline: kit/notes/cost-and-engine-findings.md §3 —")
     print("  US$0.0036 conversational, US$0.0247 with tools, on openai/gpt-5.6-luna")
 
 

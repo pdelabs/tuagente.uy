@@ -189,6 +189,6 @@ upstream" next to them. Owning the edge cases is the better kind of risk.
 
 Stage it: the next client goes on the new engine behind the same portal;
 the local demo and the VPS agent stay on Hermes until Telegram and flows
-land; `hermes-kit/` keeps its plugins, SOUL templates and catalogs, which
+land; `kit/` keeps its plugins, SOUL templates and catalogs, which
 are the product, and loses the adapter, the hooks, the config knobs and the
 engine notes, which were the tax.

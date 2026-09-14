@@ -194,7 +194,7 @@ No interpretation, exactly as it came out:
 
 ## 6. Technical debt already documented
 
-Lives in `docs/PENDING.md` and in `hermes-kit/notes/`. What to keep in mind
+Lives in `docs/PENDING.md` and in `kit/notes/`. What to keep in mind
 when picking this back up:
 
 - **The approval gate has three open, documented holes** (see the kit's

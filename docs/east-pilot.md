@@ -44,11 +44,11 @@ Her agent only holds her SOUL, her prompt, and her folders.
 - **Drive via a service account, not OAuth** (v1): Cata shares the folder
   with the service account's mail address and that's it. Avoids the
   published OAuth app, the 7-day token expiry, and the whole procedure (see
-  `hermes-kit/connections/google-workspace.md` — still valid for when a
+  `kit/connections/google-workspace.md` — still valid for when a
   client needs to *write* to their own spreadsheets under their own
   identity).
 - **OpenRouter per client** as a global kit capability — documented in
-  `hermes-kit/notes/auxiliary-models.md`. STT probably needs a dedicated key
+  `kit/notes/auxiliary-models.md`. STT probably needs a dedicated key
   (Groq/OpenAI); the skill decides, not the agent.
 - **Hosting: Railway from day 1 of real use.** The morning of 8/6 the Mac
   had two network outages and a Docker crash. Build and test locally; deploy

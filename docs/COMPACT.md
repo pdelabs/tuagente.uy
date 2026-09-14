@@ -15,8 +15,8 @@ was retired 12/8/2026 (backup in `~/Desktop/Luis/Projects/_respaldo-lamano/`).
 |---|---|
 | `app/page.tsx`, `app/blog/` | the public landing |
 | `app/app/` | the **client portal** |
-| `hermes-kit/` | **what gets installed on each client's agent** (the product) |
-| `docs/` · `hermes-kit/notes/` | the project's memory and the kit's |
+| `kit/` | **what gets installed on each client's agent** (the product) |
+| `docs/` · `kit/notes/` | the project's memory and the kit's |
 
 **PRINCIPLE ZERO:** the portal serves ANY Hermes agent of ANY client.
 Nothing client-specific goes into the code or into fixed copy.
@@ -25,7 +25,7 @@ Nothing client-specific goes into the code or into fixed copy.
 it a face at onboarding, they talk to it, it owns everything they bought. A
 pivot to a team of hired roles was built through August and **reverted on
 30/8/2026**: the removal is `docs/team-pivot-removal.md`, the pivot's own record
-is `hermes-kit/notes/archive/`. Nothing in this file describes a roster, a
+is `kit/notes/archive/`. Nothing in this file describes a roster, a
 teammate or a room, and nothing should again.
 
 ## Architecture
@@ -109,7 +109,7 @@ frontmatter, SOUL with no gaps, the classic config oversights).
   gateway uses to assemble the session. With only one, zero kanban tools.
   `kanban` isn't in `CONFIGURABLE_TOOLSETS`, so it can't be requested the
   normal way. Verified on 4/8 with a control on a disposable agent; recipe
-  and reproduction in `hermes-kit/notes/native-kanban.md`. **Our plugin got
+  and reproduction in `kit/notes/native-kanban.md`. **Our plugin got
   deleted**: all it did was declare `kanban` in `provides_tools` and
   unblock it as a side effect.
 - **Context:** see the measurement below. Part of the system prompt is
@@ -136,7 +136,7 @@ Nothing gets connected or pasted from the portal: it's **requested**, and
 that creates a ticket. Google Workspace (Sheets, Drive, Calendar, Docs) is
 already supported by the engine; what's missing is creating a single
 "Desktop app"-type OAuth app of ours and reusing it across every client —
-see `hermes-kit/connections/google-workspace.md`.
+see `kit/connections/google-workspace.md`.
 
 ## Context budget, measured (5/8, new agent)
 

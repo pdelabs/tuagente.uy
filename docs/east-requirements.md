@@ -401,7 +401,7 @@ publish, not before.
 
 **Nothing else in the menu fits.** No quotes, no invoices, no stock, no payroll.
 And note before promising anything from that list: **19 of the 21 `level: menu`
-rows install a `kit_skills` name that does not exist in `hermes-kit/skills/`**
+rows install a `kit_skills` name that does not exist in `kit/skills/`**
 (which holds only `no-images` and `no-web-search`). Two of the nineteen —
 `social-package`, `branded-reports` — still install real plugins and lose only
 their extra skill; the other seventeen (`web-monitoring`, `meeting-summaries`,
@@ -668,7 +668,7 @@ agent ever shipped. So the caption shortcut was an agent working around a broken
 capability, not dodging a paid step — and the five `[VERIFICAR CONTRA EL VIDEO]`
 markers in copy that went to air are ours. Fixed with `TUAGENTE_MODELS_KEY`
 (same value, a name the engine does not strip) and an `agent-check` failure;
-the trade-off and the narrower fix are in `hermes-kit/notes/auxiliary-models.md`
+the trade-off and the narrower fix are in `kit/notes/auxiliary-models.md`
 and `docs/PENDING.md`.
 
 **§3.4 — "the row is closed on its own, so `check-plugins.py`'s rule is

@@ -6,7 +6,7 @@
 // portal and the landing, and the bot's avatar as a PNG.
 //
 // THE GEOMETRY DOESN'T LIVE HERE: it lives in ./agentito-svg.mjs, a pure
-// React-free module that hermes-kit/tools/draw-agentito.mjs (the headless
+// React-free module that kit/tools/draw-agentito.mjs (the headless
 // SVG/PNG generator) also consumes. This component only injects that string --
 // by construction it can never diverge from the tool. If you touch a trait,
 // touch it there. Rive's runtime is NOT imported here either: it travels as
@@ -141,7 +141,7 @@ export function AgentitoAnimated(props: AgentitoAnimatedProps) {
  * static.
  *
  * `renderAgentitoSVG`'s option keys match this component's props one-to-one:
- * that module is also imported by `hermes-kit/tools/preview-agentito.mjs`,
+ * that module is also imported by `kit/tools/preview-agentito.mjs`,
  * which builds the same object.
  */
 export function AgentitoAvatar({ look = LOOK_DEFAULT, alive = false, withShadow = false, asleep = false, className }: {

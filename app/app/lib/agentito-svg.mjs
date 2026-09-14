@@ -1,12 +1,12 @@
 // The agentito's ONE source of geometry: a pure string renderer with zero
 // dependencies — no React, no DOM, no Node APIs — so the exact same drawing
 // serves the portal (AgentitoAvatar wraps this), the landing, and the headless
-// CLI (hermes-kit/tools/draw-agentito.mjs). Touch a trait here and it
+// CLI (kit/tools/draw-agentito.mjs). Touch a trait here and it
 // changes everywhere at once; there is deliberately nowhere else to draw it.
 //
 // Same geometry as public/agentito.riv, at /4 scale, on a 120x120 viewBox —
 // transcribed 1:1 from the JSX this file replaced. If you change a coordinate,
-// the golden tests in hermes-kit/tools/test_draw_agentito.py must be
+// the golden tests in kit/tools/test_draw_agentito.py must be
 // regenerated on purpose (they fail byte-by-byte otherwise, which is the point).
 
 /** Axis sizes; each axis is a numeric input of the Rive state machine. */

@@ -7,9 +7,9 @@ One repo with the four pieces of the product:
 | `app/page.tsx`, `app/blog/` | **the public landing** — marketing, SEO |
 | `app/app/` | **the client portal** — the interface a client uses to see and direct their agent. Static; all the logic lives in the browser |
 | `engine/` | **the agent engine** — Pydantic AI behind the portal; one container per client serving the gateway (`:8642`) and the adapter (`:8643`) shapes. `engine/README.md` is how to run it |
-| `hermes-kit/` | **what gets installed on each client's agent** — portal adapter, skills, plugins, SOULs, capabilities, compose and conformance checks. Has its own `CLAUDE.md` with the deep context: read it before touching the kit |
+| `kit/` | **what gets installed on each client's agent** — portal adapter, skills, plugins, SOULs, capabilities, compose and conformance checks. Has its own `CLAUDE.md` with the deep context: read it before touching the kit |
 | `docs/` | the project's memory (portal + client onboarding) |
-| `hermes-kit/notes/` | the kit's memory (measurements, engine knobs, the plugin plan) |
+| `kit/notes/` | the kit's memory (measurements, engine knobs, the plugin plan) |
 
 It used to be two repos (`tuagente.uy` and `hermes-kit`); since 22/8/2026 it's
 this monorepo. The old `hermes-kit` repo is now archived. Vercel builds the
@@ -26,7 +26,7 @@ Hermes gets killed slowly.** Decided by Luis on 2026-09-14 on the strength of
 - **No conditionals that make a thing work on both engines.** Where the kit
   already has one to coexist with Hermes, remove it when you touch that file;
   never add another.
-- The Hermes agents in `hermes-kit/fleet.md` keep running until the new engine
+- The Hermes agents in `kit/fleet.md` keep running until the new engine
   covers what they use (Telegram, flows, cron). Then they are rebuilt on it and
   the Hermes half of the kit is deleted. `docs/PENDING.md` tracks it.
 - Every mention of Hermes below is history until this section is removed.
@@ -35,7 +35,7 @@ Hermes gets killed slowly.** Decided by Luis on 2026-09-14 on the strength of
 
 - **All code AND internal documentation are written in English**: comments,
   function/variable names, commit messages, docs under `docs/` and
-  `hermes-kit/notes/`. Everything. The only thing that stays in Spanish is
+  `kit/notes/`. Everything. The only thing that stays in Spanish is
   **copy the client reads** — rioplatense neutral, no marketing-speak. That
   means: every string rendered in the portal UI, landing copy and blog posts,
   SOUL prose, `SKILL.md` instruction prose the agent
@@ -69,7 +69,7 @@ client. Nothing client-specific goes into the code or into fixed copy.
 Two services on the client's agent, never a backend of ours:
 
 - **`:8642` — the Hermes gateway** (native): chat, sessions, jobs.
-- **`:8643` — the adapter** (`hermes-kit/adapter/portal_adapter.py`): what the
+- **`:8643` — the adapter** (`kit/adapter/portal_adapter.py`): what the
   native gateway doesn't expose — tickets, approvals, artifacts, files,
   activity, real usage and capabilities.
 
@@ -98,7 +98,7 @@ module needs something, it gets added there; no stray fetches.
   documents it in `docs/portal-routes.md`. No link the portal builds carries a
   hash — that's where the credential travels.
 
-## Kit conventions (details in `hermes-kit/CLAUDE.md`)
+## Kit conventions (details in `kit/CLAUDE.md`)
 
 - **The kit is the source of truth** for what runs on each agent; a fix made
   inside an agent gets brought back to the kit (`install.sh --diff` detects
@@ -107,7 +107,7 @@ module needs something, it gets added there; no stray fetches.
   never drafts free-form requests. Nothing self-installs.
 - **The model supplies the words; the code supplies the format.** Every
   convention that depended on the agent remembering has failed.
-- A capability installs plugins (`hermes-kit/plugins/`), and a plugin brings
+- A capability installs plugins (`kit/plugins/`), and a plugin brings
   its own skills, flows and adapter surfaces; `tools/check-plugins.py`
   validates the graph and `tools/check-clones.py` that no two skills are the
   same text under different names.
@@ -122,8 +122,8 @@ module needs something, it gets added there; no stray fetches.
 | `docs/portal-routes.md` | **the contract of the portal's URLs** |
 | `docs/client-onboarding.md` | runbook for onboarding a new client |
 | `docs/portal-roadmap.md` | features per tab + big topics still to define |
-| `hermes-kit/fleet.md` | which agents are alive and what version they're running |
-| `hermes-kit/notes/` | engine knobs, measurements, recipes |
+| `kit/fleet.md` | which agents are alive and what version they're running |
+| `kit/notes/` | engine knobs, measurements, recipes |
 
 ## Verify
 
@@ -133,14 +133,14 @@ npx tsc --noEmit && npm run build
 npx next start -p 8090          # against the local agent
 
 # The kit (from the monorepo root)
-python3 -m unittest discover -s hermes-kit/adapter -p "test_*.py"
-python3 -m unittest discover -s hermes-kit/tools -p "test_*.py"
-python3 hermes-kit/tools/check-adapter-boundaries.py
-python3 hermes-kit/tools/check-clones.py
-python3 hermes-kit/tools/check-plugins.py
+python3 -m unittest discover -s kit/adapter -p "test_*.py"
+python3 -m unittest discover -s kit/tools -p "test_*.py"
+python3 kit/tools/check-adapter-boundaries.py
+python3 kit/tools/check-clones.py
+python3 kit/tools/check-plugins.py
 
 # An agent, before powering it on
-python3 hermes-kit/tools/agent-check.py <path>/data
+python3 kit/tools/agent-check.py <path>/data
 
 # A running agent: the portal contract. 0 failures or it doesn't ship.
 # THE TWO URLS ARE NOT OPTIONAL IN PRACTICE: the script defaults them to
@@ -151,7 +151,7 @@ python3 hermes-kit/tools/agent-check.py <path>/data
 # a deployed agent — whose allowlist is the real portal's origin and nothing
 # else — the default fails four checks that are pure artifact. The inverse
 # trap: green against the wrong agent, red against the right one.
-python3 hermes-kit/tools/portal-check.py --key <API_SERVER_KEY> \
+python3 kit/tools/portal-check.py --key <API_SERVER_KEY> \
     --endpoint http://127.0.0.1:<port> --adapter http://127.0.0.1:<port+1> \
     --origin http://localhost:8090   # deployed: https://app.tuagente.uy
 ```

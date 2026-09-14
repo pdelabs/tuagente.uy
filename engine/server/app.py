@@ -40,7 +40,7 @@ class CanonicalHeaders:
     """Writes response header names as `Content-Type`, not `content-type`.
 
     Header names are case-insensitive and every browser agrees, but
-    `hermes-kit/tools/portal-check.py` reads them out of `dict(res.headers)`
+    `kit/tools/portal-check.py` reads them out of `dict(res.headers)`
     — the case that came off the wire, verbatim. Starlette spells every header
     it writes in lowercase, so against this engine the check read an empty
     `Content-Type` and no `Access-Control-Allow-Origin` and failed five checks

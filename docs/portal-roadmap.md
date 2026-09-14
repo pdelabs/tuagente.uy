@@ -156,7 +156,7 @@ link (`docs/client-onboarding.md`, Phase 8).
   **Half of it already exists and is not wired.**
   `POST /portal/capabilities/suggest` is live in the adapter — one ~300-token
   call straight to the provider (US$0.000071 a call, measured;
-  `hermes-kit/notes/cost-and-engine-findings.md` §3), ids validated against the
+  `kit/notes/cost-and-engine-findings.md` §3), ids validated against the
   menu, `no_match` falls back to the whole menu without flagging anything —
   and `suggestCapabilities()` is exported from `app/app/lib/agent.ts` **with
   zero callers**. It was built for the hiring flow and it outlived it: what it
@@ -188,7 +188,7 @@ link (`docs/client-onboarding.md`, Phase 8).
   isolated per client; anything finer (per capability, per flow, per channel)
   has to come from the engine's own `session_model_usage`, which on this
   configuration **is** the charge and not an estimate
-  (`hermes-kit/notes/cost-and-engine-findings.md` §2). Nobody has asked yet.
+  (`kit/notes/cost-and-engine-findings.md` §2). Nobody has asked yet.
 
 ---
 

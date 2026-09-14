@@ -6,12 +6,12 @@ everything. The plugin framework stays — what goes is per-role exposure.
 
 This file is the running record of the removal. It is not the plan: it says
 what has actually been done, wave by wave, and what each wave learned. The
-pivot's own record is **archived**, not deleted: `hermes-kit/notes/archive/`
+pivot's own record is **archived**, not deleted: `kit/notes/archive/`
 (`team-pivot-status.md`, `spike-profiles.md`) is the account of what was built
 and why. What survives roles was lifted out of it first, into
-`hermes-kit/notes/cost-and-engine-findings.md`.
+`kit/notes/cost-and-engine-findings.md`.
 
-Reading order for whoever picks this up: this file, then `hermes-kit/fleet.md`
+Reading order for whoever picks this up: this file, then `kit/fleet.md`
 («The team pivot, undone») for the live agents, then `docs/portal-routes.md`
 for the URL contract.
 
@@ -39,7 +39,7 @@ it is the only agent in the fleet that never saw a roster, which makes it the
 pre-pivot reference shape and the thing the portal is being brought back to.
 
 The full measurement table, the backups, and the runbook are in
-`hermes-kit/fleet.md`. The short version: three deletions on each agent
+`kit/fleet.md`. The short version: three deletions on each agent
 (`policy/roles/catalog.json`, `data/profiles/<role>/`, `policy/rooms/`) and a
 restart. The client's baptism is not in any of them.
 
@@ -206,10 +206,10 @@ Against `199b6b4`, the last commit before wave 0:
 | | |
 |---|---|
 | files deleted outright | **50** |
-| of them `hermes-kit/roles/` | 32 |
-| `hermes-kit/tools/` | 8 — `hire-role.sh`, `profile_config.py` + its test, five role goldens |
+| of them `kit/roles/` | 32 |
+| `kit/tools/` | 8 — `hire-role.sh`, `profile_config.py` + its test, five role goldens |
 | `app/app/team/` | 4 |
-| `hermes-kit/adapter/` | 3 (`rooms.py` and two test suites) |
+| `kit/adapter/` | 3 (`rooms.py` and two test suites) |
 | `app/app/lib/` | 3 (`roles.tsx`, `hiring.tsx`, `intros/team.tsx`) |
 | files archived, not deleted | 2 (`notes/archive/`) |
 | code (`.py .tsx .ts .sh .json .mjs .svg`) | 88 files, **+2,761 / −8,721** |
@@ -267,7 +267,7 @@ by removing the code around them.
 `7897af2`. Reversible and deliberately first: three deletions per agent
 (`policy/roles/catalog.json`, `data/profiles/<role>/`, `policy/rooms/`) plus a
 restart, with the portal built at HEAD pointed at the result. Table, backups
-and runbook in `hermes-kit/fleet.md`. Its two loose ends both closed later in
+and runbook in `kit/fleet.md`. Its two loose ends both closed later in
 the same day: the under-skilling by `15d833a` (above), and the check that
 **lied instead of failing** by `76b8307`.
 
@@ -370,7 +370,7 @@ The measurements the removal rests on, taken again from scratch:
   line reverted.
 
 Six documentation defects came out of it, all fixed here, and only ONE of them
-was a pivot leftover — `hermes-kit/README.md` still delivering skills «to the
+was a pivot leftover — `kit/README.md` still delivering skills «to the
 profiles». The other five were pre-pivot staleness the removal simply did not
 touch: COMPACT's repo table, its tab list, its kit inventory, `fleet.md`
 calling East the only agent in the fleet, and a PENDING item the same file
