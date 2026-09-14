@@ -61,12 +61,11 @@ string or a list of strings) is allowed and ignored.
 | `flow` | yes | the catalog of curated flows the product ships. Nothing else: since 14/9/2026 a flow is a file the ENGINE reads (`engine/core/flows.py`), so the skill, the `promises` engine surface, the `core` surface and the tab are gone |
 | `capability` | yes | the only way in for what the agent does not have |
 | `memory` | no | what the agent remembers about the client's business — `core` only, so it exists on `engine` and nowhere else |
+| `image` | no | one `generate_image` tool on Pydantic AI's capability — `core` only, same shape as `memory` |
 | `transcribe` | no | audio and video to text — the plugin behind the `transcription` base capability |
 | `invoices-to-data` | no | an invoice becomes one row of data (accounting) |
 | `quotes` | no | a request becomes a priced quote in the client's template (sales) |
-| `brand-kit` | no | what a company looks like, read off its own site (marketing) |
-| `social-content` | no | Instagram posts in the brand's voice (marketing) |
-| `post-image` | no | the image a post needs, and the step that LOOKS at it (marketing) |
+| `social` | no | one Instagram post a day, written, drawn, checked and left in the Posts tab — `core` and a skill, so it exists on `engine` only |
 | `drive-inbox` | no | Drive folders as an inbox: the agent's front door for material |
 | `interview-production` | no | an interview becomes what goes on air — ten lower-thirds, or a news item |
 
@@ -97,6 +96,19 @@ state: what decides that this plugin runs is `CORE_PLUGINS` in `engine`, not
 `purchased.json`, and a row would be selling a Hermes client something they
 already have. **The rule is still "a plugin needs a way in"; what changed is
 that `core` is a second way in, and it is not the sales layer.**
+
+`social` is the fourth shape, and it is the one that puts the two halves
+together: `core` for the mechanism — `save_post`, which owns the folder a post
+lands in, and the routes the Posts tab reads — plus a `skills` surface for the
+craft and a `tab` for the page. It exists for `engine` like `memory` and
+`image` do, and unlike them a CLIENT BUYS IT: `social-package` installs it and
+`image`, which is how that plugin finally got its row. It replaced `brand-kit`,
+`social-content` and `post-image` on 14/9/2026 and did not port them — the
+brand is `marca/brand.md`, a file the client's workspace carries, so there is
+nothing left for a brand-kit plugin to be. The consequence is named rather than
+hidden: a client still on Hermes who buys this row gets `kit-skills/post/`,
+a SKILL.md that calls two tools only `engine` has. That is what Hermes dying
+looks like from the kit.
 
 ### Harness skills: what `skills/` still holds, and why
 
@@ -220,7 +232,7 @@ only while it still lives in `skills/`:
 
 ```json
 "installs": { "plugins": ["transcribe"] }
-"installs": { "plugins": ["brand-kit"], "kit_skills": ["branded-reports"] }
+"installs": { "plugins": ["social", "image"], "kit_skills": ["social-formats"] }
 ```
 
 `tools/check-plugins.py` refuses a `kit_skills` entry that names a plugin-owned
@@ -233,8 +245,8 @@ the catalog promises and the installer never copies.
 
 A ROW HAS TO BE CLOSED ON ITS OWN, because a row is what a client buys on its
 own. `check-plugins.py` refuses a row whose plugin requires a plugin that same
-row does not install — `social-package` selling `post-image` without `brand-kit`
-is an image generator with no hexes to read. Another row installing the
+row does not install — `social-package` selling `social` without `image` is a
+skill that tells the agent to call a tool the agent does not have. Another row installing the
 dependency is another purchase, not this one.
 
 **Two kinds of dependency need no declaring, and they are the two that are on
@@ -254,8 +266,8 @@ nobody else could ever buy — the opposite of why this registry exists.
 
 `verifies` did NOT move, on purpose. It describes the agent's DELIVERED layout —
 a plugin's skill is flattened into `kit-skills/` exactly as it always was — so
-`verifies.kit_skills` naming `brand-kit` is still the truth about a running
-agent. `installs` says where the source is; `verifies` says what to find on disk.
+`social-package` installs the plugin `social` and verifies the skill `post`,
+and both are the truth about a running agent. `installs` says where the source is; `verifies` says what to find on disk.
 
 ## Where the files actually land
 

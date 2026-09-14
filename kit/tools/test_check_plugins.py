@@ -574,17 +574,24 @@ class TheFlowsSurface(unittest.TestCase):
             write(tmp, "alpha", manifest("alpha"))
             self.assertEqual(plugin_registry.flow_sources(["alpha"], Path(tmp)), {})
 
-    def test_the_kits_eighteen_curated_flows_all_have_an_owner(self):
+    def test_the_kits_fifteen_curated_flows_all_have_an_owner(self):
         """The real files: every FLOW.md under plugins/ is declared by one.
 
         A FLOW.md sitting in a plugin that does not declare it is a flow nobody
         installs — which is exactly how the four that moved out of `support`
         would have been lost.
+
+        EIGHTEEN UNTIL 14/9/2026: `social-content` owned three of them
+        (`contenido-instagram-diario`, `calendario-del-mes`,
+        `reporte-de-lo-publicado`) and went with the plugin. The daily one is
+        rebuilt on `engine` by the client's own agent, in chat, which is the
+        gate `docs/own-agent-plan.md` calls G3; the other two are work for a
+        client who publishes, and nobody publishes yet.
         """
         declared = plugin_registry.flow_sources(None, KIT)
         on_disk = sorted(p.parent for p in KIT.glob("plugins/*/*/*/FLOW.md"))
         self.assertEqual(sorted(declared.values()), on_disk)
-        self.assertEqual(len(declared), 18)
+        self.assertEqual(len(declared), 15)
 
     def test_each_of_them_carries_the_frontmatter_the_portal_reads(self):
         """`name` and `trigger_type` are what the Flows page draws the card from."""
@@ -799,8 +806,7 @@ class TheRequiresThatAreNotPlugins(unittest.TestCase):
 SYSTEM = ["approval", "artifact", "capability", "deliverable", "flow", "kanban"]
 # The PORTED ones: a skill that already lived in `skills/` and got a manifest.
 # Their shape is the packaging shape -- one skill, named after the plugin.
-PORTED = ["brand-kit", "drive-inbox", "invoices-to-data", "post-image",
-          "quotes", "social-content", "transcribe"]
+PORTED = ["drive-inbox", "invoices-to-data", "quotes", "transcribe"]
 # WRITTEN AS PLUGINS, WHICH IS THE OTHER HALF AND IT STARTS HERE. A plugin
 # commissioned by a client is not a port: `interview-production` carries TWO
 # skills and neither is called after it, because the unit is the WORK (an
@@ -819,6 +825,15 @@ CLIENT = sorted(PORTED + WRITTEN)
 # it. `image` gets its row with the social capability that sells the pictures
 # (docs/own-agent-plan.md, wave 3).
 CORE_ONLY = ["image", "memory"]
+# THE FOURTH SHAPE: a plugin of our engine that a CLIENT BUYS. `social` carries
+# `core/` like the two above — the tool that owns the post's format and the
+# routes the Posts tab reads — and on top of it a skill and a tab, because what
+# the client purchases is the craft and the page, not the mechanism underneath.
+# Its skill names `generate_image` and `save_post`, which exist on `engine`
+# and nowhere else: a Hermes agent that bought this row would index a SKILL.md
+# it cannot run. That is what Hermes dying looks like from here, and it is
+# pinned so it stays a decision (docs/own-agent-plan.md, wave 3).
+ENGINE_CLIENT = ["social"]
 
 
 class TheKitsOwnRegistry(unittest.TestCase):
@@ -827,7 +842,8 @@ class TheKitsOwnRegistry(unittest.TestCase):
 
     def test_the_registry_is_the_five_defaults_plus_every_ported_skill(self):
         plugins = plugin_registry.registry(KIT)
-        self.assertEqual(sorted(plugins), sorted(SYSTEM + CLIENT + CORE_ONLY))
+        self.assertEqual(sorted(plugins),
+                         sorted(SYSTEM + CLIENT + CORE_ONLY + ENGINE_CLIENT))
         for pid in SYSTEM:
             self.assertTrue(plugins[pid]["system"], pid)
         # A PLUGIN OF engine CARRIES `core/` AND NOTHING ELSE. The day one of
@@ -837,6 +853,10 @@ class TheKitsOwnRegistry(unittest.TestCase):
         for pid in CORE_ONLY:
             self.assertFalse(plugins[pid]["system"], pid)
             self.assertEqual(sorted(plugins[pid]["surfaces"]), ["core"], pid)
+        for pid in ENGINE_CLIENT:
+            self.assertFalse(plugins[pid]["system"], pid)
+            self.assertEqual(sorted(plugins[pid]["surfaces"]),
+                             ["core", "skills", "tab"], pid)
         for pid in CLIENT:
             self.assertFalse(plugins[pid]["system"], pid)
             # A client plugin carries its skills surface, the curated flows that
@@ -867,13 +887,9 @@ class TheKitsOwnRegistry(unittest.TestCase):
 
           quotes         runs `/opt/kit/skills/deliverable/deliver.py` by path,
                          and «eso pasa por la skill `approval`» for sending it
-          brand-kit      pipes `render_kit.py` into artifact's
-                         `create_artifact.py`, and a colour change «va como
-                         pedido de aprobación»
-          social-content «Sin kit de marca no se escribe» -- `new_post.py` stops
-                         with `missing_kit` and names brand-kit in `next_steps`
-          post-image     «Sin `brand.json` corta y te da la pregunta para
-                         ofrecerle armar el kit»
+          social         «`generate_image(prompt, format)`» is step 4 of its
+                         SKILL.md, and step 5 looks at what came back — both
+                         are the `image` plugin's capability
           drive-inbox    nothing: transcribing after the download is «el caso
                          típico», and what follows «depende del flujo del cliente»
           interview-production
@@ -886,31 +902,32 @@ class TheKitsOwnRegistry(unittest.TestCase):
                          leaves, and they were leaves as pilots too
         """
         plugins = plugin_registry.registry(KIT)
-        needs = {pid: plugins[pid]["requires"].get("plugins", []) for pid in CLIENT}
+        needs = {pid: plugins[pid]["requires"].get("plugins", [])
+                 for pid in CLIENT + ENGINE_CLIENT}
         self.assertEqual(needs, {
-            "brand-kit": ["artifact", "approval"],
             "drive-inbox": [],
             "interview-production": ["transcribe", "deliverable", "approval"],
             "invoices-to-data": [],
-            "post-image": ["brand-kit"],
             "quotes": ["deliverable", "approval"],
-            "social-content": ["brand-kit"],
+            "social": ["image"],
             "transcribe": [],
         })
 
-    def test_what_the_two_non_plugin_requires_claim(self):
+    def test_what_the_non_plugin_requires_claim(self):
         """The ids themselves, pinned. That they EXIST is the command's job.
 
         `TheRequiresThatAreNotPlugins` runs `check-plugins.py` over the whole
-        registry; what is left here is what these two manifests mean, which no
+        registry; what is left here is what these manifests mean, which no
         cross-check can say.
         """
         plugins = plugin_registry.registry(KIT)
-        # `image_gen` is step 2 of post-image and `vision` is step 4, the one
-        # that looks at what came out. `image_generate` is the TOOL; the toolset
-        # is what compose/config.base.yaml lists.
-        self.assertEqual(plugins["post-image"]["requires"]["toolsets"],
-                         ["image_gen", "vision"])
+        # THE THIRD CLAIM USED TO BE `post-image`'s `image_gen` AND `vision`,
+        # and it went with the plugin on 14/9/2026: generating an image is a
+        # capability of `engine` now (plugins/image/), paid with the key the
+        # engine already runs on, so there is no Hermes toolset to turn on for
+        # it and `social` declares none.
+        self.assertEqual(plugins["interview-production"]["requires"]["toolsets"],
+                         ["terminal", "web"])
         # watch.py reads /opt/data/google_token.json, which is exactly the file
         # this connection's `detects.files` names. A plugin declares the
         # connection and never owns the credential.
@@ -1017,7 +1034,7 @@ class TheKitsOwnRegistry(unittest.TestCase):
         self.assertEqual(
             sorted(sources),
             sorted((set(SYSTEM + PORTED) - {"kanban", "flow"})
-                   | {"lower-thirds", "news-copy"}))
+                   | {"lower-thirds", "news-copy", "post"}))
         registry = plugin_registry.registry(KIT)
         for name, where in sources.items():
             owner = next(pid for pid, data in registry.items()

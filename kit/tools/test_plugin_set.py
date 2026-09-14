@@ -10,6 +10,7 @@ Run from the monorepo root:
     python3 -m unittest discover -s kit/tools -p "test_*.py"
 """
 
+import contextlib
 import json
 import shutil
 import subprocess
@@ -44,6 +45,40 @@ def agent(*bought):
             json.dumps({"capabilities": list(bought)}, ensure_ascii=False),
             encoding="utf-8")
     return data
+
+
+@contextlib.contextmanager
+def kit_whose_catalog(mutate):
+    """The real kit with a REWRITTEN catalog, for the length of a `with`.
+
+    THE CORRUPTION GOES IN A THROWAWAY KIT, NOT IN THIS ONE. Writing a broken
+    `installs` into the real `capabilities/catalog.json` and putting it back in
+    a `finally` leaves the tree clean afterwards — but for the length of the
+    test the repo really does sell a capability that installs half a plugin,
+    and anything else reading it in that window (another test, a
+    `check-plugins.py` in a second terminal, an install) fails for a reason
+    that is not there a second later. Everything but `capabilities/` is a
+    symlink, so `plugins/` is the registry as written.
+    """
+    kit = Path(tempfile.mkdtemp(prefix="kit-"))
+    for entry in KIT.iterdir():
+        if entry.name != "capabilities":
+            (kit / entry.name).symlink_to(entry)
+    shutil.copytree(KIT / "capabilities", kit / "capabilities")
+    catalog = kit / "capabilities" / "catalog.json"
+    rows = json.loads(catalog.read_text(encoding="utf-8"))
+    for row in rows["capabilities"]:
+        mutate(row)
+    catalog.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8")
+    original, plugin_set.KIT = plugin_set.KIT, kit
+    plugin_set.CAPABILITIES = catalog
+    try:
+        yield kit
+    finally:
+        plugin_set.KIT = original
+        plugin_set.CAPABILITIES = original / "capabilities" / "catalog.json"
+        shutil.rmtree(kit, ignore_errors=True)
 
 
 def broken(payload):
@@ -88,15 +123,28 @@ class TheSet(unittest.TestCase):
         self.assertNotIn("quotes", plugin_set.plugin_set(agent()))
 
     def test_one_capability_may_install_several_plugins(self):
-        """`social-package` is the case: the kit, the writer and the images."""
+        """`social-package` is the case: the craft and the pictures."""
         found = plugin_set.plugin_set(agent("social-package"))
-        for pid in ("brand-kit", "social-content", "post-image"):
+        for pid in ("social", "image"):
             self.assertEqual(found[pid], ["purchased (social-package)"], pid)
 
     def test_two_capabilities_that_install_the_same_plugin_name_the_first(self):
-        """`brand-kit` is behind three menu rows; the folder ships once."""
-        found = plugin_set.plugin_set(agent("branded-reports", "linkedin-content"))
-        self.assertEqual(found["brand-kit"], ["purchased (branded-reports)"])
+        """The folder ships once, and the reason is the first row that bought it.
+
+        THE CASE IS NOT IN THE CATALOG ANY MORE, which is why it is written
+        here. `brand-kit` was behind three menu rows until 14/9/2026 and it was
+        deleted with the other two Hermes-era social plugins; today no plugin
+        is installed by two rows. The tiebreak is still the rule — a second row
+        that installs something already in the set adds no second folder and no
+        second reason — so it is asked of a catalog that has the case.
+        """
+        def also_social(row):
+            if row["id"] == "branded-reports":
+                row["installs"]["plugins"] = ["social", "image"]
+
+        with kit_whose_catalog(also_social):
+            found = plugin_set.plugin_set(agent("branded-reports", "social-package"))
+            self.assertEqual(found["social"], ["purchased (branded-reports)"])
 
     def test_the_set_is_closed_for_every_row_we_sell(self):
         """A plugin's dependencies are in the set, for any purchase we can build.
@@ -221,44 +269,21 @@ class TheCommand(unittest.TestCase):
 
 
 class TheClosureIsAssertedAndNotRepaired(unittest.TestCase):
-    """A capability that installs a plugin installs its dependencies too.
-
-    THE CORRUPTION GOES IN A THROWAWAY KIT, NOT IN THIS ONE. Writing a broken
-    `installs` into the real `capabilities/catalog.json` and putting it back in a
-    `finally` leaves the tree clean afterwards — but for the length of the test
-    the repo really does sell a capability that installs half a plugin, and
-    anything else reading it in that window (another test, a `check-plugins.py`
-    in a second terminal, an install) fails for a reason that is not there a
-    second later.
-    """
+    """A capability that installs a plugin installs its dependencies too."""
 
     def test_a_plugin_whose_dependency_nobody_bought_stops_it(self):
-        kit = Path(tempfile.mkdtemp(prefix="kit-"))
-        for entry in KIT.iterdir():
-            if entry.name != "capabilities":
-                (kit / entry.name).symlink_to(entry)
-        shutil.copytree(KIT / "capabilities", kit / "capabilities")
-        catalog = kit / "capabilities" / "catalog.json"
-        rows = json.loads(catalog.read_text(encoding="utf-8"))
-        for row in rows["capabilities"]:
-            # `post-image` requires `brand-kit`; sold on its own it arrives
-            # without the kit it reads the hexes out of.
+        def half_a_package(row):
+            # `social` requires `image`; sold on its own it arrives as a skill
+            # that tells the agent to call a tool the agent does not have.
             if row["id"] == "social-package":
-                row["installs"]["plugins"] = ["post-image"]
-        catalog.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n",
-                           encoding="utf-8")
-        original, plugin_set.KIT = plugin_set.KIT, kit
-        plugin_set.CAPABILITIES = kit / "capabilities" / "catalog.json"
-        try:
+                row["installs"]["plugins"] = ["social"]
+
+        with kit_whose_catalog(half_a_package):
             with self.assertRaises(SystemExit) as refused:
                 plugin_set.plugin_set(agent("social-package"))
             message = str(refused.exception)
-            self.assertIn("post-image", message)
-            self.assertIn("brand-kit", message)
-        finally:
-            plugin_set.KIT = original
-            plugin_set.CAPABILITIES = original / "capabilities" / "catalog.json"
-            shutil.rmtree(kit, ignore_errors=True)
+            self.assertIn("social", message)
+            self.assertIn("image", message)
 
 
 if __name__ == "__main__":
