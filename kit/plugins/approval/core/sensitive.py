@@ -12,6 +12,12 @@ wraps the toolset: every tool in here is gated, and one added later is gated
 too without anyone remembering to put its name on a list. Fail closed is the
 whole gate.
 
+WHAT A TOOL RETURNS IS WHAT THE MODEL WILL SAY. Both of these used to answer
+«mail escrito en outbox/…», and the agent repeated it: the client approved a
+mail and was told her agent had WRITTEN one, which reads like it is still
+waiting for something. The tool ran after the yes — it says so, and where the
+copy is.
+
 THE PROSE ABOUT ASKING IS IN THE TOOL AND FIELD DESCRIPTIONS, not in a SOUL
 and not in a skill. What a request has to say — what happens if the client says
 yes, what happens if she says no — is a rule about using THIS tool, so it
@@ -91,7 +97,8 @@ def toolset() -> FunctionToolset:
         vacía siempre.
         """
         text = f"Para: {to}\nAsunto: {subject}\n\n{corrected(body, client_correction)}\n"
-        return f"mail escrito en {drop(ctx.deps.workspace, 'email', to, text)}"
+        path = drop(ctx.deps.workspace, "email", to, text)
+        return f"Enviado a {to}: «{subject}». Quedó una copia en {path}."
 
     @ts.tool
     def publish_post(
@@ -109,6 +116,7 @@ def toolset() -> FunctionToolset:
         aprueba con correcciones. Dejala vacía siempre.
         """
         body = f"Canal: {channel}\n\n{corrected(text, client_correction)}\n"
-        return f"publicación escrita en {drop(ctx.deps.workspace, 'post', channel, body)}"
+        path = drop(ctx.deps.workspace, "post", channel, body)
+        return f"Publicado en {channel}. Quedó una copia en {path}."
 
     return ts

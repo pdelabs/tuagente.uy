@@ -24,11 +24,12 @@ import {
 } from "lucide-react";
 import { loadAgentName } from "../lib/onboarding";
 import {
-  loadConfig, getApprovals, getConnections, getTicketDetail, approve, reject,
+  loadConfig, getApprovals, getConnections, getManifest, getTicketDetail, approve, reject,
   notifyApprovalsChanged, missingConnections, isTheClient, isConnectionBlock,
   isClientRequest, isClientRejection, connectionLabel, readComment,
   rejectionReason, looksLikeProposal, authorLabel,
-  type Connection, type PortalConfig, type TicketComment, type TicketDetail,
+  type Connection, type Manifest, type PortalConfig, type TicketComment,
+  type TicketDetail,
 } from "../lib/agent";
 import { COLUMN_LABEL, timeOf } from "../lib/labels";
 import {
@@ -265,22 +266,32 @@ const hhmm = (d: Date) => timeOf(d.getTime());
 /** The confirmation that was missing. Stays up while the client remains on
  *  the screen: what they did, at what time, what's happening now, and the
  *  link to the task to go look at it. */
-function ResolvedCard({ r, agentName }: { r: Resolved; agentName: string }) {
+/** WHERE IT GOES ON, WHEN THERE IS A WHERE. The board is the `kanban` module,
+ *  and an agent without it has no `/app/pipeline` to send anyone to: this card
+ *  was pointing every client at a tab that is not in their portal. What is
+ *  true on every agent is Actividad, so that is what the copy falls back to —
+ *  and the "Ver la tarea" link only exists where the task does. */
+function ResolvedCard(
+  { r, agentName, board }: { r: Resolved; agentName: string; board: boolean },
+) {
   const closed = r.action === "closed";
   const title = closed
     ? "Cerraste el pedido"
     : r.action === "approved" ? "Lo aprobaste"
     : r.action === "retry" ? "Le dijiste que lo vuelva a intentar"
     : "Lo aprobaste con tu corrección";
+  const where = board
+    ? "Lo ves avanzar en el Tablero."
+    : "Lo ves en Actividad.";
   const detail =
     r.action === "approved"
-      ? `${agentName} ya lo sabe y está siguiendo con eso. Lo ves avanzar en el Tablero.`
+      ? `${agentName} ya lo sabe y está siguiendo con eso. ${where}`
       : r.action === "corrected"
-      ? `${agentName} tiene que usar tu versión, no la original. Lo ves avanzar en el Tablero.`
+      ? `${agentName} tiene que usar tu versión, no la original. ${where}`
       : r.action === "retry"
       ? `${agentName} retoma esta tarea con la conexión ya puesta. Si algo sigue faltando, `
-        + "te lo va a decir ahí mismo. Lo ves avanzar en el Tablero."
-      : `${agentName} no lo va a volver a proponer. Quedó anotado por qué, en el Tablero. `
+        + `te lo va a decir ahí mismo. ${where}`
+      : `${agentName} no lo va a volver a proponer. Quedó anotado por qué. `
         + "Si algún día cambiás de idea, pediselo por el chat.";
   const Icon = closed ? Ban : CheckCircle2;
   const ink = closed ? "text-ink" : "text-c-green-ink";
@@ -294,13 +305,15 @@ function ResolvedCard({ r, agentName }: { r: Resolved; agentName: string }) {
           </p>
           <p className="mt-0.5 text-[13px] leading-snug text-ink">{r.title}</p>
           <p className="mt-1 text-[12.5px] leading-snug text-ink-soft">{detail}</p>
-          <Link
-            href={`/app/pipeline?task=${encodeURIComponent(r.id)}`}
-            className="mt-1.5 inline-flex items-center gap-1 text-[12.5px] font-semibold text-primary transition hover:text-primary-dark"
-          >
-            Ver la tarea
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          {board && (
+            <Link
+              href={`/app/pipeline?task=${encodeURIComponent(r.id)}`}
+              className="mt-1.5 inline-flex items-center gap-1 text-[12.5px] font-semibold text-primary transition hover:text-primary-dark"
+            >
+              Ver la tarea
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
         </div>
       </div>
     </Card>
@@ -542,6 +555,10 @@ export default function ApprovalsPage() {
   // terms). If it doesn't arrive, the card doesn't claim to be connected
   // and offers to connect it, which is the safe thing to do.
   const [connections, setConnections] = useState<Connection[] | null>(null);
+  // Which modules this agent has. Only one answer is read here: whether there
+  // is a board to send the client to once she said yes. Until it arrives there
+  // is none, which is the half that cannot point anywhere that does not exist.
+  const [manifest, setManifest] = useState<Manifest | null>(null);
 
   useEffect(() => {
     setCfg(loadConfig()); // if null, the layout shows the login
@@ -583,6 +600,11 @@ export default function ApprovalsPage() {
     fetchConnections();
     const t = setInterval(fetchConnections, REFRESH_MS);
     return () => clearInterval(t);
+  }, [cfg]);
+
+  useEffect(() => {
+    if (!cfg) return;
+    getManifest(cfg).then(setManifest).catch(() => { /* no board until it says so */ });
   }, [cfg]);
 
   const setCardError = (id: string, msg: string | null) =>
@@ -774,6 +796,7 @@ export default function ApprovalsPage() {
   const requested = visible?.filter((a) => isClientRequest(a.body)) ?? null;
 
   const agentName = loadAgentName() || "Tu agente";
+  const board = Boolean(manifest?.modules?.kanban);
 
   /* THE REQUEST'S LINK HAS TO LEAVE THE REQUEST IN VIEW, and it didn't —
      precisely the link the agent is going to send the most ("look, this is
@@ -822,7 +845,7 @@ export default function ApprovalsPage() {
       {resolved.length > 0 && (
         <div className="mb-4 flex flex-col gap-2">
           {resolved.map((r) => (
-            <ResolvedCard key={r.id} r={r} agentName={agentName} />
+            <ResolvedCard key={r.id} r={r} agentName={agentName} board={board} />
           ))}
         </div>
       )}
