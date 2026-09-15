@@ -34,9 +34,21 @@ and ~320 s with it, five minutes of a turn hanging on a request that was
 already decided. Measured again on 14/09 it was 19.4 s without and 17.5 s
 with, so the hang is not reproducible on demand; what is not in the request
 cannot cause it.
+
+THE BRIEF TRAVELS WITH THE PICTURE. Beside every image this tool writes a
+SIDECAR with the same stem and a `.json` suffix —
+`imagenes/2026-09-15-1.png` and `imagenes/2026-09-15-1.json` — carrying
+`{"prompt", "format", "model", "created_at"}`: everything the picture was made
+from. It is a convention and not a private detail, because the social plugin
+reads it: `save_post` moves the brief into the post next to the slide it made,
+and that stored brief is what a «arreglá la slide 2» starts from — change one
+line of it, keep the rest word for word, and the fixed slide still belongs to
+the same carousel. The model never writes it and never reads it: the file is
+next to the picture, so nothing has to remember a path.
 """
 
 import base64
+import json
 import os
 from datetime import datetime
 from pathlib import Path
@@ -73,6 +85,10 @@ RATIO = {"feed": "3:4", "square": "1:1", "story": "9:16"}
 Format = Literal["feed", "square", "story"]
 
 WHERE = config.WORKSPACE / "imagenes"
+
+# The sidecar's suffix. The social plugin knows this convention by the same
+# name: a picture and its brief differ only in this.
+BRIEF = ".json"
 
 # A generation is a minute or two of provider time, so the read is generous;
 # the connect is not, because a provider that does not pick up the phone is not
@@ -132,8 +148,34 @@ def next_path(suffix: str) -> Path:
     """
     WHERE.mkdir(parents=True, exist_ok=True)
     today = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%Y-%m-%d")
+    # The sidecar shares the stem, so it counts as the same number and the
+    # picture it belongs to is never overwritten by the next one.
     taken = [int(p.stem.rsplit("-", 1)[1]) for p in WHERE.glob(f"{today}-*")]
     return WHERE / f"{today}-{max(taken, default=0) + 1}{suffix}"
+
+
+def write_brief(path: Path, prompt: str, format: Format, when: datetime) -> Path:
+    """The sidecar beside the picture: what it was made from, as JSON.
+
+    `<same stem>.json`, so whoever is holding the image is holding its brief:
+    no index, no name to remember, and moving the picture out of `imagenes/`
+    is what takes the brief with it (`plugins/social/core/posts.py`).
+    """
+    brief = path.with_suffix(BRIEF)
+    brief.write_text(
+        json.dumps(
+            {
+                "prompt": prompt,
+                "format": format,
+                "model": MODEL,
+                "created_at": when.isoformat(timespec="seconds"),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n"
+    )
+    return brief
 
 
 async def generate_image(prompt: str, format: Format = "feed") -> list:
@@ -165,6 +207,7 @@ async def generate_image(prompt: str, format: Format = "feed") -> list:
     data = base64.b64decode(image["b64_json"])
     path = next_path(suffix_of(image["media_type"]))
     path.write_bytes(data)
+    write_brief(path, prompt, format, datetime.now(ZoneInfo(config.TIMEZONE)))
     # Two things in one return: the line is what the model quotes when it tells
     # the client where the picture is, and the BinaryImage is the picture
     # itself, which Pydantic AI puts in front of the model as an image.

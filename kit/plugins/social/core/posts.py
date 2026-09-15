@@ -10,6 +10,17 @@ one the close, and `alts` carries one description per slide in that same
 order. `alt` stays what it was — the post's own description — and it is the
 FIRST slide's, because that is the field the portal's `Post` reads.
 
+AND THE BRIEF OF EVERY SLIDE IS KEPT WITH IT. `generate_image` writes a
+sidecar next to each picture (`imagenes/2026-09-15-1.json`, the image plugin's
+`BRIEF` convention) with the prompt it was made from; `save_post` reads it as
+it moves the picture in, takes it out of `imagenes/` and writes the prompt into
+`prompts`, parallel to `images` and `alts` and in the same order. That is what
+makes ONE slide fixable: `replace_slide` hands the creator the brief the slide
+was made with, so it changes the one line that is wrong and keeps the rest word
+for word — which is the only thing holding a carousel's five pieces together.
+A picture with no sidecar breaks the tool loudly instead of saving a post whose
+slides cannot be fixed.
+
 THE ROUTES ARE IN THIS FILE AND NOT IN A `routes.py`, which is what the shape
 of `plugins/approval/core/` would suggest, AND THE REASON IS MEASURED. A
 plugin's surface modules import each other BY PLAIN NAME (`core/plugins.py`,
@@ -56,6 +67,11 @@ from core.tools.workspace import under
 WHERE = "posteos"
 POST = "post.json"
 CAPTION = "caption.md"
+
+# The suffix of the brief `generate_image` leaves beside every picture. The
+# same word as the image plugin's `BRIEF`, and not an import: the two plugins
+# share a `sys.modules` namespace and nothing else.
+BRIEF = ".json"
 
 # Lowercase, hyphens, short: it is half a directory name and the whole of the
 # post's id, and the id travels into the portal's URLs.
@@ -116,8 +132,11 @@ def expand(data: dict) -> dict:
     `url` with the bearer header and makes an object URL out of the bytes, so
     the client's key never travels in a query string.
 
-    Everything else of the file travels as it was written, `alts` included:
-    one description per image and in the same order as `images`.
+    Everything else of the file travels as it was written, `alts` and
+    `prompts` included: one description and one brief per image, in the same
+    order as `images`. The tab shows the brief of the slide the client is
+    looking at, which is how «everything that was used» is visible and not
+    only stored.
     """
     directory = folder(data["id"])
     return data | {
@@ -155,6 +174,46 @@ def image_path(post_id: str, name: str) -> Path | None:
     if data is None or name not in [image["name"] for image in data["images"]]:
         return None
     return folder(post_id) / name
+
+
+def incoming(workspace: Path, relative: str) -> Path:
+    """One picture the model just made, checked before it goes into a post.
+
+    The three refusals are worded for the model, which is who can fix them: a
+    path outside the workspace, a file that is not there, and a type the tab
+    cannot draw — the route answers the type off the extension, so a file it
+    has no type for would be a 500 on the tab instead of a picture.
+    """
+    try:
+        path = under(workspace, relative)
+    except ValueError:
+        raise ModelRetry(f"{relative} está fuera del espacio de trabajo") from None
+    if not path.is_file():
+        raise ModelRetry(
+            f"no encuentro {relative}: pasame la ruta que te devolvió "
+            "`generate_image`"
+        )
+    if path.suffix.lower() not in TYPES:
+        raise ModelRetry(
+            f"{relative} no es una imagen que el portal pueda mostrar: "
+            f"{', '.join(sorted(TYPES))}"
+        )
+    return path
+
+
+def brief_of(image: Path) -> str:
+    """What the picture was made from, and the sidecar taken out of `imagenes/`.
+
+    NO FALLBACK. A picture with no brief beside it did not come out of
+    `generate_image`, and saving it would leave a slide nobody can fix later:
+    the post would look finished and «arreglá la slide 2» would have nothing to
+    start from. It breaks here, where the model reads the traceback, instead of
+    a week from now in front of the client.
+    """
+    sidecar = image.with_suffix(BRIEF)
+    prompt = json.loads(sidecar.read_text())["prompt"]
+    sidecar.unlink()
+    return prompt
 
 
 def caption_file(caption: str, hashtags: list[str]) -> str:
@@ -267,28 +326,7 @@ def toolset() -> FunctionToolset:
                     f"un texto alternativo tiene {len(description)} caracteres "
                     f"y el máximo es {MAX_ALT}: una oración alcanza"
                 )
-        sources = []
-        for relative in images:
-            try:
-                path = under(ctx.deps.workspace, relative)
-            except ValueError:
-                raise ModelRetry(
-                    f"{relative} está fuera del espacio de trabajo"
-                ) from None
-            if not path.is_file():
-                raise ModelRetry(
-                    f"no encuentro {relative}: pasame la ruta que te devolvió "
-                    "`generate_image`"
-                )
-            # The route answers the type off the extension, so a file it has no
-            # type for would be a 500 on the tab instead of a picture. The
-            # format is this tool's business, which is why it is caught here.
-            if path.suffix.lower() not in TYPES:
-                raise ModelRetry(
-                    f"{relative} no es una imagen que el portal pueda mostrar: "
-                    f"{', '.join(sorted(TYPES))}"
-                )
-            sources.append(path)
+        sources = [incoming(ctx.deps.workspace, relative) for relative in images]
 
         now = datetime.now(ZoneInfo(config.TIMEZONE))
         date = now.strftime("%Y-%m-%d")
@@ -305,8 +343,14 @@ def toolset() -> FunctionToolset:
             shutil.rmtree(directory)
         directory.mkdir(parents=True)
         names = []
+        # THE BRIEF COMES IN WITH THE PICTURE. It is read before the move,
+        # while the sidecar is still beside it in `imagenes/`, and the move
+        # leaves nothing behind: one copy of the picture and one copy of what
+        # it was made from, both inside the post.
+        briefs = []
         for number, source in enumerate(sources, 1):
             name = f"{number:02d}{source.suffix.lower()}"
+            briefs.append(brief_of(source))
             source.rename(directory / name)
             names.append(name)
         data = {
@@ -319,6 +363,7 @@ def toolset() -> FunctionToolset:
             "alts": descriptions,
             "hashtags": tags,
             "images": names,
+            "prompts": briefs,
             "created_at": now.isoformat(timespec="seconds"),
             "flow": flow_of(ctx.deps.session_id),
         }
@@ -332,6 +377,83 @@ def toolset() -> FunctionToolset:
         # going to find, without counting them again from memory.
         return {"saved": post_id, "slides": len(names),
                 "url": f"/portal/posts/{post_id}"}
+
+    @ts.tool
+    def replace_slide(
+        ctx: RunContext,
+        post_id: str,
+        number: int,
+        image: str,
+        alt: str | None = None,
+    ) -> dict:
+        """Cambiar UNA sola slide de un posteo que ya está guardado.
+
+        Es la única forma de arreglar una imagen sin rehacer el posteo: pisa esa
+        slide y no toca ninguna otra, ni el pie, ni los hashtags. Llamala recién
+        cuando generaste la imagen nueva y la miraste.
+
+        Las slides se cuentan como las pasa el cliente: la 1 es el gancho y la
+        última es el cierre. Se puede arreglar cualquier posteo, no sólo el de
+        hoy.
+
+        El brief de esa slide queda reemplazado por el de la imagen nueva, así
+        que generala a partir del que está guardado en el posteo y cambiá sólo
+        lo que el pedido dice: el resto, palabra por palabra, es lo que mantiene
+        el carrusel parejo.
+
+        Args:
+            post_id: el id del posteo, `<fecha>-<slug>`, tal como viene en el
+                pedido.
+            number: qué slide cambiás, contando desde 1.
+            image: la imagen nueva, por su ruta en el espacio de trabajo: la
+                que te devolvió `generate_image`.
+            alt: el texto alternativo nuevo, si cambió lo que se ve. Si no lo
+                pasás queda el que ya tenía.
+        """
+        directory = folder(post_id)
+        path = directory / POST
+        if not path.is_file():
+            raise ModelRetry(
+                f"no hay ningún posteo «{post_id}»: el id es la fecha y el "
+                "tema, mirá el que vino en el pedido"
+            )
+        data = json.loads(path.read_text())
+        names = data["images"]
+        if not 1 <= number <= len(names):
+            raise ModelRetry(
+                f"el posteo «{post_id}» tiene {len(names)} slides y me pediste "
+                f"la {number}"
+            )
+        if alt and len(alt) > MAX_ALT:
+            raise ModelRetry(
+                f"un texto alternativo tiene {len(alt)} caracteres y el máximo "
+                f"es {MAX_ALT}: una oración alcanza"
+            )
+        source = incoming(ctx.deps.workspace, image)
+        brief = brief_of(source)
+        # THE NUMBER IS THE POSITION AND THE SUFFIX IS THE NEW PICTURE'S. A
+        # slide that comes back as a different type takes its own extension and
+        # the old file goes, or the post would list `02.png` with `02.webp`
+        # sitting next to it and nobody serving it.
+        old = names[number - 1]
+        name = f"{number:02d}{source.suffix.lower()}"
+        if name != old:
+            (directory / old).unlink()
+        source.rename(directory / name)
+        names[number - 1] = name
+        data["prompts"][number - 1] = brief
+        if alt:
+            data["alts"][number - 1] = alt
+            # `alt` is the post's own description and it is the first slide's,
+            # which is the field the portal's `Post` reads.
+            data["alt"] = data["alts"][0]
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        db.append_event(
+            "post.slide_replaced", f"Cambié la slide {number} de «{post_id}»",
+            "completed", ctx.deps.session_id, {"id": post_id, "slide": number},
+        )
+        return {"id": post_id, "slide": number, "file": name,
+                "slides": len(names), "url": f"/portal/posts/{post_id}"}
 
     return ts
 

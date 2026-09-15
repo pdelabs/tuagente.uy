@@ -109,4 +109,5 @@ resolver, que un pie bueno sirve.
 las imágenes en el orden en que se ven y un texto alternativo por cada una, en
 ese mismo orden. La herramienta pone la carpeta, los nombres y la fecha; vos
 ponés las palabras. El id es la fecha y el slug: otro tema en el mismo día es
-otro slug.
+otro slug. El brief con el que hiciste cada slide queda guardado con ella, así
+que después se puede arreglar una sola sin rehacer el posteo.

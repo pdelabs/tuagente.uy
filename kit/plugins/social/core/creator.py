@@ -29,7 +29,9 @@ WHAT IT IS BUILT FROM, and why each piece:
 - `engine.tools("read_file", "list_files")` — the brand and yesterday's posts.
   No `write_file`: what this agent leaves behind is a post, and `save_post` is
   the only thing that writes one.
-- `posts.toolset()` — `save_post`, which now exists only here.
+- `posts.toolset()` — `save_post` and `replace_slide`, which exist only
+  here: this hand writes a post and it is the only one that fixes a slide of
+  one already saved.
 - the image capability, a notebook of its own WITH ITS OWN RULE (`MEMORY`
   below: the face's talks about a chat this agent is not in), and a READ of the
   face's notebook, from the two plugins that load before this one.
@@ -72,6 +74,9 @@ DESCRIPTION = (
     " lo guarda en Posteos. Pasale la idea o el tema, o «el de hoy», y cualquier"
     " corrección o preferencia que el cliente haya dicho en esta conversación:"
     " el creador no la ve."
+    " También arregla UNA sola slide de un posteo que ya está guardado, sin"
+    " tocar las otras ni el pie: para eso pasale el id del posteo, qué número"
+    " de slide es y qué está mal, con las palabras del cliente."
 )
 
 # Its notebook's scope segment: `memoria/instagram-creator/MEMORY.md`.

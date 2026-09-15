@@ -196,13 +196,31 @@ the mechanism changes there is one file to change. The engine's own mechanisms
 follow the same rule from `core/agent.py`: the three lines about flows are
 there, next to the tools that make them true.
 
+**Images.** `image` brings one tool and registers it on nobody: it PROVIDES
+Pydantic AI's `ImageGeneration` capability, and today the only agent holding it
+is the social plugin's creator. `generate_image(prompt, format)` asks
+OpenRouter for a SHAPE (`feed` 3:4, `square` 1:1, `story` 9:16 — the provider
+does not serve 4:5), writes the picture into `workspace/imagenes/` as
+`<YYYY-MM-DD>-<n>.<ext>` with the extension the provider's own `media_type`
+says, and hands the model back the line plus the picture itself, as an image.
+
+**And beside every picture it writes its BRIEF**: the same stem with a `.json`
+suffix — `imagenes/2026-09-15-1.png` and `imagenes/2026-09-15-1.json` —
+carrying `{"prompt", "format", "model", "created_at"}`. It is a convention and
+not an internal detail, because the social plugin reads it: `save_post` moves
+the brief into the post next to the slide it made and takes it out of
+`imagenes/`, so what a picture was made from travels with the picture and
+nothing has to remember a path. A picture with no sidecar breaks `save_post`
+loudly rather than saving a post whose slides nobody can fix afterwards.
+
 **Posts.** `social` is the plugin that turns the engine into something that
 produces work a client looks at, and it is the first one a client BUYS
 (`social-package`, which installs it and `image`). It brings one tool,
 `save_post` — on its own sub-agent and not on the face, see **Sub-agents** —
 and the tool owns the format: the post lands in
 `workspace/posteos/<YYYY-MM-DD>-<slug>/` as `post.json` (id, date, format,
-caption, alt, alts, hashtags, images, `flow` when the clock started the run),
+caption, alt, alts, hashtags, images, prompts, `flow` when the clock started
+the run),
 `caption.md` — the caption, a blank line, the hashtags — and `01.png`, `02.png`
 …, MOVED out of `imagenes/` so there is one copy of each picture and it is
 inside the post. The folder is the check: a second post with the same slug on
@@ -224,6 +242,22 @@ cut to. What holds the slides together is not code either — the brief of each
 one repeats the shared visual system word for word, because the model never
 sees the slide it drew a minute ago.
 
+**ONE SLIDE CAN BE FIXED WITHOUT TOUCHING THE OTHERS**, and that is what the
+briefs are for. `post.json` carries `prompts`, parallel to `images` and `alts`:
+the brief each slide was generated from, moved in from `imagenes/` with the
+picture. The client asks for the fix in the Posts tab — «Arreglar esta imagen»
+under the slide, one line saying what is wrong — and the tab does not call the
+agent: it opens `/app/chat?p=Arreglá la slide 2 del posteo «<id>»: …`, which
+the chat SENDS. From there it is the normal path: the face delegates, the
+creator reads that post's stored brief, changes only what the request asks and
+keeps the rest word for word — the whole reason a fixed slide still belongs to
+the same carousel — generates it in the same format, looks at it, and calls
+`replace_slide(post_id, number, image, alt=None)`, the second tool of the posts
+toolset. It writes the picture over slide `number` (keeping the `NN.<ext>`
+naming), replaces that slide's prompt and, when one is given, its alt, and
+writes a `post.slide_replaced` event. Any day's post can be fixed, not only
+today's, and the caption is never rewritten.
+
 Its three routes are the Posts tab: `GET /portal/posts` (newest first, each
 image expanded to `{name, bytes, url}`), `GET /portal/posts/{id}` and
 `GET /portal/posts/{id}/{file}`, which answers the bytes with a real
@@ -233,7 +267,17 @@ and not by `/portal/files`, which answers `text/plain` for everything it has.
 
 ```bash
 python3 engine/tests/test_post.py       # ~3 min, ~US$0.07
+python3 engine/tests/test_fix.py        # ~3 min, ~US$0.11
 ```
+
+`test_fix.py` is the fix's own gate, two turns: one that leaves a carousel and
+one that says what is wrong with slide 2. Seven claims — the face delegated and
+never called `replace_slide`, that slide's bytes changed, every other slide's
+did not, the brief changed but kept a 600-character run of the old one (the
+shared visual block), `post.slide_replaced` in the face's session, an answer
+that names the slide, and `prompts` served by `/portal/posts/{id}`. It moves
+the day's post aside and puts it back, like the one above. Measured 2026-09-15:
+202 s and US$0.11, the carousel most of it and the fix 40 s.
 
 One chat turn — «Armá el posteo de hoy para Instagram y guardalo» — and nine
 assertions from outside: the folder with its three kinds of file, the listing,

@@ -21,6 +21,25 @@ estaba y que no tocaste nada. Si el pedido trae otro tema, es otro posteo con
 otro slug y va igual. Pisar uno sólo si el pedido te lo dice con todas las
 letras.
 
+**Si lo que te piden es arreglar una slide, nada de lo de arriba corre.** El
+pedido te va a llegar así: «Arreglá la slide N del posteo «X»: qué está mal».
+Hacé esto y sólo esto:
+
+1. Leé `posteos/X/post.json`. En `prompts` está el brief con el que se hizo
+   cada slide, en el mismo orden que las imágenes: el de la slide N es el que
+   te importa.
+2. Cambiá de ese brief **sólo** lo que el pedido dice. Todo lo demás va palabra
+   por palabra como estaba —el fondo, los colores, la tipografía, el texto que
+   ya tenía—: eso es lo que hace que la slide arreglada siga siendo del mismo
+   carrusel.
+3. Generala con `generate_image` en el mismo formato que las otras (`feed` en
+   un carrusel) y miralá contra los cinco puntos de siempre.
+4. Guardala con `replace_slide`. Si cambió lo que se ve, pasale también el
+   texto alternativo nuevo.
+
+Nunca regeneres las otras slides y nunca reescribas el pie: te pidieron una
+cosa. Y volvé diciendo qué slide tocaste, qué cambiaste y si quedó o no.
+
 **Volvé con un informe de dos o tres líneas**, para que la otra parte le pueda
 contar al cliente sin adivinar:
 
