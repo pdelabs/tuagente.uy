@@ -4,9 +4,10 @@ The launch sequence, in order: what this is, what it does for you, who is in
 charge, what it costs to find out, and proof we are our own client. Each post
 is handed to our agent as written here; the creator keeps the words and adds
 the alt texts. The «→» phrase on a slide is the one that gets the violet
-marker; a slide without one has no accent.
+marker; a slide without one has no accent. Each post names its look (`ink` or
+`light`, see `social/brand.md`), and the whole carousel uses it.
 
-## 1. agente-vs-chatbot — sin humo
+## 1. agente-vs-chatbot — sin humo · look `ink`
 
 - Slide 1: «Un chatbot responde. Un agente trabaja.» → «trabaja»
 - Slide 2: «El chatbot espera que le hables.»
@@ -26,7 +27,7 @@ Lo que sale para afuera —un mail, un presupuesto, un posteo— espera tu ok.
 Si querés ver cómo sería en tu empresa, escribinos.
 ```
 
-## 2. turnos-de-noche — qué le pedís
+## 2. turnos-de-noche — qué le pedís · look `ink`
 
 - Slide 1: «Los turnos que perdés de noche no vuelven solos.» → «de noche»
 - Slide 2: «Alguien escribe a las 23:40. Vos estás durmiendo.»
@@ -47,7 +48,7 @@ A la mañana ves qué hizo y qué espera tu ok.
 Escribinos y te decimos si ya lo tenemos escrito.
 ```
 
-## 3. quien-manda — quién manda
+## 3. quien-manda — quién manda · look `light`
 
 - Slide 1: «¿Quién manda cuando el agente trabaja solo?»
 - Slide 2: «Vos.» → «Vos.»
@@ -67,13 +68,14 @@ Y si querés frenarlo, hay un botón.
 Registro, aprobación y freno. Lo demás es confianza a ciegas.
 ```
 
-## 4. diagnostico — sin humo, the money
+## 4. diagnostico — sin humo, the money · look `light`
 
 - Slide 1: «El diagnóstico sale USD 200.» → «USD 200»
 - Slide 2: «Nos sentamos con tu proceso y te decimos qué trabajo le daríamos al agente primero.»
-- Slide 3: «Si seguís, se descuenta.» → «se descuenta»
-- Slide 4: «Si no seguís, te quedás con el diagnóstico.» → «te quedás»
-- Slide 5: «Escribinos y lo agendamos.» → «Escribinos»
+- Slide 3 (shapes only, no text)
+- Slide 4: «Si seguís, se descuenta.» → «se descuenta»
+- Slide 5: «Si no seguís, te quedás con el diagnóstico.» → «te quedás»
+- Slide 6: «Escribinos y lo agendamos.» → «Escribinos»
 
 Caption:
 
@@ -87,10 +89,10 @@ El setup y el mensual se cotizan ahí, con tu caso adelante y no con una tabla.
 Escribinos y lo agendamos.
 ```
 
-## 5. mr-wobbles — somos nuestro propio cliente
+## 5. mr-wobbles — somos nuestro propio cliente · look `ink`, Mr. Wobbles placed bottom-right on slide 2
 
 - Slide 1: «Este posteo lo escribió un agente. Lo aprobó una persona.» → «Lo aprobó una persona»
-- Slide 2: «Se llama Mr. Wobbles y trabaja para nosotros.» → «Mr. Wobbles»
+- Slide 2: «Se llama Mr. Wobbles y trabaja para nosotros.» → «Mr. Wobbles» — text in the top 55%, then `place_image` with `mr-wobbles.png` bottom-right
 - Slide 3: «Todas las mañanas deja un posteo listo. No lo publica: lo revisamos.» → «No lo publica»
 - Slide 4: «Lo que te vendemos es lo que usamos.» → «lo que usamos»
 - Slide 5: «¿Querés uno con tu nombre y tu proceso? Escribinos.» → «Escribinos»
@@ -102,7 +104,7 @@ Este posteo lo escribió un agente. Lo aprobó una persona.
 
 Se llama Mr. Wobbles y es el agente que tuagente.uy usa para sí mismo.
 Todas las mañanas deja un posteo listo con la voz de la marca. No lo publica: lo revisamos y lo publicamos nosotros.
-No se dibuja a sí mismo, por eso las placas son texto. Lo que te vendemos es exactamente lo que usamos.
+La cara es siempre la misma: no se dibuja a sí mismo. Lo que te vendemos es exactamente lo que usamos.
 
 ¿Querés uno con tu nombre y tu proceso? Escribinos.
 ```

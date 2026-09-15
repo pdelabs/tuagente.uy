@@ -2,7 +2,7 @@
 title: Posteos para Instagram
 client_summary: "Escribe el posteo del día con tu voz, le hace el carrusel con tus colores y te lo deja listo para revisar."
 name: post
-description: "Escribe un posteo de Instagram con la voz de la marca y le genera el carrusel: lee marca/brand.md, arma el pie con la formula (gancho, una idea, un solo pedido, hasta 5 hashtags), genera de 3 a 5 slides con generate_image, MIRA cada una contra una lista de cinco puntos y las guarda con save_post. Usala cada vez que haya que dejar un posteo, un pie de foto o contenido para Instagram."
+description: "Escribe un posteo de Instagram con la voz de la marca y le genera el carrusel: lee marca/brand.md, arma el pie con la formula (gancho, una idea, un solo pedido, hasta 5 hashtags), genera de 3 a 6 slides con generate_image, MIRA cada una contra una lista de cinco puntos y las guarda con save_post. Usala cada vez que haya que dejar un posteo, un pie de foto o contenido para Instagram."
 version: 1.0.0
 license: MIT
 ---
@@ -57,7 +57,7 @@ esa imagen, en una oración, para quien no la ve.
 
 ## 4. Hacé el carrusel
 
-El posteo del día es un **carrusel de 3 a 5 slides**, y cada una dice una sola
+El posteo del día es un **carrusel de 3 a 6 slides**, y cada una dice una sola
 cosa: la **1 es el gancho** —la frase más fuerte, grande, la que frena el
 scroll—, **las del medio una idea cada una** —las del cuerpo del pie dichas con
 otras palabras, una oración corta, nunca el pie copiado— y la **última cierra**
