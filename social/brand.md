@@ -119,7 +119,9 @@ templates.
 - **Nothing on the image but the piece itself.** No mark, no wordmark, no
   `tuagente.uy`, no handles, no URLs, no slide counter, no color codes drawn:
   the account name is already on the post. The only text is the slide's
-  line, word for word, in Spanish with its accents and its opening «¿» «¡».
+  line, character by character: the model adds an opening «¿» to anything
+  it is told is Spanish, so the brief never mentions the marks; a question
+  carries its own «¿» in the text.
 - **Layout:** feed `1080x1350` (4:5). Text block starts 9% in from the left,
   is at most 75% wide, and sits at the vertical center. Keep the top and
   bottom 12% empty: Instagram crops them in the feed.
@@ -141,7 +143,9 @@ optionally a small grid of violet dots in one corner — never touching the
 text. No characters, no robots, no mascots, no people, no hands, no icons,
 no 3D objects, no illustrations, no logos, no watermarks, no URLs, no slide
 numbers, no color codes. The ONLY text on the image is the headline below,
-word for word, in Spanish, with its accents and opening ¿ ¡ marks.
+reproduced character by character: same words, same accents, same
+punctuation, nothing added — no question mark or exclamation mark that is
+not in it.
 ```
 
 Then the slide's own two lines: the headline, and which phrase (if any)
