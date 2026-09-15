@@ -64,6 +64,20 @@ const SPREADSHEET_EXT = /\.(xlsx|xls|csv|tsv|ods)$/i;
 export const isImage = (path: string) => IMAGE_EXT.test(path);
 export const isSpreadsheet = (path: string) => SPREADSHEET_EXT.test(path);
 
+/** What type a picture's BYTES have to be handed to the browser as.
+ *
+ *  Every image in the portal arrives as an ArrayBuffer fetched with the
+ *  bearer (`getAdapterBytes`), and a Blob with no type doesn't render in an
+ *  `<img>`: the response's own header is gone by then, so the name is what
+ *  answers. Here for the same reason `FILE_EXTENSIONS` is — the Posts tab and
+ *  the markdown renderer both need it, and two copies drift. */
+const MIME: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+  webp: "image/webp", gif: "image/gif", svg: "image/svg+xml",
+};
+export const imageMime = (path: string) =>
+  MIME[(path.split(".").pop() ?? "").toLowerCase()];
+
 /** Is this bare piece of text an agent entity? */
 export function detectEntity(raw: string): Entity | null {
   const text = raw.trim();

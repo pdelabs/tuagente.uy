@@ -1,10 +1,14 @@
 "use client";
 
 // Posteos — what the agent left ready to publish: the image, the text and the
-// hashtags. IT DOES NOT PUBLISH. The client reviews it, copies the caption,
-// downloads the images and posts them from their own account; that is the
-// whole promise of the tab and the copy repeats it wherever it could be
-// misread.
+// hashtags. THE TAB ITSELF PUBLISHES NOTHING, and it never asks the agent for
+// anything directly either. The client reviews the post and then takes one of
+// two roads: download the images and post them from their own account, or ask
+// the agent to publish it — «Publicar en Instagram» writes the sentence into
+// the chat, the face calls its one gated tool, and the request lands in
+// Aprobaciones, where the client says yes. A post that went out carries
+// `published` and the card says so with the link; nothing else in here changes
+// a post's state.
 //
 // IT IS DRAWN AS THE FEED IT IS GOING INTO: one centred 470px column, newest
 // first, the header with the agent's face and the account's handle, the image
@@ -13,9 +17,10 @@
 // and a three-column grid of thumbnails answers a different question (how
 // many are there) than the one they came with (how is this going to look).
 // The row of icons is INERT and carries no counts: a number there would be an
-// invented fact about a post that nobody has published yet. The header of the
-// tab says out loud that nothing here is published, precisely because the
-// card now looks like something that is.
+// invented fact — even a post that DID go out has its likes on Instagram and
+// not here. What the card says instead is whether it went out at all, and the
+// header of the tab repeats it, precisely because the card looks like
+// something that is already up.
 //
 // Contract (the social plugin's router, shown when the manifest flips `posts`):
 //   GET {adapter}/portal/posts           → { available, posts: Post[] }  newest first
@@ -62,14 +67,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Bookmark, Check, ChevronLeft, ChevronRight, Copy, Download,
-  Ellipsis, Heart, History, ImageOff, Images, Link2, Maximize2, MessageCircle,
-  RefreshCw, Send, Wand2, X,
+  Ellipsis, ExternalLink, Heart, History, ImageOff, Images, Instagram, Link2,
+  Maximize2, MessageCircle, RefreshCw, Send, Wand2, X,
 } from "lucide-react";
 import {
   getFlows, getManifest, getPost, getPostImage, getPosts, loadConfig,
   type Flow, type HttpError, type Manifest, type Post, type PortalConfig,
   type PostVersion,
 } from "../lib/agent";
+import { imageMime } from "../lib/entities";
 import { PARAM, closeInRoute, openInRoute, urlFor, useRouteParam } from "../lib/routes";
 import { AgentitoAvatar, loadAgentLook, type AgentitoLook } from "../lib/agentito";
 import { buildChatLink } from "../lib/flowExamples";
@@ -187,12 +193,8 @@ function copyText(value: string, done: () => void, ask = "Copiá el texto:") {
 
 // The type is derived from the name and not read off the response, because
 // `getPostImage` hands back the raw bytes (same as `getFileBytes`): a Blob
-// with no type doesn't render in an `<img>`.
-const MIME: Record<string, string> = {
-  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
-  webp: "image/webp", gif: "image/gif",
-};
-const mimeOf = (name: string) => MIME[(name.split(".").pop() ?? "").toLowerCase()];
+// with no type doesn't render in an `<img>`. `imageMime` is the lib's, shared
+// with the markdown renderer, which draws the same bytes on an approval card.
 
 /** One image, fetched with the bearer and held as an object URL for as long
  *  as it is on screen. */
@@ -209,7 +211,7 @@ function usePostImage(cfg: PortalConfig | null, id: string, name: string) {
     getPostImage(cfg, id, name)
       .then((bytes) => {
         if (!alive) return;
-        made = URL.createObjectURL(new Blob([bytes], { type: mimeOf(name) }));
+        made = URL.createObjectURL(new Blob([bytes], { type: imageMime(name) }));
         setUrl(made);
       })
       .catch(() => { if (alive) setFailed(true); });
@@ -465,6 +467,54 @@ const fixRequest = (id: string, number: number, what: string) =>
 const ASK_LINK =
   "inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] " +
   "font-semibold text-white transition hover:bg-primary-dark";
+
+/* ── Publishing: asked for in the chat, answered in Aprobaciones ─────────── */
+
+/** The sentence that travels to the chat. Finished, because `?p=` SENDS it on
+ *  arrival: the client does not land in the chat with half a request to
+ *  complete. The id is in it because it is what the agent's tool takes. */
+const publishRequest = (id: string) => `Publicá en Instagram el posteo «${id}»`;
+
+/** «Publicar en Instagram» — and it is a LINK to the chat, not a call of this
+ *  tab's own. The portal talks to the agent by talking to the agent: the face
+ *  reads the message, calls its one gated tool, and the request lands in
+ *  Aprobaciones with the slides and the caption on it. Nothing goes out until
+ *  the client says yes there.
+ *
+ *  An `<a>` and not `Btn` for the same reason as «Pedírselo»: middle-click and
+ *  "open in a new tab" keep working. */
+function PublishLink({ post }: { post: Post }) {
+  return (
+    <Link href={buildChatLink(publishRequest(post.id))} className={ASK_LINK}>
+      <Instagram className="h-3.5 w-3.5" />
+      Publicar en Instagram
+    </Link>
+  );
+}
+
+/** A post that DID go out: when, and the link to it on Instagram. It replaces
+ *  the button — there is nothing left to ask for — and the permalink opens in
+ *  a tab of its own, because it is the only link in the portal that leaves the
+ *  portal. */
+function Published({ post }: { post: Post }) {
+  const published = post.published;
+  if (!published) return null;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <Chip tone="green">Publicado</Chip>
+      <span className="text-[11px] text-ink-soft">{whenItHappened(published.at)}</span>
+      <a
+        href={published.permalink}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="inline-flex items-center gap-1 text-[12px] font-semibold text-primary underline-offset-4 transition hover:underline"
+      >
+        Verlo en Instagram
+        <ExternalLink className="h-3 w-3" />
+      </a>
+    </span>
+  );
+}
 
 /** What the slide was asked of the model, folded away. Monospace because it is
  *  a brief and not prose: the line breaks and the quoted words are the piece's
@@ -888,12 +938,17 @@ function PostCard({ cfg, p, look, handle, flowName, onOpen, wide = false }: {
         <span className="ml-auto"><Chip tone={shape.tone}>{shape.label}</Chip></span>
       </div>
 
-      {/* The product's own actions. Small and secondary on purpose: the card
-          has to keep reading as a post, and these are what the client
-          actually came to do with it. */}
+      {/* The product's own actions. Copying and downloading stay small and
+          secondary — the card has to keep reading as a post — and PUBLISHING
+          is the primary one, because it is the whole of what the client came
+          to decide. A post that already went out has no button: it has the
+          date it went out and the link to it. */}
       <div className="flex flex-wrap items-center gap-2 border-t border-black/[0.07] px-3 py-2.5">
         <CopyText text={() => forPublishing(p)} label="Copiar texto" />
         {!wide && current && <DownloadImage cfg={cfg} id={p.id} name={current.name} />}
+        <span className="ml-auto">
+          {p.published ? <Published post={p} /> : <PublishLink post={p} />}
+        </span>
       </div>
       <div className="px-3 pb-3">
         <AltText alt={wide ? (p.alts ?? [p.alt]).map((a, i) => (p.images.length > 1 ? `${i + 1}. ${a}` : a)).join("\n") : altOf(p, index)} />
@@ -1011,7 +1066,7 @@ export default function PostsPage() {
   const header = (
     <PageHeader
       title="Posteos"
-      subtitle="Lo que tu agente dejó armado para tus redes. Lo publicás vos"
+      subtitle="Lo que tu agente armó para tus redes. Sale cuando vos le decís que sí"
       actions={
         <IconBtn label="Actualizar" disabled={loading} onClick={() => load()}>
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -1090,11 +1145,13 @@ export default function PostsPage() {
     <div className={FEED}>
       {header}
 
-      {/* The card looks like something that is already up. It isn't, and the
-          one thing this tab cannot let anyone misread is exactly that. */}
+      {/* The card looks like something that is already up, and most of what
+          is here isn't: that is the one thing this tab cannot let anyone
+          misread, so it says which is which and how one becomes the other. */}
       <p className="mb-4 text-[12px] leading-relaxed text-ink-soft">
-        Se ve como en Instagram para que sepas cómo va a quedar. Nada de esto está
-        publicado: bajás la imagen, copiás el texto y lo subís vos.
+        Se ve como en Instagram para que sepas cómo va a quedar. Lo que no dice
+        «Publicado» todavía no salió: o lo bajás y lo subís vos, o le pedís que lo
+        publique y te lo deja en Aprobaciones para que le des el sí.
       </p>
 
       {/* A link to a post that no longer exists: it says so and the feed

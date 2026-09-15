@@ -146,12 +146,16 @@ const EVENTS: Record<string, string | ((n: string) => string)> = {
   status_changed: "Cambió de estado",
   scheduled: "Quedó programada",
   // The social plugin writing a post into `posteos/`. Worded as a fact and
-  // not as "Publicó": nothing in the product publishes anything -- the client
-  // downloads it and posts it themselves, and the Posteos tab says so.
+  // NOT as "Publicó", which is now a different event and a different day:
+  // saving one is the agent's, publishing it is the client's yes.
   "post.saved": "Guardó un posteo",
   // One slide of a post it had already saved, made again: the client said what
   // was wrong with that image and only that image changed.
   "post.slide_replaced": "Cambió una imagen de un posteo",
+  // IT WENT OUT, and it only ever gets here after the client approved it: the
+  // tool that does it is gated, so this line can be read as "you said yes and
+  // it happened". The Activity title carries the permalink.
+  "post.published": "Publicó un posteo en Instagram",
   // The face delegated to a sub-agent and got the work back. The Activity
   // title carries the sub-agent's name and the task; these are the chips.
   "delegation.started": "Le pidió el trabajo a un ayudante",

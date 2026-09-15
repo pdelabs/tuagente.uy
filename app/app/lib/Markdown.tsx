@@ -8,7 +8,7 @@
 // arrives broken most of the time: half-open fences, tables with no body,
 // unclosed `$$`. The rule is that none of that can explode or flicker ugly.
 
-import { Children, memo, useMemo, type ReactNode } from "react";
+import { Children, memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Element, ElementContent } from "hast";
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -20,8 +20,10 @@ import {
   FileText, Image as ImageIcon, LayoutDashboard, Sheet, Ticket as TicketIcon,
 } from "lucide-react";
 import {
-  detectEntity, EntityChip, isImage, isSpreadsheet, useOpenEntity, FILE_EXTENSIONS, type Entity,
+  detectEntity, EntityChip, imageMime, isImage, isSpreadsheet, useOpenEntity,
+  FILE_EXTENSIONS, type Entity,
 } from "./entities";
+import { getAdapterBytes, loadConfig } from "./agent";
 import { readableFileName } from "./names";
 import { PARAM } from "./routes";
 import Artifact from "./Artifact";
@@ -99,6 +101,78 @@ export function closeOpenFence(md: string): string {
 /** Can the URL actually be fetched, or is it a path in the agent's own workspace? */
 function isFetchable(src: string): boolean {
   return /^(https?:)?\/\//i.test(src) || /^(data|blob):/i.test(src);
+}
+
+/* ── Pictures the ADAPTER serves ─────────────────────────────────────────── */
+
+/** A route of the adapter's, written into the markdown by the agent's own
+ *  side: `/portal/posts/<id>/01.png`, which is how the approval card for
+ *  `publish_instagram` shows the slides about to go out. Not a workspace path
+ *  and not a URL the browser can fetch by itself — every byte needs the
+ *  bearer. */
+const isAdapterPath = (src: string) => src.startsWith("/portal/");
+
+/** One of those, fetched with the bearer and held as an object URL for as long
+ *  as it is on screen. Same mechanism as the Posts tab and the Files tab, and
+ *  for the same reason: an `<img>` tag carries no header, and putting the key
+ *  in the URL is the one thing the portal never does. */
+function AdapterImage({ path, alt, title }: {
+  path: string; alt: string; title?: string;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const cfg = loadConfig();
+    if (!cfg) { setFailed(true); return; }
+    let alive = true;
+    let made: string | null = null;
+    getAdapterBytes(cfg, path)
+      .then((bytes) => {
+        if (!alive) return;
+        made = URL.createObjectURL(new Blob([bytes], { type: imageMime(path) }));
+        setUrl(made);
+      })
+      .catch(() => { if (alive) setFailed(true); });
+    return () => {
+      alive = false;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [path]);
+
+  // The picture didn't come back: the name, in a box, instead of a broken
+  // icon. What it was is still readable, which is what the alt is for.
+  if (failed) {
+    return (
+      <span className="my-1 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-black/[0.07] bg-black/[0.03] px-2 py-1 align-middle text-ink-soft">
+        <ImageIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span className="truncate text-[12px]">{alt || path}</span>
+      </span>
+    );
+  }
+  if (!url) {
+    return (
+      <span
+        className="my-2 block h-24 w-full animate-pulse rounded-lg bg-black/[0.06]"
+        aria-hidden
+      />
+    );
+  }
+  return (
+    <span className="my-2 block">
+      {/* eslint-disable-next-line @next/next/no-img-element -- next/image
+          can't carry the bearer, and these bytes only exist as an object URL. */}
+      <img
+        src={url}
+        alt={alt}
+        title={title}
+        className="block h-auto max-w-full rounded-lg border border-black/[0.07]"
+      />
+      {alt.trim() ? (
+        <span className="mt-1 block text-[12px] leading-snug text-ink-soft">{alt}</span>
+      ) : null}
+    </span>
+  );
 }
 
 /* ── What the agent named, turned into something you can touch ──────────── */
@@ -403,6 +477,12 @@ function makeComponents(streaming: boolean): Components {
     img: ({ src, alt, title }) => {
       const url = typeof src === "string" ? src : "";
       if (!url) return null;
+
+      // A route of the adapter's: the bytes need the bearer, so they are
+      // fetched and drawn from a Blob instead of going into an `<img src>`.
+      if (isAdapterPath(url)) {
+        return <AdapterImage path={url} alt={alt ?? ""} title={title} />;
+      }
 
       // The agent writes paths from its own workspace (./out/plot.png):
       // requesting that from the portal gives a 404 and a broken-image icon.

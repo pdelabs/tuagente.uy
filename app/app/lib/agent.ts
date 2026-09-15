@@ -1033,6 +1033,11 @@ export type Post = {
   created_at: string;
   /** The slug of the flow that produced it, if a flow did. */
   flow: string | null;
+  /** WHERE IT ENDED UP, once the client approved publishing it. Written by
+   *  the social plugin's `publish_instagram` and never by the portal: the tab
+   *  reads this, it doesn't publish. Absent on everything that hasn't gone
+   *  out, which is most of what's in the tab. */
+  published?: { at: string; media_id: string; permalink: string };
 };
 export const getPosts = (c: PortalConfig) =>
   get<{ available: boolean; posts: Post[] }>(c.adapter, "/portal/posts", c);
@@ -1041,8 +1046,17 @@ export const getPost = (c: PortalConfig, id: string) =>
 /** One image's raw bytes. Same reason as `getFileBytes`: a PNG that goes
  *  through `res.text()` comes back with every invalid byte replaced, and both
  *  the preview and the download would be broken. */
-export const getPostImage = async (c: PortalConfig, id: string, name: string) => {
-  const path = `/portal/posts/${encodeURIComponent(id)}/${encodeURIComponent(name)}`;
+export const getPostImage = (c: PortalConfig, id: string, name: string) =>
+  getAdapterBytes(c, `/portal/posts/${encodeURIComponent(id)}/${encodeURIComponent(name)}`);
+
+/** The raw bytes of one of the ADAPTER'S OWN paths, with the bearer.
+ *
+ *  For a path the agent WROTE rather than one the portal built: the approval
+ *  card for `publish_instagram` carries the post's slides as
+ *  `![Imagen 1](/portal/posts/<id>/01.png)`, and an `<img src>` carries no
+ *  header — which is why `lib/Markdown.tsx` fetches those bytes through here
+ *  and draws an object URL. The key never travels in a query string. */
+export const getAdapterBytes = async (c: PortalConfig, path: string) => {
   const res = await fetch(c.adapter + path, { headers: headers(c) });
   if (!res.ok) throw httpError(res.status, path);
   return res.arrayBuffer();
