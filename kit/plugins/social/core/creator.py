@@ -32,6 +32,9 @@ WHAT IT IS BUILT FROM, and why each piece:
 - `posts.toolset()` — `save_post` and `replace_slide`, which exist only
   here: this hand writes a post and it is the only one that fixes a slide of
   one already saved.
+- `stamp.toolset()` — `place_image`, the brand's own pictures pasted onto a
+  slide by code. A second toolset and not a tool inside `posts.py` because it
+  is not about the post: it is about a picture, before there is a post.
 - the image capability, a notebook of its own WITH ITS OWN RULE (`MEMORY`
   below: the face's talks about a chat this agent is not in), and a READ of the
   face's notebook, from the two plugins that load before this one.
@@ -52,6 +55,7 @@ from pathlib import Path
 
 import frontmatter
 import posts
+import stamp
 from pydantic_ai import Agent
 from pydantic_ai_harness.subagents import SubAgent
 
@@ -119,7 +123,11 @@ def build(engine) -> SubAgent:
         name=NAME,
         description=DESCRIPTION,
         instructions=[engine.identity, PROSE.read_text(), procedure(), engine.today],
-        toolsets=[engine.tools("read_file", "list_files"), posts.toolset()],
+        toolsets=[
+            engine.tools("read_file", "list_files"),
+            posts.toolset(),
+            stamp.toolset(),
+        ],
         capabilities=[
             engine.use("image"),
             engine.use("memory")(SCOPE, MEMORY),

@@ -21,6 +21,19 @@ estaba y que no tocaste nada. Si el pedido trae otro tema, es otro posteo con
 otro slug y va igual. Pisar uno sólo si el pedido te lo dice con todas las
 letras.
 
+**La marca tiene dos estéticas, `ink` y `light`, y están escritas en
+`marca/brand.md`.** Elegí una por posteo y usá su bloque, palabra por palabra,
+en el brief de todas las slides de ese carrusel: mezclarlas es un carrusel que
+se lee como dos. Una sola slide del carrusel puede ser «shapes only» si el
+archivo de marca lo permite, y cómo es esa slide también lo dice él.
+
+**Las imágenes fijas de la marca no las dibuja el modelo: se pegan con
+`place_image`.** Cuando el posteo es sobre Mr. Wobbles —el pilar «somos nuestro
+propio cliente»—, a la slide que lo nombra le pegás `mr-wobbles.png` en
+`bottom-right` con el tamaño que viene por defecto, y el brief de ESA slide
+pide que el texto quede en el 55% de arriba, así no se pisan. En ningún otro
+posteo va. El isologo (`mark-circle.png`) no va en ninguna slide, nunca.
+
 **Si lo que te piden es arreglar una slide, nada de lo de arriba corre.** El
 pedido te va a llegar así: «Arreglá la slide N del posteo «X»: qué está mal».
 Hacé esto y sólo esto:

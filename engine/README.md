@@ -30,7 +30,7 @@ What lives where:
 |---|---|
 | `state/core.db` | SQLite (WAL): sessions, messages, history, approvals, events |
 | `state/identity.json` | what the client changed from the portal; wins over the seed |
-| `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did, `memoria/` what it remembers about the client, `flows/` what runs on its own, `imagenes/` what it drew, `posteos/` the finished posts, `marca/brand.md` the brand it writes with |
+| `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did, `memoria/` what it remembers about the client, `flows/` what runs on its own, `imagenes/` what it drew, `posteos/` the finished posts, `marca/` the brand it writes with — `brand.md` and the fixed assets `place_image` pastes onto a slide |
 | `agent/SOUL.md` | the client section + the `core:base` block, mounted read-only |
 | `/opt/kit/plugins` | `kit/plugins`, read-only. `CORE_PLUGINS` picks which load, and each one's `core/` surface is what it adds to this engine |
 
@@ -241,6 +241,36 @@ already asks for, so the skill tells the creator to generate every slide as
 cut to. What holds the slides together is not code either — the brief of each
 one repeats the shared visual system word for word, because the model never
 sees the slide it drew a minute ago.
+
+**THE BRAND'S OWN PICTURES ARE PASTED ON BY CODE, NEVER DRAWN.**
+`workspace/marca/` holds the brand: `brand.md`, the file the creator reads
+before writing a word, and the fixed assets next to it — a character, an
+isologo, whatever that client owns. Asked for one of those in a brief, an image
+model draws a different animal every time and misspells the logo, which is why
+the brand block forbids them and why `place_image(image, asset, corner,
+size=0.28, margin=0.06)` exists: it opens the generated slide, resizes the
+asset to `size` × the slide's width keeping its aspect, pastes it WITH ITS OWN
+ALPHA AS THE MASK at that corner with `margin` × width of air, and writes a NEW
+picture in `imagenes/` — with a sidecar carrying the slide's own brief plus
+`[place_image: <asset> at <corner>, size <size>]` and `model` «place_image».
+The bare slide stays: the creator looks at both and saves the one it wants.
+The folder's listing is the vocabulary — an asset that is not a file in
+`marca/` comes back as the list of the ones that are — and the tool answers the
+same two things `generate_image` does, the line and the picture, because the
+composite has to go through the five-point checklist like anything else. It is
+the social plugin's `core/stamp.py`, a second toolset on the creator: it is not
+about the post, it is about a picture before there is a post.
+
+```bash
+python3 engine/tests/test_place.py     # free, a second, no model
+```
+
+Six claims inside the container: the composite landed and the bare slide
+stayed, it is the slide's own size, the asset is at the corner asked for with
+its transparent quadrant still showing the background (a paste without the mask
+puts a cut-out in a black box), the sidecar carries the brief plus the
+placement line, the tool answers the picture and not only a path, and an asset
+that is not in `marca/` comes back as a `ModelRetry` listing the ones that are.
 
 **ONE SLIDE CAN BE FIXED WITHOUT TOUCHING THE OTHERS**, and that is what the
 briefs are for. `post.json` carries `prompts`, parallel to `images` and `alts`:
