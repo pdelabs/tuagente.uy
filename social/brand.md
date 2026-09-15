@@ -1,7 +1,7 @@
 # tuagente.uy on Instagram — brand identity
 
 Internal doc (English). Everything the audience reads is Spanish, rioplatense,
-`vos`. This file is what the `ig-post` skill reads before writing anything.
+`vos`. This file is what the `post` skill reads before writing anything.
 
 ## Who we are talking to
 
@@ -82,37 +82,67 @@ Each one with its "nunca". Reuse verbatim or tighten, never soften the limit.
 5. **El bautismo** — name + face, the dice, why a name changes how people
    treat it. Formats: `statement` with agentito large, carousel of faces.
 
-## Visual identity
+## Visual identity — the one look every slide has
 
-Same system as the landing and the portal. No new colors, no new fonts.
+The slides are generated, one prompt each, and the model never sees the
+previous slide. So the look is not a theme to pick: it is ONE system, fixed,
+and the whole block below goes **verbatim into every brief**, before the
+slide's text. A feed of these has to look like one account, not like five
+templates.
 
-- **Type:** Plus Jakarta Sans (variable, in `social/fonts/`). Headlines 800,
-  tight tracking, `line-height 1.05`. Body 500. Never ALL CAPS in headlines.
-- **Colors:** primary `#5B4BE8`, ink `#14131F`, surface `#FBFAFF`. Tonal
-  containers violet `#EAE6FF/#241663`, green `#CFF3E4/#0B3B2C`, coral
-  `#FFDFD6/#4A1405`, amber `#FBEECB/#4A3608`. Dark card `#161522`.
-- **Themes** (`theme` in `post.json`): `violet` (hero, the OG gradient),
-  `ink` (dark, for the honest/serious posts), `light` (surface + aurora, for
-  behind-the-scenes), `tonal-violet` / `tonal-green` / `tonal-coral` /
-  `tonal-amber` (one per job, like the landing cards).
-- **Shape:** big radii (32px cards, pill buttons), hairline borders, soft or
-  no shadows. Lots of air. One agentito per image at most.
-- **Mascot:** the agentito, always drawn by `app/app/lib/agentito-svg.mjs`
-  (never a screenshot). Default brand look = the landing's baptism look
-  `{tone:0, antenna:5, accessory:0, pupil:1, mouth:1, skin:1, suit:0, brows:1}`.
-  Mr.Wobbles (pillar 4 only) = `{tone:3, antenna:0, accessory:1, pupil:0,
-  mouth:0, skin:0, suit:1, brows:1}`. Other looks only for "el bautismo"
-  posts showing the dice.
+- **Background:** always ink `#14131F`, flat. No gradients, no glow, no
+  texture, no photo. Never a light slide, never a colored slide.
+- **Type:** one geometric sans-serif (Plus Jakarta Sans), extra bold, white
+  `#FFFFFF`, sentence case, left aligned, tight line height. Never ALL CAPS,
+  never italics, never a second font. The text is the whole slide.
+- **Size by role:** the hook (slide 1) is the biggest, 3 to 5 lines, the line
+  breaks where the sentence breathes. Middle slides one short sentence, a size
+  down. The close is the hook's size again.
+- **Accent:** at most ONE phrase per slide gets a violet `#5B4BE8` highlight
+  behind it, a rounded marker stroke with white text on top. On the close
+  slide that is the call's key phrase («tenemos escrito»); on the others it
+  is the one word the sentence turns on, or nothing. Never two accents.
+- **Ornament:** thin violet `#5B4BE8` line geometry, 2px, and nothing else:
+  one large arc or rounded-rectangle outline running off the edge, with a
+  small solid violet dot where a line ends, and optionally one small grid of
+  violet dots in a corner. Same three elements every slide, placed
+  differently, never touching the text.
+- **No character.** No robot, no mascot, no person, no hand, no icon, no 3D
+  object, no illustration. The look of a generated character changes every
+  time and the feed reads as five different brands; until there is one
+  canonical character we can hand the model as a reference, the slides carry
+  type and lines only. (The landing's SVG agentito and Mr.Wobbles stay on the
+  landing and the portal; they are not in the posts.)
 - **Nothing on the image but the piece itself.** No mark, no wordmark, no
-  `tuagente.uy`, no handles, no URLs, no slide counter: the account name is
-  already on the post. On a generated image the only text is the headline
-  the brief lists, word for word. (The template renderer used to stamp the
-  mark top-left; that rule is gone on 2026-09-14 by Luis' decision.)
-- **Formats:** feed `1080x1350` (default, 4:5), square `1080x1080` (only if
-  asked), story `1080x1920`. Carousels: 4 to 7 slides, first one is the hook,
-  last one is the CTA (`statement` with `cta`).
-- **Accent inside a headline:** wrap the one phrase that matters in `<em>`;
-  the theme colors it. One `<em>` per headline, max.
+  `tuagente.uy`, no handles, no URLs, no slide counter, no color codes drawn:
+  the account name is already on the post. The only text is the slide's
+  line, word for word, in Spanish with its accents and its opening «¿» «¡».
+- **Layout:** feed `1080x1350` (4:5). Text block starts 9% in from the left,
+  is at most 75% wide, and sits at the vertical center. Keep the top and
+  bottom 12% empty: Instagram crops them in the feed.
+- **Formats:** carousel of 3 to 5 slides (default), first is the hook, last
+  is the close. Square `1080x1080` only if asked, story `1080x1920` only if
+  asked, same system.
+
+The block to paste, before the slide's text, in every brief:
+
+```
+Instagram slide, 1080x1350 portrait. Flat solid dark background #14131F, no
+gradient, no texture, no photo. Headline in a geometric sans-serif like Plus
+Jakarta Sans, extra bold, white, sentence case, left aligned, tight line
+height, text block starting 9% from the left edge, at most 75% wide,
+vertically centered, top and bottom 12% of the image empty. Decoration: thin
+2px violet #5B4BE8 line geometry only — one large arc or rounded-rectangle
+outline running off the edge, a small solid violet dot where a line ends,
+optionally a small grid of violet dots in one corner — never touching the
+text. No characters, no robots, no mascots, no people, no hands, no icons,
+no 3D objects, no illustrations, no logos, no watermarks, no URLs, no slide
+numbers, no color codes. The ONLY text on the image is the headline below,
+word for word, in Spanish, with its accents and opening ¿ ¡ marks.
+```
+
+Then the slide's own two lines: the headline, and which phrase (if any)
+gets the violet marker highlight.
 
 ## Caption formula
 

@@ -47,7 +47,8 @@ Y cómo suena:
   está en la marca, no entra. Nada de números inventados, clientes inventados
   ni urgencia inventada.
 - Nada de palabras infladas (revolucionario, potenciá, el futuro es hoy), ni
-  emojis, ni signos de exclamación en el gancho.
+  emojis, ni signos de exclamación en el gancho. Una pregunta abre con «¿»:
+  sin el de apertura no es español.
 - Cuando muestres lo que el agente hace, mostrá también lo que **nunca** hace.
   Es lo que hace creíble la promesa.
 
@@ -62,13 +63,14 @@ scroll—, **las del medio una idea cada una** —las del cuerpo del pie dichas 
 otras palabras, una oración corta, nunca el pie copiado— y la **última cierra**
 con el único pedido del posteo.
 
-Se leen como un solo posteo, así que **todas comparten el sistema visual**: el
-mismo formato, la misma paleta, la misma tipografía, el mismo lugar del texto,
-el agentito o su ausencia. Ese sistema va **palabra por palabra en el brief de
-cada slide** —color de fondo, cómo se ve la tipografía, si aparece el agentito
-o no, cómo está armada la grilla— y recién después el texto de esa slide. Un
-brief que dice «igual que la anterior» no dice nada: cada pedido empieza de
-cero y el modelo no vio la slide anterior.
+Se leen como un solo posteo, y como un solo feed con los de ayer, así que
+**todas tienen el mismo sistema visual, que es uno solo y está escrito en
+`marca/brand.md`**: el bloque que dice «The block to paste» va **palabra por
+palabra al principio del brief de cada slide**, y recién después el texto de
+esa slide y qué frase lleva el resaltado violeta, si alguna. Un brief que dice
+«igual que la anterior» no dice nada: cada pedido empieza de cero y el modelo
+no vio la slide anterior. No inventes un fondo, un color ni un personaje que
+el bloque no nombre.
 
 Y en cada brief enumerá **palabra por palabra** el único texto que puede
 aparecer en esa pieza: ningún otro, ni fechas, ni dominios, ni logos ni la
@@ -85,8 +87,9 @@ La herramienta te devuelve la imagen y la ves, apenas la generás. Recorrela
 contra estos cinco puntos:
 
 1. **Se lee**: el texto entra, no se corta y no se pisa con el fondo.
-2. **Es de la marca**: los colores y el aire son los de `brand.md`, y son los
-   mismos que los de las slides anteriores.
+2. **Es de la marca**: fondo oscuro, tipografía blanca, líneas violetas y
+   nada más, igual que las slides anteriores. Un robot, un personaje o un
+   fondo de otro color es una falla aunque quede lindo.
 3. **No tiene texto que no pediste.** Es la falla más común y la más fácil de
    pasar por alto, porque el texto de más suele estar bien escrito.
 4. **No hay palabras rotas.** Mirá adentro de los dibujos, no sólo los
