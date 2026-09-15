@@ -984,6 +984,19 @@ export const deleteArtifact = (c: PortalConfig, id: string) =>
  *
  *  `format` is left open like an artifact's `kind`: the plugin can grow a
  *  shape tomorrow and the tab draws it raw instead of hiding it. */
+/** One slide as it was before a fix replaced it. `file` is its path inside the
+ *  post (`anteriores/02-1.png`) and `url` where its bytes are — same rule as
+ *  an image's: the bytes need the bearer, so it never goes into an `<img src>`.
+ *  `reason` is what the client said was wrong, in their own words. */
+export type PostVersion = {
+  file: string;
+  prompt: string;
+  alt: string;
+  reason: string;
+  replaced_at: string;
+  url: string;
+};
+
 export type Post = {
   /** `<YYYY-MM-DD>-<slug>`, the name of its folder in `posteos/`. */
   id: string;
@@ -1006,6 +1019,12 @@ export type Post = {
    *  and ask for one slide to be fixed. Absent on a post saved before the
    *  sidecar existed. */
   prompts?: string[];
+  /** The earlier takes of each slide, keyed by the slide's CURRENT file name
+   *  and oldest first. A fix throws nothing away: which of the two pictures is
+   *  the good one is the client's call, so the one that was replaced is still
+   *  there with its brief, its alt and what the client said was wrong. `{}`
+   *  when nothing was fixed; absent on a post from before this existed. */
+  versions?: Record<string, PostVersion[]>;
   /** Without the "#": the portal writes it when it copies them. */
   hashtags: string[];
   /** `url` is relative to the adapter (`/portal/posts/<id>/01.png`) and the

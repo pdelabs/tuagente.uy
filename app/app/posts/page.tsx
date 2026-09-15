@@ -37,6 +37,12 @@
 // landed on. The face delegates it to the creator, and the creator is the one
 // with `replace_slide`.
 //
+// AND A FIX DELETES NOTHING: the slide that was there is kept, and the tab
+// draws it under the one that replaced it («Versiones anteriores»), with what
+// the client said was wrong and when. Which of the two is the good one is
+// their call — so the picture they did not keep has to stay where they can
+// look at it, download it, and read the brief it was made from.
+//
 // AND THE BRIEF IS ON THE SCREEN. `prompts` carries what each slide was asked
 // of the model, one per image; «Ver brief» shows it. Everything that was used
 // to make the piece is stored with it, and this is the half that makes it
@@ -56,21 +62,22 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Bookmark, Check, ChevronLeft, ChevronRight, Copy, Download,
-  Ellipsis, Heart, ImageOff, Images, Link2, Maximize2, MessageCircle,
-  RefreshCw, Send, Wand2,
+  Ellipsis, Heart, History, ImageOff, Images, Link2, Maximize2, MessageCircle,
+  RefreshCw, Send, Wand2, X,
 } from "lucide-react";
 import {
   getFlows, getManifest, getPost, getPostImage, getPosts, loadConfig,
   type Flow, type HttpError, type Manifest, type Post, type PortalConfig,
+  type PostVersion,
 } from "../lib/agent";
 import { PARAM, closeInRoute, openInRoute, urlFor, useRouteParam } from "../lib/routes";
 import { AgentitoAvatar, loadAgentLook, type AgentitoLook } from "../lib/agentito";
 import { buildChatLink } from "../lib/flowExamples";
-import { moment } from "../lib/labels";
+import { moment, whenItHappened } from "../lib/labels";
 import { loadAgentName } from "../lib/onboarding";
 import {
-  Btn, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner, StaleLinkNotice,
-  inputCls,
+  Btn, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner,
+  StaleLinkNotice, inputCls,
 } from "../lib/ui";
 
 // Instagram's web feed is a 470px column and the post is read at that width:
@@ -403,8 +410,14 @@ function CopyText({ text, label }: { text: () => string; label: string }) {
 
 /** Downloads one image with the name the agent gave it. The bytes are asked
  *  for again instead of reusing the object URL on screen: the preview is
- *  mounted per component and may not be the one being downloaded. */
-function DownloadImage({ cfg, id, name }: { cfg: PortalConfig | null; id: string; name: string }) {
+ *  mounted per component and may not be the one being downloaded.
+ *
+ *  `as` is the name the file lands with when the piece lives one folder down
+ *  (`anteriores/02-1.png`): a slash in `download` is not a folder, it is a
+ *  character the browser rewrites. */
+function DownloadImage({ cfg, id, name, as }: {
+  cfg: PortalConfig | null; id: string; name: string; as?: string;
+}) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const download = async () => {
@@ -416,7 +429,7 @@ function DownloadImage({ cfg, id, name }: { cfg: PortalConfig | null; id: string
       const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
       const a = document.createElement("a");
       a.href = url;
-      a.download = name;
+      a.download = as ?? name;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -544,6 +557,108 @@ function FixSlide({ post, number }: { post: Post; number: number }) {
         Se lo pedís por el chat y cambia sólo esta imagen: las otras y el texto quedan
         como están. Por ejemplo: «sacale el signo de pregunta».
       </p>
+    </div>
+  );
+}
+
+/** One earlier take, open: the whole picture, why it was replaced, when, the
+ *  brief it was made from and its own «Descargar». Nothing about it is
+ *  second-class — it is a piece the client may well prefer. */
+function VersionModal({ cfg, post, number, version, onClose }: {
+  cfg: PortalConfig | null;
+  post: Post;
+  number: number;
+  version: PostVersion;
+  onClose: () => void;
+}) {
+  const [ratio, setRatio] = useState<number | null>(null);
+  return (
+    <Modal onClose={onClose} wide>
+      <div className="flex items-center gap-2 border-b border-black/[0.07] px-4 py-3">
+        <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
+          La imagen {number}, antes de arreglarla
+        </p>
+        <IconBtn label="Cerrar" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </IconBtn>
+      </div>
+      <div className="min-h-0 overflow-auto">
+        <Frame ratio={ratio}>
+          <PostImage
+            cfg={cfg}
+            id={post.id}
+            name={version.file}
+            alt={version.alt}
+            onRatio={(r) => setRatio(frameRatio(r))}
+          />
+        </Frame>
+        <div className="space-y-2 px-4 py-3">
+          <p className="text-[12.5px] leading-relaxed text-ink">
+            <b className="font-semibold">Qué pediste cambiar:</b> {version.reason}
+          </p>
+          <p className="text-[11px] text-ink-soft">
+            La cambió {whenItHappened(version.replaced_at)}
+          </p>
+          <DownloadImage
+            cfg={cfg}
+            id={post.id}
+            name={version.file}
+            as={version.file.split("/").pop()}
+          />
+          <Brief prompt={version.prompt} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** The takes this slide already had, oldest first. A fix keeps the picture it
+ *  replaced (`anteriores/NN-k.png`), and this is where the client sees it: the
+ *  thumbnail, what they asked to change and when. */
+function Versions({ cfg, post, name, number }: {
+  cfg: PortalConfig | null; post: Post; name: string; number: number;
+}) {
+  const list = post.versions?.[name] ?? [];
+  const [open, setOpen] = useState<PostVersion | null>(null);
+  if (list.length === 0) return null;
+  return (
+    <div className="px-3 pb-3">
+      <p className="inline-flex items-center gap-1 text-[12px] font-semibold text-ink-soft">
+        <History className="h-3 w-3" />
+        Versiones anteriores
+      </p>
+      <div className="mt-1.5 flex flex-wrap gap-2">
+        {list.map((version) => (
+          <button
+            key={version.file}
+            onClick={() => setOpen(version)}
+            title={version.reason}
+            className="w-[92px] rounded-lg text-left transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <span
+              className="block overflow-hidden rounded-lg border border-black/[0.07] bg-c-violet/30"
+              style={{ aspectRatio: String(TALLEST) }}
+            >
+              <PostImage cfg={cfg} id={post.id} name={version.file} alt={version.alt} />
+            </span>
+            <span className="mt-1 block truncate text-[11px] text-ink-soft">
+              {version.reason}
+            </span>
+            <span className="block truncate text-[11px] text-ink-soft/70">
+              {whenItHappened(version.replaced_at)}
+            </span>
+          </button>
+        ))}
+      </div>
+      {open && (
+        <VersionModal
+          cfg={cfg}
+          post={post}
+          number={number}
+          version={open}
+          onClose={() => setOpen(null)}
+        />
+      )}
     </div>
   );
 }
@@ -814,6 +929,7 @@ function StackedImage({ cfg, p, name, index }: {
       {/* A post saved before the brief travelled with the slide has none, and
           the control simply isn't there: there is nothing to show. */}
       {brief && <div className="px-3 pb-2"><Brief prompt={brief} /></div>}
+      <Versions cfg={cfg} post={p} name={name} number={index + 1} />
     </div>
   );
 }

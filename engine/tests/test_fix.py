@@ -29,6 +29,14 @@ from outside:
   g. AND THE TAB SERVES THE BRIEFS — `GET /portal/posts/{id}` carries `prompts`,
      one per image: «everything that was used» is visible in Posteos and not
      only kept on disk.
+  h. THE SLIDE THAT WAS THERE IS KEPT — `anteriores/02-1.png` holds the bytes
+     that used to be `02.png`, and `versions["02.png"][0]` carries that
+     picture's brief, its alt, when it was replaced and the CLIENT's words
+     about what was wrong. Deleting it would throw away both the piece the
+     client might have preferred and the only record of what they asked for.
+  i. AND THE TAB SERVES IT — `GET /portal/posts/{id}/anteriores/02-1.png`
+     answers those same bytes as `image/png`, which is the route taking a
+     `:path` without becoming a way out of the post's folder.
 
 IT PUTS THE DAY'S POST BACK, like `test_post.py` and for the same reason: the
 post that is already there is moved out of the workspace for the length of the
@@ -85,6 +93,17 @@ KEPT = 200
 # What the answer has to say so the client knows which image was touched.
 NAMES_IT = (f"slide {SLIDE}", f"imagen {SLIDE}", "segunda")
 
+# The client's words have to reach `reason` through the face and the creator,
+# which is what puts them next to the old picture in Posteos. Not the whole
+# sentence: the creator is allowed to hand it over trimmed, not rewritten.
+COMPLAINT = ("arco", "violeta")
+
+# Where the slide that was replaced ends up: the first fix of slide 2, so `-1`,
+# and the suffix of the picture that was there — the new one may be another
+# type, and what is kept is the OLD file, under its own extension.
+PREVIOUS = "anteriores/{n:02d}-1{suffix}"
+TYPE = "image/png"
+
 secrets = (CORE / "secrets.env").read_text().splitlines()
 KEY = next(l.split("=", 1)[1].strip() for l in secrets if l.startswith("API_SERVER_KEY="))
 OPENROUTER_KEY = next(
@@ -115,6 +134,13 @@ def get(url: str) -> dict:
     request = urllib.request.Request(url, headers={"Authorization": f"Bearer {KEY}"})
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.loads(response.read())
+
+
+def raw(url: str) -> tuple[bytes, dict]:
+    """The bytes and the headers, which is how the portal fetches a piece."""
+    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {KEY}"})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return response.read(), dict(response.headers)
 
 
 def key_usage() -> float:
@@ -277,19 +303,23 @@ def main() -> int:
             problems.append(f"the face called {CREATORS_OWN} itself")
         failures += judge("a. the face delegated it", problems)
 
+        # The slide is a POSITION: the picture that was there may have come
+        # back under another extension, and then the two names differ.
+        was_name = was["images"][SLIDE - 1]
+        was_bytes = was_pictures[was_name]
         name = now["images"][SLIDE - 1]
-        changed = was_pictures.get(name) != now_pictures.get(name)
-        print(f"  slide {SLIDE:02d} : {name} ·"
-              f" {len(was_pictures.get(name, b'')) // 1024} KB ->"
+        print(f"  slide {SLIDE:02d} : {was_name} -> {name} ·"
+              f" {len(was_bytes) // 1024} KB ->"
               f" {len(now_pictures.get(name, b'')) // 1024} KB")
         failures += judge(
             f"b. slide {SLIDE} changed",
-            [] if changed else [f"{name} came back byte for byte the same"],
+            [] if now_pictures.get(name) != was_bytes
+            else [f"{name} came back byte for byte the same"],
         )
 
         untouched = [
             n for n, data in was_pictures.items()
-            if n != name and now_pictures.get(n) != data
+            if n != was_name and now_pictures.get(n) != data
         ]
         problems = [f"these slides changed too: {untouched}"] if untouched else []
         for field in ("caption", "hashtags", "id", "slug", "format", "created_at"):
@@ -336,6 +366,47 @@ def main() -> int:
         elif served["prompts"][SLIDE - 1] != new_brief:
             problems.append("the brief the tab shows is not the one on disk")
         failures += judge("g. and the tab serves the briefs", problems)
+
+        kept = (now.get("versions") or {}).get(name) or []
+        problems = []
+        if len(kept) != 1:
+            problems.append(f"{len(kept)} version(s) kept for {name}")
+        else:
+            version = kept[0]
+            print(f"  anterior : {version['file']} · «{version['reason']}» ·"
+                  f" {version['replaced_at']}")
+            where = PREVIOUS.format(n=SLIDE, suffix=Path(was_name).suffix)
+            if version["file"] != where:
+                problems.append(f"it was filed as {version['file']!r} and not {where!r}")
+            elif (directory / where).read_bytes() != was_bytes:
+                problems.append("the kept file is not the picture that was there")
+            if version["prompt"] != old_brief:
+                problems.append("the kept brief is not the one that slide had")
+            if version["alt"] != was["alts"][SLIDE - 1]:
+                problems.append("the kept alt is not the one that slide had")
+            missing = [word for word in COMPLAINT if word not in plain(version["reason"])]
+            if missing:
+                problems.append(f"the reason does not carry {missing}:"
+                                f" {version['reason']!r}")
+        failures += judge("h. the slide that was there is kept", problems)
+
+        # From the ROUTE and not from the file: the `url` is what the portal
+        # fetches with the bearer, and it is `expand()` that puts it there.
+        shown = (served.get("versions") or {}).get(name) or []
+        problems = []
+        if not shown:
+            problems.append("the route hands over no version for this slide")
+        elif not shown[0].get("url"):
+            problems.append("the version carries no url for the portal to fetch")
+        else:
+            body, headers = raw(f"{ADAPTER}{shown[0]['url']}")
+            print(f"  {shown[0]['url']} · {len(body) // 1024} KB ·"
+                  f" {headers.get('Content-Type')}")
+            if body != was_bytes:
+                problems.append("the route answers bytes that are not the old slide's")
+            if headers.get("Content-Type") != TYPE:
+                problems.append(f"Content-Type is {headers.get('Content-Type')!r}")
+        failures += judge("i. and the tab serves it", problems)
 
     finally:
         # The workspace goes back the way it was: this run's post out, the
