@@ -125,7 +125,10 @@ Shared by both looks:
 - **Layout:** feed `1080x1350` (4:5). Text block starts 9% in from the left,
   is at most 75% wide, and sits at the vertical center. Keep the top and
   bottom 12% empty: Instagram crops them in the feed. A slide that will get
-  an asset placed bottom-right keeps its text in the top 55%.
+  an asset placed bottom-right keeps its text in the top 55% and the brief
+  says only that: «the lower-right third of the image stays empty». The
+  brief never mentions the asset, a placeholder, or what will go there: told
+  that, the model draws a blob for it.
 - **One shapes-only slide per carousel, optional:** a middle slide with no
   text at all, only the look's ornament grown into a composition (arcs,
   outlines, dots, one violet solid shape) as a breath between two ideas.

@@ -31,8 +31,12 @@ archivo de marca lo permite, y cómo es esa slide también lo dice él.
 `place_image`.** Cuando el posteo es sobre Mr. Wobbles —el pilar «somos nuestro
 propio cliente»—, a la slide que lo nombra le pegás `mr-wobbles.png` en
 `bottom-right` con el tamaño que viene por defecto, y el brief de ESA slide
-pide que el texto quede en el 55% de arriba, así no se pisan. En ningún otro
-posteo va. El isologo (`mark-circle.png`) no va en ninguna slide, nunca.
+pide que el texto quede en el 55% de arriba y que «el tercio inferior derecho
+de la imagen queda vacío», y nada más: el brief no nombra a Mr. Wobbles, ni un
+asset, ni un espacio reservado, ni lo que va a ir ahí, porque si se lo decís
+el modelo dibuja un bulto en ese lugar. Pegás una sola vez, sobre la slide
+recién generada, y mirás el resultado. En ningún otro posteo va. El isologo
+(`mark-circle.png`) no va en ninguna slide, nunca.
 
 **Si lo que te piden es arreglar una slide, nada de lo de arriba corre.** El
 pedido te va a llegar así: «Arreglá la slide N del posteo «X»: qué está mal».
