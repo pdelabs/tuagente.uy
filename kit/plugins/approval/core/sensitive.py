@@ -1,22 +1,28 @@
-"""Two sensitive tools with fake side effects, and the gate on top of them.
+"""One sensitive tool with a fake side effect, and the gate on top of it.
 
-Nothing here reaches the outside: `send_email` and `publish_post` write a file
-into `/workspace/outbox/` and that is the whole side effect. What is real is
-the gate. The toolset is registered wrapped in `approval_required()`
+Nothing here reaches the outside: `send_email` writes a file into
+`/workspace/outbox/` and that is the whole side effect. What is real is the
+gate. The toolset is registered wrapped in `approval_required()`
 (`plugin.py`), so a call stops the run and lands in the client's Approvals tab
 BEFORE the tool body runs — the model cannot forget to ask, because asking is not something it
 does.
+
+THERE WAS A SECOND ONE, `publish_post`, AND IT IS GONE. It dropped a markdown
+file into the outbox and answered «Publicado en <canal>», which was harmless
+while nothing in this engine could publish anything. The social plugin's
+`publish_instagram` publishes for real now, and two tools with that name and
+that promise, one of them fake, is the model choosing between them by the
+shape of a sentence. A demo of the gate is what `send_email` is for.
 
 `approval_required()` with no predicate on purpose, and it is `plugin.py` that
 wraps the toolset: every tool in here is gated, and one added later is gated
 too without anyone remembering to put its name on a list. Fail closed is the
 whole gate.
 
-WHAT A TOOL RETURNS IS WHAT THE MODEL WILL SAY. Both of these used to answer
-«mail escrito en outbox/…», and the agent repeated it: the client approved a
-mail and was told her agent had WRITTEN one, which reads like it is still
-waiting for something. The tool ran after the yes — it says so, and where the
-copy is.
+WHAT A TOOL RETURNS IS WHAT THE MODEL WILL SAY. This one used to answer «mail
+escrito en outbox/…», and the agent repeated it: the client approved a mail and
+was told her agent had WRITTEN one, which reads like it is still waiting for
+something. The tool ran after the yes — it says so, and where the copy is.
 
 THE PROSE ABOUT ASKING IS IN THE TOOL AND FIELD DESCRIPTIONS, not in a SOUL
 and not in a skill. What a request has to say — what happens if the client says
@@ -99,24 +105,5 @@ def toolset() -> FunctionToolset:
         text = f"Para: {to}\nAsunto: {subject}\n\n{corrected(body, client_correction)}\n"
         path = drop(ctx.deps.workspace, "email", to, text)
         return f"Enviado a {to}: «{subject}». Quedó una copia en {path}."
-
-    @ts.tool
-    def publish_post(
-        ctx: RunContext,
-        channel: str,
-        text: str,
-        note: ApprovalNote,
-        client_correction: str | None = None,
-    ) -> str:
-        """Publicar algo en un canal. Frena hasta que el cliente lo apruebe.
-
-        `note` es lo que el cliente lee para decidir: llenala siempre.
-
-        `client_correction` NO LA ESCRIBÍS VOS: la completa el cliente cuando
-        aprueba con correcciones. Dejala vacía siempre.
-        """
-        body = f"Canal: {channel}\n\n{corrected(text, client_correction)}\n"
-        path = drop(ctx.deps.workspace, "post", channel, body)
-        return f"Publicado en {channel}. Quedó una copia en {path}."
 
     return ts

@@ -1,8 +1,8 @@
 {
   "id": "social",
-  "version": "1.0.0",
-  "description": "One Instagram carousel a day, finished: the skill that writes it in the brand's voice and looks at every slide it made, the `save_post` tool that owns the format, and the Posts tab where the client reads it and downloads the pieces",
-  "client_copy": "Posteos para Instagram con tu voz y tu identidad: cada día te deja un carrusel listo para revisar y bajar.",
+  "version": "1.1.0",
+  "description": "One Instagram carousel a day, finished: the skill that writes it in the brand's voice and looks at every slide it made, the `save_post` tool that owns the format, the Posts tab where the client reads it, and `publish_instagram`, which puts it on the account once the client says yes",
+  "client_copy": "Posteos para Instagram con tu voz y tu identidad: cada día te deja un carrusel listo, y lo publica cuando vos le decís que sí.",
   "_comment": [
     "IT REPLACES social-content, post-image AND brand-kit, and it is not a port",
     "of them (docs/own-agent-plan.md, wave 3). Those three were Hermes-era: a",
@@ -36,10 +36,25 @@
     "and the face delegates to it and reads its report out to the client. That",
     "is why the module declares `SKILLS = []`: the skill file is still this",
     "plugin's and still travels, it is this engine's INDEX it stays out of,",
-    "because the face no longer has the tools the procedure names."
+    "because the face no longer has the tools the procedure names.",
+    "",
+    "IT REQUIRES `approval` BECAUSE PUBLISHING IS THE ONE THING THIS PLUGIN",
+    "DOES OUTWARDS. `core/publishing.py` registers `publish_instagram` on the",
+    "FACE wrapped in `approval_required()`, and without the approval plugin a",
+    "run that stops at that gate has nothing to write the row, nothing to draw",
+    "the card and nowhere for the client to answer. `approval` is a system",
+    "plugin, so it is on every agent and the capability row installs nothing",
+    "extra; the declaration is what says the order they load in.",
+    "",
+    "AND THE CARD IS DRAWN HERE, not there. This tool's only argument is a post",
+    "id, so a card built from the arguments would say nothing about what is",
+    "going out: the plugin hands the approval plugin a renderer by tool name",
+    "(`engine.provide('approval.render.publish_instagram', ...)`) and it reads",
+    "the slides, the caption and the hashtags off `post.json`."
   ],
   "requires": {
     "plugins": [
+      "approval",
       "image"
     ]
   },

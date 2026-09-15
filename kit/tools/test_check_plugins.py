@@ -889,7 +889,13 @@ class TheKitsOwnRegistry(unittest.TestCase):
                          and «eso pasa por la skill `approval`» for sending it
           social         «`generate_image(prompt, format)`» is step 4 of its
                          SKILL.md, and step 5 looks at what came back — both
-                         are the `image` plugin's capability
+                         are the `image` plugin's capability. And `approval`,
+                         which is not a sentence in the SKILL.md because it is
+                         not the creator's: `core/publishing.py` registers
+                         `publish_instagram` on the FACE wrapped in
+                         `approval_required()`, and a gate with nobody to write
+                         the row, draw the card and take the client's answer is
+                         a tool that publishes without asking
           drive-inbox    nothing: transcribing after the download is «el caso
                          típico», and what follows «depende del flujo del cliente»
           interview-production
@@ -909,7 +915,7 @@ class TheKitsOwnRegistry(unittest.TestCase):
             "interview-production": ["transcribe", "deliverable", "approval"],
             "invoices-to-data": [],
             "quotes": ["deliverable", "approval"],
-            "social": ["image"],
+            "social": ["approval", "image"],
             "transcribe": [],
         })
 

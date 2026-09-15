@@ -24,6 +24,14 @@ dependencies = [
     # uses — open, convert, resize, paste with an alpha mask, save — has not
     # moved in a decade, so the floor is a floor and not a pin.
     "pillow>=11",
+    # The social plugin's `publish_instagram`
+    # (kit/plugins/social/core/instagram.py): Instagram fetches the pictures
+    # itself and only takes PUBLIC URLs, so the slides go to a Cloudflare R2
+    # bucket for the length of the publish and are deleted on the way out. R2
+    # is S3-compatible and this is the S3 client; a floor, not a pin, because
+    # the four calls used here — client, put_object, delete_objects — are the
+    # oldest surface boto3 has.
+    "boto3>=1.35",
     # Traces to Phoenix (core/tracing.py): plain OpenTelemetry plus the
     # processor that rewrites Pydantic AI's GenAI attributes into the
     # OpenInference ones Phoenix renders. No Logfire.

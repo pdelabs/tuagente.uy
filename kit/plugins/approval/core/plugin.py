@@ -47,6 +47,11 @@ def paused(session_id: str, requests, history: str) -> str:
 
 
 def register(engine) -> None:
+    # THE CARD ANOTHER PLUGIN DRAWS FOR ITS OWN TOOL. The engine's shared dict
+    # is bound, not read: the plugins that gate a tool of theirs load after
+    # this one, so what is in it now is nothing and what matters is what is in
+    # it when a run stops (`render.py`).
+    render.SHARED = engine.shared
     engine.toolset(sensitive.toolset().approval_required())
     engine.router(routes.router)
     engine.module("approvals", True)
