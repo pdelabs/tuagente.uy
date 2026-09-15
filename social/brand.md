@@ -49,7 +49,7 @@ Everything verifiable against the landing (`app/page.tsx`):
   que existe: setup y mensual "se cotizan en el diagnóstico". Never post any
   other number.
 - Corre sobre Hermes (Nous Research), open source.
-- Hecho en Montevideo por pdelabs. Somos nuestro propio cliente: Mr.Wobbles.
+- Hecho en Montevideo por pdelabs. Somos nuestro propio cliente: Mr. Wobbles.
 - Conexiones listas hoy: Telegram, correo, Google Planillas/Drive/Agenda/Docs,
   Slack, WhatsApp. Anything else is "lo escribimos a medida".
 
@@ -77,8 +77,9 @@ Each one with its "nunca". Reuse verbatim or tighten, never soften the limit.
 3. **Sin humo** — education from the blog: agente vs chatbot, qué es un
    agente, cuánto cuesta, por qué la gente normal no usa agentes. Formats:
    `list` carousel, `stat`, `statement` with a quote.
-4. **Somos nuestro propio cliente** — Mr.Wobbles working for pdelabs, building
-   in public, Uruguay. Formats: `chat`, `statement` light theme.
+4. **Somos nuestro propio cliente** — Mr. Wobbles, our own agent, working for
+   pdelabs, building in public, Uruguay. He is named, not drawn (see Visual
+   identity). At most one post in ten is about him.
 5. **El bautismo** — name + face, the dice, why a name changes how people
    treat it. Formats: `statement` with agentito large, carousel of faces.
 
@@ -111,8 +112,10 @@ templates.
   object, no illustration. The look of a generated character changes every
   time and the feed reads as five different brands; until there is one
   canonical character we can hand the model as a reference, the slides carry
-  type and lines only. (The landing's SVG agentito and Mr.Wobbles stay on the
-  landing and the portal; they are not in the posts.)
+  type and lines only. That includes Mr. Wobbles: he is a fixed image
+  (`social/logo/kit/mr-wobbles.png`), never described to the image model and
+  never redrawn by it. A pillar 4 post names him in the caption; the slide
+  stays type and lines.
 - **Nothing on the image but the piece itself.** No mark, no wordmark, no
   `tuagente.uy`, no handles, no URLs, no slide counter, no color codes drawn:
   the account name is already on the post. The only text is the slide's
