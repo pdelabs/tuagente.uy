@@ -1001,6 +1001,11 @@ export type Post = {
   /** One per image, same order as `images`, when the post is a carousel
    *  (social plugin >= carousel). Absent on a one-image post. */
   alts?: string[];
+  /** The brief each image was made from, same order as `images`: what the
+   *  agent asked the model for, kept with the post so the client can read it
+   *  and ask for one slide to be fixed. Absent on a post saved before the
+   *  sidecar existed. */
+  prompts?: string[];
   /** Without the "#": the portal writes it when it copies them. */
   hashtags: string[];
   /** `url` is relative to the adapter (`/portal/posts/<id>/01.png`) and the

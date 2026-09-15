@@ -27,6 +27,22 @@
 // the one thing the portal never does (`docs/portal-routes.md`). Same
 // mechanism as the Files tab: bytes → Blob → object URL, revoked on unmount.
 //
+// FIXING ONE SLIDE GOES THROUGH THE CHAT, never through a call of this tab's
+// own: the portal talks to the agent by talking to the agent. «Arreglar esta
+// imagen» writes «Arreglá la slide N del posteo «<id>»: <what the client
+// says>» and opens `/app/chat?p=…`, and that param SENDS the message on
+// arrival (`app/app/chat/page.tsx`) instead of leaving it in the box — which
+// is why the sentence is finished HERE, in one line of input, and not left
+// hanging on a colon for the client to complete in a screen they have just
+// landed on. The face delegates it to the creator, and the creator is the one
+// with `replace_slide`.
+//
+// AND THE BRIEF IS ON THE SCREEN. `prompts` carries what each slide was asked
+// of the model, one per image; «Ver brief» shows it. Everything that was used
+// to make the piece is stored with it, and this is the half that makes it
+// visible — the client reads what was asked for, and that is what they are
+// correcting.
+//
 // THE CAPTION IS NOT MARKDOWN and does not go through `lib/Markdown.tsx`. It
 // is the literal text that gets pasted into the network: its line breaks are
 // the post's line breaks and its `#` are hashtags, not headings. Rendered it
@@ -34,13 +50,14 @@
 // with `whitespace-pre-wrap`.
 
 import {
-  useCallback, useEffect, useMemo, useRef, useState, type ReactNode,
+  useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Bookmark, Check, ChevronLeft, ChevronRight, Copy, Download,
   Ellipsis, Heart, ImageOff, Images, Link2, Maximize2, MessageCircle,
-  RefreshCw, Send,
+  RefreshCw, Send, Wand2,
 } from "lucide-react";
 import {
   getFlows, getManifest, getPost, getPostImage, getPosts, loadConfig,
@@ -48,10 +65,12 @@ import {
 } from "../lib/agent";
 import { PARAM, closeInRoute, openInRoute, urlFor, useRouteParam } from "../lib/routes";
 import { AgentitoAvatar, loadAgentLook, type AgentitoLook } from "../lib/agentito";
+import { buildChatLink } from "../lib/flowExamples";
 import { moment } from "../lib/labels";
 import { loadAgentName } from "../lib/onboarding";
 import {
   Btn, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner, StaleLinkNotice,
+  inputCls,
 } from "../lib/ui";
 
 // Instagram's web feed is a 470px column and the post is read at that width:
@@ -419,6 +438,116 @@ function DownloadImage({ cfg, id, name }: { cfg: PortalConfig | null; id: string
   );
 }
 
+/* ── One slide: its brief, and asking for it to be fixed ─────────────────── */
+
+/** The sentence that travels to the chat. The id and the number are in it
+ *  because they are what the creator's tool needs, and the rest are the
+ *  client's own words: what is wrong is the one thing the portal cannot know. */
+const fixRequest = (id: string, number: number, what: string) =>
+  `Arreglá la slide ${number} del posteo «${id}»: ${what}`;
+
+// The primary button as a LINK: `Btn` only draws a <button>, and this one has
+// to be an <a> so middle-click and "open in a new tab" keep working — the same
+// shape `flows/FlowStatus.tsx` uses for its own chat links.
+const ASK_LINK =
+  "inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] " +
+  "font-semibold text-white transition hover:bg-primary-dark";
+
+/** What the slide was asked of the model, folded away. Monospace because it is
+ *  a brief and not prose: the line breaks and the quoted words are the piece's
+ *  instructions, and reading it is how the client knows what to correct. */
+function Brief({ prompt }: { prompt: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <details className="group">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[12px] font-semibold text-ink-soft transition hover:text-ink [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="h-3 w-3 transition group-open:rotate-90" />
+        Ver brief
+      </summary>
+      <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-black/[0.07] bg-black/[0.02] p-2.5 font-mono text-[11.5px] leading-relaxed text-ink-soft">
+        {prompt}
+      </pre>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <Btn
+          kind="secondary"
+          size="sm"
+          onClick={() => copyText(prompt, () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1800);
+          })}
+        >
+          {copied ? <Check className="h-3.5 w-3.5 text-c-green-ink" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? "Copiado" : "Copiar"}
+        </Btn>
+        <span className="text-[11px] text-ink-soft/80">
+          Es lo que tu agente le pidió al modelo para esta imagen.
+        </span>
+      </div>
+    </details>
+  );
+}
+
+/** «Arreglar esta imagen»: what is wrong, in one line, and the chat opens with
+ *  the request already sent. Nothing is fixed here — the tab has no way to ask
+ *  the agent for anything, and the whole product only ever asks through the
+ *  conversation. */
+function FixSlide({ post, number }: { post: Post; number: number }) {
+  const [open, setOpen] = useState(false);
+  const [what, setWhat] = useState("");
+  const router = useRouter();
+  const field = useId();
+  const ask = what.trim();
+  const href = ask ? buildChatLink(fixRequest(post.id, number, ask)) : null;
+
+  if (!open) {
+    return (
+      <Btn kind="secondary" size="sm" onClick={() => setOpen(true)}>
+        <Wand2 className="h-3.5 w-3.5" />
+        Arreglar esta imagen
+      </Btn>
+    );
+  }
+  return (
+    <div className="w-full">
+      <label htmlFor={field} className="block text-[12px] font-semibold text-ink">
+        Qué está mal en la imagen {number}
+      </label>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <input
+          id={field}
+          autoFocus
+          value={what}
+          onChange={(e) => setWhat(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && href) { e.preventDefault(); router.push(href); }
+            if (e.key === "Escape") { setOpen(false); setWhat(""); }
+          }}
+          placeholder="Qué está mal"
+          className={`${inputCls} min-w-[180px] flex-1`}
+        />
+        {href ? (
+          <Link href={href} className={ASK_LINK}>
+            <Send className="h-3.5 w-3.5" />
+            Pedírselo
+          </Link>
+        ) : (
+          <Btn kind="primary" size="sm" disabled>
+            <Send className="h-3.5 w-3.5" />
+            Pedírselo
+          </Btn>
+        )}
+        <Btn kind="ghost" size="sm" onClick={() => { setOpen(false); setWhat(""); }}>
+          Cancelar
+        </Btn>
+      </div>
+      <p className="mt-1 text-[11px] leading-relaxed text-ink-soft/80">
+        Se lo pedís por el chat y cambia sólo esta imagen: las otras y el texto quedan
+        como están. Por ejemplo: «sacale el signo de pregunta».
+      </p>
+    </div>
+  );
+}
+
 /* ── The card ────────────────────────────────────────────────────────────── */
 
 /** The «…» of a post: the two things the portal can actually do with it, and
@@ -602,8 +731,8 @@ function PostCard({ cfg, p, look, handle, flowName, onOpen, wide = false }: {
       {wide ? (
         p.images.length === 0 ? <Empty /> : (
           <div className="flex flex-col">
-            {p.images.map((img) => (
-              <StackedImage key={img.name} cfg={cfg} p={p} name={img.name} />
+            {p.images.map((img, i) => (
+              <StackedImage key={img.name} cfg={cfg} p={p} name={img.name} index={i} />
             ))}
           </div>
         )
@@ -659,18 +788,32 @@ function PostCard({ cfg, p, look, handle, flowName, onOpen, wide = false }: {
 }
 
 /** One image of the detail: its own shape, its own «Descargar», the name the
- *  file has so the client recognizes it once it lands. */
-function StackedImage({ cfg, p, name }: { cfg: PortalConfig | null; p: Post; name: string }) {
+ *  file has so the client recognizes it once it lands — and the two things
+ *  that are about THIS slide and no other: the brief it was made from and
+ *  «Arreglar esta imagen».
+ *
+ *  The number is the one the client counts and the one the request quotes: the
+ *  first slide is 1, and the file is called `01.png` for the same reason. */
+function StackedImage({ cfg, p, name, index }: {
+  cfg: PortalConfig | null; p: Post; name: string; index: number;
+}) {
   const [ratio, setRatio] = useState<number | null>(null);
+  const brief = p.prompts?.[index];
   return (
     <div>
       <Frame ratio={ratio}>
-        <PostImage cfg={cfg} id={p.id} name={name} alt={altOf(p, p.images.findIndex((im) => im.name === name))} onRatio={(r) => setRatio(frameRatio(r))} />
+        <PostImage cfg={cfg} id={p.id} name={name} alt={altOf(p, index)} onRatio={(r) => setRatio(frameRatio(r))} />
       </Frame>
       <div className="flex flex-wrap items-center gap-2 px-3 py-2">
         <DownloadImage cfg={cfg} id={p.id} name={name} />
-        <span className="text-[11px] text-ink-soft">{name}</span>
+        <FixSlide post={p} number={index + 1} />
+        <span className="text-[11px] text-ink-soft">
+          {p.images.length > 1 ? `Imagen ${index + 1} · ${name}` : name}
+        </span>
       </div>
+      {/* A post saved before the brief travelled with the slide has none, and
+          the control simply isn't there: there is nothing to show. */}
+      {brief && <div className="px-3 pb-2"><Brief prompt={brief} /></div>}
     </div>
   );
 }

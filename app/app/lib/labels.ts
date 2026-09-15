@@ -149,6 +149,9 @@ const EVENTS: Record<string, string | ((n: string) => string)> = {
   // not as "Publicó": nothing in the product publishes anything -- the client
   // downloads it and posts it themselves, and the Posteos tab says so.
   "post.saved": "Guardó un posteo",
+  // One slide of a post it had already saved, made again: the client said what
+  // was wrong with that image and only that image changed.
+  "post.slide_replaced": "Cambió una imagen de un posteo",
   // The face delegated to a sub-agent and got the work back. The Activity
   // title carries the sub-agent's name and the task; these are the chips.
   "delegation.started": "Le pidió el trabajo a un ayudante",

@@ -199,6 +199,26 @@ front. The other details don't need this because they open in a modal
 (`?task=`, `?scheduled=`, `?artifact=`, `?file=`), which appears centered
 with the background locked.
 
+## `?p=` — the chat with the request already sent
+
+`/app/chat?p=<the message>` isn't a detail: it's the portal handing the agent a
+request the client just decided on. The chat **sends it the moment it opens**
+and clears the param off the URL, so a refresh doesn't send it twice — and so
+the sentence has to arrive finished. A link that ends in a colon for the client
+to complete lands them in a screen where there is nothing left to complete.
+
+Who builds one today:
+
+- **Flows** — the example cards and the two offers on a flow that lost its
+  scheduled task (`app/app/lib/flowExamples.tsx`, `app/app/flows/FlowStatus.tsx`).
+- **Posts** — «Arreglar esta imagen», under each slide of an open post: the
+  client writes in one line what's wrong and the link carries «Arreglá la
+  slide 2 del posteo «2026-09-15-…»: sacale el signo de pregunta». The tab
+  never asks the agent for anything of its own; the face reads the message,
+  delegates to the creator, and the creator is the one with `replace_slide`.
+  The sentence is gated end to end by `engine/tests/test_fix.py`; what nobody
+  has clicked in a browser yet is the control itself.
+
 ## `?request=` doesn't go stale by rejecting it
 
 Worth saying here because it changes what the link means: **rejecting a
