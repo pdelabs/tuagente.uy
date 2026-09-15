@@ -1,5 +1,17 @@
 # Instagram
 
+> **Publishing no longer comes from here.** On the `core` engine, the social
+> plugin publishes a post by itself —
+> `kit/plugins/social/core/instagram.py`, behind the approval gate — over the
+> **Instagram API with Instagram Login** (`graph.instagram.com`), which needs
+> no Facebook Page and no MCP: five calls, `httpx`, and a public bucket for the
+> slides because Instagram fetches the pictures itself. `engine/README.md`,
+> «Publishing», is the whole of it. What this file describes is the READING
+> half — the 23-tool MCP, still unaudited, still not connected — and it is the
+> half that is worth the connection anyway: see below. Both halves want the
+> same long-lived token, and the same 60 days are still the thing that kills
+> it.
+
 **Official Graph API, starting with reading.** Base:
 [`mcpware/instagram-mcp`](https://github.com/mcpware/instagram-mcp) — 23
 tools, long-lived token, no private API involved.
