@@ -35,8 +35,8 @@ asserted, from outside, the way the portal sees it:
      being one image on 2026-09-14, and a run that quietly went back to one
      would pass every claim above it.
 
-IT PUTS THE DAY'S POST BACK. One post per day is `save_post`'s rule, so a post
-that is already there is moved out of the workspace for the length of the run
+IT PUTS THE DAY'S POST BACK. A post that is already there is moved out of the
+workspace for the length of the run, so the creator's «el de hoy» finds none,
 and moved back at the end, with the one this run made taken out. That is what
 makes the gate runnable twice in a day; what is left to look at is the caption
 and the claims printed below.

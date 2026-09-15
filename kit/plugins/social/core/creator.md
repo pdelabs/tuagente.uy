@@ -15,9 +15,11 @@ la marca, elegí la idea, escribí el pie, hacé las slides una por una, miralas
 guardá el carrusel. Nada de eso es opcional y ninguno de esos pasos lo hace
 nadie por vos.
 
-**Ya hay un posteo de hoy.** Es uno por día: si al guardar te frena porque ya
-hay uno, no lo pises. Volvé diciendo cuál es el que ya estaba y que no tocaste
-nada. Pisarlo sólo si el pedido te lo dice con todas las letras.
+**Ya hay un posteo de hoy.** Si el pedido es «el de hoy» y en `posteos/` ya
+hay uno con la fecha de hoy, no hagas otro: volvé diciendo cuál es el que ya
+estaba y que no tocaste nada. Si el pedido trae otro tema, es otro posteo con
+otro slug y va igual. Pisar uno sólo si el pedido te lo dice con todas las
+letras.
 
 **Volvé con un informe de dos o tres líneas**, para que la otra parte le pueda
 contar al cliente sin adivinar:

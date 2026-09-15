@@ -205,8 +205,9 @@ and the tool owns the format: the post lands in
 caption, alt, alts, hashtags, images, `flow` when the clock started the run),
 `caption.md` — the caption, a blank line, the hashtags — and `01.png`, `02.png`
 …, MOVED out of `imagenes/` so there is one copy of each picture and it is
-inside the post. One post per day, and the folder is the check: `replace=True`
-is the only way past it. Prose never says any of that; the tool does, and what
+inside the post. The folder is the check: a second post with the same slug on
+the same day is refused, and `replace=True` is the only way past it; another
+slug is another post. Prose never says any of that; the tool does, and what
 the model cannot be given by code is in `skills/post/SKILL.md` — read
 `marca/brand.md` first, the caption formula, and the five-point checklist every
 generated slide has to pass before it counts.
@@ -241,8 +242,8 @@ the piece downloading as `image/png`, `modules.posts` in the manifest, a
 `delegate_task` in the trail and `save_post` NOT in it, an answer that
 names Posteos, and the carousel itself — `format` `carousel`, three slides or
 more, one alt each, every `NN.png` on disk and listed in order. The day's post is moved out of the workspace for the length of
-the run and moved back at the end — one per day is `save_post`'s rule, and
-without that the second run of a day has no folder to assert.
+the run and moved back at the end, so the run's own post is the only one of
+the day and the workspace is left as it was found.
 
 ## Sub-agents
 

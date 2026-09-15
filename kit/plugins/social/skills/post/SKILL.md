@@ -105,4 +105,5 @@ resolver, que un pie bueno sirve.
 `save_post(slug, caption, hashtags, format="carousel", images=[…], alts=[…])`:
 las imágenes en el orden en que se ven y un texto alternativo por cada una, en
 ese mismo orden. La herramienta pone la carpeta, los nombres y la fecha; vos
-ponés las palabras. Es uno por día.
+ponés las palabras. El id es la fecha y el slug: otro tema en el mismo día es
+otro slug.

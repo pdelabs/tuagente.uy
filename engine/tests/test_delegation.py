@@ -28,9 +28,9 @@ the whole mechanism against the running container:
       `CORE_DELEGATION_TIMEOUT=5`. Both come back as a message the client can
       read, and neither ends in «No pude responder».
 
-IT PUTS THE DAY'S POST BACK. One post per day is `save_post`'s rule, so the
-post that is already there is moved out of the workspace for the length of the
-run and moved back at the end, with everything this test wrote taken out: the
+IT PUTS THE DAY'S POST BACK. The post that is already there is moved out of
+the workspace for the length of the run, so the creator's «el de hoy» finds
+none, and moved back at the end, with everything this test wrote taken out: the
 flow, its rows and conversations, and the posts S1 and S2 made. What is left to
 look at is this script's own output.
 
@@ -276,8 +276,8 @@ def compose(**env: str) -> None:
 
 
 def standing() -> Path | None:
-    """The post of today, if the workspace already has one. It is one per day,
-    so it is also the reason this test has to move things around."""
+    """The post of today, if the workspace already has one. The creator does
+    not make «el de hoy» twice, so it is why this test has to move things around."""
     return next((d for d in sorted(folders()) if d.name.startswith(today() + "-")), None)
 
 
@@ -478,8 +478,8 @@ def main() -> int:
 
         # ── S2 ──────────────────────────────────────────────────────────────
         print("\n== S2 ==")
-        # S1's post goes out: it is one per day, and the flow has to be able to
-        # save one of its own — which is what puts a flow's slug on a post.
+        # S1's post goes out: the flow asks for «el de hoy» and must find none,
+        # so that it saves one of its own — which is what puts a flow's slug on a post.
         s1_post = standing()
         if s1_post:
             shutil.rmtree(s1_post)

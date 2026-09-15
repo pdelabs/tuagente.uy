@@ -203,8 +203,10 @@ def toolset() -> FunctionToolset:
         que es la proporción 4:5 de un carrusel, y acá el formato es
         `carousel`, que es lo que el cliente termina pasando con el dedo.
 
-        Es un posteo por día. Si ya hay uno de hoy te frena; `replace=True`
-        pisa el anterior, y eso sólo lo hacés si te lo pidieron.
+        El posteo queda con el id `<fecha>-<slug>`. Si ya hay uno de hoy con
+        ese mismo slug te frena; `replace=True` lo pisa, y eso sólo lo hacés si
+        te lo pidieron. Otro tema, otro slug, otro posteo: en un día entran
+        los que el cliente pida.
 
         Args:
             slug: el tema en dos o tres palabras, en minúsculas y con guiones.
@@ -217,7 +219,7 @@ def toolset() -> FunctionToolset:
             alt: qué se ve en la imagen, en una oración, para quien no la ve.
                 Es el de una imagen sola; en un carrusel va `alts` en su lugar.
             alts: uno por imagen y en el mismo orden que `images`.
-            replace: pisar el posteo de hoy en vez de frenar.
+            replace: pisar el posteo de hoy con este slug en vez de frenar.
         """
         if not SLUG.match(slug):
             raise ModelRetry(
@@ -291,17 +293,16 @@ def toolset() -> FunctionToolset:
         now = datetime.now(ZoneInfo(config.TIMEZONE))
         date = now.strftime("%Y-%m-%d")
         root().mkdir(parents=True, exist_ok=True)
-        taken = sorted(p for p in root().glob(f"{date}-*") if p.is_dir())
-        if taken and not replace:
-            raise ModelRetry(
-                f"ya hay un posteo de hoy ({taken[0].name}): es uno por día. Si "
-                "el cliente te pidió cambiarlo, llamame con `replace=True`"
-            )
-        for old in taken:
-            shutil.rmtree(old)
-
         post_id = f"{date}-{slug}"
         directory = folder(post_id)
+        if directory.is_dir() and not replace:
+            raise ModelRetry(
+                f"ya hay un posteo de hoy con ese slug ({post_id}). Si el "
+                "cliente te pidió cambiarlo, llamame con `replace=True`; si es "
+                "otro tema, dale otro slug"
+            )
+        if directory.is_dir():
+            shutil.rmtree(directory)
         directory.mkdir(parents=True)
         names = []
         for number, source in enumerate(sources, 1):
