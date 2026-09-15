@@ -33,8 +33,22 @@ after it, and whose:
 - **The mascot** (Luis): generative 3D robot that drifts daily, or the HTML
   renderer in `social/` for the brand's SVG agentito.
 - **The agent's name** (Luis): «Tu Agente» for now.
-- **Telegram**, so a morning post announces itself; **publishing** through an
-  Instagram connection behind the gate; the **VPS deploy** of an instance.
+- **Telegram**, so a morning post announces itself; the **VPS deploy** of an
+  instance.
+- **Publishing: BUILT, waiting on Luis for the credentials.** `publish_instagram`
+  is on the face behind the gate, the approval card shows the slides and the
+  caption read off `post.json`, and Posteos has the button and the «Publicado»
+  chip (`engine/README.md`, «Publishing»). Both gates are green — the sequence
+  with no network (`engine/tests/test_instagram.py`) and the gate live
+  (`engine/tests/test_publish_gate.sh`) — and nothing has touched Instagram
+  yet. What is missing is only credentials, and they are Luis': the
+  **`IG_ACCESS_TOKEN` and `IG_USER_ID`** of tuagente.uy's own professional
+  account (Instagram API with Instagram Login, no Facebook page, no app review
+  for our own account), and a **Cloudflare R2 bucket** with its five variables
+  — Instagram fetches the pictures itself and only takes public URLs. They go
+  in `engine/instances/tuagente/secrets.env`. Then one real publish, by hand,
+  and after that the token has to be refreshed before **60 days**
+  (`POST /portal/instagram/refresh`; a flow should own that, and does not yet).
 
 ## Migration to English (2026-08-23)
 

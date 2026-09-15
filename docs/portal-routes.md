@@ -211,13 +211,22 @@ Who builds one today:
 
 - **Flows** — the example cards and the two offers on a flow that lost its
   scheduled task (`app/app/lib/flowExamples.tsx`, `app/app/flows/FlowStatus.tsx`).
-- **Posts** — «Arreglar esta imagen», under each slide of an open post: the
-  client writes in one line what's wrong and the link carries «Arreglá la
-  slide 2 del posteo «2026-09-15-…»: sacale el signo de pregunta». The tab
-  never asks the agent for anything of its own; the face reads the message,
-  delegates to the creator, and the creator is the one with `replace_slide`.
-  The sentence is gated end to end by `engine/tests/test_fix.py`; what nobody
-  has clicked in a browser yet is the control itself.
+- **Posts** — two of them, and for the same reason: the tab never asks the
+  agent for anything of its own.
+  - «Arreglar esta imagen», under each slide of an open post: the client
+    writes in one line what's wrong and the link carries «Arreglá la slide 2
+    del posteo «2026-09-15-…»: sacale el signo de pregunta». The face reads the
+    message, delegates to the creator, and the creator is the one with
+    `replace_slide`. The sentence is gated end to end by
+    `engine/tests/test_fix.py`; what nobody has clicked in a browser yet is the
+    control itself.
+  - «Publicar en Instagram», on every post that hasn't gone out: the link
+    carries «Publicá en Instagram el posteo «2026-09-15-…»», the face calls
+    `publish_instagram`, and the run STOPS at the approval gate — so this `?p=`
+    ends in Aprobaciones and not in an answer. A post that did go out shows the
+    «Publicado» chip and the permalink instead, and has no button.
+    `engine/tests/test_publish_gate.sh` walks the whole sentence, from the
+    message to the card to the client's yes.
 
 ## `?request=` doesn't go stale by rejecting it
 

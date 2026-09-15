@@ -342,6 +342,102 @@ more, one alt each, every `NN.png` on disk and listed in order. The day's post i
 the run and moved back at the end, so the run's own post is the only one of
 the day and the workspace is left as it was found.
 
+### Publishing
+
+**IT GOES OUT ONLY THROUGH THE GATE.** `publish_instagram(post_id, note)` is
+the social plugin's one outward tool and the only thing in this product that
+leaves the building: `kit/plugins/social/core/publishing.py`, registered on the
+FACE wrapped in `approval_required()` exactly the way the approval plugin
+registers `send_email`. Not on the creator — a sub-agent never talks to the
+client, and a gated tool inside `delegate_task` does not pause, it kills the
+turn (**Sub-agents** below). The client asks for it from Posteos («Publicar en
+Instagram», which opens `/app/chat?p=…` like the slide fix does) or just says
+so in the chat; the run stops, the request lands in Aprobaciones, and nothing
+has happened yet.
+
+**THE TOOL'S ONLY ARGUMENT IS AN ID**, so there is no way to publish a version
+of the post the client never saw — and so a card built from the arguments would
+say nothing. The social plugin hands the approval plugin a renderer for its own
+tool, `engine.provide("approval.render.publish_instagram", publishing.card)`,
+and `render.py` looks it up by tool name when a run stops: the card is read off
+`post.json` — the slides as pictures (`/portal/posts/{id}/{NN}.png`, fetched by
+the portal's markdown renderer with the bearer), the caption, the hashtags, and
+a warning with the permalink if it already went out. The slides sit in a
+markdown table because the portal cuts a request's EDITABLE text after the last
+table row (`splitProposal`), which puts the caption, and only the caption, in
+the box the client edits. A correction therefore REPLACES the caption — the
+portal sends "use exactly this version" — instead of being appended the way
+`send_email`'s is. The pictures are never touched by a correction: a slide
+that is wrong is fixed first, with «Arreglar esta imagen».
+
+**THE API IS THE INSTAGRAM API WITH INSTAGRAM LOGIN** (`graph.instagram.com`,
+v21.0): a professional account and a long-lived user token, no Facebook Page,
+no app review for the account's own owner. `instagram.py` creates one container
+per slide, then the `CAROUSEL` with their ids and the caption, polls
+`status_code` until `FINISHED` — Instagram fetches the pictures itself, so a
+container is not publishable the moment it exists — publishes, and reads the
+permalink back. It writes `published: {at, media_id, permalink}` into
+`post.json` and one `post.published` event; the Posts tab draws that as the
+«Publicado» chip with the link. A post of ONE picture is not a carousel:
+Instagram's takes 2 to 10 children, so a single slide goes up as one container.
+
+**INSTAGRAM ONLY TAKES PUBLIC URLS AND THIS ENGINE SERVES EVERY BYTE BEHIND A
+BEARER**, so the slides go up to a Cloudflare R2 bucket (S3-compatible, `boto3`)
+as `<post_id>/<NN>.png` for the length of the publish and are deleted on the way
+out, on the failure path too. The bucket is a doorstep, not a store.
+
+The environment, on the instance's `secrets.env`, read at call time and ALL of
+it before the first upload — so a half-connected agent never leaves pictures in
+a bucket for a publish that was never going to happen:
+
+| variable | what |
+|---|---|
+| `IG_ACCESS_TOKEN` | the long-lived user token. **60 days** |
+| `IG_USER_ID` | the Instagram professional account's id |
+| `R2_ACCOUNT_ID` | the Cloudflare account the bucket is in |
+| `R2_ACCESS_KEY_ID` · `R2_SECRET_ACCESS_KEY` | the bucket's S3 credentials |
+| `R2_BUCKET` | where the slides wait |
+| `R2_PUBLIC_URL` | its public base, e.g. `https://pub-xxxx.r2.dev` |
+
+A missing one is one Spanish line the agent hands the client — «Falta conectar
+Instagram: no está IG_ACCESS_TOKEN» — and it is the one thing in here that is
+not protective programming: it is the connection not being set up, which is the
+state every agent is in until its client connects the account.
+
+**THE TOKEN EXPIRES SILENTLY EVERY 60 DAYS**, which is how this connection dies
+without anyone noticing. `POST /portal/instagram/refresh` calls Meta's
+`refresh_access_token` and answers WHEN the new one expires, never the token
+itself (the adapter never returns a credential); the refreshed value replaces
+the one the process is holding, and since Meta extends the token it is given,
+the next refresh from what `secrets.env` still has works as long as it happens
+inside the window. It is called by hand today; a flow calls it later
+(`docs/PENDING.md`).
+
+```bash
+python3 engine/tests/test_instagram.py   # free, a second, no model, no network
+bash engine/tests/test_publish_gate.sh   # ~7 s, ~US$0.01, one turn
+```
+
+The first one is where the sequence is asserted, because a real publish is one
+irreversible thing on a real account and cannot be run twice: the Graph behind
+an `httpx.MockTransport` and the bucket behind a recorder, over a throwaway
+post, seven claims — the documented order of calls, the public URLs Instagram
+was handed and in what order, the caption being exactly what `caption.md`
+carries, `published` and the event, the objects deleted, a one-picture post
+that is not a carousel, and `NotConnected` naming the variable before a single
+byte goes up.
+
+The second is the gate, live, one turn, with `IG_*` and `R2_*` unset — which is
+why it can be run as often as it likes. Sixteen claims: the turn pauses with the
+pause message and `publish_instagram` in the trail, nothing was published, the
+card names the post and carries the caption, the hashtags and both slides as
+pictures, the caption is below the last table row, and then the client approves
+and the resumed run comes back with «No pude publicarlo: falta conectar
+Instagram (`IG_ACCESS_TOKEN`)» — an answer and not a dead turn — the post still
+unpublished, the request closed, and both halves in Activity. Last run
+2026-09-15: **0 failures, 6.5 s**. A real publish is Luis' to do, with his
+token.
+
 ## Sub-agents
 
 **The face is the only entry point** — the chat and every flow run — and what
@@ -570,11 +666,19 @@ portal's refresh reads the outcome and not the row as it was a second ago. The
 resumed run has no stream attached: its answer shows up in the chat on the next
 load, which the plan takes as acceptable for the engine.
 
-**The outbox.** `send_email` and `publish_post` are fake, and deliberately so:
-their whole side effect is one markdown file in `workspace/outbox/`
-(`email-<stamp>-<to>.md`, `post-<stamp>-<channel>.md`) with the client's
-correction on a line of its own. It is the only evidence that the tool ran, and
-the Files tab shows it.
+**The outbox.** `send_email` is fake, and deliberately so: its whole side effect
+is one markdown file in `workspace/outbox/` (`email-<stamp>-<to>.md`) with the
+client's correction on a line of its own. It is the only evidence that the tool
+ran, and the Files tab shows it.
+
+**THE GATE IS NOT A DEMO ANY MORE**, and this plugin is no longer the only one
+that uses it: the social plugin's `publish_instagram` is real, it is gated the
+same way, and it draws its own card through this plugin's renderer hook
+(**Publishing**, above). There used to be a second fake tool here,
+`publish_post`, dropping a file in the outbox and answering «Publicado en
+<canal>»; it went out with that change, because two tools with that name and
+that promise, one of them fake, is the model choosing between them by the shape
+of a sentence.
 
 ## Memory
 
