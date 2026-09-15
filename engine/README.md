@@ -386,6 +386,14 @@ BEARER**, so the slides go up to a Cloudflare R2 bucket (S3-compatible, `boto3`)
 as `<post_id>/<NN>.png` for the length of the publish and are deleted on the way
 out, on the failure path too. The bucket is a doorstep, not a store.
 
+**`boto3` IS NEW IN THE IMAGE, SO EVERY RUNNING AGENT NEEDS `--build` ONCE.**
+The kit reaches a container by bind mount and a dependency does not: an
+instance restarted without rebuilding imports the social plugin, fails on
+`import boto3` and does not come up at all — the plugins are loaded at startup
+and a plugin that raises takes the app with it. `docker compose -p <name> -f
+engine/instance.yml --env-file engine/instances/<name>/instance.env up -d
+--build`, once, per agent.
+
 The environment, on the instance's `secrets.env`, read at call time and ALL of
 it before the first upload — so a half-connected agent never leaves pictures in
 a bucket for a publish that was never going to happen:

@@ -49,6 +49,11 @@ after it, and whose:
   in `engine/instances/tuagente/secrets.env`. Then one real publish, by hand,
   and after that the token has to be refreshed before **60 days**
   (`POST /portal/instagram/refresh`; a flow should own that, and does not yet).
+  **Our own agent has to be brought up with `--build` before anything else**:
+  `boto3` is new in the image, the kit reaches the container by bind mount and
+  a dependency does not, so a plain restart fails on `import boto3` and the
+  container does not come up at all. It is still running the code it loaded
+  before any of this, so nothing is broken until somebody restarts it.
 
 ## Migration to English (2026-08-23)
 
