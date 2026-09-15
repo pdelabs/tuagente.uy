@@ -10,7 +10,10 @@ AI's `ImageGeneration` capability puts in front of an agent. Three claims:
      second half is what Pydantic AI hands to a model as an IMAGE rather than
      as a filename, so it is what makes looking at the piece possible at all.
   b. THE PNG LANDED — a new file under `<workspace>/imagenes/`, which is inside
-     the one directory the client can see from the Files tab.
+     the one directory the client can see from the Files tab, WITH ITS BRIEF
+     beside it: `<same stem>.json`, carrying the prompt it was made from. That
+     sidecar is what the social plugin moves into the post, and it is what a
+     «arreglá la slide 2» starts from a week later.
   c. THE SHAPE IS THE ONE ASKED FOR — the file's own IHDR, read without a
      decoder. `square` is 1:1 and a provider that quietly served something else
      would be a post cropped wrong on every phone.
@@ -48,6 +51,9 @@ PROMPT = (
     " sin ningún texto."
 )
 FORMAT = "square"
+# The suffix of the brief `generate_image` leaves beside every picture
+# (`kit/plugins/image/core/generate.py`).
+BRIEF = ".json"
 # What `square` means, from `kit/plugins/image/core/generate.py`'s table: the
 # provider is asked for a SHAPE and picks the pixels, so the assertion is the
 # ratio and not a size.
@@ -95,7 +101,11 @@ def generate(prompt: str, shape: str) -> dict:
 
 
 def pictures() -> set[Path]:
-    return {p for p in IMAGES.glob("*") if p.is_file()} if IMAGES.is_dir() else set()
+    """The pictures and not their briefs: the sidecar shares the stem, and a
+    `.json` sorted before the `.png` is what claim (c) would measure."""
+    if not IMAGES.is_dir():
+        return set()
+    return {p for p in IMAGES.glob("*") if p.is_file() and p.suffix != BRIEF}
 
 
 def dimensions(path: Path) -> tuple[int, int]:
@@ -136,9 +146,14 @@ def main() -> int:
             problems.append(f"the picture is {answered['bytes']} bytes")
     failures += judge("a. the tool answered with both things", problems)
 
-    failures += judge(
-        "b. the PNG landed", [] if fresh else [f"no new file under {IMAGES}"]
-    )
+    problems = [] if fresh else [f"no new file under {IMAGES}"]
+    if fresh:
+        sidecar = fresh[0].with_suffix(BRIEF)
+        if not sidecar.is_file():
+            problems.append(f"no brief beside it ({sidecar.name})")
+        elif json.loads(sidecar.read_text())["prompt"] != PROMPT:
+            problems.append("the brief does not carry the prompt it was made with")
+    failures += judge("b. the PNG landed, with its brief", problems)
 
     problems = []
     if fresh:
