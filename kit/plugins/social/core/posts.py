@@ -4,6 +4,7 @@
         post.json     the whole post; it is also what the route answers
         caption.md    the caption, a blank line, the hashtags on one line
         01.png …      the slides, in the order they are flipped through
+        anteriores/   every slide a fix replaced, kept: 01-1.png, 02-1.png …
 
 THE DAY'S POST IS A CAROUSEL: several slides, `01.png` the hook and the last
 one the close, and `alts` carries one description per slide in that same
@@ -20,6 +21,16 @@ was made with, so it changes the one line that is wrong and keeps the rest word
 for word — which is the only thing holding a carousel's five pieces together.
 A picture with no sidecar breaks the tool loudly instead of saving a post whose
 slides cannot be fixed.
+
+AND A FIX THROWS NOTHING AWAY. `replace_slide` does not delete the slide it
+replaces: it moves it into `anteriores/` as `NN-<k>.<ext>`, counting up per
+slide, and writes a row into `versions` — the file, the prompt and the alt that
+were that slide's, when it was replaced, and the client's own words about what
+was wrong. Which of two pictures is the good one is the client's call and
+nobody else's, and the picture they did not keep is also the only record of
+what they asked for; both of those used to be one `unlink()` away from gone.
+`versions` is keyed by the slide's CURRENT file name, so a fix that arrives as
+a different type carries its history with it.
 
 THE ROUTES ARE IN THIS FILE AND NOT IN A `routes.py`, which is what the shape
 of `plugins/approval/core/` would suggest, AND THE REASON IS MEASURED. A
@@ -67,6 +78,9 @@ from core.tools.workspace import under
 WHERE = "posteos"
 POST = "post.json"
 CAPTION = "caption.md"
+# Where a replaced slide goes. Spanish, like `posteos/` and `imagenes/`: it is
+# a folder the client opens in Files, not an internal of ours.
+PREVIOUS = "anteriores"
 
 # The suffix of the brief `generate_image` leaves beside every picture. The
 # same word as the image plugin's `BRIEF`, and not an import: the two plugins
@@ -137,6 +151,13 @@ def expand(data: dict) -> dict:
     order as `images`. The tab shows the brief of the slide the client is
     looking at, which is how «everything that was used» is visible and not
     only stored.
+
+    `versions` gets the same treatment as `images`: each replaced slide is
+    handed over with the `url` its bytes are at, so the tab draws the picture
+    that was there before the fix without ever building a path of its own. It
+    is always answered, `{}` on a post nothing was fixed on — and `.get`,
+    because a post written before any of this existed is still on disk and the
+    tab has to draw it.
     """
     directory = folder(data["id"])
     return data | {
@@ -147,7 +168,14 @@ def expand(data: dict) -> dict:
                 "url": f"/portal/posts/{data['id']}/{name}",
             }
             for name in data["images"]
-        ]
+        ],
+        "versions": {
+            name: [
+                version | {"url": f"/portal/posts/{data['id']}/{version['file']}"}
+                for version in history
+            ]
+            for name, history in (data.get("versions") or {}).items()
+        },
     }
 
 
@@ -167,11 +195,17 @@ def read_all() -> list[dict]:
 def image_path(post_id: str, name: str) -> Path | None:
     """The bytes of one piece, and only of a piece the post lists.
 
-    The listing is the allowlist, so there is no path to sanitize: a name that
-    is not in `images` is a 404 whatever it is made of.
+    The listing is the allowlist, so there is no path to sanitize and no guard
+    written in prose: a name that is not one of `images` or one of the
+    `versions`' files is a 404 whatever it is made of, `anteriores/../../x`
+    included. That is also what lets the route take a `:path` — a replaced
+    slide lives one folder down and its name carries a slash.
     """
     data = read(post_id)
-    if data is None or name not in [image["name"] for image in data["images"]]:
+    if data is None:
+        return None
+    kept = [v["file"] for history in data["versions"].values() for v in history]
+    if name not in [image["name"] for image in data["images"]] + kept:
         return None
     return folder(post_id) / name
 
@@ -364,6 +398,9 @@ def toolset() -> FunctionToolset:
             "hashtags": tags,
             "images": names,
             "prompts": briefs,
+            # Nothing has been replaced yet. The key is written from the start
+            # so a post's shape does not depend on whether it was ever fixed.
+            "versions": {},
             "created_at": now.isoformat(timespec="seconds"),
             "flow": flow_of(ctx.deps.session_id),
         }
@@ -384,17 +421,22 @@ def toolset() -> FunctionToolset:
         post_id: str,
         number: int,
         image: str,
+        reason: str,
         alt: str | None = None,
     ) -> dict:
         """Cambiar UNA sola slide de un posteo que ya está guardado.
 
-        Es la única forma de arreglar una imagen sin rehacer el posteo: pisa esa
-        slide y no toca ninguna otra, ni el pie, ni los hashtags. Llamala recién
-        cuando generaste la imagen nueva y la miraste.
+        Es la única forma de arreglar una imagen sin rehacer el posteo: cambia
+        esa slide y no toca ninguna otra, ni el pie, ni los hashtags. Llamala
+        recién cuando generaste la imagen nueva y la miraste.
 
         Las slides se cuentan como las pasa el cliente: la 1 es el gancho y la
         última es el cierre. Se puede arreglar cualquier posteo, no sólo el de
         hoy.
+
+        No se pierde nada: la imagen que estaba queda guardada con su brief, su
+        texto alternativo y el motivo, y el cliente la sigue viendo en Posteos.
+        Elegir cuál de las dos le gusta más es de él, no tuyo.
 
         El brief de esa slide queda reemplazado por el de la imagen nueva, así
         que generala a partir del que está guardado en el posteo y cambiá sólo
@@ -407,6 +449,9 @@ def toolset() -> FunctionToolset:
             number: qué slide cambiás, contando desde 1.
             image: la imagen nueva, por su ruta en el espacio de trabajo: la
                 que te devolvió `generate_image`.
+            reason: qué estaba mal, con las palabras del cliente tal como te
+                llegaron en el pedido. Es lo que va a leer al lado de la
+                imagen vieja.
             alt: el texto alternativo nuevo, si cambió lo que se ve. Si no lo
                 pasás queda el que ya tenía.
         """
@@ -431,16 +476,32 @@ def toolset() -> FunctionToolset:
             )
         source = incoming(ctx.deps.workspace, image)
         brief = brief_of(source)
-        # THE NUMBER IS THE POSITION AND THE SUFFIX IS THE NEW PICTURE'S. A
-        # slide that comes back as a different type takes its own extension and
-        # the old file goes, or the post would list `02.png` with `02.webp`
-        # sitting next to it and nobody serving it.
         old = names[number - 1]
+        # THE SLIDE THAT WAS THERE IS KEPT, and with everything that made it:
+        # its brief, its alt and the client's own words about what was wrong.
+        # The history is popped under the OLD name and put back under the new
+        # one, so a fix that comes back as a different type does not leave the
+        # earlier versions filed under a name the post no longer has.
+        history = data.setdefault("versions", {}).pop(old, [])
+        kept = f"{number:02d}-{len(history) + 1}{Path(old).suffix}"
+        (directory / PREVIOUS).mkdir(exist_ok=True)
+        (directory / old).rename(directory / PREVIOUS / kept)
+        history.append({
+            "file": f"{PREVIOUS}/{kept}",
+            "prompt": data["prompts"][number - 1],
+            "alt": data["alts"][number - 1],
+            "reason": reason,
+            "replaced_at": datetime.now(ZoneInfo(config.TIMEZONE)).isoformat(
+                timespec="seconds"
+            ),
+        })
+        # THE NUMBER IS THE POSITION AND THE SUFFIX IS THE NEW PICTURE'S: a
+        # slide that comes back as a different type takes its own extension,
+        # and the post would otherwise list `02.png` with `02.webp` beside it.
         name = f"{number:02d}{source.suffix.lower()}"
-        if name != old:
-            (directory / old).unlink()
         source.rename(directory / name)
         names[number - 1] = name
+        data["versions"][name] = history
         data["prompts"][number - 1] = brief
         if alt:
             data["alts"][number - 1] = alt
@@ -452,7 +513,9 @@ def toolset() -> FunctionToolset:
             "post.slide_replaced", f"Cambié la slide {number} de «{post_id}»",
             "completed", ctx.deps.session_id, {"id": post_id, "slide": number},
         )
-        return {"id": post_id, "slide": number, "file": name,
+        # `kept` so the report can say the old one is still there, which is the
+        # half of this the client has to hear to stop being afraid of asking.
+        return {"id": post_id, "slide": number, "file": name, "kept": history[-1]["file"],
                 "slides": len(names), "url": f"/portal/posts/{post_id}"}
 
     return ts
@@ -476,7 +539,7 @@ def detail(post_id: str):
     return found
 
 
-@router.get("/portal/posts/{post_id}/{name}")
+@router.get("/portal/posts/{post_id}/{name:path}")
 def piece(post_id: str, name: str):
     """The bytes of one image, with the type that makes it open.
 

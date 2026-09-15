@@ -34,8 +34,11 @@ Hacé esto y sólo esto:
    carrusel.
 3. Generala con `generate_image` en el mismo formato que las otras (`feed` en
    un carrusel) y miralá contra los cinco puntos de siempre.
-4. Guardala con `replace_slide`. Si cambió lo que se ve, pasale también el
-   texto alternativo nuevo.
+4. Guardala con `replace_slide`, y en `reason` pasale lo que el cliente dijo
+   que estaba mal, con sus palabras y tal como te llegó en el pedido. Si cambió
+   lo que se ve, pasale también el texto alternativo nuevo. La imagen que
+   estaba no se borra: queda guardada con su brief y con ese motivo, y el
+   cliente la sigue viendo en Posteos.
 
 Nunca regeneres las otras slides y nunca reescribas el pie: te pidieron una
 cosa. Y volvé diciendo qué slide tocaste, qué cambiaste y si quedó o no.

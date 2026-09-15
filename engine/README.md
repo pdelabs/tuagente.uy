@@ -252,11 +252,30 @@ the chat SENDS. From there it is the normal path: the face delegates, the
 creator reads that post's stored brief, changes only what the request asks and
 keeps the rest word for word — the whole reason a fixed slide still belongs to
 the same carousel — generates it in the same format, looks at it, and calls
-`replace_slide(post_id, number, image, alt=None)`, the second tool of the posts
-toolset. It writes the picture over slide `number` (keeping the `NN.<ext>`
-naming), replaces that slide's prompt and, when one is given, its alt, and
-writes a `post.slide_replaced` event. Any day's post can be fixed, not only
-today's, and the caption is never rewritten.
+`replace_slide(post_id, number, image, reason, alt=None)`, the second tool of
+the posts toolset. It puts the picture in as slide `number` (keeping the
+`NN.<ext>` naming), replaces that slide's prompt and, when one is given, its
+alt, and writes a `post.slide_replaced` event. Any day's post can be fixed, not
+only today's, and the caption is never rewritten.
+
+**A FIX DELETES NOTHING.** The slide that was there moves to
+`<post>/anteriores/` as `NN-<k>.<ext>`, counting up per slide, and `post.json`
+grows a `versions` map keyed by the slide's current file name:
+
+```json
+"versions": {"02.png": [{"file": "anteriores/02-1.png", "prompt": "…",
+                         "alt": "…", "reason": "la decoración violeta…",
+                         "replaced_at": "2026-09-15T18:41:07-03:00"}]}
+```
+
+`reason` is a required argument and it is the CLIENT's words about what was
+wrong, passed through by the creator: next to the old picture it is the only
+thing that says why there are two. Which one is the good one is the client's
+call — the Posts tab draws the earlier ones under the slide, and `expand()`
+hands each version the `url` its bytes are at. `GET /portal/posts/{id}/{file}`
+takes a `:path` so `anteriores/02-1.png` is served like any other piece; the
+allowlist is still the post's own listing, so a name that is not in `images` or
+in `versions` is a 404, `..` included.
 
 Its three routes are the Posts tab: `GET /portal/posts` (newest first, each
 image expanded to `{name, bytes, url}`), `GET /portal/posts/{id}` and
@@ -271,13 +290,17 @@ python3 engine/tests/test_fix.py        # ~3 min, ~US$0.11
 ```
 
 `test_fix.py` is the fix's own gate, two turns: one that leaves a carousel and
-one that says what is wrong with slide 2. Seven claims — the face delegated and
+one that says what is wrong with slide 2. Nine claims — the face delegated and
 never called `replace_slide`, that slide's bytes changed, every other slide's
-did not, the brief changed but kept a 600-character run of the old one (the
+did not, the brief changed but kept a long verbatim run of the old one (the
 shared visual block), `post.slide_replaced` in the face's session, an answer
-that names the slide, and `prompts` served by `/portal/posts/{id}`. It moves
-the day's post aside and puts it back, like the one above. Measured 2026-09-15:
-202 s and US$0.11, the carousel most of it and the fix 40 s.
+that names the slide, `prompts` served by `/portal/posts/{id}`, the replaced
+picture kept under `anteriores/` with its own brief, its alt and the client's
+words, and those bytes served as `image/png` through the version's `url`. It
+moves the day's post aside and puts it back, like the one above. Measured
+2026-09-15: 217 s and US$0.10, the carousel most of it and the fix 49 s — and
+the reason reached `post.json` word for word («la decoración violeta dejala
+como un arco grande abajo a la derecha»).
 
 One chat turn — «Armá el posteo de hoy para Instagram y guardalo» — and nine
 assertions from outside: the folder with its three kinds of file, the listing,
