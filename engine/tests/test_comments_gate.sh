@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Answering a comment stops at the gate, and the card says what is about to go out.
+# Answering a comment or a message stops at the gate, and the card says what is
+# about to go out.
 #
 #     ./tests/test_comments_gate.sh          ~1 minute, ~US$0.01
 #
@@ -19,6 +20,9 @@
 #   d. the client approves, and the resumed turn comes back with the missing
 #      connection — an answer and not a dead turn — the request closed and both
 #      halves in Activity
+#   e. the same for a DIRECT MESSAGE: a seeded conversation, one turn asking for
+#      an answer to it, and a card that carries the person, the thread and how
+#      much of Meta's 24 hours is left
 #
 # The only Spanish is what the agent and the client read.
 set -uo pipefail
@@ -36,7 +40,14 @@ POST_LINE="Una ferretería que contesta a las once de la noche."
 PERMALINK="https://www.instagram.com/p/PRUEBADELAPUERTA/"
 DRAFT="Sí, los sábados de 9 a 13. Escribinos y lo vemos."
 ASK="Fijate si hay comentarios nuevos en Instagram y contame."
+# The DM half: a thread the agent has seen, and the person on the other side.
+THREAD_ID="ig_dm_prueba_de_la_puerta"
+DM_WHO="clienta.nueva"
+DM_IGSID="7380000000000001"
+DM_SAID="Hola, ¿ustedes atienden los sábados?"
+DM_DRAFT="Sí, los sábados de 9 a 13. ¿De qué es tu negocio?"
 REPLY_ASK="Contestá el comentario \`${COMMENT_ID}\` de Instagram con esto, tal cual: «${DRAFT}»"
+DM_ASK="Contestá el mensaje de la conversación \`${THREAD_ID}\` de Instagram con esto, tal cual: «${DM_DRAFT}»"
 FAILURES=0
 
 # Generous: approving waits for a whole model turn.
@@ -58,14 +69,16 @@ cleanup() {
 import sqlite3, sys
 db = sqlite3.connect("/state/core.db")
 db.execute("DELETE FROM instagram_seen WHERE comment_id = ?", (sys.argv[1],))
+db.execute("DELETE FROM instagram_messages WHERE conversation_id = ?", (sys.argv[3],))
+db.execute("DELETE FROM instagram_conversations WHERE conversation_id = ?", (sys.argv[3],))
 # BOTH CONVERSATIONS, and the second one is not named after the comment: a
 # session left behind is one the next run MATCHES on its own first turn
 # (`match_session` reads the client turns), and then the turn this test is
 # watching for never happens.
 ids = [r[0] for r in db.execute(
     "SELECT id FROM sessions WHERE id IN (SELECT session_id FROM messages"
-    " WHERE content LIKE ? OR content LIKE ?)",
-    (f"%{sys.argv[1]}%", f"%{sys.argv[2]}%"))]
+    " WHERE content LIKE ? OR content LIKE ? OR content LIKE ?)",
+    (f"%{sys.argv[1]}%", f"%{sys.argv[2]}%", f"%{sys.argv[3]}%"))]
 holes = ",".join("?" * len(ids)) or "NULL"
 approvals = [r[0] for r in db.execute(
     f"SELECT id FROM approvals WHERE session_id IN ({holes})", ids)] if ids else []
@@ -76,7 +89,7 @@ for table in ("events", "messages", "history", "sessions"):
     db.executemany(f"DELETE FROM {table} WHERE {column} = ?", [(i,) for i in ids])
 db.commit()
 print(f"took out the comment, {len(approvals)} request(s) and {len(ids)} conversation(s)")
-' "$COMMENT_ID" "$ASK"
+' "$COMMENT_ID" "$ASK" "$THREAD_ID"
 }
 trap cleanup EXIT
 
@@ -180,7 +193,59 @@ for kind in approval_requested approval_approved; do
     && ok "Activity has $kind" || bad "Activity has no $kind for this request"
 done
 
-step "(e) result"
+step "(e) the same door for a direct message"
+inside '
+import sqlite3, sys, time
+thread_id, igsid, who, said = sys.argv[1:5]
+now = time.time()
+db = sqlite3.connect("/state/core.db")
+db.execute(
+    "INSERT OR REPLACE INTO instagram_conversations (conversation_id, participant_id,"
+    " participant_username, last_inbound_at) VALUES (?, ?, ?, ?)",
+    (thread_id, igsid, who, now - 3600))
+db.execute(
+    "INSERT OR REPLACE INTO instagram_messages (message_id, conversation_id, from_id,"
+    " from_username, text, created_time, seen_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    (f"{thread_id}-1", thread_id, igsid, who, said, now - 3600, now))
+db.commit()
+print(f"{thread_id}: @{who}, hace una hora")
+' "$THREAD_ID" "$DM_IGSID" "$DM_WHO" "$DM_SAID" || bad "the conversation could not be written"
+
+before="$(pending_ids)"
+dm="$(post "$ADAPTER/portal/chat/stream" \
+  "$(jq -nc --arg m "$DM_ASK" '{stream: true, messages: [{role: "user", content: $m}]}')")"
+grep -q 'Te dejé un pedido en Aprobaciones' <<<"$dm" \
+  && ok "the message turn stops at the gate too" \
+  || bad "the message turn never paused: $(tail -3 <<<"$dm")"
+grep -q '"tool": "send_message"' <<<"$dm" \
+  && ok "the tool trail shows send_message" || bad "send_message is not in the stream"
+new="$(comm -13 <(printf '%s\n' "$before") <(pending_ids))"
+DM_ID="$(head -1 <<<"$new")"
+if [ -n "$DM_ID" ]; then
+  DM_BODY="$(api "$ADAPTER/portal/tickets/$DM_ID" | jq -r '.ticket.body')"
+  grep -qF "$DM_SAID" <<<"$DM_BODY" \
+    && ok "what she wrote is on the card" || bad "the message is not on the card"
+  grep -qF "@$DM_WHO" <<<"$DM_BODY" \
+    && ok "and who wrote it" || bad "the person is not on the card"
+  grep -q 'Quedan .* h del plazo' <<<"$DM_BODY" \
+    && ok "with how much of the 24 hours is left" \
+    || bad "the window is not on the card: $DM_BODY"
+  grep -qF "$DM_DRAFT" <<<"$DM_BODY" \
+    && ok "the draft answer is on the card" || bad "the draft is not on the card"
+  [ "$(printf '%s' "$DM_BODY" | grep -n '^|' | tail -1 | cut -d: -f1)" \
+    -lt "$(printf '%s' "$DM_BODY" | grep -nF "$DM_DRAFT" | tail -1 | cut -d: -f1)" ] \
+    && ok "and it is the card's editable tail" \
+    || bad "the draft is not the card's editable tail"
+  assert "$(post "$ADAPTER/portal/approvals/$DM_ID/approve" '{}' | jq -r '.ok')" "true" \
+    "the approval answered ok"
+  assert "$(api "$ADAPTER/portal/activity" \
+    | jq '[.events[] | select(.kind == "message.sent")] | length')" "0" \
+    "nothing was sent to anybody"
+else
+  bad "no approval id for the message: nothing else can be checked"
+fi
+
+step "(f) result"
 [ "$FAILURES" -eq 0 ] && printf 'COMMENTS GATE PASS - 0 failures\n' \
   || printf 'COMMENTS GATE FAIL - %s failures\n' "$FAILURES"
 exit $((FAILURES > 0))
