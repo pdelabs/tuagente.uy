@@ -46,9 +46,15 @@ after it, and whose:
   account (Instagram API with Instagram Login, no Facebook page, no app review
   for our own account), and a **Cloudflare R2 bucket** with its five variables
   — Instagram fetches the pictures itself and only takes public URLs. They go
-  in `engine/instances/tuagente/secrets.env`. Then one real publish, by hand,
-  and after that the token has to be refreshed before **60 days**
-  (`POST /portal/instagram/refresh`; a flow should own that, and does not yet).
+  in `engine/instances/tuagente/secrets.env`. Then one real publish, by hand.
+  **The 60 days are no longer anybody's job**: the `instagram` plugin's flow
+  refreshes the token as its first step when fewer than ten are left, and the
+  new one is stored in `instagram_account` — the env is the seed and the table
+  is what every Graph call reads first, because `secrets.env` is outside the
+  container (`engine/README.md`, «The comments»). `POST /portal/instagram/
+  refresh` is still there to do it by hand, and it writes through the same
+  table. What is NOT built is DMs, and it cannot be: `instagram_manage_messages`
+  needs Meta's Advanced Access even on our own account.
   **Our own agent has to be brought up with `--build` before anything else**:
   `boto3` is new in the image, the kit reaches the container by bind mount and
   a dependency does not, so a plain restart fails on `import boto3` and the
