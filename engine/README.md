@@ -540,6 +540,19 @@ what gates them is the CLIENT's own app, «Permitir acceso a mensajes»
 (Configuración → Mensajes y respuestas a historias), a consumer setting no
 dashboard can see.
 
+**THE PERSON IS THE UNIT, NOT THE MESSAGE**, and that rule cost a real
+conversation on our own account (16/9/2026, trace
+`0e51460eb36805965a55545755fd2924`). The tick handed back only what was new —
+«hola buenas leyeron mi mensaje?» — so the agent answered «sí, vimos tu
+mensaje» and asked its qualifying question, never answering the one two messages
+up. The context was on the ticket and nothing made it read it. So BOTH ticks now
+hand back THREADS: every conversation with something new comes back whole
+(oldest first, ours named «Vos», the new ones marked «(nuevo)», the board's
+ticket named when there is one), and a new comment comes back with its post, its
+parent and the replies already under it. What is NEW is a fact about a row; what
+to ANSWER is a fact about a conversation, and no prose can ask a model to go and
+find it.
+
 **`fetch_messages()` IS THE SECOND HALF OF THE TICK.** The threads
 (`GET /me/conversations?platform=instagram&fields=id,updated_time`), then each
 one's messages expanded in the same call
@@ -558,8 +571,9 @@ up to 24 h after their last message, and each message of theirs starts it again;
 forward, so reading a thread twice cannot reset a window. `send_message(
 conversation_id, text, note)` is gated like the rest and **takes no recipient**:
 the IGSID comes off the conversation, which is the only way a model cannot
-address a stranger. The card is the person, the window, the last six messages as
-table rows with ours marked, and the draft as the editable tail. The window is
+address a stranger. The card is the person, the window, the ticket, the last ten
+messages as table rows oldest first with ours marked, and the draft as the
+editable tail. The window is
 checked AGAIN in the tool body — a request can sit in the queue overnight — and
 past it the tool sends nothing and answers the sentence that says so and says to
 use the board instead. The send itself is the one call in this kit that is JSON
@@ -650,15 +664,17 @@ the card with the slide and the draft as its editable tail, the numbers the
 creator reads, and the token renewing itself and being what the NEXT call goes
 out with.
 
-The second one is the messages, and it is the only place the window can be
-asserted at all — it is a clock, and a live test would have to wait a day to
-watch it shut. Six claims: the tick that groups by conversation with the time
-left on each, our own answers kept but not listed, the documented send (the JSON
-body, the IGSID off the conversation, the Bearer header) with the correction
-replacing the text, a thread whose last message is twenty-five hours old
-refused with the sentence that says what to do instead, a conversation nobody
-saw refused, and the card with the thread as table rows and the draft as its
-tail.
+The second one is the messages, and it is the only place both clocks can be
+asserted — the window, which a live test would have to wait a day to watch shut,
+and the thread, which needs a second tick to be a thread at all. Six claims: a
+tick that comes back with whole conversations, with the time left and the ticket
+on each; THE NUDGE — a second tick carrying one new message and the question
+from three messages up, unmarked, which is the regression this rule was bought
+with; the documented send (the JSON body, the IGSID off the conversation, the
+Bearer header) with the correction replacing the text; a thread whose last
+message is twenty-five hours old refused with the sentence that says what to do
+instead; a conversation nobody saw refused; and the card with the thread as
+table rows, oldest first, and the draft as its tail.
 
 The third is the gate, live, with `IG_*` unset — which is why it can be run as
 often as it likes. Three turns: the tick answers «falta conectar Instagram» and

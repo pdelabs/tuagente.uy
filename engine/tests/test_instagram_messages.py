@@ -6,13 +6,15 @@ the Graph behind an `httpx.MockTransport`. Free, a second, no model and no
 network — and the only place the 24-hour window can be asserted at all, because
 it is a clock and a live test would have to wait a day to see it close.
 
-  a. A TICK BRINGS BACK WHAT THEY WROTE, NOT WHAT WE DID — the threads, each
-     one's messages, ours skipped by `from.id`, grouped by conversation, with
-     the person, the text and HOW MUCH OF THE 24 HOURS IS LEFT. The second tick
-     says «Sin mensajes nuevos.» and the run ends.
-  b. AND OUR OWN ANSWERS ARE STILL WRITTEN DOWN — skipped from the listing,
-     kept in the thread, because the approval card shows the conversation and
-     half a conversation reads like a person talking to a wall.
+  a. A TICK BRINGS BACK THE WHOLE CONVERSATION, not the new line — every thread
+     with something new, oldest first, ours named «Vos», the new ones marked,
+     with the person, HOW MUCH OF THE 24 HOURS IS LEFT and the board's ticket
+     when there is one. The tick after it says «Sin mensajes nuevos.»
+  b. AND AN OLD QUESTION IS STILL THERE WHEN A NUDGE ARRIVES — the regression
+     this rule was bought with (16/9/2026, our own account): a second tick with
+     one new message carries the QUESTION FROM BEFORE, unmarked, so the answer
+     can be to the person and not to the last line. Ours are written down and
+     named, never listed as new.
   c. THE ANSWER IS THE CALL META DOCUMENTS — `POST /{IG_USER_ID}/messages`, a
      JSON body carrying the recipient's IGSID and the text, the token as a
      Bearer header. The recipient comes from the CONVERSATION and never from
@@ -55,6 +57,10 @@ INSIDE = r"""
 import json, sys, types
 from datetime import datetime, timedelta, timezone
 
+# BOTH PLUGIN DIRECTORIES, the way the engine has them: every enabled plugin's
+# surface is on `sys.path` at load (`core/plugins.py`), and this plugin reads the
+# board for the ticket a thread already has.
+sys.path.insert(0, "/opt/kit/plugins/kanban/core")
 sys.path.insert(0, "/opt/kit/plugins/instagram/core")
 import httpx
 import ig_graph
@@ -124,6 +130,12 @@ def handle(request):
 
 ig_graph.http = lambda: httpx.Client(transport=httpx.MockTransport(handle))
 
+# THE NUDGE: what the person writes when nobody answered the question. It
+# arrives between the first tick and the second, which is the shape of the run
+# that bought this rule.
+NUDGE = {"id": "m_insistencia", "created_time": stamp(0.2), "from": THEM,
+         "to": {"data": [US]}, "message": "hola buenas, ¿leyeron mi mensaje?"}
+
 tools = {name: tool.function for name, tool in ig_tools.toolset().tools.items()}
 gated = {name: tool.function for name, tool in ig_tools.gated().tools.items()}
 ctx = types.SimpleNamespace(deps=types.SimpleNamespace(session_id=SESSION))
@@ -135,9 +147,18 @@ try:
     os.environ["IG_ACCESS_TOKEN"] = TOKEN
     os.environ["IG_USER_ID"] = USER
 
-    # (a) and (b) the two ticks.
+    # The thread's own ticket on the board: the listing has to name it.
+    import board_store
+    ticket_id, _ = board_store.create(
+        title="Mensaje de prueba en Instagram", body=ASKED,
+        source="instagram-dm", source_ref=OPEN_THREAD, session_id=SESSION)
+    out["ticket_id"] = ticket_id
+
+    # (a) the first tick, (b) the nudge, and then nothing.
     out["first_tick"] = tools["fetch_messages"](ctx)
-    out["second_tick"] = tools["fetch_messages"](ctx)
+    THREADS[OPEN_THREAD].insert(0, NUDGE)
+    out["nudge_tick"] = tools["fetch_messages"](ctx)
+    out["third_tick"] = tools["fetch_messages"](ctx)
     out["rows"] = [dict(r) for r in db.query(
         "SELECT message_id, conversation_id, from_id, from_username, text"
         " FROM instagram_messages ORDER BY created_time")]
@@ -169,6 +190,9 @@ try:
         "SELECT kind, label, payload FROM events WHERE session_id = ? ORDER BY id", (SESSION,))]
     print(json.dumps(out, ensure_ascii=False, default=str))
 finally:
+    for ticket in db.query("SELECT id FROM tickets WHERE source = ?", ("instagram-dm",)):
+        db.write("DELETE FROM ticket_comments WHERE ticket_id = ?", (ticket["id"],))
+        db.write("DELETE FROM tickets WHERE id = ?", (ticket["id"],))
     for thread_id in (OPEN_THREAD, CLOSED_THREAD):
         db.write("DELETE FROM instagram_messages WHERE conversation_id = ?", (thread_id,))
         db.write("DELETE FROM instagram_conversations WHERE conversation_id = ?", (thread_id,))
@@ -205,26 +229,45 @@ def main() -> int:
     for wanted in (OPEN_THREAD, CLOSED_THREAD, f"@{WHO}", ASKED, "Hola!"):
         if wanted not in listing:
             problems.append(f"the listing does not carry {wanted!r}")
-    if ANSWERED in listing:
-        problems.append("it came back with our own answer")
+    # OURS ARE CONTEXT, NAMED AND NOT MARKED NEW: the thread is what gets read.
+    if "Vos: «" not in listing:
+        problems.append("our own answer is not in the thread as «Vos»")
+    if f"Vos: «{ANSWERED}» (nuevo)" in listing:
+        problems.append("our own answer came back as something new")
     if "Quedan" not in listing:
         problems.append("it does not say how much of the window is left")
     if "VENCIÓ" not in listing:
         problems.append("it does not say which window is already shut")
-    if measured["second_tick"] != "Sin mensajes nuevos.":
-        problems.append(f"the second tick said {measured['second_tick']!r}")
+    if f"tarea {measured['ticket_id']}" not in listing:
+        problems.append("the thread's ticket is not named in the listing")
+    # Oldest first: the greeting is above the question it came before.
+    if listing.index("Hola!") > listing.index(ASKED):
+        problems.append("the thread is not oldest first")
+    if measured["third_tick"] != "Sin mensajes nuevos.":
+        problems.append(f"the tick after the nudge said {measured['third_tick']!r}")
     listed = [c for c in calls if c["path"] == "/v21.0/me/conversations"]
     if not listed or listed[0]["query"].get("platform") != "instagram":
         problems.append("the conversations call did not carry platform=instagram")
     expanded = [c for c in calls if c["path"] == f"/v21.0/{OPEN_THREAD}"]
     if not expanded or "messages{" not in expanded[0]["query"].get("fields", ""):
         problems.append("the thread was not asked for with its messages expanded")
-    failures += judge("a. a tick brings back what they wrote, with the clock", problems)
+    failures += judge("a. a tick brings back the whole conversation", problems)
 
-    # (b) ours are kept
+    # (b) the nudge, and the question from before
     problems = []
+    nudge = measured["nudge_tick"]
+    if "¿leyeron mi mensaje?" not in nudge:
+        problems.append("the nudge is not in the listing")
+    elif "¿leyeron mi mensaje?» (nuevo)" not in nudge:
+        problems.append("the nudge is not marked as the new one")
+    if ASKED not in nudge:
+        problems.append("THE QUESTION FROM BEFORE IS GONE — this is the whole bug")
+    elif f"«{ASKED}» (nuevo)" in nudge:
+        problems.append("the old question came back marked as new")
+    if CLOSED_THREAD in nudge:
+        problems.append("a conversation with nothing new was listed")
     rows = {row["message_id"]: row for row in measured["rows"]}
-    if set(rows) < {"m_saludo", "m_pregunta", "m_nuestro"}:
+    if set(rows) < {"m_saludo", "m_pregunta", "m_nuestro", "m_insistencia"}:
         problems.append(f"what was written down is {sorted(rows)}")
     elif rows["m_nuestro"]["from_id"] != USER:
         problems.append("our own message is not marked as ours")
@@ -233,7 +276,8 @@ def main() -> int:
         problems.append("the conversation does not carry the person's IGSID")
     if threads.get(OPEN_THREAD, {}).get("participant_username") != WHO:
         problems.append("the conversation does not carry the person's handle")
-    failures += judge("b. and our own answers are still written down", problems)
+    failures += judge("b. and an old question is still there when a nudge arrives",
+                      problems)
 
     # (c) the answer
     problems = []
@@ -252,11 +296,11 @@ def main() -> int:
                             f"{sent[1]['body']['message']['text']!r}")
     if f"@{WHO}" not in measured["sent"]:
         problems.append(f"the tool answered {measured['sent']!r}")
-    kinds = [event["kind"] for event in measured["events"]]
-    if kinds.count("message.sent") != 2:
-        problems.append(f"Activity has {kinds.count('message.sent')} message.sent")
-    elif f"@{WHO}" not in measured["events"][0]["label"]:
-        problems.append(f"the event reads {measured['events'][0]['label']!r}")
+    said = [e for e in measured["events"] if e["kind"] == "message.sent"]
+    if len(said) != 2:
+        problems.append(f"Activity has {len(said)} message.sent")
+    elif f"@{WHO}" not in said[0]["label"]:
+        problems.append(f"the event reads {said[0]['label']!r}")
     failures += judge("c. the answer is the call Meta documents", problems)
 
     # (d) the window
@@ -288,11 +332,13 @@ def main() -> int:
     body = card["body"]
     if f"@{WHO}" not in card["title"]:
         problems.append(f"the title is {card['title']!r}")
-    for wanted in (ASKED, ANSWERED, DRAFT, "Quedan"):
+    for wanted in (ASKED, ANSWERED, DRAFT, "Quedan", measured["ticket_id"]):
         if wanted not in body:
             problems.append(f"the card does not carry {wanted!r}")
     if "| Vos |" not in body:
         problems.append("our own message is not marked as ours on the card")
+    if body.index("Hola!") > body.index(ASKED):
+        problems.append("the card's thread is not oldest first")
     lines = body.splitlines()
     last_row = max((i for i, line in enumerate(lines) if line.strip().startswith("|")),
                    default=-1)

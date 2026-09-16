@@ -6,10 +6,11 @@ Graph behind an `httpx.MockTransport`. Free, a second, no model and no network �
 and it is where the whole mechanism can be asserted, because answering a comment
 is one public thing on a real account and cannot be run twice.
 
-  a. A TICK READS THE FEED AND COMES BACK WITH WHAT IS NEW — the last posts,
-     each one's comments AND the replies nested under them, with the account's
-     OWN answers skipped by username. The listing carries each comment's id,
-     which post it is under, who wrote it and what it says.
+  a. A TICK COMES BACK WITH THE THREAD, NOT THE ROW — the last posts, each
+     comment that has something new, and the replies already under it INCLUDING
+     OURS, named «Vos», with the new ones marked. The listing carries each
+     answerable comment's id, which post it is under, who wrote it and what it
+     says. Ours are never new and never carry an id.
   b. AND THE SECOND TICK HAS NOTHING TO SAY — «Sin comentarios nuevos.», one
      line, so a run that found nothing costs a cent and ends.
   c. AN ANSWER GOES OUT AS A REPLY TO THAT COMMENT — `POST /{comment-id}/
@@ -60,6 +61,10 @@ INSIDE = r"""
 import json, shutil, sys, types
 from pathlib import Path
 
+# BOTH PLUGIN DIRECTORIES, the way the engine has them: every enabled plugin's
+# surface is on `sys.path` at load (`core/plugins.py`), and this plugin reads the
+# board for the ticket a thread already has.
+sys.path.insert(0, "/opt/kit/plugins/kanban/core")
 sys.path.insert(0, "/opt/kit/plugins/instagram/core")
 import httpx
 import ig_graph
@@ -239,8 +244,14 @@ def main() -> int:
     for wanted in ("c_pregunta", "c_respuesta", "c_spam"):
         if wanted not in listing:
             problems.append(f"{wanted} is not in the listing")
-    if "c_nuestro" in listing:
-        problems.append("it came back with the account's own reply")
+    if "`c_nuestro`" in listing:
+        problems.append("our own reply came back with an id, as if it were answerable")
+    if "Vos: «Te contesto por acá.»" not in listing:
+        problems.append("our own reply is not in the thread as context")
+    if "(nuevo)" not in listing:
+        problems.append("nothing is marked as new")
+    if "Te contesto por acá.» (nuevo)" in listing:
+        problems.append("our own reply came back marked as new")
     if "@juan.perez" not in listing or "¿Cuánto sale?" not in listing:
         problems.append("the listing does not say who wrote it or what it says")
     if HEAD not in listing:

@@ -2,8 +2,8 @@
 title: Comentarios y mensajes de Instagram
 client_summary: "Mira los comentarios y los mensajes de tu Instagram, te deja la respuesta lista para aprobar y te marca en el tablero a los que quieren comprar."
 name: comments
-description: "Decide qué hacer con cada comentario y cada mensaje privado nuevo de Instagram: cuál se contesta y con qué palabras, cuál no se toca, cuál se oculta, y quién es alguien que quiere comprar y va al tablero como tarea. Usala cada vez que `fetch_comments` o `fetch_messages` traigan algo, en el flujo de Instagram o cuando el cliente te pida mirarlos."
-version: 1.1.0
+description: "Decide qué hacer con cada hilo de Instagram donde hay algo nuevo —comentarios y mensajes privados—: cuál se contesta y con qué palabras, cuál no se toca, cuál se oculta, y quién es alguien que quiere comprar y va al tablero como tarea. Usala cada vez que `fetch_comments` o `fetch_messages` traigan algo, en el flujo de Instagram o cuando el cliente te pida mirarlos."
+version: 1.2.0
 license: MIT
 ---
 
@@ -20,7 +20,29 @@ horario.
 Una respuesta es pública y la lee cualquiera. Lo que escribas queda abajo del
 posteo con el nombre del cliente arriba.
 
-## 2. Separá los comentarios en cuatro montones
+## 2. Leé el hilo entero antes de escribir una palabra
+
+`fetch_comments` y `fetch_messages` no te traen renglones sueltos: te traen **el
+hilo completo** de cada persona que dijo algo nuevo, de lo más viejo a lo más
+nuevo, con lo tuyo marcado «Vos» y lo nuevo marcado «(nuevo)». **Le contestás a
+la persona, no al último renglón.**
+
+Y si el hilo trae `tarea t_…`, leela con `read_ticket` antes de contestar: ahí
+está lo que ya se habló y lo que se decidió. No adivines lo que ya está escrito.
+
+Entonces, siempre, en este orden:
+
+1. **Contestá lo que preguntó**, aunque lo haya preguntado tres mensajes atrás y
+   nadie se lo haya contestado todavía. Eso primero, en la primera línea.
+2. Recién después, si hace falta, **una sola pregunta** tuya.
+
+**«Sí, vimos tu mensaje» no es una respuesta.** Si alguien pregunta «¿leyeron mi
+mensaje?», lo que está pidiendo es la respuesta a lo que preguntó antes, no que
+le confirmes que lo leíste. Contestale eso. Lo mismo con «¿hola?», «¿alguien
+ahí?» o un mensaje repetido: la pregunta de verdad está más arriba en el hilo, y
+la tenés delante.
+
+## 3. Separá los comentarios en cuatro montones
 
 **Se contesta:**
 
@@ -53,7 +75,7 @@ ocultar a un cliente enojado es peor que el comentario.
 hago», «cuánto sale», «¿trabajan con X?», «¿me pasás info?», alguien que cuenta
 su problema y pregunta si lo resuelven.
 
-## 3. La respuesta: una o dos líneas y nada más
+## 4. La respuesta: una o dos líneas y nada más
 
 - Hablale de **vos**, corto, como contesta una persona: «Sí, se puede», «Te
   cuento».
@@ -73,7 +95,7 @@ lo dio `fetch_comments`. **La respuesta no sale ahí**: queda esperando el sí d
 tu cliente, y él la puede editar antes de aprobarla. En la nota decí quién
 comentó, qué preguntó y qué le vas a contestar.
 
-## 4. Un comentario que quiere comprar es una tarea, no sólo una respuesta
+## 5. Un comentario que quiere comprar es una tarea, no sólo una respuesta
 
 En cuanto alguien pregunta precio, pregunta cómo hacer, o dice que le interesa:
 
@@ -95,7 +117,7 @@ marca, o por mensaje privado, que ahora sí podés leer y contestar—. Lo que n
 hagas nunca es escribirle vos primero por privado: Instagram sólo deja
 contestar a quien escribió.
 
-## 5. Los mensajes privados: lo mismo, pero con reloj
+## 6. Los mensajes privados: lo mismo, pero con reloj
 
 Un mensaje es más serio que un comentario: nadie escribe por privado de casual.
 Casi siempre es alguien preguntando si le servís.
@@ -123,6 +145,11 @@ después va como comentario de esa tarea con `update_ticket`. Y si el plazo se
 está por vencer y todavía no hay aprobación, decilo ahí: «se vence a las 18 el
 plazo para contestarle».
 
+**Antes de escribir, leé el hilo entero y la tarea.** `fetch_messages` te da la
+conversación completa y, si ya tiene tarea, su id: `read_ticket` te dice qué se
+habló. Si quedó una pregunta sin contestar más arriba, **esa es la respuesta que
+va primero**, aunque el último mensaje sea otra cosa.
+
 **La respuesta se arma igual que la de un comentario** —`vos`, corto, sin
 emojis, sin precio que no sea el del diagnóstico, sin fechas— con dos
 diferencias:
@@ -131,7 +158,8 @@ diferencias:
   «Hola, ¿qué tal?» está bien acá y no abajo de un posteo.
 - **Terminá con UNA pregunta que sirva para saber si le podés resolver el
   problema**: de qué es la empresa, qué es lo que hoy le come el día, cuánta
-  gente atiende. Una sola, corta, y esperá la respuesta.
+  gente atiende. Una sola, corta, y esperá la respuesta. Va DESPUÉS de haber
+  contestado lo que preguntó, nunca en lugar de eso.
 
 Después llamá a `send_message(conversation_id, text, note)`. Tampoco sale sola:
 queda esperando el sí del cliente, que la puede editar antes de aprobarla.
@@ -142,7 +170,7 @@ dejalo en el tablero y decilo—; no mandes links que no estén en la marca; no
 escribas primero a nadie que no haya escrito antes (Instagram tampoco lo deja);
 y si te insultan o te quieren vender algo, no contestes nada.
 
-## 6. Contale a tu cliente en una línea
+## 7. Contale a tu cliente en una línea
 
 Cuando termines la vuelta: cuántos comentarios y cuántos mensajes nuevos había,
 cuántas respuestas le dejaste esperando el sí, y a quién le abriste tarea. Si

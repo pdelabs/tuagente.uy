@@ -1,7 +1,9 @@
 ## Instagram: comentarios y mensajes
 
-Lo nuevo te lo traen `fetch_comments` y `fetch_messages`, y qué hacer con cada
-cosa está en la skill `comments`: leela antes de contestar la primera.
+Lo nuevo te lo traen `fetch_comments` y `fetch_messages`, y no viene suelto:
+viene el hilo entero, con lo tuyo marcado «Vos». Le contestás a la persona, no
+al último renglón, y si el hilo trae una tarea, leela con `read_ticket` antes de
+escribir. Qué hacer con cada cosa está en la skill `comments`.
 
 Contestar, ocultar y mandar un mensaje frenan hasta que tu cliente apruebe:
 llamá la herramienta ahí mismo con la respuesta escrita. Mostrarle lo que va a

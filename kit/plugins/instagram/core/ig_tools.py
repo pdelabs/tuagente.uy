@@ -27,6 +27,26 @@ a post about to be published.
 WHAT THE MODEL CANNOT BE GIVEN BY CODE is in `skills/comments/SKILL.md`: which
 comment gets an answer, which gets nothing, which gets hidden, and when a
 comment is a client and becomes a ticket.
+
+**THE PERSON IS THE UNIT, NOT THE MESSAGE**, and that rule was bought on
+16/9/2026 with a real conversation on our own account. `fetch_messages` handed
+back only what was new — «hola buenas leyeron mi mensaje?» — so the agent
+answered «sí, vimos tu mensaje» and asked its qualifying question, without ever
+answering the one two messages up («quería saber más de qué es lo que hacen»).
+Everything it needed was on the ticket and nothing made it read it. So a tick
+now hands back the WHOLE THREAD of every conversation that has something new —
+ours marked «Vos», the new ones marked «(nuevo)», the ticket named when there is
+one — and the same for a comment: its post, its parent and the replies already
+under it. What is NEW is a fact about a row; what to answer is a fact about a
+conversation, and the model cannot be asked to go and find it.
+
+WHY `import board_store` AND NOT `engine.use`. `provide`/`use` exists because
+plugin modules share one `sys.modules` namespace and a `store.py` here would BE
+another plugin's `store` (`core/plugins.py`). `board_store` carries its prefix
+for exactly that reason — it is unique across `kit/plugins` — and `kanban` is in
+this plugin's `requires.plugins`, which is what orders the load. It is the same
+import the `mail` plugin makes, for the same one-line need: the ticket a thread
+already has.
 """
 
 import json
@@ -36,6 +56,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 
+import board_store as board
 import ig_graph
 import ig_store
 from core import config, db
@@ -52,9 +73,18 @@ FEED = 10
 # How many posts the creator reads the numbers of before writing.
 PERFORMANCE = 10
 
-# How many message threads a tick looks at, and how much of one the card shows.
+# WHAT THIS PLUGIN CALLS ITSELF ON THE BOARD. A comment's ticket is keyed by the
+# comment; a conversation's by the conversation, because a thread is one person
+# and one ticket, and the second message of the same person is not a second lead.
+FROM_COMMENT = "instagram"
+FROM_DM = "instagram-dm"
+
+# How many message threads a tick looks at, and how much of one is shown — on
+# the approval card and in the listing a tick comes back with. TEN AND NOT SIX:
+# what the client is approving is an answer to a conversation, and she cannot
+# judge it against the half of it she can see.
 THREADS = 50
-SHOWN = 6
+SHOWN = 10
 
 # Read by the client, or by the model on her behalf. Spanish, all of it.
 NOTHING_NEW = "Sin comentarios nuevos."
@@ -225,17 +255,49 @@ def window_line(row) -> str:
     return OPEN.format(hours=int(left // 3600) or 1)
 
 
+# ── the thread, and the ticket it may already have ──────────────────────────
+
+
+def ticket_of(source: str, source_ref: str) -> str | None:
+    """The board's ticket for this comment or this conversation, if there is one.
+
+    `(source, source_ref)` is the board's own unique key, so this is a lookup and
+    never a guess. It travels in the listing because the ticket is where what was
+    already said and decided lives: an agent that does not know a thread has one
+    answers the last message instead of the person.
+    """
+    found = board.by_source(source, source_ref)
+    return found["id"] if found else None
+
+
+def said_by(row, participant_id: str | None) -> str:
+    """Who said it, the way the listing and the card name them: «Vos» is us."""
+    if row["from_id"] and participant_id and row["from_id"] != participant_id:
+        return "Vos"
+    return f"@{row['from_username']}" if row["from_username"] else "la persona"
+
+
+def thread_lines(conversation_id: str, participant_id: str | None,
+                 new: set[str], indent: str = "  ") -> list[str]:
+    """The conversation as the model reads it: oldest first, ours named, new marked."""
+    lines = []
+    for row in ig_store.thread(conversation_id, SHOWN):
+        mark = " (nuevo)" if row["message_id"] in new else ""
+        lines.append(f"{indent}{said_by(row, participant_id)}: «{flat(row['text'])}»{mark}")
+    return lines
+
+
 # ── the messages of one thread ──────────────────────────────────────────────
 
 
-def sift(conversation_id: str, found: list[dict], mine: str) -> list[dict]:
+def sift(conversation_id: str, found: list[dict], mine: str) -> set[str]:
     """Every message written down, and the NEW INBOUND ones handed back.
 
     Ours are told apart by `from.id`, which is the account's own id — the same
     fact `IG_USER_ID` is — and never by the text. Writing ours down too is what
     lets the approval card show a conversation instead of half of one.
     """
-    new = []
+    new = set()
     for item in found:
         author = item.get("from") or {}
         from_id = str(author.get("id") or "")
@@ -249,8 +311,7 @@ def sift(conversation_id: str, found: list[dict], mine: str) -> list[dict]:
             conversation_id, participant_id=from_id,
             participant_username=author.get("username"), last_inbound_at=when)
         if fresh:
-            new.append({"conversation_id": conversation_id, "username": author.get("username"),
-                        "text": text, "created_time": when})
+            new.add(item["id"])
     return new
 
 
@@ -270,10 +331,14 @@ def send_card(args: dict) -> tuple[str, str]:
     title = f"Contestarle a {who} por mensaje en Instagram"
     lines = ["| | |", "|---|---|", f"| La persona | {who} |",
              f"| El plazo | {window_line(row)} |"]
+    ticket = ticket_of(FROM_DM, conversation_id)
+    if ticket:
+        lines.append(f"| En el tablero | {ticket} |")
+    # OLDEST FIRST AND TEN OF THEM: what the client is approving is an answer to
+    # a conversation, and she cannot judge it against the half she can see.
     for message in ig_store.thread(conversation_id, SHOWN):
-        speaker = ("Vos" if message["from_id"] and row["participant_id"]
-                   and message["from_id"] != row["participant_id"] else who)
-        lines.append(f"| {speaker} | {flat(message['text'])} |")
+        lines.append(f"| {said_by(message, row['participant_id'])} | "
+                     f"{flat(message['text'])} |")
     lines += ["", args["text"].strip()]
     return title, "\n".join(lines)
 
@@ -281,42 +346,61 @@ def send_card(args: dict) -> tuple[str, str]:
 # ── the listing a tick comes back with ──────────────────────────────────────
 
 
-def entry(row: dict) -> str:
-    who = f"@{row['username']}" if row["username"] else "alguien"
-    where = f"«{row['post_line']}»" if row["post_line"] else "un posteo"
-    what = "respuesta" if row["is_reply"] else "comentario"
-    line = f"- `{row['comment_id']}` · {who}, {what} en {where}"
-    if row["permalink"]:
-        line += f" ({row['permalink']})"
-    return f"{line}\n  «{flat(row['text'])}»"
+def comment_line(item: dict, mine: str, new: set[str], indent: str) -> str:
+    """One comment as the model reads it: ours named «Vos», the new ones marked.
 
-
-def walk(comment: dict, media: dict, mine: str) -> list[dict]:
-    """One comment and the replies under it, ours skipped, newest state kept.
-
-    THE REPLIES ARE WALKED TOO because a conversation under a post is one
-    thing: somebody asking the price as a reply to another comment is still
-    asking us. OUR OWN ARE SKIPPED BY USERNAME — the account's answers come back
-    nested under the comment they answer, and an agent that read its own reply
-    as new would answer itself every fifteen minutes.
+    OURS CARRY NO ID because there is nothing to do with one: you do not answer
+    or hide your own answer, and an id on the line is an invitation to try.
     """
-    found = []
+    text = flat(item.get("text") or "")
+    if item.get("username") == mine:
+        return f"{indent}Vos: «{text}»"
+    who = f"@{item['username']}" if item.get("username") else "alguien"
+    mark = " (nuevo)" if item["id"] in new else ""
+    return f"{indent}`{item['id']}` {who}: «{text}»{mark}"
+
+
+def walk(comment: dict, media: dict, mine: str) -> str | None:
+    """One comment's whole thread, if anything under it is new. `None` if not.
+
+    THE THREAD AND NOT THE ROW, and that is the same rule the messages follow:
+    a reply that says «yo también» means nothing without the question above it,
+    and the agent has no other way to see it. So a comment with something new
+    comes back with the post it is under, the comment itself and every reply
+    already under it — OURS INCLUDED, named «Vos», because our own answer is the
+    context that keeps the agent from answering twice.
+
+    WHAT IS NEW IS STILL ONE ROW AT A TIME: `instagram_seen` is what decides it,
+    ours are never new (they are skipped by username before being recorded), and
+    a comment already handled is shown as context and not as work.
+    """
     nested = (comment.get("replies") or {}).get("data") or []
+    new = set()
     for item, is_reply in [(comment, False)] + [(r, True) for r in nested]:
         if item.get("username") == mine:
             continue
-        row = {
-            "comment_id": item["id"],
-            "media_id": media["id"],
-            "permalink": media.get("permalink"),
-            "post_line": first_line(media.get("caption")),
-            "username": item.get("username"),
-            "text": item.get("text") or "",
-            "is_reply": is_reply,
-        }
-        if ig_store.record(**row):
-            found.append(row)
-    return found
+        if ig_store.record(
+            comment_id=item["id"],
+            media_id=media["id"],
+            permalink=media.get("permalink"),
+            post_line=first_line(media.get("caption")),
+            username=item.get("username"),
+            text=item.get("text") or "",
+            is_reply=is_reply,
+        ):
+            new.add(item["id"])
+    if not new:
+        return None
+    where = f"«{first_line(media.get('caption'))}»" if media.get("caption") else "un posteo"
+    head = f"- En {where}"
+    if media.get("permalink"):
+        head += f" ({media['permalink']})"
+    ticket = ticket_of(FROM_COMMENT, comment["id"])
+    if ticket:
+        head += f" · tarea {ticket}"
+    lines = [head, comment_line(comment, mine, new, "  ")]
+    lines += [comment_line(reply, mine, new, "    ") for reply in nested]
+    return "\n".join(lines)
 
 
 # ── the toolsets ────────────────────────────────────────────────────────────
@@ -328,15 +412,17 @@ def toolset() -> FunctionToolset:
 
     @ts.tool
     def fetch_comments(ctx: RunContext) -> str:
-        """Los comentarios nuevos en los posteos de Instagram del cliente.
+        """Los hilos de comentarios donde hay algo nuevo, enteros.
 
-        Mira los últimos posteos de la cuenta y te trae lo que todavía no
-        viste: de quién es, qué dice, en qué posteo, y si es una respuesta a
-        otro comentario. Los que ya te trajo alguna vez no vuelven, y lo que
-        contestó el agente tampoco.
+        Mira los últimos posteos de la cuenta y te trae, de cada comentario con
+        algo nuevo, **el hilo completo**: en qué posteo está, el comentario, y
+        las respuestas que ya tiene abajo —incluida la tuya, marcada «Vos»—.
+        Lo nuevo va marcado «(nuevo)»: lo demás es contexto, no trabajo.
 
-        Cada comentario viene con su id entre comillas invertidas: ese id es el
-        que va en `reply_comment` y en `hide_comment`.
+        Cada comentario que podés contestar viene con su id entre comillas
+        invertidas —ese id va en `reply_comment` y en `hide_comment`—, y si el
+        hilo ya tiene tarea en el tablero, con el id de la tarea: leela con
+        `read_ticket` antes de escribir.
 
         Si no hay nada nuevo te lo dice en una línea, y ahí se termina la
         corrida: no inventes trabajo.
@@ -346,30 +432,36 @@ def toolset() -> FunctionToolset:
             feed = ig_graph.media(FEED)
         except ig_graph.NotConnected as exc:
             return str(exc)
-        found = []
+        blocks = []
         for item in feed:
             for comment in ig_graph.comments(item["id"]):
-                found += walk(comment, item, mine)
-        if not found:
+                block = walk(comment, item, mine)
+                if block:
+                    blocks.append(block)
+        if not blocks:
             return NOTHING_NEW
-        head = (f"{len(found)} comentario nuevo:" if len(found) == 1
-                else f"{len(found)} comentarios nuevos:")
-        return head + "\n\n" + "\n".join(entry(row) for row in found)
+        head = ("1 comentario nuevo, en este hilo:" if len(blocks) == 1
+                else f"Comentarios nuevos, en {len(blocks)} hilos:")
+        return head + "\n\n" + "\n\n".join(blocks)
 
     @ts.tool
     def fetch_messages(ctx: RunContext) -> str:
-        """Los mensajes privados nuevos que le mandaron al cliente por Instagram.
+        """Las conversaciones de Instagram donde hay algo nuevo, enteras.
 
-        Te trae lo que todavía no viste, agrupado por conversación: quién
-        escribió, qué dice, cuándo, y **cuánto queda del plazo para contestar**
-        —Instagram sólo deja responder hasta 24 horas después del último
-        mensaje de esa persona, y cada mensaje suyo lo vuelve a arrancar—.
+        No te trae mensajes sueltos: te trae **la conversación completa** de
+        cada persona que escribió algo nuevo, de lo más viejo a lo más nuevo,
+        con lo tuyo marcado «Vos» y lo nuevo marcado «(nuevo)». Es a la persona
+        a la que le contestás, no al último renglón: si preguntó algo hace tres
+        mensajes y todavía no se lo contestaste, está ahí.
 
-        Cada conversación viene con su id entre comillas invertidas: ese id es
-        el que va en `send_message`. Lo que ya contestaste no vuelve.
+        Cada conversación viene con su id entre comillas invertidas —ese id es
+        el que va en `send_message`—, con **cuánto queda del plazo para
+        contestar** —Instagram sólo deja responder hasta 24 horas después del
+        último mensaje de esa persona— y, si ya tiene tarea en el tablero, con
+        el id de la tarea: leela con `read_ticket` antes de escribir.
 
-        Si no hay nada nuevo te lo dice en una línea y ahí se termina la
-        corrida.
+        Las conversaciones donde no hay nada nuevo no aparecen. Si no hay nada
+        nuevo en ninguna, te lo dice en una línea y ahí se termina la corrida.
         """
         try:
             mine = ig_graph.user_id()
@@ -384,14 +476,20 @@ def toolset() -> FunctionToolset:
         if not found:
             return NO_MESSAGES
         total = sum(len(v) for v in found.values())
-        head = (f"{total} mensaje nuevo:" if total == 1 else f"{total} mensajes nuevos:")
+        head = (f"{total} mensaje nuevo, en estas conversaciones:" if total == 1
+                else f"{total} mensajes nuevos, en estas conversaciones:")
         blocks = []
         for conversation_id, new in found.items():
             row = ig_store.conversation(conversation_id)
-            who = f"@{new[0]['username']}" if new[0]["username"] else "alguien"
-            said = "\n".join(f"  «{flat(m['text'])}»" for m in new)
-            blocks.append(f"- `{conversation_id}` · {who} · {window_line(row)}\n{said}")
-        return head + "\n\n" + "\n".join(blocks)
+            who = (f"@{row['participant_username']}" if row["participant_username"]
+                   else "alguien")
+            ticket = ticket_of(FROM_DM, conversation_id)
+            title = f"- `{conversation_id}` · {who} · {window_line(row)}"
+            if ticket:
+                title += f" · tarea {ticket}"
+            blocks.append("\n".join(
+                [title] + thread_lines(conversation_id, row["participant_id"], new)))
+        return head + "\n\n" + "\n\n".join(blocks)
 
     @ts.tool
     def refresh_if_due(ctx: RunContext) -> str:
