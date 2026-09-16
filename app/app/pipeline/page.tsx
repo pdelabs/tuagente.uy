@@ -32,7 +32,6 @@ import {
   createTicket,
   commentTicket,
   setTicketStatus,
-  approve,
   getTickets,
   getTicketDetail,
   isTheClient,
@@ -159,26 +158,23 @@ const statusOf = (t: { status: string; body?: string | null }) =>
 // separate: it's always offered, with confirmation.
 type Transition = { status: TargetStatus; label: string; inProgress: string; icon: LucideIcon };
 
-// APPROVING IS NOT THE ACTION FOR EVERYTHING THAT'S BLOCKED, and offering it
-// anyway isn't free: approving is `unblock`, and a ticket has ONE useful
-// unblock before the engine declares it a loop and sends it to `triage`,
-// where nothing can be approved anymore. On a request from the client
-// themselves ("Conectar WhatsApp") it also sets the worker loose on a ticket
-// whose body says "don't do anything on your own with this"; on a block from
-// a missing connection, the cause is still there and the agent blocks it
-// again right away. Both cases go without a transition and with a line
-// saying where they actually get resolved. See `isConnectionBlock`.
+// THERE IS NOTHING TO MOVE ON THESE TWO, so they're offered no transition and
+// a line saying where they actually get resolved. A request the client made
+// themselves ("Conectar WhatsApp") is ours to answer, not hers to release; a
+// block from a missing connection has its cause still sitting there, and the
+// agent blocks it again right away. See `isConnectionBlock`.
 const noApproval = (t: { status: string; body?: string | null }) =>
   t.status === "blocked" && (isClientRequest(t.body) || isConnectionBlock(t.body));
 
 function transitionsFor(t: { status: string; body?: string | null }): Transition[] {
   if (t.status === "blocked") {
     if (noApproval(t)) return [];
-    // "Aprobar", same as on the Approvals tab. This same action used to be
-    // called "Desbloquear" here, "Aprobar" there, and "se destraba" in the
-    // explanation: three words for the same thing, and the client with no
-    // way to know whether they were three different things.
-    return [{ status: "ready", label: "Aprobar", inProgress: "Aprobando…", icon: Unlock }];
+    // "Destrabar" and not "Aprobar", because this button does NOT approve
+    // anything: what it does is put the ticket back in "Por hacer". The
+    // approval is its own object with its own `apr_` id and its own page, and
+    // a ticket that's blocked waiting for a yes gets that yes in Aprobaciones.
+    // The word is the portal's own ("Ya la destrabaste", in `Outcome`).
+    return [{ status: "ready", label: "Destrabar", inProgress: "Destrabando…", icon: Unlock }];
   }
   if (t.status === "done")
     return [{ status: "ready", label: "Reabrir", inProgress: "Reabriendo…", icon: RotateCcw }];
@@ -574,24 +570,19 @@ export default function PipelinePage() {
   const changeStatus = async (status: TargetStatus) => {
     if (!cfg || !openId || actionInProgress) return;
     const id = openId;
-    const ticket = openTicket;
-    // APPROVING IS NOT UNBLOCKING, even though the button says the same thing
-    // on both tabs. `setTicketStatus(..., "ready")` ends up in a bare
-    // `unblock`: the ticket is freed and the agent wakes up with NO approval
-    // comment at all. And the agent does the right thing with that -- it
-    // doesn't spend money because someone released the block without saying
-    // yes -- so it closes the request without running it, and the client
-    // sees an "Approve" that approved nothing.
-    // It happened: a request to generate 3 images (US$0.135) got closed
-    // without being done. The approvals endpoint leaves "Aprobado desde el
-    // portal" signed before unblocking, which is what the agent looks for.
-    // It's the same one the Approvals tab uses: one path for one word.
-    const isApproval = status === "ready" && ticket?.status === "blocked";
+    // A TICKET'S STATUS CHANGE IS A STATUS CHANGE, and nothing else. This used
+    // to fork: a blocked ticket moved to "ready" was POSTed to
+    // `/portal/approvals/{id}/approve` instead, because on Hermes the ticket
+    // WAS the request -- unblocking one without the "Aprobado desde el portal"
+    // comment closed it without doing the work, and a request to generate 3
+    // images (US$0.135) got lost that way.
+    // On the engine they are two objects: a request has its own `apr_` id, its
+    // own row and its own page, and the board's `t_` id posted to that route
+    // is a 404. Approving happens in Aprobaciones; here a ticket moves.
     setActionInProgress(status);
     setActionError(null);
     try {
-      if (isApproval) await approve(cfg, id);
-      else await setTicketStatus(cfg, id, status);
+      await setTicketStatus(cfg, id, status);
       load();
       if (status === "archived") closeTask(); // no longer on the board
       else await loadDetail(id);
@@ -1083,7 +1074,7 @@ export default function PipelinePage() {
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  {/* With no approve button, the task can't be left with no
+                  {/* With no transition at all, the task can't be left with no
                       way out: it says who unblocks it and -- when there's
                       something to do -- where the button that actually works
                       is. */}
