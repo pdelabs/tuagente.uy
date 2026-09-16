@@ -60,6 +60,35 @@ after it, and whose:
   a dependency does not, so a plain restart fails on `import boto3` and the
   container does not come up at all. It is still running the code it loaded
   before any of this, so nothing is broken until somebody restarts it.
+- **The inbox: BUILT, waiting on Luis for the mailbox.** `kit/plugins/mail/`
+  reads the casilla every five minutes, leaves every mail as a ticket on the
+  board and the answer in Aprobaciones; `send_email` is gated, has no `to`, and
+  goes out as `EMAIL_FROM`. Three gates are green against the lab's stub
+  mailbox — `engine/tests/test_mail.py` 7/7 with no model,
+  `engine/tests/test_mail_gate.sh` 0 failures live, and the two gate tests that
+  moved onto the real tool (`test_approval_crash.sh` 32/32,
+  `test_flow_gate.sh` 0 failures) — and nothing has touched a real address.
+  What is missing is Luis', and it is one afternoon:
+  a **Gmail app password** for the account `info@tuagente.uy` is routed to, IMAP
+  ON, **«Enviar como info@tuagente.uy» verified** in that account so the SMTP
+  `From` is accepted, and a **filter + label** for what arrives at that address
+  (`EMAIL_FOLDER`), because IMAP's seen flag is the state and a mail he opens on
+  his phone first is one the agent never sees. Then six lines in
+  `engine/instances/tuagente/secrets.env`:
+
+  ```
+  EMAIL_ADDRESS=<la cuenta de Gmail>
+  EMAIL_PASSWORD=<app password, 16 letras>
+  EMAIL_IMAP_HOST=imap.gmail.com
+  EMAIL_SMTP_HOST=smtp.gmail.com
+  EMAIL_FROM=info@tuagente.uy
+  EMAIL_FOLDER=<la etiqueta, o INBOX>
+  ```
+
+  and `mail` is already in the instance's `CORE_PLUGINS`. The flow arrives
+  `active`: from the restart on, the agent is reading. The lab's own copy is
+  PAUSED on purpose, so the lab does not spend a turn every five minutes
+  (`engine/workspace/flows/bandeja-de-entrada/FLOW.md`).
 
 ## Migration to English (2026-08-23)
 

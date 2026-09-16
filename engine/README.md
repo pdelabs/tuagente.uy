@@ -30,7 +30,7 @@ What lives where:
 |---|---|
 | `state/core.db` | SQLite (WAL): sessions, messages, history, approvals, events |
 | `state/identity.json` | what the client changed from the portal; wins over the seed |
-| `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `outbox/` what a sensitive tool did, `memoria/` what it remembers about the client, `flows/` what runs on its own, `imagenes/` what it drew, `posteos/` the finished posts, `marca/` the brand it writes with — `brand.md` and the fixed assets `place_image` pastes onto a slide |
+| `workspace/` | the agent's only writable ground: `entrada/` in, `entregables/` out, `correo/` what came attached to a mail, `memoria/` what it remembers about the client, `flows/` what runs on its own, `imagenes/` what it drew, `posteos/` the finished posts, `marca/` the brand it writes with — `brand.md` and the fixed assets `place_image` pastes onto a slide |
 | `agent/SOUL.md` | the client section + the `core:base` block, mounted read-only |
 | `/opt/kit/plugins` | `kit/plugins`, read-only. `CORE_PLUGINS` picks which load, and each one's `core/` surface is what it adds to this engine |
 
@@ -111,11 +111,19 @@ kit/plugins/kanban/core/    the board: board_store.py (the tickets, the
                                    board_routes.py (/portal/tickets*),
                                    board_tools.py (create_ticket,
                                    update_ticket, ungated), instructions.md
-kit/plugins/approval/core/  the gate: sensitive.py (the gated toolset),
+kit/plugins/approval/core/  the gate, and NO toolset of its own:
                                    store.py (the row), render.py (what she
                                    reads), routes.py (/portal/approvals*; the
                                    THREAD is read through the board's route),
                                    instructions.md, and SKILLS = []
+kit/plugins/mail/core/      the inbox: mail_store.py (the connection
+                                   and the two tables), mail_imap.py (the
+                                   folder, the parsing, the discards),
+                                   mail_smtp.py (the reply and its headers),
+                                   mail_tools.py (fetch_mail, and send_email
+                                   behind the gate, with its card),
+                                   instructions.md, skills/inbox/SKILL.md and
+                                   flows/bandeja-de-entrada/FLOW.md
 kit/plugins/deliverable/core/  nothing to register: instructions.md
 kit/plugins/memory/core/    the notebook: plugin.py (the capability, the
                                    rule it carries as `guidance`, and the two
@@ -205,7 +213,7 @@ SOUL at the END of the creator's prompt, under the memory guidance.
 **Where a rule lives is decided by what can enforce it.** In CODE if code can
 check it — the gate is on the tool, so asking is not something the model can
 forget. In a TOOL'S DESCRIPTION if it is about using that tool — what a request
-has to explain is in `send_email`'s docstring and in `ApprovalNote`'s fields. In
+has to explain is in the gated tool's docstring and in `ApprovalNote`'s fields. In
 the SOUL only if it is about who the agent is: its name, its client, its tone,
 its scope, and the list of what THIS company does not do without permission.
 Nothing about tools, folders, skills or mechanisms goes in the SOUL. Everything
@@ -393,7 +401,7 @@ the day and the workspace is left as it was found.
 the social plugin's one outward tool and the only thing in this product that
 leaves the building: `kit/plugins/social/core/publishing.py`, registered on the
 FACE wrapped in `approval_required()` exactly the way the approval plugin
-registers `send_email`. Not on the creator — a sub-agent never talks to the
+registers its own. Not on the creator — a sub-agent never talks to the
 client, and a gated tool inside `delegate_task` does not pause, it kills the
 turn (**Sub-agents** below). The client asks for it from Posteos («Publicar en
 Instagram», which opens `/app/chat?p=…` like the slide fix does) or just says
@@ -412,7 +420,7 @@ markdown table because the portal cuts a request's EDITABLE text after the last
 table row (`splitProposal`), which puts the caption, and only the caption, in
 the box the client edits. A correction therefore REPLACES the caption — the
 portal sends "use exactly this version" — instead of being appended the way
-`send_email`'s is. The pictures are never touched by a correction: a slide
+the mail plugin's is. The pictures are never touched by a correction: a slide
 that is wrong is fixed first, with «Arreglar esta imagen».
 
 **THE API IS THE INSTAGRAM API WITH INSTAGRAM LOGIN** (`graph.instagram.com`,
@@ -898,19 +906,137 @@ portal's refresh reads the outcome and not the row as it was a second ago. The
 resumed run has no stream attached: its answer shows up in the chat on the next
 load, which the plan takes as acceptable for the engine.
 
-**The outbox.** `send_email` is fake, and deliberately so: its whole side effect
-is one markdown file in `workspace/outbox/` (`email-<stamp>-<to>.md`) with the
-client's correction on a line of its own. It is the only evidence that the tool
-ran, and the Files tab shows it.
+**THIS PLUGIN REGISTERS NO TOOLSET, and that is what it is now.** It used to
+ship two fake sensitive tools so the gate could be shown to work with nothing
+real behind it: `publish_post`, which dropped a markdown file in
+`workspace/outbox/` and answered «Publicado en <canal>», and `send_email`,
+which dropped one and answered as if a mail had gone out. Both are gone, each
+one the day the real thing arrived — the social plugin's `publish_instagram`
+(**Publishing**, above) and the mail plugin's `send_email` (**Mail**, below).
+Two tools with one name, one of them fake, is the model choosing between them
+by the shape of a sentence, and `workspace/outbox/` went with them.
 
-**THE GATE IS NOT A DEMO ANY MORE**, and this plugin is no longer the only one
-that uses it: the social plugin's `publish_instagram` is real, it is gated the
-same way, and it draws its own card through this plugin's renderer hook
-(**Publishing**, above). There used to be a second fake tool here,
-`publish_post`, dropping a file in the outbox and answering «Publicado en
-<canal>»; it went out with that change, because two tools with that name and
-that promise, one of them fake, is the model choosing between them by the shape
-of a sentence.
+What is left here is the MACHINERY and all of it: the wrapper is Pydantic AI's
+and the plugin that owns the tool applies it, while the row, the negotiation,
+the resume, the card, the page and the one `DEFERRED_HANDLER` that answers a
+stopped run are this plugin's. Every gated tool draws its own card through the
+renderer hook; a gated tool that files none is read as its name and its
+arguments, which is true, ugly, and the reason both of them file one.
+
+## Mail
+
+The inbox is a PLUGIN — `kit/plugins/mail/`, loaded because `mail` is in
+`CORE_PLUGINS` — and it is the first thing that writes into the board on its
+own. What it sells is one sentence: **every mail becomes a ticket the client
+already knows how to read, and the answer waits for her yes.** Take it out of
+the list and the agent has no mailbox, no `fetch_mail`, no `send_email` and no
+inbox flow; nothing else changes.
+
+**READING IS A FLOW, NOT A LOOP.** The plugin ships one curated flow,
+`bandeja-de-entrada`, `*/5 * * * *` — the engine's floor
+(`CORE_FLOWS_MIN_MINUTES`) — and its run is one tool call away from doing
+nothing: with an empty mailbox `fetch_mail()` answers «Sin mails nuevos.» and
+the turn ends there, for about US$0.001. The FLOW.md is copied into
+`workspace/flows/` when the plugin loads and NEVER over a file that is already
+there: there is no install step between a read-only kit and the client's
+workspace, and what she edited is hers. Turning it off is `status: paused`,
+which is still a file, so a paused flow is not copied back either.
+
+**`fetch_mail()`** opens `EMAIL_FOLDER` over IMAP, takes the `UNSEEN` messages
+oldest first and at most twenty, and for each one:
+
+| what it is | what happens |
+|---|---|
+| a mail nobody wrote — `List-Unsubscribe`, `Auto-Submitted`, `Precedence: bulk\|list\|junk`, or our own `EMAIL_FROM` as the sender | a ticket opened and moved straight to `done`, with «Descartado: …» on it. It is counted under «descartados: N» and never offered to the model as something to answer |
+| an answer to a conversation we have — an id in `In-Reply-To`/`References` that `mail_seen` knows | a COMMENT on that ticket signed by whoever sent it, and the ticket goes back to `ready` |
+| anything else | `board.create(title=subject, source="mail", source_ref=<Message-ID>)`: who wrote, when, and the message as plain text |
+
+and then marks it `\Seen` — AFTER the ticket exists, never by the fetch itself
+(`BODY.PEEK[]`), because a message marked read by a tick that then died is a
+message nobody will ever see again. `mail_seen(message_id, ticket_id, seen_at)`
+is the second lock under that flag and the map a reply finds its thread by; the
+id of every message WE send goes in it too, since the customer's next answer
+quotes ours and not theirs. What comes back to the run is a compact listing:
+the ticket id, the sender, the date, the subject and the first lines.
+
+**HTML BECOMES TEXT BY CODE**, with the stdlib's `html.parser` and no
+dependency — what the model reads is what a person would read. **Attachments**
+are saved under `workspace/correo/<ticket_id>/` and listed in the ticket's
+body, which is the one thing that needs the id before the body is finished:
+`board_store.set_body` exists for that and has no other caller.
+
+**`send_email(ticket_id, body, note)` IS GATED, ON THE FACE, AND HAS NO `to`.**
+The recipient and the subject come off `mail_threads`, written by the code when
+the mail arrived, so there is no way for the model to write to somebody who
+never wrote — the same shape as `publish_instagram`, whose only argument is a
+post id. The flow's prose moves the ticket to `blocked` with «Respuesta lista,
+esperando tu ok» before calling it; the gate then stops the run, and the card
+this plugin draws (`engine.provide("approval.render.send_email", …)`) carries
+the recipient, the subject, the mail itself and the thread's comments QUOTED,
+then a one-row table, then the draft. The table is load-bearing twice over: the
+portal cuts a request's editable text after the last table row, so the box the
+client edits is the answer alone — and the quoting is what stops a mail that
+happens to contain a `|` line from moving that cut. A correction REPLACES the
+body, because what comes back from that box is a finished mail.
+
+On the yes it goes out over SMTP as `EMAIL_FROM`, with `Subject: Re: …`,
+`In-Reply-To` and `References` set so it threads in the customer's mailbox; the
+text is appended to the ticket as a comment signed by the address it went out
+as, the ticket moves to `done` with that text as its outcome, and Activity gets
+one `mail.sent`. On a no the ticket stays `blocked` and the agent proposes
+again on the same row, which is what the approval plugin already is.
+
+The environment, read at call time and each one named in its own Spanish line
+if it is missing («Falta conectar el correo: no está EMAIL_IMAP_HOST»):
+
+| variable | what |
+|---|---|
+| `EMAIL_ADDRESS` | the IMAP/SMTP login — the whole address on any provider worth having |
+| `EMAIL_PASSWORD` | its password. On Gmail, an app password |
+| `EMAIL_IMAP_HOST` | `host[:port]`, 993 and SSL by default |
+| `EMAIL_SMTP_HOST` | `host[:port]`, 587 and STARTTLS by default |
+| `EMAIL_FROM` | the address the answers go out as (`info@…`). Defaults to `EMAIL_ADDRESS` |
+| `EMAIL_FOLDER` | the folder to read, `INBOX` by default. **On Gmail a label is a folder** |
+| `EMAIL_TLS` | `0` for plain IMAP/SMTP. The lab's stub is that, and it is decided by this and never by the hostname |
+
+**THE CRAFT IS `skills/inbox/SKILL.md`** and the «nunca» is what makes it
+different from an autoresponder: no price that is not written in
+`marca/brand.md`, no date ever («te escribimos con dos horarios», and the
+ticket stays), nothing the company does not do, no other client's data, and
+never «ya está hecho». A question the skill cannot answer is not answered
+halfway: the draft stays, the ticket goes to `blocked`, and the comment asks
+the client the one thing that is missing.
+
+**THE LAB HAS A MAILBOX OF ITS OWN.** `greenmail/standalone` in
+`docker-compose.yml`, SMTP 3025 and IMAP 3143 in the clear, with
+`agente@lab.test` and `cliente@lab.test` as real accounts (GreenMail's login is
+the LOCAL PART, which is why the lab's `EMAIL_ADDRESS` is `agente` while
+`EMAIL_FROM` is the address). Nothing in these tests can reach a real address,
+so they can be run as often as they like.
+
+```bash
+python3 engine/tests/test_mail.py        # free, seconds, no model
+bash engine/tests/test_mail_gate.sh      # ~1 minute, ~US$0.01, one turn
+```
+
+The first is M1: four messages into the stub and `fetch_mail` called directly —
+two mails are two tickets, the second tick says «Sin mails nuevos.», a reply
+lands as a comment and brings its ticket back to «Por hacer», a newsletter is
+discarded and not listed, an HTML body is text and an attachment is on disk and
+named in the ticket. 7/7, and it cleans up after itself.
+
+The second is M2, live: the trail shows `fetch_mail` and `send_email`, the
+ticket is `blocked`, the card names who wrote and quotes the mail with the
+draft as its editable tail, and after the approval the message is in the OTHER
+mailbox — as `agente@lab.test`, under `Re:`, threaded by `In-Reply-To` — with
+the ticket closed and Activity carrying it. Last run 2026-09-16: **0 failures**,
+and the draft it wrote named the diagnóstico's USD 200 and nothing else, which
+is the price half of M3 (`docs/inbox-plan.md`).
+
+The two gate tests moved onto this tool with it: `tests/test_approval_crash.sh`
+drops a mail in and proves the correction IS the text that was sent by reading
+it out of the other mailbox (32/32), and `tests/test_flow_gate.sh`'s flow is
+«read the inbox and answer what is there» (0 failures).
 
 ## Memory
 
@@ -1269,6 +1395,19 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
   as a `ModelRetry` naming the path, since the morning a `read_file` on a
   deleted `post.json` ended a client's turn in «No pude responder: [Errno 2]»
   (`tests/test_workspace_tools.py`). `bash`'s timeout is still a crash.
+- **A mail the client opens first is a mail the agent never sees.** IMAP's
+  `\Seen` flag is the state the inbox flow reads, so anything she opens on her
+  phone before the tick is already read and no ticket is ever made for it. The
+  mitigation is the product's, not the code's: a filter that labels what
+  arrives at the company address and `EMAIL_FOLDER` pointing at that label,
+  which is an inbox only the agent touches. It is the clause the `email`
+  connection row's `how` gained and the reason that row is `who: assisted`. If
+  it bites anyway, the plugin switches to `SINCE` + `mail_seen` alone.
+- **Two attachments with one name, on one mail, are one file.** They are
+  written into `workspace/correo/<ticket_id>/` by the name the sender chose, so
+  the second `factura.pdf` lands on the first. Real, unmeasured, and one
+  `while target.exists()` away — which is a guard, and guards wait for the
+  failure they protect against.
 - **Session matching is O(sessions × messages).** `match_session` reads every
   session's messages out of SQLite to compare user turns on every new
   conversation. At the engine's scale it is microseconds; at a client's it wants
