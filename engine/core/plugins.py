@@ -33,7 +33,9 @@ that make its `Agent(...)` fit this engine:
                                 string, so it renders first
     engine.today                the date line, a callable, so it renders last
     engine.provide(name, obj)   an object for the plugins loaded after this one
-    engine.use(name)            one of those, by name
+    engine.use(name)            one of those, by name. With a `default` it is
+                                an OPTIONAL dependency: the plugin that
+                                provides it may not be installed
     engine.model / .model_settings / .Deps
 
 WHY A SUB-AGENT IS NOT JUST ANOTHER TOOLSET. The face is the only entry point —
@@ -83,6 +85,11 @@ from . import config, delegation
 
 ENTRY = "plugin.py"
 PROSE = "instructions.md"
+
+# «Nobody passed a default», so `engine.use(name)` can keep raising while
+# `engine.use(name, default=None)` answers `None`. `None` itself is a perfectly
+# good default for an optional dependency, so it cannot be the sentinel.
+_ABSENT = object()
 
 
 def gated(toolset: AbstractToolset) -> bool:
@@ -277,12 +284,25 @@ class Engine:
         """Offer an object to the plugins that load after this one."""
         self.shared[name] = obj
 
-    def use(self, name: str) -> Any:
+    def use(self, name: str, default: Any = _ABSENT) -> Any:
         """One of those, by name. A `KeyError` here is one of two things: the
         plugin that provides it is not in `CORE_PLUGINS`, or it is and it loads
         AFTER this one — `requires.plugins` in the manifest is what orders
-        them."""
-        return self.shared[name]
+        them.
+
+        WITH A `default`, THE DEPENDENCY IS OPTIONAL and the missing case is a
+        real state of the product, not a misconfiguration: a client buys
+        `social-package` without `instagram-comments`, so the creator asks for
+        the performance toolset the `instagram` plugin provides and works
+        without it when nobody bought it. That is the ONLY thing this argument
+        is for. A plugin the manifest declares in `requires.plugins` is not
+        optional, and asking for one of its objects with a default would turn a
+        broken `CORE_PLUGINS` into a silently poorer agent — which is why the
+        bare call still raises.
+        """
+        if default is _ABSENT:
+            return self.shared[name]
+        return self.shared.get(name, default)
 
     @property
     def model(self) -> str:
