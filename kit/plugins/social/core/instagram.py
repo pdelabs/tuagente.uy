@@ -49,10 +49,20 @@ never uploaded to find out that `R2_BUCKET` is empty.
 
 **THE TOKEN DIES ON ITS OWN, SILENTLY, EVERY 60 DAYS.** `refresh_token()` is
 the other half of this file and `POST /portal/instagram/refresh` is how it is
-called today, by hand; a flow will call it later. It extends the token it is
-given, so refreshing again from the stored one keeps working as long as it
-happens inside the window — which is why the route answers WHEN it expires and
-never the token itself. The adapter never returns a credential.
+called by hand. It extends the token it is given, so refreshing again from the
+stored one keeps working as long as it happens inside the window — which is why
+the route answers WHEN it expires and never the token itself. The adapter never
+returns a credential.
+
+**AND THE TOKEN IN FORCE IS NOT ALWAYS THE ENV'S.** `secrets.env` lives outside
+the container and nothing in here can write it, so a refreshed token used to
+live in one process's `os.environ` and die with it. The `instagram` plugin —
+the one that reads the comments, and the one whose flow refreshes on a schedule
+— keeps it in a table of the engine's own SQLite instead, and hands this file
+the two functions it needs by name (`TOKEN`, `SAVE_TOKEN` below, bound in
+`plugin.py` from `engine.use(..., default=None)`). Every call here asks
+`token()`: the table first, the env second. An agent that publishes and does
+not read comments has no table and nothing changes for it.
 """
 
 import json
@@ -96,6 +106,21 @@ READY = "FINISHED"
 BROKEN = ("ERROR", "EXPIRED")
 
 
+# THE TOKEN IS SHARED WITH THE PLUGIN THAT READS THE COMMENTS, when the client
+# bought it. Bound by `plugin.py` from `engine.use("instagram.token",
+# default=None)`: the `instagram` plugin keeps the CURRENT token in a table of
+# the engine's own SQLite, because a refreshed one cannot be written back into
+# the instance's `secrets.env` and would otherwise live in one process's
+# environment and die with it. Here the env is the fallback, which is the whole
+# state of an agent that publishes and does not read comments.
+TOKEN = None
+# And where a refresh done from HERE gets written down, so the two plugins are
+# never holding two different ideas of which token is in force. `None` when the
+# other plugin is not installed: then the refresh lives in `os.environ` alone,
+# exactly as it did before any of this.
+SAVE_TOKEN = None
+
+
 class NotConnected(RuntimeError):
     """Instagram (or the bucket) is not set up on this agent.
 
@@ -124,6 +149,15 @@ def env(name: str) -> str:
     if not value:
         raise NotConnected(MISSING.format(name=name))
     return value
+
+
+def token() -> str:
+    """The token in force: the `instagram` plugin's table first, the env second.
+
+    One accessor, so every call in this file asks the same question. Without the
+    other plugin installed this IS `env("IG_ACCESS_TOKEN")`, message and all.
+    """
+    return (TOKEN() if TOKEN else None) or env("IG_ACCESS_TOKEN")
 
 
 def http() -> httpx.Client:
@@ -252,7 +286,7 @@ def publish(post_id: str, caption: str | None = None,
     # EVERY CREDENTIAL FIRST. A missing one has to be read before a single byte
     # is uploaded, or a connection that is half set up leaves pictures in a
     # bucket for a publish that was never going to happen.
-    token, user = env("IG_ACCESS_TOKEN"), env("IG_USER_ID")
+    access, user = token(), env("IG_USER_ID")
     bucket, base = env("R2_BUCKET"), env("R2_PUBLIC_URL").rstrip("/")
     store = r2()
 
@@ -263,27 +297,27 @@ def publish(post_id: str, caption: str | None = None,
                 # ONE PICTURE IS NOT A CAROUSEL: Instagram's carousel takes 2
                 # to 10 children, so a single slide is one container with the
                 # caption on it.
-                creation_id = container(client, user, token,
+                creation_id = container(client, user, access,
                                         {"image_url": urls[0], "caption": text})
             else:
                 children = [
-                    container(client, user, token,
+                    container(client, user, access,
                               {"image_url": url, "is_carousel_item": "true"})
                     for url in urls
                 ]
-                creation_id = container(client, user, token, {
+                creation_id = container(client, user, access, {
                     "media_type": "CAROUSEL",
                     "children": ",".join(children),
                     "caption": text,
                 })
-            wait(client, creation_id, token)
+            wait(client, creation_id, access)
             media_id = answer(client.post(
                 f"{GRAPH}/{user}/media_publish",
-                data={"creation_id": creation_id, "access_token": token},
+                data={"creation_id": creation_id, "access_token": access},
             ))["id"]
             permalink = answer(client.get(
                 f"{GRAPH}/{media_id}",
-                params={"fields": "permalink", "access_token": token},
+                params={"fields": "permalink", "access_token": access},
             ))["permalink"]
     finally:
         drop(store, bucket, keys)
@@ -316,10 +350,16 @@ def refresh_token() -> dict:
     """
     body = answer(http().get(REFRESH, params={
         "grant_type": "ig_refresh_token",
-        "access_token": env("IG_ACCESS_TOKEN"),
+        "access_token": token(),
     }))
-    os.environ["IG_ACCESS_TOKEN"] = body["access_token"]
     seconds = int(body["expires_in"])
+    os.environ["IG_ACCESS_TOKEN"] = body["access_token"]
+    # AND WHEREVER ELSE THIS ACCOUNT'S TOKEN IS KEPT. With the `instagram`
+    # plugin installed that is a table of the engine's own SQLite, which is what
+    # makes the new token survive a restart; without it, this process's
+    # environment is the only place there is.
+    if SAVE_TOKEN:
+        SAVE_TOKEN(body["access_token"], seconds)
     expires = datetime.now(ZoneInfo(config.TIMEZONE)) + timedelta(seconds=seconds)
     return {"ok": True, "expires_in": seconds,
             "expires_at": expires.isoformat(timespec="seconds")}

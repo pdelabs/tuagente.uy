@@ -46,6 +46,14 @@ SKILLS: list[str] = []
 
 
 def register(engine) -> None:
+    # THE TOKEN THE OTHER HALF OF THIS ACCOUNT KEEPS. The `instagram` plugin —
+    # the comments, and the flow that refreshes on a schedule — holds the token
+    # in force in a table, because a refreshed one cannot be written back into
+    # the instance's `secrets.env`. `default=None` because that plugin is a real
+    # OPTIONAL dependency: a client buys `social-package` without
+    # `instagram-comments` and then the env is the only token there is.
+    instagram.TOKEN = engine.use("instagram.token", default=None)
+    instagram.SAVE_TOKEN = engine.use("instagram.token.refreshed", default=None)
     engine.subagent(creator.build(engine), label=creator.LABEL)
     # THE WHOLE TOOLSET IS GATED, exactly as the approval plugin gates its own:
     # `approval_required()` with no predicate, so a tool added to it tomorrow

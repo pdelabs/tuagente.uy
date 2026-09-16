@@ -35,6 +35,12 @@ WHAT IT IS BUILT FROM, and why each piece:
 - `stamp.toolset()` — `place_image`, the brand's own pictures pasted onto a
   slide by code. A second toolset and not a tool inside `posts.py` because it
   is not about the post: it is about a picture, before there is a post.
+- `recent_performance`, WHEN THERE IS ONE. The `instagram` plugin provides a
+  read-only toolset with the numbers of the last ten posts, and this is the only
+  agent that gets it: what got saved is what to do more of, and that decision is
+  made before the first word. A client who bought the posts and not the comments
+  has no such plugin and the creator writes without it — which is what
+  `engine.use(name, default=None)` is for.
 - the image capability, a notebook of its own WITH ITS OWN RULE (`MEMORY`
   below: the face's talks about a chat this agent is not in), and a READ of the
   face's notebook, from the two plugins that load before this one.
@@ -103,6 +109,15 @@ MEMORY = (
 MAX_CALLS = 2
 TIMEOUT = float(os.environ.get("CORE_DELEGATION_TIMEOUT", "900"))
 
+# THE NUMBERS OF WHAT ALREADY WENT OUT, when the client bought them. The
+# `instagram` plugin provides a read-only toolset with one tool,
+# `recent_performance`, and it is offered to the hand that writes the next post
+# and to nobody else: what got saved is what to do more of, and that is a
+# decision made before the first word, not in a chat. `default=None` because it
+# is a REAL optional dependency — `social-package` is sold on its own and then
+# the creator writes with the brand and the previous posts, as it always did.
+PERFORMANCE = "instagram.performance"
+
 
 def procedure() -> str:
     """The skill's body, without its frontmatter. The same `frontmatter` the
@@ -117,17 +132,21 @@ def build(engine) -> SubAgent:
     harness falls back to the agent's own, and the name is also what Phoenix
     calls the child's span tree.
     """
+    hands = [
+        engine.tools("read_file", "list_files"),
+        posts.toolset(),
+        stamp.toolset(),
+    ]
+    numbers = engine.use(PERFORMANCE, default=None)
+    if numbers is not None:
+        hands.append(numbers)
     agent = Agent(
         engine.model,
         deps_type=engine.Deps,
         name=NAME,
         description=DESCRIPTION,
         instructions=[engine.identity, PROSE.read_text(), procedure(), engine.today],
-        toolsets=[
-            engine.tools("read_file", "list_files"),
-            posts.toolset(),
-            stamp.toolset(),
-        ],
+        toolsets=hands,
         capabilities=[
             engine.use("image"),
             engine.use("memory")(SCOPE, MEMORY),

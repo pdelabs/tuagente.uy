@@ -26,6 +26,11 @@ elegí otra cosa: otro trabajo, otra punta del mismo tema, otro pilar de los que
 liste la marca. Dos posteos parecidos seguidos se leen como un agente que no
 tiene nada nuevo para decir.
 
+Si tenés `recent_performance()`, llamala acá: te dice cómo le fue a cada uno de
+los últimos posteos. **Lo que la gente guarda es lo que hay que hacer más** —
+guardar es el que dice «esto me sirve»—, así que elegí del lado de lo que
+funcionó y no del lado de lo que te gustó.
+
 ## 3. Escribí el pie
 
 La fórmula, en este orden:
