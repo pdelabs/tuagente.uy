@@ -574,7 +574,11 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
               .then((r) => arr<Approval>(r?.approvals).filter((a) => !isClientRequest(a.body))),
             setApprovals),
           request(on("kanban"), "el tablero",
-            () => getTickets(cfg).then((r) => arr<Ticket>(r?.tickets)), setTickets),
+            // `work`, because this card is the TABLERO's summary and links to
+            // it: counting the conversations too would make Home say a number
+            // the tab it points at does not have (the same drift the sidebar's
+            // badge and the approvals filter already cost us once).
+            () => getTickets(cfg, "work").then((r) => arr<Ticket>(r?.tickets)), setTickets),
           // Activity is the only one that arrives with a utc offset, so
           // that's where the rest of the portal gets the business's clock
           // from (`lib/labels.ts`).
