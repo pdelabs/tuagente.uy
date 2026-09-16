@@ -1,0 +1,70 @@
+{
+  "id": "instagram",
+  "version": "1.0.0",
+  "description": "The reading half of the Instagram account: the comments on the client's posts, the answer that goes out with her yes, the lead that becomes a ticket, and the numbers the post creator writes with",
+  "client_copy": "Lee los comentarios de tus posteos, te arma la respuesta para que la apruebes y te marca en el tablero a los que son clientes.",
+  "_comment": [
+    "PUBLISHING IS NOT HERE AND IS NOT MOVING. `social/core/instagram.py` puts",
+    "a post on the account and this plugin reads what people say under it: two",
+    "halves of one connection, two plugins, because a client buys either one on",
+    "its own. What they share is the TOKEN, and they share it by name —",
+    "`engine.provide('instagram.token', ...)` — never by importing each other's",
+    "module: every enabled plugin's surface modules live in ONE sys.modules",
+    "namespace and load in CORE_PLUGINS order, so an import would be a bet on",
+    "who got there first. That is also why every module in here is prefixed",
+    "`ig_`.",
+    "",
+    "THE ENV IS THE SEED AND THE TABLE IS THE CURRENT TOKEN. IG_ACCESS_TOKEN",
+    "comes from the instance's secrets.env, which is outside the container: a",
+    "refreshed token is written into `instagram_account` and every Graph call",
+    "reads the table first. Before that, a refresh lived in one process's",
+    "os.environ and died with it, which is how a connection that refreshes",
+    "itself still expires after sixty days.",
+    "",
+    "IG_USERNAME IS NOT AN ENV. It is a fact about the token, read once from",
+    "GET /me and cached next to it, and it is what tells the account's own",
+    "replies apart from a stranger's -- Instagram hands ours back nested under",
+    "the comment they answer, and an agent that read its own reply as new would",
+    "answer itself every fifteen minutes.",
+    "",
+    "READING IS A FLOW AND NOT A LOOP. `flows/comentarios-instagram` ticks every",
+    "fifteen minutes, and a tick with nothing new is one tool call and one line",
+    "-- `fetch_comments` answers «Sin comentarios nuevos.» and the run ends. The",
+    "plugin copies the FLOW.md into workspace/flows/ when it loads if it is not",
+    "already there, and never overwrites: from the moment the file exists it is",
+    "the client's, hers to pause and the agent's to edit.",
+    "",
+    "KNOWN LIMIT, DMs: instagram_manage_messages requires Meta's Advanced",
+    "Access even on the account's own owner, so direct messages cannot be read",
+    "or answered from here. Nothing in this plugin pretends otherwise, and the",
+    "reply to a lead invites them to write to the address on the brand file",
+    "instead. It is the one thing this capability does not cover and the",
+    "catalog row says so.",
+    "",
+    "IT REQUIRES `approval` AND `kanban`: answering and hiding are outward acts",
+    "on a public thread and both are gated, which needs the approval plugin's",
+    "row, card and queue; and a comment that reads like a lead becomes a ticket",
+    "on the board, which is the kanban plugin's `create_ticket` with",
+    "source=instagram and the comment id as source_ref -- that pair is the",
+    "dedupe, so the same comment never opens two."
+  ],
+  "requires": {
+    "plugins": [
+      "approval",
+      "kanban"
+    ],
+    "connections": [
+      "instagram"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "comments"
+    ],
+    "flows": [
+      "flows/comentarios-instagram"
+    ],
+    "core": "core/"
+  },
+  "system": false
+}
