@@ -39,13 +39,43 @@ token, not a decision the client makes. It is read once from `/me` and cached in
 from a stranger's — the comments endpoint hands back the account's own answers
 nested under the comment they answer.
 
-**DMs ARE NOT HERE.** `instagram_manage_messages` needs Advanced Access even on
-our own account, so there is nothing to write yet (`plugin.json` names it as a
-known limit).
+**AND THE MESSAGES ARE HERE TOO**, which the connection's README said for a year
+could not be: the Conversations API answers under STANDARD ACCESS on this
+flavor — `GET /me/conversations?platform=instagram` came back `{"data": []}` on
+our own account with the token we already had, no permission error — and what
+Advanced Access buys is the same thing it buys for publishing, ANY client
+connecting without a role in our Meta app. Two things gate it instead, and both
+are the client's: a professional account, and «Permitir acceso a mensajes» on in
+the Instagram app, which is a consumer setting no dashboard can see.
+
+**THE FIELDS ARE THE DOCUMENTED ONES AND NOTHING ELSE** (Instagram API with
+Instagram Login, «Conversations» and «Send Messages»): a conversation is `id`
+and `updated_time`, a message is `id,created_time,from,to,message`, and `from`
+is `{username, id}` — that id is the IGSID, which is what a reply is addressed
+to. There is no `participants` field on this flavor and no `attachments` on a
+message: a field Graph does not know fails the whole call, so the WHO of a
+conversation is read off its messages, where it is documented.
+
+**AND THE MESSAGES COME BACK EXPANDED, IN ONE CALL PER CONVERSATION.** The
+documented alternative is `?fields=messages` for the ids and then one call per
+message for its content — 20 calls per conversation against a budget of 200 an
+hour, which a tick every fifteen minutes would spend on one busy thread. So the
+edge is expanded (`?fields=messages{…}`, the Graph's own syntax, which the
+Facebook-login flavor of this same API documents) and the newest 20 are kept.
+
+**SENDING IS THE ONE CALL THAT IS NOT FORM-ENCODED.** `POST /{IG_USER_ID}/
+messages` takes a JSON body — `{"recipient": {"id": IGSID}, "message": {"text":
+…}}` — and the token as a Bearer header, which is how Meta documents it. And it
+only works INSIDE THE 24-HOUR WINDOW: an app may answer a person up to 24 hours
+after that person's last message, and every new message of theirs starts it
+again. Past it the send fails, so the window is checked before the call and it
+is on the approval card, because a request the client sits on until tomorrow is
+a request that cannot be carried out.
 """
 
 import os
 import time
+from datetime import datetime
 
 import httpx
 import ig_store
@@ -77,6 +107,22 @@ METRICS = "reach,likes,comments,saved,shares"
 # two weeks of an agent being off before the connection dies on its own.
 RENEW_WITHIN_DAYS = 10
 DAY = 86400
+
+# WHAT A MESSAGE IS, in the documented order and with no field this flavor does
+# not serve. `from` is `{username, id}` and that id is the IGSID a reply goes to.
+MESSAGE_FIELDS = "id,created_time,from,to,message"
+
+# Meta's own clock: an app may answer a person up to 24 hours after that
+# person's last message, and every message of theirs starts it again. It is not
+# a policy we chose and not one we can stretch.
+WINDOW_HOURS = 24
+
+# How many of a thread's messages are kept. Meta serves details for the 20 most
+# recent and hands them back newest first.
+THREAD = 20
+
+# The timestamps Graph writes: `2026-09-16T10:00:00+0000`.
+WHEN = "%Y-%m-%dT%H:%M:%S%z"
 
 
 class NotConnected(RuntimeError):
@@ -217,6 +263,72 @@ def insights(media_id: str) -> dict:
     """
     data = get(f"{media_id}/insights", metric=METRICS).get("data") or []
     return {row["name"]: row["values"][0]["value"] for row in data}
+
+
+# ── the messages ────────────────────────────────────────────────────────────
+
+
+def post_json(path: str, payload: dict) -> dict:
+    """The one call Meta documents as JSON with a Bearer header, not as a form.
+
+    Sending a message is that call, and the shape is the docs': the body carries
+    the recipient and the text, the token travels in the header.
+    """
+    with http() as client:
+        return answer(client.post(
+            f"{GRAPH}/{path}",
+            json=payload,
+            headers={"Authorization": f"Bearer {token()}",
+                     "Content-Type": "application/json"},
+        ))
+
+
+def moment(stamp: str) -> float:
+    """One of Graph's timestamps as an epoch."""
+    return datetime.strptime(stamp, WHEN).timestamp()
+
+
+def conversations(limit: int = 50) -> list[dict]:
+    """The account's message threads, newest first: `id` and `updated_time`.
+
+    `platform=instagram` is the documented parameter and the fields are the two
+    documented keys. WHO is in a thread is NOT here — there is no `participants`
+    field on this flavor — and it does not need to be: the person is on every
+    message they wrote, where the docs put them.
+
+    ONE CALL AND NO PAGING LOOP. `limit` is the Graph's own, the rows are sorted
+    by `updated_time` here so «newest» is a fact and not a hope, and a client
+    with more than fifty live threads is a client this tick is the wrong shape
+    for anyway.
+    """
+    rows = get("me/conversations", platform="instagram",
+               fields="id,updated_time", limit=limit).get("data") or []
+    rows.sort(key=lambda row: row.get("updated_time", ""), reverse=True)
+    return rows[:limit]
+
+
+def messages(conversation_id: str) -> list[dict]:
+    """One thread's messages, newest first, at most twenty.
+
+    Expanded in the one call that asks for the thread, because the documented
+    alternative — the ids here and then one call per message — spends twenty of
+    the two hundred calls an hour on a single busy conversation.
+    """
+    found = get(conversation_id, fields=f"messages{{{MESSAGE_FIELDS}}}")
+    return ((found.get("messages") or {}).get("data") or [])[:THREAD]
+
+
+def send_message(recipient_igsid: str, text: str) -> str:
+    """The answer, sent to that person. The id of what went out.
+
+    The recipient is an IGSID read off a message they sent us, never a number
+    the model picked: `ig_tools.py` looks it up on the conversation, which is
+    the only argument the tool takes.
+    """
+    return post_json(f"{user_id()}/messages", {
+        "recipient": {"id": recipient_igsid},
+        "message": {"text": text},
+    })["message_id"]
 
 
 # ── the sixty days ──────────────────────────────────────────────────────────

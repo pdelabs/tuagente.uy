@@ -1,13 +1,13 @@
 ---
-title: Comentarios de Instagram
-client_summary: "Mira los comentarios de tus posteos, te deja la respuesta lista para aprobar y te marca en el tablero a los que quieren comprar."
+title: Comentarios y mensajes de Instagram
+client_summary: "Mira los comentarios y los mensajes de tu Instagram, te deja la respuesta lista para aprobar y te marca en el tablero a los que quieren comprar."
 name: comments
-description: "Decide qué hacer con cada comentario nuevo de Instagram: cuál se contesta y con qué palabras, cuál no se toca, cuál se oculta, y cuál es alguien que quiere comprar y va al tablero como tarea. Usala cada vez que `fetch_comments` traiga algo, en el flujo de comentarios o cuando el cliente te pida mirarlos."
-version: 1.0.0
+description: "Decide qué hacer con cada comentario y cada mensaje privado nuevo de Instagram: cuál se contesta y con qué palabras, cuál no se toca, cuál se oculta, y quién es alguien que quiere comprar y va al tablero como tarea. Usala cada vez que `fetch_comments` o `fetch_messages` traigan algo, en el flujo de Instagram o cuando el cliente te pida mirarlos."
+version: 1.1.0
 license: MIT
 ---
 
-# comments — qué hacer con cada comentario
+# comments — qué hacer con cada comentario y cada mensaje
 
 ## 1. Leé la marca antes de contestar el primero
 
@@ -90,12 +90,61 @@ El `source_ref` es lo que evita abrir dos tareas por el mismo comentario: si ya
 existe, la herramienta te devuelve la que hay y no pasa nada.
 
 Y **contestale igual**, en el mismo movimiento: una línea que le diga que sí y
-que lo invite a escribir a la dirección de la marca, donde se sigue la
-conversación en serio. Instagram no nos deja leer los mensajes privados, así
-que nunca le digas «te escribo por privado» ni «mandanos un DM».
+que lo invite a seguir por donde el cliente pueda atenderlo —la dirección de la
+marca, o por mensaje privado, que ahora sí podés leer y contestar—. Lo que no
+hagas nunca es escribirle vos primero por privado: Instagram sólo deja
+contestar a quien escribió.
 
-## 5. Contale a tu cliente en una línea
+## 5. Los mensajes privados: lo mismo, pero con reloj
 
-Cuando termines la vuelta: cuántos comentarios nuevos había, cuántas respuestas
-le dejaste esperando el sí, y a quién le abriste tarea. Si no había nada nuevo,
-eso es todo lo que hay para decir y no hace falta ni decirlo.
+Un mensaje es más serio que un comentario: nadie escribe por privado de casual.
+Casi siempre es alguien preguntando si le servís.
+
+**El reloj primero.** Instagram sólo deja contestar hasta **24 horas** después
+del último mensaje de esa persona. `fetch_messages` te dice cuánto queda de ese
+plazo en cada conversación: **contestá primero las que están por vencerse.** Si
+una ya venció, no insistas —la herramienta no va a mandar nada— y dejala en el
+tablero con lo que preguntó, para que el cliente decida.
+
+**Un primer mensaje de alguien es una tarea**, aunque también lo contestes:
+
+```
+create_ticket(
+  title="Mensaje de @<usuario> en Instagram",
+  body=<lo que escribió, tal cual, y de qué posteo puede venir si se sabe>,
+  source="instagram-dm",
+  source_ref=<el id de la conversación>,
+)
+```
+
+Una conversación es **una sola tarea**: el id del hilo es el mismo siempre, así
+que el segundo mensaje de la misma persona no abre otra. Lo que va contando
+después va como comentario de esa tarea con `update_ticket`. Y si el plazo se
+está por vencer y todavía no hay aprobación, decilo ahí: «se vence a las 18 el
+plazo para contestarle».
+
+**La respuesta se arma igual que la de un comentario** —`vos`, corto, sin
+emojis, sin precio que no sea el del diagnóstico, sin fechas— con dos
+diferencias:
+
+- **Un poco más cálida**: hay una persona sola del otro lado, no una tribuna.
+  «Hola, ¿qué tal?» está bien acá y no abajo de un posteo.
+- **Terminá con UNA pregunta que sirva para saber si le podés resolver el
+  problema**: de qué es la empresa, qué es lo que hoy le come el día, cuánta
+  gente atiende. Una sola, corta, y esperá la respuesta.
+
+Después llamá a `send_message(conversation_id, text, note)`. Tampoco sale sola:
+queda esperando el sí del cliente, que la puede editar antes de aprobarla.
+
+**Lo que nunca**: no sigas una conversación más allá de donde la seguiría tu
+cliente —dos o tres idas y vueltas y pasa a ser trabajo de una persona, así que
+dejalo en el tablero y decilo—; no mandes links que no estén en la marca; no
+escribas primero a nadie que no haya escrito antes (Instagram tampoco lo deja);
+y si te insultan o te quieren vender algo, no contestes nada.
+
+## 6. Contale a tu cliente en una línea
+
+Cuando termines la vuelta: cuántos comentarios y cuántos mensajes nuevos había,
+cuántas respuestas le dejaste esperando el sí, y a quién le abriste tarea. Si
+alguna conversación tiene el plazo por vencerse, eso va primero. Si no había
+nada nuevo, eso es todo lo que hay para decir y no hace falta ni decirlo.

@@ -179,6 +179,9 @@ const EVENTS: Record<string, string | ((n: string) => string)> = {
   // yes to; the Activity title carries the handle that was answered or hidden.
   "comment.replied": "Contestó un comentario en Instagram",
   "comment.hidden": "Ocultó un comentario en Instagram",
+  // A direct message answered, which Meta only allows within 24 h of the
+  // person's last one — so this line is also the proof it made it in time.
+  "message.sent": "Contestó un mensaje en Instagram",
   // The face delegated to a sub-agent and got the work back. The Activity
   // title carries the sub-agent's name and the task; these are the chips.
   "delegation.started": "Le pidió el trabajo a un ayudante",

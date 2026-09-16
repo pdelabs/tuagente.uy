@@ -27,6 +27,18 @@ a lead becomes is opened by the face with the board's own `create_ticket`, and
 over there (`kanban/core/board_store.py`): that pair IS the link. A column here
 would be a second copy of it that nothing in this plugin maintains.
 
+`instagram_messages` AND `instagram_conversations` ARE THE SAME IDEA FOR THE
+DMs, with one difference: the message table keeps OURS TOO. `from_id` is what
+tells them apart, the listing only shows the new inbound ones, and the approval
+card shows the thread — where an answer of ours missing would read like a person
+talking to a wall. The conversation row holds who is on the other side (their
+IGSID, which is what a reply is addressed to, and their handle) and
+`last_inbound_at`, WHICH IS META'S 24-HOUR CLOCK: it only ever moves forward, so
+reading a thread twice cannot reset a window and a message that arrives out of
+order cannot shorten one. THERE IS NO `ticket_id` HERE EITHER — a DM thread that
+became a lead is a ticket with `(source, source_ref) = ("instagram-dm", <the
+conversation id>)`, one per person, and that pair is already unique on the board.
+
 `instagram_account` IS WHERE THE TOKEN LIVES ONCE IT HAS BEEN REFRESHED. The
 env is the SEED — `IG_ACCESS_TOKEN` in the instance's `secrets.env`, which is
 outside the container and cannot be written from in here — and this table is
@@ -52,6 +64,27 @@ SCHEMA = (
         token            TEXT,
         token_expires_at REAL,
         fetched_at       REAL NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS instagram_messages (
+        message_id      TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        from_id         TEXT,
+        from_username   TEXT,
+        text            TEXT,
+        created_time    REAL,
+        seen_at         REAL NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS instagram_messages_by_thread"
+    " ON instagram_messages(conversation_id, created_time)",
+    """
+    CREATE TABLE IF NOT EXISTS instagram_conversations (
+        conversation_id      TEXT PRIMARY KEY,
+        participant_id       TEXT,
+        participant_username TEXT,
+        last_inbound_at      REAL
     )
     """,
     """
@@ -105,6 +138,83 @@ def record(
          int(is_reply), time.time()),
     )
     return True
+
+
+# ── the messages, and who is on the other side of each thread ───────────────
+
+
+def message_seen(message_id: str):
+    return db.one("SELECT * FROM instagram_messages WHERE message_id = ?", (message_id,))
+
+
+def record_message(
+    message_id: str,
+    conversation_id: str,
+    from_id: str | None,
+    from_username: str | None,
+    text: str,
+    created_time: float | None,
+) -> bool:
+    """One message written down, and whether it is new.
+
+    EVERY MESSAGE OF THE THREAD IS KEPT, ours included — `from_id` is what tells
+    them apart. The listing only ever shows the new INBOUND ones, but the
+    approval card shows the conversation, and a thread with our own answers
+    missing reads like a person talking to a wall.
+    """
+    if message_seen(message_id) is not None:
+        return False
+    db.write(
+        "INSERT OR IGNORE INTO instagram_messages (message_id, conversation_id, from_id,"
+        " from_username, text, created_time, seen_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (message_id, conversation_id, from_id, from_username, text, created_time, time.time()),
+    )
+    return True
+
+
+def thread(conversation_id: str, limit: int = 6):
+    """The last messages of one thread, oldest first: the card reads it."""
+    rows = db.query(
+        "SELECT * FROM instagram_messages WHERE conversation_id = ?"
+        " ORDER BY created_time DESC, seen_at DESC LIMIT ?",
+        (conversation_id, limit),
+    )
+    return list(reversed(rows))
+
+
+def conversation(conversation_id: str):
+    return db.one(
+        "SELECT * FROM instagram_conversations WHERE conversation_id = ?", (conversation_id,)
+    )
+
+
+def save_conversation(
+    conversation_id: str,
+    participant_id: str | None = None,
+    participant_username: str | None = None,
+    last_inbound_at: float | None = None,
+) -> None:
+    """Who is on the other side, and when they last wrote.
+
+    `last_inbound_at` IS THE 24-HOUR CLOCK and it only ever moves forward: a
+    thread read twice must not have its window reset by the second read, and a
+    message that arrives out of order must not shorten it.
+    """
+    row = conversation(conversation_id)
+    if row is None:
+        db.write(
+            "INSERT INTO instagram_conversations (conversation_id, participant_id,"
+            " participant_username, last_inbound_at) VALUES (?, ?, ?, ?)",
+            (conversation_id, participant_id, participant_username, last_inbound_at),
+        )
+        return
+    db.write(
+        "UPDATE instagram_conversations SET participant_id = COALESCE(?, participant_id),"
+        " participant_username = COALESCE(?, participant_username),"
+        " last_inbound_at = MAX(COALESCE(?, 0), COALESCE(last_inbound_at, 0))"
+        " WHERE conversation_id = ?",
+        (participant_id, participant_username, last_inbound_at, conversation_id),
+    )
 
 
 # ── the account: the username, and the token that is current ────────────────

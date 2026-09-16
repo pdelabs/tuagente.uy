@@ -40,9 +40,10 @@ import ig_graph
 import ig_store
 from core import config, db
 
-# The two tool names the approval plugin looks a card up by.
+# The three tool names the approval plugin looks a card up by.
 REPLY = "reply_comment"
 HIDE = "hide_comment"
+SEND = "send_message"
 
 # How much of the feed a tick looks at. Ten posts is more than a fortnight of
 # a client posting every day, and a comment older than that is not news.
@@ -50,6 +51,10 @@ FEED = 10
 
 # How many posts the creator reads the numbers of before writing.
 PERFORMANCE = 10
+
+# How many message threads a tick looks at, and how much of one the card shows.
+THREADS = 50
+SHOWN = 6
 
 # Read by the client, or by the model on her behalf. Spanish, all of it.
 NOTHING_NEW = "Sin comentarios nuevos."
@@ -63,11 +68,28 @@ FAILED_REPLY = "No pude contestar el comentario: {reason}. No salió nada."
 FAILED_HIDE = "No pude ocultar el comentario: {reason}. Sigue visible."
 FRESH = "El token de Instagram está al día: le quedan {days} días."
 RENEWED = "Renové el token de Instagram: vuelve a durar {days} días."
+NO_MESSAGES = "Sin mensajes nuevos."
+NO_THREAD = (
+    "No tengo ninguna conversación {conversation_id}. Las que puedo contestar son las "
+    "que te trajo `fetch_messages`."
+)
+SENT = "Le respondí a @{username} por Instagram."
+FAILED_SEND = "No pude mandarle el mensaje a @{username}: {reason}. No salió nada."
+# META'S CLOCK, NOT OURS, and the sentence says what to do instead: a message
+# that cannot be sent is still a person waiting, and the board is where she goes.
+CLOSED = (
+    "Se pasaron las 24 horas desde el último mensaje de @{username}, y después de eso "
+    "Instagram no deja contestar hasta que vuelva a escribir. No mandé nada: si hace "
+    "falta seguirlo, dejalo en el tablero."
+)
+OPEN = "Quedan {hours} h del plazo para contestarle"
+CLOSING = "El plazo para contestarle YA VENCIÓ (Instagram da 24 h desde su último mensaje)"
 
 # The events the client reads in Activity. The label is written by the code,
 # in Spanish, with the handle in it (`app/app/lib/labels.ts` has the two kinds).
 REPLIED_EVENT = "comment.replied"
 HIDDEN_EVENT = "comment.hidden"
+SENT_EVENT = "message.sent"
 
 
 class ApprovalNote(BaseModel):
@@ -182,6 +204,80 @@ def hide_card(args: dict) -> tuple[str, str]:
     return title, "\n".join(about(row))
 
 
+# ── the 24 hours Meta gives to answer a person ──────────────────────────────
+
+
+def window_left(row) -> float:
+    """Seconds left to answer this thread, negative once they are gone.
+
+    It is Meta's rule and not ours: an app may answer up to 24 hours after the
+    person's last message. The client has to see it on the card, because a
+    request she sits on until tomorrow is one that cannot be carried out.
+    """
+    last = row["last_inbound_at"] or 0
+    return last + ig_graph.WINDOW_HOURS * 3600 - time.time()
+
+
+def window_line(row) -> str:
+    left = window_left(row)
+    if left <= 0:
+        return CLOSING
+    return OPEN.format(hours=int(left // 3600) or 1)
+
+
+# ── the messages of one thread ──────────────────────────────────────────────
+
+
+def sift(conversation_id: str, found: list[dict], mine: str) -> list[dict]:
+    """Every message written down, and the NEW INBOUND ones handed back.
+
+    Ours are told apart by `from.id`, which is the account's own id — the same
+    fact `IG_USER_ID` is — and never by the text. Writing ours down too is what
+    lets the approval card show a conversation instead of half of one.
+    """
+    new = []
+    for item in found:
+        author = item.get("from") or {}
+        from_id = str(author.get("id") or "")
+        text = item.get("message") or ""
+        when = ig_graph.moment(item["created_time"]) if item.get("created_time") else None
+        fresh = ig_store.record_message(
+            item["id"], conversation_id, from_id, author.get("username"), text, when)
+        if from_id == mine:
+            continue
+        ig_store.save_conversation(
+            conversation_id, participant_id=from_id,
+            participant_username=author.get("username"), last_inbound_at=when)
+        if fresh:
+            new.append({"conversation_id": conversation_id, "username": author.get("username"),
+                        "text": text, "created_time": when})
+    return new
+
+
+def send_card(args: dict) -> tuple[str, str]:
+    """«Contestarle este mensaje», in Spanish: who, the thread, the clock, the draft.
+
+    THE THREAD IS TABLE ROWS AND NOT A QUOTE BLOCK, and that is what puts the
+    answer — and only the answer — in the box the portal preloads: it cuts the
+    editable text after the LAST table row (`splitProposal`).
+    """
+    conversation_id = args["conversation_id"]
+    row = ig_store.conversation(conversation_id)
+    if row is None:
+        return (f"Contestar la conversación {conversation_id}",
+                NO_THREAD.format(conversation_id=conversation_id))
+    who = f"@{row['participant_username']}" if row["participant_username"] else "alguien"
+    title = f"Contestarle a {who} por mensaje en Instagram"
+    lines = ["| | |", "|---|---|", f"| La persona | {who} |",
+             f"| El plazo | {window_line(row)} |"]
+    for message in ig_store.thread(conversation_id, SHOWN):
+        speaker = ("Vos" if message["from_id"] and row["participant_id"]
+                   and message["from_id"] != row["participant_id"] else who)
+        lines.append(f"| {speaker} | {flat(message['text'])} |")
+    lines += ["", args["text"].strip()]
+    return title, "\n".join(lines)
+
+
 # ── the listing a tick comes back with ──────────────────────────────────────
 
 
@@ -261,6 +357,43 @@ def toolset() -> FunctionToolset:
         return head + "\n\n" + "\n".join(entry(row) for row in found)
 
     @ts.tool
+    def fetch_messages(ctx: RunContext) -> str:
+        """Los mensajes privados nuevos que le mandaron al cliente por Instagram.
+
+        Te trae lo que todavía no viste, agrupado por conversación: quién
+        escribió, qué dice, cuándo, y **cuánto queda del plazo para contestar**
+        —Instagram sólo deja responder hasta 24 horas después del último
+        mensaje de esa persona, y cada mensaje suyo lo vuelve a arrancar—.
+
+        Cada conversación viene con su id entre comillas invertidas: ese id es
+        el que va en `send_message`. Lo que ya contestaste no vuelve.
+
+        Si no hay nada nuevo te lo dice en una línea y ahí se termina la
+        corrida.
+        """
+        try:
+            mine = ig_graph.user_id()
+            threads = ig_graph.conversations(THREADS)
+        except ig_graph.NotConnected as exc:
+            return str(exc)
+        found = {}
+        for item in threads:
+            new = sift(item["id"], ig_graph.messages(item["id"]), mine)
+            if new:
+                found[item["id"]] = new
+        if not found:
+            return NO_MESSAGES
+        total = sum(len(v) for v in found.values())
+        head = (f"{total} mensaje nuevo:" if total == 1 else f"{total} mensajes nuevos:")
+        blocks = []
+        for conversation_id, new in found.items():
+            row = ig_store.conversation(conversation_id)
+            who = f"@{new[0]['username']}" if new[0]["username"] else "alguien"
+            said = "\n".join(f"  «{flat(m['text'])}»" for m in new)
+            blocks.append(f"- `{conversation_id}` · {who} · {window_line(row)}\n{said}")
+        return head + "\n\n" + "\n".join(blocks)
+
+    @ts.tool
     def refresh_if_due(ctx: RunContext) -> str:
         """Renovar el token de Instagram si está por vencer.
 
@@ -332,6 +465,61 @@ def gated() -> FunctionToolset:
             {"comment_id": comment_id, "media_id": row["media_id"], "text": message},
         )
         return REPLIED.format(username=row["username"])
+
+    @ts.tool
+    def send_message(
+        ctx: RunContext,
+        conversation_id: str,
+        text: str,
+        note: ApprovalNote,
+        client_correction: str | None = None,
+    ) -> str:
+        """Contestar un mensaje privado de Instagram. Frena hasta que el cliente apruebe.
+
+        Le llega a la persona que escribió, en el mismo hilo, con el nombre de
+        la cuenta del cliente. **A quién le va lo decide la conversación**: vos
+        pasás el id del hilo y nada más.
+
+        Instagram sólo deja contestar hasta 24 horas después del último mensaje
+        de esa persona. Si ya se pasó, la herramienta no manda nada y te lo
+        dice: ahí lo que corresponde es dejarlo en el tablero.
+
+        `note` es lo que el cliente lee para decidir: quién escribió, qué
+        preguntó y qué le vas a contestar.
+
+        `client_correction` NO LA ESCRIBÍS VOS: la completa el cliente cuando
+        aprueba con correcciones, y es EL MENSAJE ya editado por él, tal cual
+        tiene que salir. Dejala vacía siempre.
+
+        Args:
+            conversation_id: el id que te dio `fetch_messages`.
+            text: la respuesta, corta, con la voz de la marca.
+        """
+        row = ig_store.conversation(conversation_id)
+        if row is None:
+            raise ModelRetry(NO_THREAD.format(conversation_id=conversation_id))
+        who = row["participant_username"] or "esa persona"
+        # THE CLOCK IS CHECKED AGAIN HERE AND NOT ONLY ON THE CARD: a request
+        # can sit in the queue overnight, and the yes arrives after the window
+        # the card showed as open. NOT a ModelRetry — proposing the same message
+        # again cannot fix time, and the sentence says what to do instead.
+        if window_left(row) <= 0:
+            return CLOSED.format(username=who)
+        message = (client_correction or text).strip()
+        try:
+            sent = ig_graph.send_message(row["participant_id"], message)
+        except ig_graph.NotConnected as exc:
+            return str(exc)
+        except ig_graph.Refused as exc:
+            return FAILED_SEND.format(username=who, reason=exc)
+        ig_store.record_message(sent, conversation_id, ig_graph.user_id(), None,
+                                message, time.time())
+        db.append_event(
+            SENT_EVENT, f"Le respondí a @{who} por Instagram", "completed",
+            ctx.deps.session_id,
+            {"conversation_id": conversation_id, "message_id": sent, "text": message},
+        )
+        return SENT.format(username=who)
 
     @ts.tool
     def hide_comment(

@@ -1,13 +1,16 @@
-## Los comentarios de Instagram
+## Instagram: comentarios y mensajes
 
-Los comentarios nuevos te los trae `fetch_comments`, y qué hacer con cada uno
-está en la skill `comments`: leela antes de contestar el primero.
+Lo nuevo te lo traen `fetch_comments` y `fetch_messages`, y qué hacer con cada
+cosa está en la skill `comments`: leela antes de contestar la primera.
 
-Contestar y ocultar frenan hasta que tu cliente apruebe: llamá la herramienta
-ahí mismo con la respuesta escrita. Mostrarle lo que va a salir y esperar el sí
-lo hace la puerta, no vos, y no digas que contestaste hasta que la herramienta
-te haya devuelto que salió.
+Contestar, ocultar y mandar un mensaje frenan hasta que tu cliente apruebe:
+llamá la herramienta ahí mismo con la respuesta escrita. Mostrarle lo que va a
+salir y esperar el sí lo hace la puerta, no vos, y no digas que contestaste
+hasta que la herramienta te haya devuelto que salió.
 
-Cuando un comentario es alguien que quiere comprar, va al tablero con
-`create_ticket` —`source="instagram"`, `source_ref` el id del comentario—: «te
-dejé en el tablero a alguien que preguntó por precio».
+Los mensajes privados tienen plazo: 24 horas desde el último de esa persona.
+Si uno está por vencerse, ese va primero.
+
+Cuando alguien quiere comprar, va al tablero con `create_ticket` —`source`
+`"instagram"` con el id del comentario, o `"instagram-dm"` con el de la
+conversación—: «te dejé en el tablero a alguien que preguntó por precio».
