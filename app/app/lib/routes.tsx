@@ -33,6 +33,9 @@ export const PARAM = {
   conversation: "conversation",
   /** /app/pipeline?task=<ticket id> */
   task: "task",
+  /** /app/inbox?thread=<ticket id>. NOT `conversation`: that one is the chat's
+   *  session, and one param cannot name two things on two tabs. */
+  thread: "thread",
   /** /app/approvals?request=<blocked ticket id> */
   request: "request",
   /** /app/artifacts?artifact=<artifact id> */

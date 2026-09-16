@@ -75,7 +75,33 @@ export type Ticket = {
    *  read — whoever removes it there removes this line too. */
   assignee: string | null;
   created_at: string | number; // Hermes emits it as an epoch in seconds
+  /** When something last happened on it. The Board sorts by `created_at` — a
+   *  task is what it was opened for — and the Inbox by this one: a
+   *  conversation is read by when the last thing was said on it. */
+  updated_at?: string | number | null;
+  /** Where the ticket came from: `client` (she opened it from the portal),
+   *  `agent`, or the plugin that brought it in (`mail`, `instagram`,
+   *  `instagram-dm`). */
+  source?: string | null;
+  /** That plugin's own key for it — the message id, the comment id, the
+   *  conversation id. With `source` it is the board's dedupe. */
+  source_ref?: string | null;
 };
+
+/** The sources that are a CONVERSATION: somebody wrote in and is waiting for
+ *  an answer. Those tickets live in the Inbox (`app/app/inbox/`) and the Board
+ *  keeps the rest — one ticket, one screen, never both.
+ *
+ *  The engine has the same list (`board_store.CHANNELS`) and it is the one
+ *  that filters: the portal asks for `?source=channels` or `?source=work` and
+ *  never sends the names. This copy answers a different question — "is THIS
+ *  ticket, already in my hands, a conversation?" — which is what the board's
+ *  detail needs to send the client to the right screen. */
+export const CHANNEL_SOURCES = ["mail", "instagram", "instagram-dm"];
+
+/** Is this ticket a conversation with someone outside the company? */
+export const isChannelTicket = (t: { source?: string | null } | null | undefined) =>
+  CHANNEL_SOURCES.includes((t?.source ?? "").trim().toLowerCase());
 
 const DEFAULTS = { endpoint: "http://localhost:8642", adapter: "http://localhost:8643" };
 export const CONFIG_KEY = "tuagente_portal_config";
@@ -496,6 +522,16 @@ const AGENT_SIGNATURES = new Set([
   "", "default", "worker", "agent", "agente", "hermes", "user", "usuario",
 ]);
 
+/** Any of the signatures the agent's own comments come under.
+ *
+ *  Exported next to `isTheClient` and `isTheSystem`, and off the SAME set
+ *  `authorLabel` draws the agent's name for, because the Inbox has to know
+ *  which SIDE of a conversation a comment is on: the person who wrote in goes
+ *  on the left and everyone on our side on the right, and "not the person" is
+ *  not enough on a channel that does not sign with a handle. */
+export const isTheAgent = (author: string | null | undefined) =>
+  AGENT_SIGNATURES.has((author ?? "").trim().toLowerCase());
+
 /** WHO WROTE THIS COMMENT, first and last name if it has one.
  *
  *  Lives here, next to `isTheClient` and `isTheSystem`, because the label is
@@ -659,7 +695,12 @@ export type TicketDetail = {
 
 // ── Adapter (:8643) ──
 export const getManifest = (c: PortalConfig) => get<Manifest>(c.adapter, "/portal/manifest", c);
-export const getTickets = (c: PortalConfig) => get<{ tickets: Ticket[] }>(c.adapter, "/portal/tickets", c);
+/** The board. `source` picks the screen: `channels` is the Inbox's list,
+ *  `work` the Board's, and with nothing it is everything, which is what the
+ *  screens that count tickets read. */
+export const getTickets = (c: PortalConfig, source?: "channels" | "work") =>
+  get<{ tickets: Ticket[] }>(
+    c.adapter, source ? `/portal/tickets?source=${source}` : "/portal/tickets", c);
 export const getTicketDetail = (c: PortalConfig, id: string) =>
   get<TicketDetail>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}`, c);
 export const getApprovals = (c: PortalConfig) => get<{ approvals: any[] }>(c.adapter, "/portal/approvals", c);
