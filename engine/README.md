@@ -272,6 +272,32 @@ puts a cut-out in a black box), the sidecar carries the brief plus the
 placement line, the tool answers the picture and not only a path, and an asset
 that is not in `marca/` comes back as a `ModelRetry` listing the ones that are.
 
+**WORDS ARE CHANGED WITH `update_caption(post_id, caption, hashtags=None,
+alts=None)`, AND A SAVE NEVER DESTROYS.** Both come from the same morning
+(2026-09-15, our own agent): asked for a better caption, the creator had no
+tool for words, so it called `save_post(replace=True)` with the post's own
+pictures as `images` — `replace` deleted the folder, the first `brief_of` died
+on a sidecar that had been inside it, and four finished slides were gone. Three
+things changed. `update_caption` rewrites the caption, and the hashtags and
+alts when they are given, rewrites `caption.md` from the same two fields,
+touches no picture and writes `post.updated`; it refuses a post that is already
+published, with the permalink, because what went out is not rewritten from
+here. `incoming()` refuses any path under `posteos/`, naming the two tools that
+do what such a call is reaching for. And `save_post` builds the new post in a
+folder of its own (`.armando-<id>`, which the listing skips) and swaps it in
+with two renames at the end, so a failure halfway leaves the post that was
+there byte for byte and the half-built one on disk.
+
+```bash
+python3 engine/tests/test_post_tools.py   # free, a second, no model
+```
+
+Three claims inside the container, all about what is left on disk: the picture
+of a saved post is refused as a source and the post is untouched; a save that
+dies on a missing sidecar leaves the old post whole and the tab listing it
+once; and `update_caption` changes the words, keeps the pictures and the
+briefs, and refuses both an unknown post and a published one.
+
 **ONE SLIDE CAN BE FIXED WITHOUT TOUCHING THE OTHERS**, and that is what the
 briefs are for. `post.json` carries `prompts`, parallel to `images` and `alts`:
 the brief each slide was generated from, moved in from `imagenes/` with the
@@ -1040,7 +1066,11 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
   timeout=60)` raises, nothing catches it, and 60 s of a command now reach the
   client as "No pude responder: Command ... timed out". A tool error the model
   can read and work around would be better, and it is one `except` in
-  `core/tools/workspace.py`.
+  `core/tools/workspace.py`. The FILE half of that file is done — a path that
+  is not there, a folder that is not one and a folder read as a file come back
+  as a `ModelRetry` naming the path, since the morning a `read_file` on a
+  deleted `post.json` ended a client's turn in «No pude responder: [Errno 2]»
+  (`tests/test_workspace_tools.py`). `bash`'s timeout is still a crash.
 - **Session matching is O(sessions × messages).** `match_session` reads every
   session's messages out of SQLite to compare user turns on every new
   conversation. At the engine's scale it is microseconds; at a client's it wants

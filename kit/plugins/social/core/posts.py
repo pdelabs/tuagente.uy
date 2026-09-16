@@ -57,6 +57,22 @@ THE PIECES ARE MOVED AND NOT COPIED. `generate_image` leaves the PNG in
 `imagenes/`, which is scratch: the client sees it in Files and does not know
 whether it is the one that got used. After the move there is one copy and it
 is inside the post, so throwing the post out throws its pictures out too.
+
+AND THAT IS WHY A SAVE MAY NEVER DELETE BEFORE IT HAS THE REPLACEMENT. Measured
+on our own agent on 2026-09-15, and it cost four finished slides: the client
+asked for a better caption, the creator had no tool for words, so it called
+`save_post(replace=True)` with THE POST'S OWN PICTURES as `images`. `replace`
+deleted the folder, and the first `brief_of` then died on a sidecar that had
+been inside it. The post was empty and nothing was left to put back. Two things
+came out of that morning and both are in this file:
+
+- `incoming()` refuses a path under `posteos/`. A picture that is already in a
+  post is not an incoming picture, and the refusal names the two tools that do
+  what that call was trying to do.
+- A save NEVER writes over the old post. It builds the new one in a folder of
+  its own and swaps it in at the end — the old one is renamed aside and only
+  then removed — so a failure halfway leaves the post that was there exactly as
+  it was, and the half-built one on disk for whoever wants to look.
 """
 
 import json
@@ -81,6 +97,12 @@ CAPTION = "caption.md"
 # Where a replaced slide goes. Spanish, like `posteos/` and `imagenes/`: it is
 # a folder the client opens in Files, not an internal of ours.
 PREVIOUS = "anteriores"
+
+# The prefix of a post that is being built and of the one it is replacing. It
+# starts with a dot because these two are OURS and not the client's, and the
+# listing skips them by this name: a folder halfway through a save is not a
+# post, and the tab drawing it would be drawing a post with no pictures.
+BUILDING = ".armando-"
 
 # The suffix of the brief `generate_image` leaves beside every picture. The
 # same word as the image plugin's `BRIEF`, and not an import: the two plugins
@@ -186,8 +208,17 @@ def read(post_id: str) -> dict | None:
 
 def read_all() -> list[dict]:
     """Every post, newest first. The day decides, and `created_at` breaks the
-    tie for the day a post was replaced."""
-    found = [json.loads(path.read_text()) for path in root().glob(f"*/{POST}")]
+    tie for the day a post was replaced.
+
+    A folder `save_post` is still building is not one of them: it carries the
+    same `post.json` for the last instant before the swap, and the client would
+    see the same post twice — or, if the save failed, one that has no pictures.
+    """
+    found = [
+        json.loads(path.read_text())
+        for path in root().glob(f"*/{POST}")
+        if not path.parent.name.startswith(BUILDING)
+    ]
     found.sort(key=lambda p: (p["date"], p["created_at"]), reverse=True)
     return [expand(p) for p in found]
 
@@ -213,10 +244,18 @@ def image_path(post_id: str, name: str) -> Path | None:
 def incoming(workspace: Path, relative: str) -> Path:
     """One picture the model just made, checked before it goes into a post.
 
-    The three refusals are worded for the model, which is who can fix them: a
-    path outside the workspace, a file that is not there, and a type the tab
-    cannot draw — the route answers the type off the extension, so a file it
-    has no type for would be a 500 on the tab instead of a picture.
+    The refusals are worded for the model, which is who can fix them: a path
+    outside the workspace, a file that is not there, a type the tab cannot draw
+    — the route answers the type off the extension, so a file it has no type
+    for would be a 500 on the tab instead of a picture — and a picture that is
+    already inside a post.
+
+    THAT LAST ONE IS THE ONE THAT COST FOUR SLIDES. `save_post(replace=True)`
+    with the post's own pictures as `images` is a call that deletes its own
+    sources, and the creator made it because it was asked for a better caption
+    and had no tool for words (the module docstring has the whole morning). The
+    refusal names the two tools that do what such a call is reaching for, so it
+    is a redirection and not a wall.
     """
     try:
         path = under(workspace, relative)
@@ -231,6 +270,13 @@ def incoming(workspace: Path, relative: str) -> Path:
         raise ModelRetry(
             f"{relative} no es una imagen que el portal pueda mostrar: "
             f"{', '.join(sorted(TYPES))}"
+        )
+    if path.is_relative_to((workspace / WHERE).resolve()):
+        raise ModelRetry(
+            f"{relative} ya es la imagen de un posteo que está guardado, y esas "
+            "no se vuelven a guardar. Si hay que cambiarle las palabras al "
+            "posteo usá `update_caption`; si hay que cambiar una imagen, "
+            "`replace_slide`"
         )
     return path
 
@@ -248,6 +294,51 @@ def brief_of(image: Path) -> str:
     prompt = json.loads(sidecar.read_text())["prompt"]
     sidecar.unlink()
     return prompt
+
+
+def clean_caption(caption: str) -> str:
+    """The caption as it is stored: the trailing hashtag block off, trimmed,
+    and refused if it does not fit in Instagram. Shared by the tool that writes
+    a post and the one that rewrites its words, so the two cannot drift."""
+    caption = HASHTAG_LINES.sub("", caption).strip()
+    if len(caption) > MAX_CAPTION:
+        raise ModelRetry(
+            f"el pie tiene {len(caption)} caracteres y en Instagram entran "
+            f"{MAX_CAPTION}: cortalo"
+        )
+    return caption
+
+
+def clean_tags(hashtags: list[str]) -> list[str]:
+    """The hashtags without their `#`, and never more than Instagram takes.
+
+    The `#` is stripped and not refused: the model writes them the way they
+    look on the screen about half the time, and a retry over a character the
+    code can take off is a turn spent on nothing.
+    """
+    tags = [tag.strip().lstrip("#") for tag in hashtags]
+    if len(tags) > MAX_HASHTAGS:
+        raise ModelRetry(
+            f"{len(tags)} hashtags y el máximo es {MAX_HASHTAGS}: Instagram "
+            "bajó el tope en diciembre de 2025 y treinta se ve viejo"
+        )
+    return tags
+
+
+def check_alts(alts: list[str], images: int) -> list[str]:
+    """One description per image, and none of them a paragraph."""
+    if len(alts) != images:
+        raise ModelRetry(
+            f"el posteo tiene {images} imágenes y me pasaste {len(alts)} textos "
+            "alternativos: va uno por imagen y en el mismo orden"
+        )
+    for description in alts:
+        if len(description) > MAX_ALT:
+            raise ModelRetry(
+                f"un texto alternativo tiene {len(description)} caracteres "
+                f"y el máximo es {MAX_ALT}: una oración alcanza"
+            )
+    return alts
 
 
 def caption_file(caption: str, hashtags: list[str]) -> str:
@@ -319,21 +410,8 @@ def toolset() -> FunctionToolset:
                 f"«{slug}» no sirve como slug: minúsculas, números y guiones, "
                 f"hasta {MAX_SLUG} caracteres"
             )
-        caption = HASHTAG_LINES.sub("", caption).strip()
-        if len(caption) > MAX_CAPTION:
-            raise ModelRetry(
-                f"el pie tiene {len(caption)} caracteres y en Instagram entran "
-                f"{MAX_CAPTION}: cortalo"
-            )
-        # The `#` is stripped and not refused: the model writes the hashtags
-        # the way they look on the screen about half the time, and a retry over
-        # a character the code can take off is a turn spent on nothing.
-        tags = [tag.strip().lstrip("#") for tag in hashtags]
-        if len(tags) > MAX_HASHTAGS:
-            raise ModelRetry(
-                f"{len(tags)} hashtags y el máximo es {MAX_HASHTAGS}: Instagram "
-                "bajó el tope en diciembre de 2025 y treinta se ve viejo"
-            )
+        caption = clean_caption(caption)
+        tags = clean_tags(hashtags)
         if not 1 <= len(images) <= MAX_IMAGES:
             raise ModelRetry(
                 f"un posteo lleva entre 1 y {MAX_IMAGES} imágenes, y me pasaste "
@@ -343,23 +421,12 @@ def toolset() -> FunctionToolset:
         # and `alt` the single image's, and `post.json` keeps both: the list,
         # and its first item as the post's `alt`, which is the field the portal
         # has always read.
-        if alts is not None and len(alts) != len(images):
-            raise ModelRetry(
-                f"me pasaste {len(images)} imágenes y {len(alts)} textos "
-                "alternativos: va uno por imagen y en el mismo orden"
-            )
         if alts is None and not alt:
             raise ModelRetry(
                 "falta el texto alternativo: `alt` si es una sola imagen, "
                 "`alts` con uno por imagen si es un carrusel"
             )
-        descriptions = alts if alts is not None else [alt]
-        for description in descriptions:
-            if len(description) > MAX_ALT:
-                raise ModelRetry(
-                    f"un texto alternativo tiene {len(description)} caracteres "
-                    f"y el máximo es {MAX_ALT}: una oración alcanza"
-                )
+        descriptions = check_alts(alts if alts is not None else [alt], len(images))
         sources = [incoming(ctx.deps.workspace, relative) for relative in images]
 
         now = datetime.now(ZoneInfo(config.TIMEZONE))
@@ -373,9 +440,17 @@ def toolset() -> FunctionToolset:
                 "cliente te pidió cambiarlo, llamame con `replace=True`; si es "
                 "otro tema, dale otro slug"
             )
-        if directory.is_dir():
-            shutil.rmtree(directory)
-        directory.mkdir(parents=True)
+        # THE NEW POST IS BUILT BESIDE THE OLD ONE AND SWAPPED IN AT THE END.
+        # Everything that can fail — a sidecar that is not there, a rename —
+        # happens while `directory` is still the post the client has, and the
+        # swap itself is two renames. What is left behind by a failure is this
+        # scratch folder with whatever got moved into it, never a post that was
+        # finished. A leftover from an earlier crash is this call's to clear:
+        # it is ours, it is named after this post, and nothing reads it.
+        staging = root() / f"{BUILDING}{post_id}"
+        if staging.is_dir():
+            shutil.rmtree(staging)
+        staging.mkdir(parents=True)
         names = []
         # THE BRIEF COMES IN WITH THE PICTURE. It is read before the move,
         # while the sidecar is still beside it in `imagenes/`, and the move
@@ -385,7 +460,7 @@ def toolset() -> FunctionToolset:
         for number, source in enumerate(sources, 1):
             name = f"{number:02d}{source.suffix.lower()}"
             briefs.append(brief_of(source))
-            source.rename(directory / name)
+            source.rename(staging / name)
             names.append(name)
         data = {
             "id": post_id,
@@ -404,8 +479,19 @@ def toolset() -> FunctionToolset:
             "created_at": now.isoformat(timespec="seconds"),
             "flow": flow_of(ctx.deps.session_id),
         }
-        (directory / POST).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
-        (directory / CAPTION).write_text(caption_file(caption, tags))
+        (staging / POST).write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        (staging / CAPTION).write_text(caption_file(caption, tags))
+        # THE SWAP. The old post steps aside under a name the tab does not read,
+        # the new one takes its place, and only then is the old one thrown out:
+        # at no moment is there no post where the client is looking.
+        leaving = root() / f"{BUILDING}{post_id}.anterior"
+        if directory.is_dir():
+            if leaving.is_dir():
+                shutil.rmtree(leaving)
+            directory.rename(leaving)
+        staging.rename(directory)
+        if leaving.is_dir():
+            shutil.rmtree(leaving)
         db.append_event(
             "post.saved", f"Dejé listo el posteo «{slug}»", "completed",
             ctx.deps.session_id, {"id": post_id},
@@ -413,6 +499,78 @@ def toolset() -> FunctionToolset:
         # `slides` so the report the creator writes says how many the client is
         # going to find, without counting them again from memory.
         return {"saved": post_id, "slides": len(names),
+                "url": f"/portal/posts/{post_id}"}
+
+    @ts.tool
+    def update_caption(
+        ctx: RunContext,
+        post_id: str,
+        caption: str,
+        hashtags: list[str] | None = None,
+        alts: list[str] | None = None,
+    ) -> dict:
+        """Cambiarle las palabras a un posteo que ya está en Posteos.
+
+        Es la ÚNICA forma de tocarle el texto a un posteo guardado: cambia el
+        pie, y si se los pasás los hashtags y los textos alternativos. Las
+        imágenes no las toca. **Nunca vuelvas a guardar un posteo para cambiarle
+        las palabras**: `save_post` es para uno nuevo, y si le pasás las
+        imágenes del posteo que ya está, se pierden.
+
+        El pie va entero, como va a salir: lo que mandes reemplaza lo que
+        había. Los hashtags y los textos alternativos, si no los pasás, quedan
+        como estaban.
+
+        Un posteo ya publicado no se cambia desde acá: lo que salió, salió.
+
+        Args:
+            post_id: el id del posteo, `<fecha>-<tema>`, tal como aparece en
+                Posteos.
+            caption: el pie nuevo, completo y sin los hashtags.
+            hashtags: hasta 5, sin el `#`. Si no los pasás quedan los de antes.
+            alts: uno por imagen y en el mismo orden. Si no los pasás quedan
+                los de antes.
+        """
+        directory = folder(post_id)
+        path = directory / POST
+        if not path.is_file():
+            raise ModelRetry(
+                f"no hay ningún posteo «{post_id}»: el id es la fecha y el "
+                "tema, mirá el que vino en el pedido"
+            )
+        data = json.loads(path.read_text())
+        # WHAT WENT OUT DOES NOT GET REWRITTEN. The permalink is in the message
+        # because it is the fact that settles it: the caption on Instagram is
+        # the one the client's followers are reading, and `post.json` saying
+        # something else would make the tab lie about what is published.
+        published = data.get("published")
+        if published:
+            raise ModelRetry(
+                f"el posteo «{post_id}» ya está publicado: "
+                f"{published['permalink']}. Lo que ya salió no se cambia desde "
+                "acá; si el cliente quiere otra cosa, es otro posteo"
+            )
+        data["caption"] = clean_caption(caption)
+        if hashtags is not None:
+            data["hashtags"] = clean_tags(hashtags)
+        if alts is not None:
+            data["alts"] = check_alts(alts, len(data["images"]))
+            # `alt` is the post's own description and it is the first slide's,
+            # which is the field the portal's `Post` reads.
+            data["alt"] = data["alts"][0]
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        # `caption.md` is what the client copies into Instagram by hand, so it
+        # is rewritten from the same two fields every time: one of the two
+        # saying something the other does not is the bug this tool exists to
+        # stop making by hand.
+        (directory / CAPTION).write_text(
+            caption_file(data["caption"], data["hashtags"])
+        )
+        db.append_event(
+            "post.updated", f"Cambié el pie de «{post_id}»", "completed",
+            ctx.deps.session_id, {"id": post_id},
+        )
+        return {"id": post_id, "slides": len(data["images"]),
                 "url": f"/portal/posts/{post_id}"}
 
     @ts.tool
