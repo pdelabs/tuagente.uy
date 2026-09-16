@@ -139,12 +139,27 @@ const EVENTS: Record<string, string | ((n: string) => string)> = {
   cancelled: "Cancelada",
   canceled: "Cancelada",
   archived: "Archivada",
+  // A STATUS, NOT AN EVENT -- same as `done`, `blocked` and `archived` above.
+  // The board's move event carries the status it moved TO, and Activity draws
+  // the status through this same table: without this line «ready» reached the
+  // client's screen as "Ready", in English and meaning nothing.
+  ready: "Por hacer",
   skipped: "Se salteó",
   timeout: "Tardó demasiado",
   delivered: "Entregada",
   sent: "Enviada",
   status_changed: "Cambió de estado",
   scheduled: "Quedó programada",
+  // THE BOARD ON THE ENGINE (`kit/plugins/kanban/core/`) writes these three,
+  // with a dotted kind like the social plugin's. The words are the ones this
+  // table already had for the same three facts on a Hermes ticket (`created`,
+  // `status_changed`, `comment`): what changed is who writes them, and the
+  // client should not be able to tell. WHAT MOVED and WHO SAID IT are in the
+  // Activity line the engine writes next to the event, which carries the
+  // ticket's title and the column's name.
+  "ticket.created": "Se creó",
+  "ticket.moved": "Cambió de estado",
+  "ticket.commented": "Comentario",
   // The social plugin writing a post into `posteos/`. Worded as a fact and
   // NOT as "Publicó", which is now a different event and a different day:
   // saving one is the agent's, publishing it is the client's yes.

@@ -486,8 +486,14 @@ export const isTheSystem = (author: string) =>
 // name -- showing the word "user" on screen is a machine identifier in the
 // client's face -- but as TRUST it's nobody: it never hides content or speaks
 // on the client's behalf.
+//
+// `agente` IS THE ENGINE'S OWN SIGNATURE and it was missing: the approval
+// plugin signs the agent's side of a request with it and the board signs its
+// comments the same way, so the client read the literal word "agente" where
+// the name she gave it belongs -- on the Approvals thread, which is the screen
+// where a wrong author label costs the most.
 const AGENT_SIGNATURES = new Set([
-  "", "default", "worker", "agent", "hermes", "user", "usuario",
+  "", "default", "worker", "agent", "agente", "hermes", "user", "usuario",
 ]);
 
 /** WHO WROTE THIS COMMENT, first and last name if it has one.
