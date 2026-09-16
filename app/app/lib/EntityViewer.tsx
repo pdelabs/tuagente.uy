@@ -135,6 +135,7 @@ function canonicalUrlOf(entity: Entity): string {
     return urlFor("/app/artifacts", { [PARAM.artifact]: entity.id });
   }
   if (entity.kind === "file") return urlFor("/app/files", { [PARAM.file]: entity.path });
+  if (entity.kind === "post") return urlFor("/app/posts", { [PARAM.post]: entity.id });
   return urlFor("/app/connections", { [PARAM.connection]: entity.id });
 }
 
@@ -160,8 +161,10 @@ function EntityViewer({ cfg, entity, onClose }: {
     let alive = true;
     setErr(null);
     // "connection" never reaches here: its chip IS the card and opens no modal.
+    // Neither does "post": its chip is a link to Posteos, where the picture is
+    // drawn at the size it is going out at instead of squeezed into a modal.
     if (entity.kind === "connection" || entity.kind === "permissions"
-        || entity.kind === "capability") return;
+        || entity.kind === "capability" || entity.kind === "post") return;
     // A photo or a PDF isn't requested as text: it's shown or downloaded.
     if (isPhoto || downloadOnly) return;
     const p =
@@ -182,6 +185,7 @@ function EntityViewer({ cfg, entity, onClose }: {
         connection: "",
         permissions: "",
         capability: "",
+        post: "",
       }[entity.kind];
       setErr(msg.startsWith("404") ? missingMessage : msg);
     });
@@ -203,6 +207,7 @@ function EntityViewer({ cfg, entity, onClose }: {
 
   if (entity.kind === "connection" || entity.kind === "permissions"
       || entity.kind === "capability") return null; // its chip IS the card
+  if (entity.kind === "post") return null; // its chip is a link to Posteos
 
   const title =
     entity.kind === "ticket" ? ticket?.ticket.title ?? entity.id

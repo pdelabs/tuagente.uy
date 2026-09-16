@@ -6,20 +6,34 @@
 // chip opens lives in EntityViewer.tsx.
 
 import { createContext, useContext } from "react";
-import { FileText, Image as ImageIcon, LayoutDashboard, Sheet, Ticket as TicketIcon } from "lucide-react";
+import Link from "next/link";
+import { FileText, Image as ImageIcon, Images, LayoutDashboard, Sheet, Ticket as TicketIcon } from "lucide-react";
 import { ConnectionCardInline, PermissionsInline } from "./ConnectionChip";
 import { CapabilityInline } from "./CapabilityChip";
+import { PARAM } from "./routes";
 
 export type Entity =
   | { kind: "ticket"; id: string }
   | { kind: "file"; path: string }
   | { kind: "artifact"; id: string }
+  | { kind: "post"; id: string }
   | { kind: "connection"; id: string }
   | { kind: "permissions"; id: string }
   | { kind: "capability"; id: string };
 
 const TICKET_RE = /^t_[0-9a-f]{6,16}$/i;
 const ARTIFACT_RE = /^art_\d{10}_[\w-]+$/i;
+/** A post's id is its folder in `posteos/`: the date it is FOR and the slug
+ *  (`save_post`, `kit/plugins/social/core/posts.py`). It is the one id in the
+ *  product that reads like a sentence, which is why the agent quotes it in
+ *  prose and why it has to become a link there.
+ *
+ *  What it must NOT swallow: a bare date (`2026-09-15` — there is no slug), a
+ *  timestamp (`2026-09-15T08:16:28-03:00` — the `T` is not a hyphen), and a
+ *  file `generate_image` left in `imagenes/` (`2026-09-15-3.png` — the slug
+ *  has to carry a letter, and a dot is not part of an id). The source of the
+ *  shape is the tool's own `SLUG`: lowercase, digits and hyphens, 40 max. */
+const POST_RE = /^\d{4}-\d{2}-\d{2}-(?=[a-z0-9-]*[a-z])[a-z0-9][a-z0-9-]{0,39}$/i;
 // The agent mentions a catalog connection as `connection:google-workspace`
 // (its SOUL teaches it to): the chat draws it as a card with status and a
 // button.
@@ -84,6 +98,7 @@ export function detectEntity(raw: string): Entity | null {
   if (!text || /\s/.test(text)) return null;
   if (TICKET_RE.test(text)) return { kind: "ticket", id: text };
   if (ARTIFACT_RE.test(text)) return { kind: "artifact", id: text };
+  if (POST_RE.test(text)) return { kind: "post", id: text.toLowerCase() };
   const cx = CONNECTION_RE.exec(text);
   if (cx) return { kind: "connection", id: cx[1].toLowerCase() };
   const pm = PERMISSIONS_RE.exec(text);
@@ -103,7 +118,30 @@ const ENTITY_HINT = {
   ticket: "Ver la tarea",
   file: "Abrir el archivo",
   artifact: "Ver la visualización",
+  post: "Ver el posteo",
 };
+
+/** The chip for a post: a LINK to the tab, not a modal.
+ *
+ *  A post is an image at full width plus the text that goes with it, and
+ *  `?post=` takes the whole screen for exactly that reason
+ *  (`docs/portal-routes.md`); squeezing it into the viewer's modal would show
+ *  the client less than the tab they already have. The href is relative and
+ *  built with the route helper's own param name: with
+ *  `window.location.origin` it would come out one way in the prerender and
+ *  another in the browser, which is a hydration mismatch on a static page. */
+function PostLink({ id }: { id: string }) {
+  return (
+    <Link
+      href={`/app/posts?${PARAM.post}=${encodeURIComponent(id)}`}
+      title={ENTITY_HINT.post}
+      className="inline-flex max-w-full items-center gap-1 rounded-md border border-c-violet bg-c-violet/40 px-1.5 py-0.5 align-middle font-mono text-[0.85em] text-primary transition hover:border-primary hover:bg-c-violet"
+    >
+      <Images className="h-3 w-3 shrink-0" />
+      <span className="truncate">{id}</span>
+    </Link>
+  );
+}
 
 export function EntityChip({ entity, label }: { entity: Entity; label: string }) {
   const open = useOpenEntity();
@@ -111,6 +149,8 @@ export function EntityChip({ entity, label }: { entity: Entity; label: string })
   if (entity.kind === "connection") return <ConnectionCardInline id={entity.id} />;
   if (entity.kind === "permissions") return <PermissionsInline id={entity.id} />;
   if (entity.kind === "capability") return <CapabilityInline id={entity.id} />;
+  // A post opens in its own tab, where it is drawn the size it is going out at.
+  if (entity.kind === "post") return <PostLink id={entity.id} />;
   // The icon says what it is before you touch it: a photo opens to look at,
   // a spreadsheet opens to download.
   const Icon =

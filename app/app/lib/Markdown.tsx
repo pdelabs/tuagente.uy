@@ -8,7 +8,10 @@
 // arrives broken most of the time: half-open fences, tables with no body,
 // unclosed `$$`. The rule is that none of that can explode or flicker ugly.
 
-import { Children, memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Children, cloneElement, isValidElement, memo, useEffect, useMemo, useState,
+  type ReactElement, type ReactNode,
+} from "react";
 import type { Element, ElementContent } from "hast";
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -279,10 +282,13 @@ function Thing({ entity, text }: { entity: Entity; text?: string }) {
   );
 }
 
-/** The chip for an entity, whatever kind it is. Connections, permissions and
- *  capabilities have their own card (`entities.tsx`); everything else opens. */
+/** The chip for an entity, whatever kind it is. Connections, permissions,
+ *  capabilities and posts have their own chip (`entities.tsx`) — the first
+ *  three are cards and the post is a link to its tab, where it is drawn at the
+ *  size it is going out at; everything else opens in the viewer. */
 function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
-  if (entity.kind === "connection" || entity.kind === "permissions" || entity.kind === "capability") {
+  if (entity.kind === "post"
+    || entity.kind === "connection" || entity.kind === "permissions" || entity.kind === "capability") {
     return <EntityChip entity={entity} label={text?.trim() || entity.id} />;
   }
   return <Thing entity={entity} text={text} />;
@@ -305,15 +311,34 @@ function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
 // These are the convention's three folders (the same ones the Files tab
 // separates), not just any relative path: a bare `informe.md` in a sentence
 // isn't a promise that the portal can open it.
+// A POST'S ID GOES HERE TOO, and it is the one the agent quotes most: the face
+// is told to name it exactly as the creator returned it, and a post the client
+// cannot open from the sentence that announces it is a post they go hunting
+// for. The shape is `entities.tsx`'s `POST_RE` without its anchors — a date
+// alone is not one, and neither is `2026-09-15-3.png`, whose slug has no
+// letter and whose dot ends the match before the extension.
 const INLINE_ENTITY_RE = new RegExp(
   "(\\bt_[0-9a-f]{6,16}\\b" +
   "|\\bconnection:[a-z0-9][a-z0-9-]*\\b" +
   "|\\bcapability:[a-z0-9][a-z0-9-]*\\b" +
+  "|\\b\\d{4}-\\d{2}-\\d{2}-(?=[a-z0-9-]*[a-z])[a-z0-9][a-z0-9-]{0,39}\\b" +
   `|(?:/opt/data/)?\\b(?:workspace|entregables|entrada|interno)/[\\w./-]+\\.(?:${FILE_EXTENSIONS})\\b)`,
   "gi");
 
+// Emphasis is scanned THROUGH, and that is not a nicety: the face writes the
+// post's id in bold about half the time («Lo dejé en **2026-09-15-tema**»), and
+// `**…**` arrives here as a <strong> element whose text this scan never saw —
+// so the one sentence that announces a post was the one place the id did not
+// become a link. Only these two: inside `code` an id is being quoted, not
+// named, and a link already goes somewhere.
+const THROUGH = new Set(["strong", "em"]);
+
 function linkify(children: ReactNode): ReactNode {
   return Children.map(children, (child) => {
+    if (isValidElement(child) && typeof child.type === "string" && THROUGH.has(child.type)) {
+      const inner = (child as ReactElement<{ children?: ReactNode }>).props.children;
+      return cloneElement(child, undefined, linkify(inner));
+    }
     if (typeof child !== "string") return child;
     const parts: ReactNode[] = [];
     let last = 0;
