@@ -801,6 +801,9 @@ portal turns it into a link, with nothing asked of the model but the id.
 | `done` | Completado |
 | `archived` | off the board; the link still opens it |
 
+In the Inbox the same five are read as a conversation: `ready` is «Nuevo»,
+`in_progress` «En curso», `blocked` «Esperando tu ok», `done` «Respondido».
+
 A sixth value is refused by the routes (400) and by the tools (`ModelRetry`),
 both naming the five: an unknown status falls into «En curso» on the board, and
 a ticket that is not moving then reads as one that is. `closed_at` is written
@@ -814,6 +817,17 @@ the message id, `instagram` + the comment id). `(source, source_ref)` is a
 UNIQUE index, and `create_ticket` on a pair that is already there answers with
 the id that is there and says so: for a plugin that ticks over the same inbox
 every five minutes, «already have it» is the normal case and not an error.
+
+**A CHANNEL TICKET IS A CONVERSATION, AND IT LIVES IN THE INBOX.** `mail`,
+`instagram` and `instagram-dm` are somebody who wrote in and is waiting for an
+answer; `client`, `agent` and nothing are work. `GET /portal/tickets` takes a
+`?source=`: `channels` answers with the three (the Inbox, `app/app/inbox/`),
+`work` with everything else (the Board), and a bare list of sources
+(`?source=mail,instagram`) with exactly those. With no `?source=` it is the
+whole board, unchanged — that is the call `portal-check` makes. There is no
+second store and no second route: one list, asked two ways. Which sources are
+channels is `board_store.CHANNELS`' to say, so the portal asks for the screen
+it is drawing and never for a list of plugin names.
 
 **Two tools on the face, not gated.** `create_ticket(title, body, source?,
 source_ref?)` and `update_ticket(id, status?, comment?)`. A ticket is internal —

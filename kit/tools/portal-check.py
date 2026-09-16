@@ -189,6 +189,17 @@ def main():
 
     modcheck("kanban", f"{A}/portal/tickets",
              lambda d, h: f"{len(d['tickets'])} tickets")
+    # The Inbox is the same list asked with `?source=channels` and not a route
+    # of its own, so what is checked here is THE FILTER: an answer carrying a
+    # ticket that is not from a channel means the tab would show the client her
+    # own work next to the mails, which is the one thing this screen is for.
+    def _inbox_ok(d, h):
+        strangers = sorted({t.get("source") for t in d["tickets"]}
+                           - {"mail", "instagram", "instagram-dm"})
+        if strangers:
+            raise AssertionError(f"the filter let other sources through: {strangers}")
+        return f"{len(d['tickets'])} conversations"
+    modcheck("inbox", f"{A}/portal/tickets?source=channels", _inbox_ok)
     modcheck("approvals", f"{A}/portal/approvals",
              lambda d, h: f"{len(d['approvals'])} pending")
     modcheck("artifacts", f"{A}/portal/artifacts",
