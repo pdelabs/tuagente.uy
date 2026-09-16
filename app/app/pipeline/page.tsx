@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Archive,
   Check,
@@ -38,6 +39,7 @@ import {
   isTheSystem,
   isConnectionBlock,
   isClientRequest,
+  isChannelTicket,
   readComment,
   authorLabel,
   type PortalConfig,
@@ -312,6 +314,7 @@ function Label({ children, optional }: { children: string; optional?: boolean })
 type LocalComment = TicketComment & { local: number };
 
 export default function PipelinePage() {
+  const router = useRouter();
   // The agent's look for the stamp on its comments (lazy: no flash).
   const [agentLook] = useState(loadAgentLook);
   const [cfg] = useState<PortalConfig | null>(() => loadConfig());
@@ -360,7 +363,11 @@ export default function PipelinePage() {
     inFlight.current = true;
     setLoading(true);
     try {
-      const res = await getTickets(cfg);
+      // `work` and not everything: a ticket that came in through a channel is
+      // a conversation and lives in Bandeja (`app/app/inbox/`). The same
+      // ticket on two screens is the client answering a mail here and finding
+      // it again there, each half with a different idea of what she did.
+      const res = await getTickets(cfg, "work");
       setTickets(res.tickets);
       setError(null);
       setLastUpdated(new Date());
@@ -434,9 +441,20 @@ export default function PipelinePage() {
     setCreateError(null);
   }, []);
 
+  // A LINK TO A CHANNEL TICKET LANDS IN BANDEJA, and the board is what
+  // forwards it. `t_ab12` alone does not say where it belongs — not in the
+  // chat's chip, not in a link the agent quoted last week, not in this URL —
+  // so the answer comes from the ticket the detail just read, and the board
+  // hands it over to the screen that ticket lives on. `replace` and not
+  // `push`: the board's entry was never a place to come back to.
   useEffect(() => {
-    if (openId) loadDetail(openId);
-  }, [openId, loadDetail]);
+    if (!openId) return;
+    loadDetail(openId).then((d) => {
+      if (d && isChannelTicket(d.ticket) && openIdRef.current === openId) {
+        router.replace(`/app/inbox?${PARAM.thread}=${encodeURIComponent(openId)}`);
+      }
+    });
+  }, [openId, loadDetail, router]);
 
   // Modals: close on Escape and block the background scroll.
   const hasModal = createOpen || openId !== null;
