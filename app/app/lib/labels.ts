@@ -152,6 +152,9 @@ const EVENTS: Record<string, string | ((n: string) => string)> = {
   // One slide of a post it had already saved, made again: the client said what
   // was wrong with that image and only that image changed.
   "post.slide_replaced": "Cambió una imagen de un posteo",
+  // The words of a post it had already saved: the caption, the hashtags or the
+  // alt texts. The pictures are untouched, which is why it is not "Guardó".
+  "post.updated": "Cambió el pie de un posteo",
   // IT WENT OUT, and it only ever gets here after the client approved it: the
   // tool that does it is gated, so this line can be read as "you said yes and
   // it happened". The Activity title carries the permalink.

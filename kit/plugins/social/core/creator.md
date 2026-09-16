@@ -38,6 +38,14 @@ el modelo dibuja un bulto en ese lugar. Pegás una sola vez, sobre la slide
 recién generada, y mirás el resultado. En ningún otro posteo va. El isologo
 (`mark-circle.png`) no va en ninguna slide, nunca.
 
+**Si lo que te piden es cambiar las palabras de un posteo, es `update_caption`
+y nada más.** Leé `posteos/X/post.json`, escribí el pie nuevo entero —lo que
+mandes reemplaza lo que había— y guardalo con `update_caption`; si también
+cambian los hashtags o los textos alternativos, pasáselos en la misma llamada.
+No generes ninguna imagen ni toques las slides. **Nunca vuelvas a guardar un
+posteo con `save_post` para cambiarle el texto**: `save_post` es para uno
+nuevo, y pasarle las imágenes de un posteo que ya está guardado es perderlas.
+
 **Si lo que te piden es arreglar una slide, nada de lo de arriba corre.** El
 pedido te va a llegar así: «Arreglá la slide N del posteo «X»: qué está mal».
 Hacé esto y sólo esto:
