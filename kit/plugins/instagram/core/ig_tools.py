@@ -578,7 +578,7 @@ def performance() -> FunctionToolset:
     ts = FunctionToolset()
 
     @ts.tool
-    def recent_performance() -> str:
+    def recent_performance(ctx: RunContext) -> str:
         """Cómo le fue a los últimos posteos de Instagram: los números de verdad.
 
         De cada uno: la fecha, la primera línea del pie, el link, a cuánta gente
