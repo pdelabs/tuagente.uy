@@ -38,11 +38,13 @@ KIT_PLUGINS = Path(os.environ.get("CORE_KIT_PLUGINS", "/opt/kit/plugins"))
 #
 # THE ORDER IS THE LOAD ORDER AND `provide`/`use` READS IT. `instagram` sits
 # before `social` because the creator asks for the performance toolset that
-# plugin provides, and for the token the two of them share.
+# plugin provides, and for the token the two of them share. `mail` is last
+# because it writes into the board and hands the gate a card of its own, so
+# `kanban` and `approval` have to be there before it registers.
 PLUGINS = [
     p.strip()
     for p in os.environ.get(
-        "CORE_PLUGINS", "kanban,approval,deliverable,memory,image,instagram,social"
+        "CORE_PLUGINS", "kanban,approval,deliverable,memory,image,instagram,social,mail"
     ).split(",")
     if p.strip()
 ]
