@@ -53,8 +53,12 @@ after it, and whose:
   is what every Graph call reads first, because `secrets.env` is outside the
   container (`engine/README.md`, «The comments»). `POST /portal/instagram/
   refresh` is still there to do it by hand, and it writes through the same
-  table. What is NOT built is DMs, and it cannot be: `instagram_manage_messages`
-  needs Meta's Advanced Access even on our own account.
+  table. DMs ARE BUILT TOO, and the claim that they could not be was wrong:
+  `GET /me/conversations?platform=instagram` answers under Standard Access with
+  the token we already have. What Luis still has to do for them is one toggle in
+  the Instagram app — «Permitir acceso a mensajes» — and what nobody can change
+  is Meta's 24-hour window: an approval that waits until tomorrow cannot be
+  sent, so the window is on the card.
   **Our own agent has to be brought up with `--build` before anything else**:
   `boto3` is new in the image, the kit reaches the container by bind mount and
   a dependency does not, so a plain restart fails on `import boto3` and the

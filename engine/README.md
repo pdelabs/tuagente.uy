@@ -146,14 +146,16 @@ kit/plugins/social/core/    the post: creator.py (the SUB-AGENT that
                                    skills/post/SKILL.md, the craft
 kit/plugins/instagram/core/ the other half of the account: ig_graph.py
                                    (the Graph calls, and the token in force),
-                                   ig_store.py (the comments already handled
-                                   and the account's own row), ig_tools.py
-                                   (fetch_comments and refresh_if_due on the
-                                   face, reply_comment and hide_comment behind
-                                   the gate with their cards, and
-                                   recent_performance for the creator),
-                                   instructions.md, skills/comments/SKILL.md
-                                   and flows/comentarios-instagram/
+                                   ig_store.py (the comments and the messages
+                                   already handled, the thread's other side
+                                   with its 24-hour clock, and the account's
+                                   own row), ig_tools.py (fetch_comments,
+                                   fetch_messages and refresh_if_due on the
+                                   face, reply_comment, hide_comment and
+                                   send_message behind the gate with their
+                                   cards, and recent_performance for the
+                                   creator), instructions.md,
+                                   skills/comments/SKILL.md and flows/instagram/
 ```
 
 `register(engine)` gets an object with eight verbs that ADD something and no
@@ -499,7 +501,7 @@ unpublished, the request closed, and both halves in Activity. Last run
 2026-09-15: **0 failures, 6.5 s**. A real publish is Luis' to do, with his
 token.
 
-### The comments, which are the other half of the account
+### The comments and the messages, which are the other half of the account
 
 **PUBLISHING IS THE SOCIAL PLUGIN'S AND READING IS `instagram`'s**, and they are
 two plugins because a client buys either one on its own: somebody who posts by
@@ -510,13 +512,66 @@ row is `instagram-comments` — over the same door publishing uses
 `instagram_business_manage_comments` scope it already carries).
 
 **READING IS A FLOW AND NOT A LOOP.** The plugin ships
-`flows/comentarios-instagram/FLOW.md` — cron `*/15 * * * *` — and COPIES IT INTO
-`workspace/flows/` WHEN IT LOADS, if it is not already there and never over what
-is. The kit is a read-only bind mount and the workspace is the client's, so
+`flows/instagram/FLOW.md` — «Instagram: comentarios y mensajes», cron
+`*/15 * * * *` — and COPIES IT INTO `workspace/flows/` WHEN IT LOADS, if it is
+not already there and never over what is. The kit is a read-only bind mount and the workspace is the client's, so
 there is no install step between them on this engine; a flow turned off is
 `status: paused`, which is still a file, so a restart does not switch it back
 on. The `mail` plugin does the same thing in the same shape, and the day the
 engine grows one helper for it both plugins will use that instead.
+
+**AND A CURATED FLOW THAT GETS RENAMED IS RETIRED, NOT ORPHANED.** That flow was
+`comentarios-instagram` until the messages joined it, and a plugin that only ever
+copies would have left the client with two flows reading one account every
+fifteen minutes. So the plugin also carries `SUPERSEDED`: a slug it used to ship
+with the **sha256 of the exact bytes it shipped**. An installed copy that still
+hashes to that is deleted; anything else — she paused it, the agent edited it —
+is left alone and says so in the log, because a file two people have a claim on
+is not one code should decide about quietly. Measured on the lab: the old folder
+went, the new one landed, and the Flows tab shows one card.
+
+**INSTAGRAM'S DIRECT MESSAGES ARE IN, AND THE «ADVANCED ACCESS» STORY WAS
+WRONG.** `kit/connections/instagram/README.md` said for a year that
+`instagram_manage_messages` needed Meta's review even on our own account. Probed
+on 16/9/2026 with the token we already had: `GET /v21.0/me/conversations?
+platform=instagram` answers `{"data": []}` — an empty inbox, not a permission
+error. Messages live under the same rule as everything else on that connection;
+what gates them is the CLIENT's own app, «Permitir acceso a mensajes»
+(Configuración → Mensajes y respuestas a historias), a consumer setting no
+dashboard can see.
+
+**`fetch_messages()` IS THE SECOND HALF OF THE TICK.** The threads
+(`GET /me/conversations?platform=instagram&fields=id,updated_time`), then each
+one's messages expanded in the same call
+(`?fields=messages{id,created_time,from,to,message}`) — the documented fields and
+no others, because a field this flavor does not serve fails the whole call, and
+expanded because the documented alternative is one call per message and this
+connection has two hundred an hour. Ours are told apart by `from.id`, which is
+the account's own id; theirs are new if `instagram_messages` has not seen them.
+EVERY message is written down and only the new inbound ones are listed — the
+card shows a conversation, and half a conversation reads like a person talking to
+a wall. Nothing new: «Sin mensajes nuevos.»
+
+**THE 24 HOURS ARE META'S AND THEY ARE ON THE CARD.** An app may answer a person
+up to 24 h after their last message, and each message of theirs starts it again;
+`instagram_conversations.last_inbound_at` holds that clock and only ever moves
+forward, so reading a thread twice cannot reset a window. `send_message(
+conversation_id, text, note)` is gated like the rest and **takes no recipient**:
+the IGSID comes off the conversation, which is the only way a model cannot
+address a stranger. The card is the person, the window, the last six messages as
+table rows with ours marked, and the draft as the editable tail. The window is
+checked AGAIN in the tool body — a request can sit in the queue overnight — and
+past it the tool sends nothing and answers the sentence that says so and says to
+use the board instead. The send itself is the one call in this kit that is JSON
+with a Bearer header: `POST /{IG_USER_ID}/messages` with `{"recipient": {"id":
+…}, "message": {"text": …}}`, which is how Meta documents it.
+
+**A FIRST MESSAGE IS A LEAD, AND A THREAD IS ONE TICKET.** `source="instagram-dm"`
+with the CONVERSATION id as `source_ref`, so the second message of the same
+person does not open a second ticket — what they say afterwards is a comment on
+the one that exists. The skill carries the rest: warmer than a comment, one
+question back to qualify, never a price but the diagnóstico's, never a date,
+never a conversation carried past where the client would carry it.
 
 **A TICK WITH NOTHING NEW IS ONE LINE.** `fetch_comments()` reads the last ten
 posts (`GET /{IG_USER_ID}/media`), then each one's comments with the replies
@@ -582,7 +637,8 @@ and without comments has no table and nothing changes for it.
 
 ```bash
 python3 engine/tests/test_instagram_comments.py   # free, a second, no model
-bash engine/tests/test_comments_gate.sh           # ~1 min, ~US$0.01, two turns
+python3 engine/tests/test_instagram_messages.py   # free, a second, no model
+bash engine/tests/test_comments_gate.sh           # ~2 min, ~US$0.02, three turns
 ```
 
 The first one is the mechanism, with the Graph behind an `httpx.MockTransport`
@@ -594,13 +650,24 @@ the card with the slide and the draft as its editable tail, the numbers the
 creator reads, and the token renewing itself and being what the NEXT call goes
 out with.
 
-The second is the gate, live, with `IG_*` unset — which is why it can be run as
-often as it likes. Two turns: the tick answers «falta conectar Instagram» and
-ends normally instead of dying, then a seeded comment is answered, the run
-pauses, the card carries the post, the comment and the draft below the last
-table row, and the client's yes comes back with the missing connection — an
-answer and not a dead turn — with the request closed and both halves in
-Activity. Last run 2026-09-16: **0 failures**.
+The second one is the messages, and it is the only place the window can be
+asserted at all — it is a clock, and a live test would have to wait a day to
+watch it shut. Six claims: the tick that groups by conversation with the time
+left on each, our own answers kept but not listed, the documented send (the JSON
+body, the IGSID off the conversation, the Bearer header) with the correction
+replacing the text, a thread whose last message is twenty-five hours old
+refused with the sentence that says what to do instead, a conversation nobody
+saw refused, and the card with the thread as table rows and the draft as its
+tail.
+
+The third is the gate, live, with `IG_*` unset — which is why it can be run as
+often as it likes. Three turns: the tick answers «falta conectar Instagram» and
+ends normally instead of dying; a seeded comment is answered, the run pauses,
+the card carries the post, the comment and the draft below the last table row,
+and the client's yes comes back with the missing connection — an answer and not
+a dead turn; and the same door for a direct message, whose card carries the
+person, what she wrote and how much of the 24 hours is left. Last run
+2026-09-16: **0 failures**.
 
 ## Sub-agents
 

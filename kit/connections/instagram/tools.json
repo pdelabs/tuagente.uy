@@ -25,9 +25,9 @@
     "business_discovery":         { "kind": "read",   "what_it_does": "Public data of another business account.",
                                     "note": "Useful for watching competitors without stepping outside the official API." },
     "get_conversations":          { "kind": "read",   "what_it_does": "The direct-message threads.",
-                                    "requires": "instagram_manage_messages — Advanced Access. Does NOT work with Standard Access, not even on the account's own owner." },
+                                    "requires": "instagram_manage_messages. CORRECTED 16/9/2026: this row said Advanced Access was always needed, and that is not true of the Instagram-login API — GET /me/conversations?platform=instagram answers under Standard Access on our own account, with the token we already had. What it does need is «Permitir acceso a mensajes» on in the client's Instagram app. The engine does messages itself (kit/plugins/instagram/), not through this MCP." },
     "get_conversation_messages":  { "kind": "read",   "what_it_does": "The history of one message thread.",
-                                    "requires": "instagram_manage_messages — Advanced Access. Does NOT work with Standard Access." },
+                                    "requires": "instagram_manage_messages. CORRECTED 16/9/2026: this row said Advanced Access was always needed, and that is not true of the Instagram-login API — GET /me/conversations?platform=instagram answers under Standard Access on our own account, with the token we already had. What it does need is «Permitir acceso a mensajes» on in the client's Instagram app. The engine does messages itself (kit/plugins/instagram/), not through this MCP." },
 
     "publish_media":              { "kind": "act", "what_it_does": "Publishes an image or video to the account.",
                                     "why_it_acts": "It goes out under the client's brand and anyone can see it. It's public and immediate." },
@@ -39,6 +39,6 @@
     "delete_comment":             { "kind": "act", "what_it_does": "Deletes a comment.",
                                     "why_it_acts": "It CANNOT be undone. And deleting an angry customer's comment, decided by an agent, is worse than the comment itself." },
     "send_dm":                    { "kind": "act", "what_it_does": "Sends a direct message.",
-                                    "requires": "instagram_manage_messages — Advanced Access. Does NOT work with Standard Access." }
+                                    "requires": "instagram_manage_messages. CORRECTED 16/9/2026: this row said Advanced Access was always needed, and that is not true of the Instagram-login API — GET /me/conversations?platform=instagram answers under Standard Access on our own account, with the token we already had. What it does need is «Permitir acceso a mensajes» on in the client's Instagram app. The engine does messages itself (kit/plugins/instagram/), not through this MCP." }
   }
 }

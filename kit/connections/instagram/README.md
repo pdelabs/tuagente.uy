@@ -1,16 +1,17 @@
 # Instagram
 
 > **What the engine does with this connection, both halves.** Publishing is
-> `kit/plugins/social/` and READING THE COMMENTS is `kit/plugins/instagram/`
-> (capability `instagram-comments`): a flow every fifteen minutes, the new
-> comments listed, an answer or a hide behind the approval gate, a lead onto the
-> board as a ticket, the last posts' insights handed to the creator that writes
-> the next one, and the token refreshed by the flow's first step instead of
-> dying silently at sixty days. Two things that are NOT variables of this
-> connection: the username (read once from `/me` and cached) and the token in
-> force (a table, because `secrets.env` is outside the container). DMs are still
-> out, and that is Meta's. `engine/README.md`, «Publishing» and «The comments»,
-> is the whole of it. What follows is the Hermes-era reading half, the 23-tool
+> `kit/plugins/social/` and READING — the comments AND the direct messages — is
+> `kit/plugins/instagram/` (capability `instagram-comments`): a flow every
+> fifteen minutes, what is new listed, an answer, a hide or a reply behind the
+> approval gate, a lead onto the board as a ticket, the last posts' insights
+> handed to the creator that writes the next one, and the token refreshed by the
+> flow's first step instead of dying silently at sixty days. Two things that are
+> NOT variables of this connection: the username (read once from `/me` and
+> cached) and the token in force (a table, because `secrets.env` is outside the
+> container). DMs answer under STANDARD access — measured, see below — inside
+> Meta's 24-hour window. `engine/README.md`, «Publishing» and «The comments», is
+> the whole of it. What follows is the Hermes-era reading half, the 23-tool
 > MCP, still unaudited and still not connected.
 >
 > **Publishing no longer comes from here.** On the `core` engine, the social
@@ -77,10 +78,20 @@ page. Personal accounts have no API — Meta cut off support for them in
 October 2024. Converting one is free, takes 5 minutes, is reversible, and
 doesn't lose followers or posts.
 
-**Exception: direct messages.** `instagram_manage_messages` requires
-Advanced Access **always**, even on your own account. The three DM tools
-(`get_conversations`, `get_conversation_messages`, `send_dm`) are declared
-but **won't work** until that review happens.
+**Direct messages: this page used to say "Advanced Access always", and that
+was wrong for the Instagram-login API.** Probed on our own account on
+16/9/2026 with the long-lived token we already had:
+`GET https://graph.instagram.com/v21.0/me/conversations?platform=instagram`
+answers `{"data": []}` — an empty inbox, not a permission error. So messages
+follow the SAME rule as everything else on this page: Standard Access covers an
+account whose owner has a role in our Meta app, and Advanced Access is what lets
+any client connect with a button. What DOES gate messages is the client's own
+Instagram app: the account has to be professional and **«Permitir acceso a
+mensajes»** has to be on (Configuración → Mensajes y respuestas a historias), a
+consumer setting no developer dashboard can see or turn on. The engine reads and
+answers DMs through `kit/plugins/instagram/`, inside Meta's **24-hour window**:
+an app may answer a person up to 24 h after their last message, and each message
+of theirs starts it again.
 
 ## Why we DON'T use an unofficial MCP
 
