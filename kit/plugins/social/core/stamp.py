@@ -62,7 +62,7 @@ BRIEF = ".json"
 OUT = ".png"
 TYPE = "image/png"
 
-Corner = Literal["bottom-right", "bottom-left", "top-right", "top-left"]
+Corner = Literal["bottom-right", "bottom-left", "top-right", "top-left", "center", "top", "bottom"]
 
 # What goes into the stamped slide's brief, under the original's. It is read
 # back by `replace_slide`'s procedure — the creator starts a fix from the
@@ -127,8 +127,12 @@ def toolset() -> FunctionToolset:
                 la que te devolvió `generate_image`.
             asset: el nombre del archivo en `marca/`, por ejemplo
                 `mr-wobbles.png`.
-            corner: en qué esquina va: `bottom-right`, `bottom-left`,
-                `top-right` o `top-left`.
+            corner: dónde va: una esquina (`bottom-right`, `bottom-left`,
+                `top-right`, `top-left`), o centrado horizontalmente en
+                `center` (el medio de la slide), `top` o `bottom`. Centrado es
+                para cuando el personaje es el protagonista y el texto va
+                arriba o abajo: el brief de esa slide deja libre la franja
+                donde va.
             size: qué tan grande, como parte del ancho de la slide. 0.28 es un
                 poco más de un cuarto del ancho, que es lo que se usa.
             margin: cuánto aire le queda contra los dos bordes, también como
@@ -159,8 +163,18 @@ def toolset() -> FunctionToolset:
         gap = round(picture.width * margin)
         # The corner names the two edges it hugs; everything else is the same
         # arithmetic mirrored.
-        x = gap if corner.endswith("left") else picture.width - width - gap
-        y = gap if corner.startswith("top") else picture.height - height - gap
+        if corner.endswith("left"):
+            x = gap
+        elif corner.endswith("right"):
+            x = picture.width - width - gap
+        else:
+            x = (picture.width - width) // 2
+        if corner.startswith("top"):
+            y = gap
+        elif corner.startswith("bottom"):
+            y = picture.height - height - gap
+        else:
+            y = (picture.height - height) // 2
         # `paste` WITH THE MARK AS ITS OWN MASK, which is what respects the
         # transparency: pasted without the mask, a cut-out asset arrives in its
         # own black box. And unlike `alpha_composite` it clips at the edge

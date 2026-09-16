@@ -32,7 +32,10 @@ archivo de marca lo permite, y cómo es esa slide también lo dice él.
 propio cliente»—, a la slide que lo nombra le pegás `mr-wobbles.png` en
 `bottom-right` con el tamaño que viene por defecto, y el brief de ESA slide
 pide que el texto quede en el 55% de arriba y que «el tercio inferior derecho
-de la imagen queda vacío», y nada más: el brief no nombra a Mr. Wobbles, ni un
+de la imagen queda vacío», y nada más. Si el cliente lo quiere de
+protagonista, va `center` con `size` 0.5 y el brief pide el texto en el
+cuarto de abajo (o de arriba) y «el centro de la imagen queda vacío». Siempre
+lo mismo: el brief no nombra a Mr. Wobbles, ni un
 asset, ni un espacio reservado, ni lo que va a ir ahí, porque si se lo decís
 el modelo dibuja un bulto en ese lugar. Pegás una sola vez, sobre la slide
 recién generada, y mirás el resultado. En ningún otro posteo va. El isologo
