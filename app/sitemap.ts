@@ -15,6 +15,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 0.8,
     },
+    {
+      url: "https://tuagente.uy/privacidad",
+      lastModified: new Date("2026-09-16"),
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
     ...POSTS.map((p) => ({
       url: `https://tuagente.uy/blog/${p.slug}`,
       lastModified: new Date(p.date),
