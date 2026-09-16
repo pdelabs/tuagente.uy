@@ -18,6 +18,7 @@ import UsageIntro from "./usage";
 import ConnectionsIntro from "./connections";
 import FlowsIntro from "./flows";
 import PostsIntro from "./posts";
+import InboxIntro from "./inbox";
 
 const KEY = "tuagente_intro_v2";
 
@@ -27,6 +28,7 @@ export const INTROS: Record<string, ComponentType<IntroProps>> = {
   // The key is the MODULE's, not the tab's: the manifest declares `kanban`
   // and the nav labels it "Tablero".
   kanban: PipelineIntro,
+  inbox: InboxIntro,
   approvals: ApprovalsIntro,
   artifacts: ArtifactsIntro,
   crons: CronsIntro,

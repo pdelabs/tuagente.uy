@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home, Images,
-  LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Plug, Puzzle, Workflow,
+  Inbox, LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Plug, Puzzle, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -52,6 +52,13 @@ export const HIDDEN_MODULES = new Set<string>([]);
 export const MODULES: { key: string; path: string; label: string; icon: LucideIcon; sec?: boolean }[] = [
   { key: "home", path: "/app/home", label: "Inicio", icon: Home },
   { key: "chat", path: "/app/chat", label: "Chat", icon: MessageSquare },
+  // Bandeja right after Chat, and ABOVE Tablero, because it is the tab with
+  // somebody waiting on the other side: a mail that came in is a person, and a
+  // person waits worse than a task does. What lands here is the channel
+  // tickets and ONLY those -- the Tablero asks the same endpoint for
+  // everything else, so no ticket is on both screens.
+  { key: "inbox", path: "/app/inbox", label: "Bandeja", icon: Inbox },
+  { key: "kanban", path: "/app/pipeline", label: "Tablero", icon: Columns3 },
   { key: "flows", path: "/app/flows", label: "Flujos", icon: Workflow },
   // Posteos right after Flujos because that is where they come from: a daily
   // flow writes one every morning and leaves it here. A generic icon and not
@@ -60,14 +67,6 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   // knows which one it goes to -- it doesn't, and tomorrow the same tab holds
   // another.
   { key: "posts", path: "/app/posts", label: "Posteos", icon: Images },
-  // Actividad left "Más" (8/13) and sits right next to Flujos. Both blind-QA
-  // clients went looking for it and both said the same thing: "it's where the
-  // truth is" and "it should be up top". One of them discovered THERE that her
-  // two flows had failed, while Flujos showed them in green. That gap is
-  // already patched on the other side, but the log of what the agent did
-  // isn't a workshop view: it's the proof that it worked.
-  { key: "activity", path: "/app/activity", label: "Actividad", icon: Activity },
-  { key: "kanban", path: "/app/pipeline", label: "Tablero", icon: Columns3 },
   { key: "approvals", path: "/app/approvals", label: "Aprobaciones", icon: Hand },
   // Primary by Luis's decision (8/7): the showcase of what's been produced --
   // flow deliverables + visualizations, on a single tab.
@@ -79,6 +78,14 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   // closet". Half a dozen screens promise "the systems you connected to it":
   // the place where you connect them can't be folded away.
   { key: "connections", path: "/app/connections", label: "Conexiones", icon: Plug },
+  // ACTIVIDAD WENT BACK UNDER "Más" (9/16, Luis). It came out of there on 8/13
+  // with a good reason -- two blind-QA clients went hunting for it and one of
+  // them found out THERE that her flows had failed -- and that reason is
+  // spent: a flow that fails now says so on its own tab, and the main nav had
+  // grown a tab for every screen we ever built. The log of what the agent did
+  // is still one click away and still the proof that it worked; what it is not
+  // is a place the client goes every day.
+  { key: "activity", path: "/app/activity", label: "Actividad", icon: Activity, sec: true },
   { key: "files", path: "/app/files", label: "Archivos", icon: Folder, sec: true },
   { key: "usage", path: "/app/usage", label: "Uso", icon: BarChart3, sec: true },
   { key: "skills", path: "/app/skills", label: "Habilidades", icon: Puzzle, sec: true },
