@@ -78,6 +78,15 @@ OURS = "Lo estamos viendo"
 FROM_CLIENT = "client"
 FROM_AGENT = "agent"
 
+# THE SOURCES THAT ARE A CONVERSATION AND NOT WORK OF OURS. Somebody wrote in
+# through a channel and is waiting for an answer: that ticket lives in the
+# Inbox (`app/app/inbox/`) and nowhere else, and the Board keeps the rest.
+# The list is HERE and not in the portal because the alias is resolved here:
+# `/portal/tickets?source=channels` asks for these three and `?source=work`
+# for everything else, so the day a fourth channel exists the portal does not
+# have to learn its name.
+CHANNELS = ("mail", "instagram", "instagram-dm")
+
 # Who signs a comment. `cliente` is the word the portal reads as hers
 # (`isTheClient`), `agente` the one it draws under the name she gave the agent.
 CLIENT = "cliente"
@@ -176,19 +185,37 @@ def as_ticket(row) -> dict:
         "tenant": row["tenant"],
         "assignee": None,
         "created_at": int(row["created_at"]),
+        # WHEN IT LAST MOVED, which is not when it was opened. The Board reads
+        # a ticket by when it was created; a CONVERSATION is read by when
+        # somebody last said something on it, and that is this column — the
+        # comment and the move both write it. Without it the Inbox would sort
+        # a thread with an answer from this morning under one nobody touched
+        # in a week.
+        "updated_at": int(row["updated_at"]),
         "source": row["source"],
         "source_ref": row["source_ref"],
     }
 
 
-def listing() -> list[dict]:
+def listing(sources: tuple[str, ...] = (), other: bool = False) -> list[dict]:
     """The board, newest first. Archived tickets are off it — that is what
-    archiving is — and the link to one still opens its detail."""
+    archiving is — and the link to one still opens its detail.
+
+    `sources` narrows it to where the tickets came from, and `other` flips the
+    question to «everything BUT these». The two together are the one screen
+    each ticket belongs to: the Inbox asks for `CHANNELS`, the Board asks for
+    everything else, and with neither this is the list it has always been.
+    """
+    where, params = ["status != ?"], [ARCHIVED]
+    if sources:
+        where.append(f"source {'NOT IN' if other else 'IN'} ({','.join('?' * len(sources))})")
+        params += list(sources)
     return [
         as_ticket(row)
         for row in db.query(
-            "SELECT * FROM tickets WHERE status != ? ORDER BY created_at DESC LIMIT 100",
-            (ARCHIVED,),
+            f"SELECT * FROM tickets WHERE {' AND '.join(where)}"
+            " ORDER BY created_at DESC LIMIT 100",
+            tuple(params),
         )
     ]
 

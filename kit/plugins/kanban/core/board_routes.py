@@ -1,6 +1,7 @@
 """The Board tab: the five calls `app/app/lib/agent.ts` already types.
 
     GET  /portal/tickets                  the board, newest first
+    GET  /portal/tickets?source=channels  the same list, only the conversations
     GET  /portal/tickets/{id}             the thread: ticket, comments, events, outcome
     POST /portal/tickets                  {title, body?, tenant?} -> {ok, id}
     POST /portal/tickets/{id}/comment     {body, author?}         -> {ok}
@@ -40,6 +41,15 @@ SHARED: dict = {}
 # per plugin, and each one answers `None` for an id that is not its own.
 DETAIL = "tickets.detail."
 
+# The two words the portal asks `?source=` with, and they are ALIASES and not
+# sources: `channels` is the three a person writes in through and `work` is
+# everything else. Which three is `board.CHANNELS`' to say — the portal asks
+# for the screen it is drawing, not for a list of plugin names it would have to
+# keep in step. A bare `?source=mail,instagram` still works, which is what the
+# aliases are built out of.
+CHANNELS = "channels"
+WORK = "work"
+
 
 async def payload(request: Request) -> dict:
     raw = await request.body()
@@ -57,6 +67,23 @@ def elsewhere(ticket_id: str) -> dict | None:
     return None
 
 
+def wanted(source: str | None) -> tuple[tuple[str, ...], bool]:
+    """What `?source=` asks for: which sources, and whether to keep the OTHERS.
+
+    Nothing is refused here. A source nobody has ever written a ticket with
+    answers with an empty list, which is the truth about it, and the two
+    aliases are the only spellings the portal uses.
+    """
+    value = (source or "").strip()
+    if not value:
+        return (), False
+    if value == CHANNELS:
+        return board.CHANNELS, False
+    if value == WORK:
+        return board.CHANNELS, True
+    return tuple(part.strip() for part in value.split(",") if part.strip()), False
+
+
 def a_status(value: str) -> str:
     if value not in board.STATUSES:
         raise HTTPException(400, board.BAD_STATUS.format(status=value))
@@ -64,8 +91,11 @@ def a_status(value: str) -> str:
 
 
 @router.get("/portal/tickets")
-def tickets():
-    return {"tickets": board.listing()}
+def tickets(source: str | None = None):
+    """The board. With no `?source=` it is the whole of it, which is the call
+    `portal-check` makes and the one every screen made before the Inbox."""
+    sources, other = wanted(source)
+    return {"tickets": board.listing(sources, other)}
 
 
 @router.get("/portal/tickets/{ticket_id}")

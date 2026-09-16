@@ -86,6 +86,9 @@ MODULES = {
     "approvals": False,
     "usage": True,
     "kanban": False,
+    # The Inbox: the conversation half of the board (`?source=channels`). The
+    # kanban plugin flips both, for the reason written where it does it.
+    "inbox": False,
     "artifacts": False,
     "crons": False,
     # Flows are the engine's own (core/flows.py, core/scheduler.py,

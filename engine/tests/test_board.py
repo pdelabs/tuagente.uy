@@ -33,6 +33,11 @@ The claims, in order:
      carries the comments, the events and the outcome.
   f. AN ID THAT IS NOT A TICKET IS A 404 — in Spanish, which is what the portal
      shows on the card the client just clicked.
+  g. EACH TICKET ON THE ONE SCREEN IT BELONGS TO — `?source=channels` answers
+     with the mail and not the client's own request, `?source=work` with the
+     request and not the mail, and the bare list with both. A conversation
+     lives in the Inbox (`app/app/inbox/`) and the Board keeps the rest; the
+     unfiltered call is what `portal-check` makes and it does not change.
 
 IT CLEANS UP AFTER ITSELF: the tickets, their comments and the events they
 wrote are gone by the end, whatever happened.
@@ -148,6 +153,21 @@ finally:
     db.commit()
 """
 
+# One ticket from a CHANNEL, made inside the container: the routes cannot make
+# one — `POST /portal/tickets` is the client's own request and is always
+# `client` — and (g) needs one of each on the board at the same time.
+MAKE = r"""
+import sys
+
+sys.path.insert(0, "/opt/kit/plugins/kanban/core")
+import board_store as board
+
+ticket_id, _ = board.create(
+    title=sys.argv[2], body="Lo que escribió quien nos escribió.",
+    source=sys.argv[1], source_ref=sys.argv[3])
+print(ticket_id)
+"""
+
 # What the HTTP half leaves behind, cleared by id at the end.
 FORGET = r"""
 import sqlite3, sys
@@ -159,6 +179,15 @@ for ticket_id in sys.argv[1:]:
         "DELETE FROM events WHERE json_extract(payload, '$.ticket_id') = ?", (ticket_id,))
 db.commit()
 """
+
+
+def inside(script: str, *args: str) -> str:
+    """One script inside the container, and what it printed."""
+    done = subprocess.run(
+        ["docker", "exec", CONTAINER, "python3", "-c", script, *args],
+        capture_output=True, text=True, check=True,
+    )
+    return done.stdout.strip()
 
 
 def call(path: str, body: dict | None = None) -> tuple[int, dict]:
@@ -342,6 +371,36 @@ def the_clients_half() -> tuple[list[str], list[str]]:
     return made, failures
 
 
+def the_two_screens() -> tuple[list[str], list[str]]:
+    """(g) The filter. Returns (ids to clean up, failures)."""
+    mail_id = inside(MAKE, "mail", "Consulta desde la web", "<bandeja@tuagente.uy>")
+    _, mine = call("/portal/tickets", {"title": "Revisar el stock", "body": "La pido yo."})
+    made = [mail_id, mine.get("id")]
+
+    channels = call("/portal/tickets?source=channels")[1]["tickets"]
+    work = call("/portal/tickets?source=work")[1]["tickets"]
+    everything = [t["id"] for t in call("/portal/tickets")[1]["tickets"]]
+    in_inbox = [t["id"] for t in channels]
+    on_board = [t["id"] for t in work]
+    print(f"  ?source=channels -> {len(channels)} · ?source=work -> {len(work)}"
+          f" · sin filtro -> {len(everything)}")
+    failures = judge("g. each ticket on the one screen it belongs to", [
+        *([] if mail_id in in_inbox else ["the mail is not in the Inbox"]),
+        *([] if mine["id"] not in in_inbox
+          else ["the client's own request showed up in the Inbox"]),
+        *([] if mine["id"] in on_board else ["her request is not on the Board"]),
+        *([] if mail_id not in on_board else ["the mail is still on the Board"]),
+        *([] if mail_id in everything and mine["id"] in everything
+          else ["the unfiltered list lost one of them"]),
+        *([] if all(t["source"] in ("mail", "instagram", "instagram-dm") for t in channels)
+          else [f"a source that is not a channel came back: "
+                f"{sorted({t['source'] for t in channels})}"]),
+        *([] if all(isinstance(t.get("updated_at"), int) for t in channels)
+          else ["a conversation with no `updated_at`: the Inbox cannot sort them"]),
+    ])
+    return made, failures
+
+
 def main() -> int:
     print(f"container: {CONTAINER} · adapter: {ADAPTER}")
     modules = call("/portal/manifest")[1]["modules"]
@@ -353,6 +412,10 @@ def main() -> int:
     _, failures = the_agents_half()
     print("\nthe client's half — the five calls, over HTTP")
     made, more = the_clients_half()
+    failures += more
+    print("\nthe two screens — the Inbox's filter and the Board's")
+    also, more = the_two_screens()
+    made += also
     failures += more
     if made:
         subprocess.run(

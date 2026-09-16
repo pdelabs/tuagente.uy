@@ -37,3 +37,11 @@ def register(engine) -> None:
     engine.toolset(board_tools.toolset())
     engine.router(board_routes.router)
     engine.module("kanban", True)
+    # THE INBOX IS THE BOARD'S TOO, and it is on the moment the board is. It is
+    # not a second store and not a second route: it is the same `/portal/tickets`
+    # asked with `?source=channels`, so what would turn it off is the plugin
+    # that answers it not being loaded. An Inbox with nothing in it is a
+    # truthful screen — an agent whose client has not connected a mailbox yet
+    # has no conversations, and the tab says so; a tab that appears the day the
+    # first mail lands is a tab the client never learns she has.
+    engine.module("inbox", True)
