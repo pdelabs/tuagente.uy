@@ -11,7 +11,11 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from pydantic import ValidationError
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.exceptions import ModelAPIError
+from pydantic_ai.models import Model
+from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.toolsets import AbstractToolset, CombinedToolset
 
 from . import config, plugins
@@ -172,11 +176,28 @@ def tools(*names: str) -> AbstractToolset[Deps]:
 _agent: Agent[Deps, str] | None = None
 
 
+def model() -> Model:
+    """The engine's model, with ONE retry on the provider.
+
+    OpenRouter intermittently answers a 200 with a body that is neither a
+    completion nor its error envelope; pydantic-ai raises a ValidationError
+    on it (issues 3994 and 6900 upstream) and the turn dies. Measured on our
+    own agent on 2026-09-16: the daily flow had saved its post and lost its
+    last model call to one of those. The same model twice in a FallbackModel
+    is a retry, and the fallback also covers a transport-level ModelAPIError.
+    Every agent of the engine, the face and the plugins' sub-agents, gets it
+    through `engine.model`.
+    """
+    return FallbackModel(
+        config.MODEL, config.MODEL, fallback_on=(ModelAPIError, ValidationError)
+    )
+
+
 def get_agent() -> Agent[Deps, str]:
     global _agent
     if _agent is None:
         _agent = Agent(
-            config.MODEL,
+            model(),
             deps_type=Deps,
             instructions=instructions,
             model_settings=config.MODEL_SETTINGS,

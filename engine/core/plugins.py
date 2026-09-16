@@ -305,8 +305,13 @@ class Engine:
         return self.shared.get(name, default)
 
     @property
-    def model(self) -> str:
-        return config.MODEL
+    def model(self):
+        """The engine's model with its retry (`agent.model()`), for a plugin's
+        own `Agent(...)`: a sub-agent dies on the same malformed body the face
+        would, so it gets the same cover."""
+        from . import agent
+
+        return agent.model()
 
     @property
     def model_settings(self) -> dict:
