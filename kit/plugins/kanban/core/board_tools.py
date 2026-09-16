@@ -97,4 +97,34 @@ def toolset() -> FunctionToolset:
             return f"Moví {ticket_id} a {board.COLUMN[status]}."
         return f"Comenté en {ticket_id}."
 
+    @ts.tool
+    def read_ticket(ctx: RunContext, ticket_id: str) -> str:
+        """Leer una tarea del tablero entera: qué es, de dónde vino, qué se dijo.
+
+        Usala antes de seguir algo que quedó abierto: ahí está el pedido
+        original, los comentarios, y —si vino de un canal— la referencia que
+        necesitás para contestarlo: el id de la conversación de Instagram, el
+        id del comentario, o el hilo de mail. Sin leerla, no adivines.
+
+        Args:
+            ticket_id: el id de la tarea, como `t_ab12cd34ef56`.
+        """
+        found = board.detail(ticket_id)
+        if found is None:
+            raise ModelRetry(board.MISSING.format(ticket_id=ticket_id))
+        ticket = found["ticket"]
+        lines = [
+            f"{ticket['id']} · {board.COLUMN[ticket['status']]} · origen: {ticket['source'] or 'sin origen'}"
+            + (f" · referencia: {ticket['source_ref']}" if ticket["source_ref"] else ""),
+            f"Título: {ticket['title']}",
+            "",
+            ticket["body"] or "(sin cuerpo)",
+        ]
+        if found["comments"]:
+            lines.append("")
+            lines.append("Comentarios, en orden:")
+            for c in found["comments"]:
+                lines.append(f"- {c['author']}: {c['body']}")
+        return "\n".join(lines)
+
     return ts

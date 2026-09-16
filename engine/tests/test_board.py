@@ -108,6 +108,10 @@ try:
         ctx, "Consulta por mail (otra vez)", "El mismo mail, otro tick.", SOURCE, SOURCE_REF)
     from_source = board.by_source(SOURCE, SOURCE_REF)
     opened.append(from_source["id"])
+    # (b2) read it back: the reference the channel tools need is in the text.
+    read = tools["read_ticket"](ctx, from_source["id"])
+    report["read"] = {"has_ref": SOURCE_REF in read, "has_source": f"origen: {SOURCE}" in read,
+                      "has_title": "Consulta por mail" in read}
     report["dedupe"] = {
         "first": first,
         "again": again,
@@ -237,6 +241,11 @@ def the_agents_half() -> tuple[dict, list[str]]:
 
     dedupe = r["dedupe"]
     print(f"  the same mail twice -> {dedupe['again']}")
+    failures += judge("b2. a ticket reads back with its source and reference", [
+        *([] if r["read"]["has_ref"] else ["the reference is not in the text"]),
+        *([] if r["read"]["has_source"] else ["the source is not in the text"]),
+        *([] if r["read"]["has_title"] else ["the title is not in the text"]),
+    ])
     failures += judge("b. the same thing never makes two tickets", [
         *([] if dedupe["rows"] == 1 else [f"{dedupe['rows']} tickets for one message"]),
         *([] if dedupe["first"].rstrip(".").split()[-1] in dedupe["again"]
