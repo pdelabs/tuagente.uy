@@ -40,10 +40,11 @@
         "env": [
           "EMAIL_ADDRESS",
           "EMAIL_PASSWORD",
+          "EMAIL_IMAP_HOST",
           "EMAIL_SMTP_HOST"
         ]
       },
-      "how": "Con el usuario y la contraseña de la casilla. ¿Usás Gmail? Esta misma sirve: alcanza una contraseña de aplicación y no hace falta crear nada en Google.",
+      "how": "Con el usuario y la contraseña de la casilla. ¿Usás Gmail? Esta misma sirve: alcanza una contraseña de aplicación y no hace falta crear nada en Google. Decinos también qué etiqueta mirar: si filtrás ahí lo que le llega a la dirección de la empresa, el agente lee esa etiqueta y no toda tu bandeja.",
       "effort": "minutes",
       "who": "assisted",
       "internal_note": "Used to coexist with `gmail-lectura` (Google OAuth) and the client didn't know which to pick: the first ticket the pdelabs agent ever got was exactly a request for the Gmail one, the one we DON'T want. Removed from the catalog on 8/9. The OAuth path is still possible but Google treats it as a restricted-scope permission and requires an expensive security review to publish the app; for email, IMAP/SMTP is enough. If a client genuinely needs it, that's a conversation, not a card."

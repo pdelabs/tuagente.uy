@@ -315,6 +315,30 @@
       "internal_note": "Not written yet. It's THE proven combo of the moment (Fireflies, Fathom, Otter: a mature market) and the natural upsell on transcription, which is already base — the audio isn't billed, the summary is. GUARDRAIL: Whisper makes up phrases in ~1% of silences, so it's delivered as a summary of what was said and NOT as a literal record; nothing legal. Once it exists, it goes into the kit and reaches everyone via install.sh."
     },
     {
+      "id": "inbox",
+      "label": "Tu casilla contestada",
+      "group": "customer-service",
+      "level": "menu",
+      "status": "existing",
+      "purpose": "Que no se te pase ningún mail: mira la casilla cada cinco minutos, te deja cada uno como tarea en el tablero —con quién escribió, qué dice y lo que haya venido adjunto— y la respuesta escrita con tu voz esperándote para que la apruebes. La propaganda y los avisos automáticos los descarta solo.",
+      "how": "La prendemos nosotros. Vos nos pasás la casilla: si es Gmail alcanza una contraseña de aplicación, y si querés que lea sólo lo que le llega a la dirección de la empresa, una etiqueta con ese filtro. Nada sale sin tu sí: lo que el agente escribe te queda en Aprobaciones y el mail recién sale cuando apretás.",
+      "cost": "Sin costo aparte: se cobra el trabajo que hace con lo que llega, no el mirar.",
+      "effort": "minutes",
+      "who": "assisted",
+      "detects": {
+        "kit_skill": "inbox"
+      },
+      "verifies": {
+        "kit_skill": "inbox"
+      },
+      "installs": {
+        "plugins": [
+          "mail"
+        ]
+      },
+      "internal_note": "BUILT 2026-09-16 on the `core` engine (docs/inbox-plan.md, wave 2). The row installs `mail` and nothing else: `approval` and `kanban`, which the plugin requires, are system plugins and on every agent already. The connection is declared by the plugin (`requires.connections: [email]`), not restated here, same as drive-inbox.\n\nWHAT IT ACTUALLY IS: reading is a curated flow, `bandeja-de-entrada`, every five minutes — the engine's floor — and a tick with nothing new is one short turn (~US$0.001). A mail is a TICKET on the board the client already has, keyed by Message-ID, so nothing is read twice and a restart replays nothing. Answering is `send_email`, gated, with no `to` and no `subject`: both come off the thread the code wrote when the mail arrived.\n\nTHE «NUNCA» IS THE SELLING POINT AND IT IS IN skills/inbox/SKILL.md: no price that is not written in `marca/brand.md`, no date ever («te escribimos con dos horarios» and the ticket stays), nothing the company does not do, no other client's data, and never «ya está hecho». A question the skill cannot answer is a ticket in `blocked` with the draft and the question for the client — which is the difference between this and an autoresponder.\n\nTHE RISK WORTH NAMING TO A CLIENT: IMAP's seen flag is the state, so a mail the client opens on her phone first is one the agent never sees. The mitigation is the label in `how`, and it is why `who` is `assisted` and not `us`: that filter is hers to make."
+    },
+    {
       "id": "knowledge-base",
       "label": "Respuestas de tu negocio",
       "group": "customer-service",
