@@ -174,6 +174,11 @@ const EVENTS: Record<string, string | ((n: string) => string)> = {
   // tool that does it is gated, so this line can be read as "you said yes and
   // it happened". The Activity title carries the permalink.
   "post.published": "Publicó un posteo en Instagram",
+  // THE OTHER HALF OF THE ACCOUNT (`kit/plugins/instagram/core/`): what people
+  // say under a post. Both are gated too, so both are things the client said
+  // yes to; the Activity title carries the handle that was answered or hidden.
+  "comment.replied": "Contestó un comentario en Instagram",
+  "comment.hidden": "Ocultó un comentario en Instagram",
   // The face delegated to a sub-agent and got the work back. The Activity
   // title carries the sub-agent's name and the task; these are the chips.
   "delegation.started": "Le pidió el trabajo a un ayudante",

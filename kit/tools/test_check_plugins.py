@@ -574,7 +574,7 @@ class TheFlowsSurface(unittest.TestCase):
             write(tmp, "alpha", manifest("alpha"))
             self.assertEqual(plugin_registry.flow_sources(["alpha"], Path(tmp)), {})
 
-    def test_the_kits_fifteen_curated_flows_all_have_an_owner(self):
+    def test_the_kits_seventeen_curated_flows_all_have_an_owner(self):
         """The real files: every FLOW.md under plugins/ is declared by one.
 
         A FLOW.md sitting in a plugin that does not declare it is a flow nobody
@@ -586,22 +586,42 @@ class TheFlowsSurface(unittest.TestCase):
         `reporte-de-lo-publicado`) and went with the plugin. The daily one is
         rebuilt on `engine` by the client's own agent, in chat, which is the
         gate `docs/own-agent-plan.md` calls G3; the other two are work for a
-        client who publishes, and nobody publishes yet.
+        client who publishes, and nobody publishes yet. FIFTEEN UNTIL
+        16/9/2026, when the two plugins of `docs/inbox-plan.md` each brought
+        the clock that makes them happen: `comentarios-instagram` and
+        `bandeja-de-entrada`.
         """
         declared = plugin_registry.flow_sources(None, KIT)
         on_disk = sorted(p.parent for p in KIT.glob("plugins/*/*/*/FLOW.md"))
         self.assertEqual(sorted(declared.values()), on_disk)
-        self.assertEqual(len(declared), 15)
+        self.assertEqual(len(declared), 17)
 
-    def test_each_of_them_carries_the_frontmatter_the_portal_reads(self):
-        """`name` and `trigger_type` are what the Flows page draws the card from."""
-        for slug, directory in plugin_registry.flow_sources(None, KIT).items():
-            with self.subTest(flow=slug):
-                text = (directory / "FLOW.md").read_text(encoding="utf-8")
-                self.assertTrue(text.startswith("---\n"), slug)
-                head = text.split("---", 2)[1]
-                for key in ("name:", "client_summary:", "trigger_type:", "status:"):
-                    self.assertIn(key, head, slug)
+    def test_each_of_them_carries_the_frontmatter_ITS_OWN_ENGINE_READS(self):
+        """TWO SHAPES, AND WHICH ONE A FLOW IS IN IS NOT A GUESS.
+
+        A flow shipped by a plugin with a `core/` surface is OUR ENGINE's, and
+        `engine/core/flows.py` is what parses it: `trigger`, `trigger_detail`
+        and `cron` iff it runs on a clock. Every other flow is a Hermes agent's,
+        where the Flows page draws the card from `trigger_type`. The pools are
+        told apart by the plugin, so neither assertion has to accept both — a
+        FLOW.md in the wrong shape for the engine that will read it is a flow
+        that either never fires or takes the whole tab down with it.
+        """
+        registry = plugin_registry.registry(KIT)
+        for pid, data in sorted(registry.items()):
+            ours = bool(data["surfaces"].get("core"))
+            for rel in data["surfaces"].get("flows") or []:
+                slug = rel.rstrip("/").rsplit("/", 1)[-1]
+                with self.subTest(flow=slug):
+                    text = (data["_dir"] / rel / "FLOW.md").read_text(encoding="utf-8")
+                    self.assertTrue(text.startswith("---\n"), slug)
+                    head = text.split("---", 2)[1]
+                    keys = ["name:", "client_summary:", "status:"]
+                    keys += (["trigger:", "trigger_detail:"] if ours else ["trigger_type:"])
+                    for key in keys:
+                        self.assertIn(key, head, slug)
+                    if ours and "trigger: schedule" in head:
+                        self.assertIn("cron:", head, slug)
 
 
 class ACapabilityInstallsAClosedSet(unittest.TestCase):
@@ -834,6 +854,16 @@ CORE_ONLY = ["image", "memory"]
 # it cannot run. That is what Hermes dying looks like from here, and it is
 # pinned so it stays a decision (docs/own-agent-plan.md, wave 3).
 ENGINE_CLIENT = ["social"]
+# THE FIFTH SHAPE: a plugin of our engine that a client buys and that brings the
+# FLOW that makes it happen without anybody asking. `instagram` reads the
+# comments every fifteen minutes and `mail` the inbox every five, so each one
+# carries `core/` (the tools, the gate's card, the tables), a skill (what to do
+# with what it found) and a `flows/` surface (when). No tab: what they produce
+# lands on the board and in Aprobaciones, which are somebody else's pages.
+# THEIR FLOW.md IS THE ENGINE'S SHAPE AND NOT HERMES' — `trigger:` and `cron:`,
+# read by `engine/core/flows.py` — which is why the frontmatter test below walks
+# two pools and not one.
+ENGINE_FLOWS = ["instagram", "mail"]
 
 
 class TheKitsOwnRegistry(unittest.TestCase):
@@ -843,7 +873,7 @@ class TheKitsOwnRegistry(unittest.TestCase):
     def test_the_registry_is_the_five_defaults_plus_every_ported_skill(self):
         plugins = plugin_registry.registry(KIT)
         self.assertEqual(sorted(plugins),
-                         sorted(SYSTEM + CLIENT + CORE_ONLY + ENGINE_CLIENT))
+                         sorted(SYSTEM + CLIENT + CORE_ONLY + ENGINE_CLIENT + ENGINE_FLOWS))
         for pid in SYSTEM:
             self.assertTrue(plugins[pid]["system"], pid)
         # A PLUGIN OF engine CARRIES `core/` AND NOTHING ELSE. The day one of
@@ -857,6 +887,12 @@ class TheKitsOwnRegistry(unittest.TestCase):
             self.assertFalse(plugins[pid]["system"], pid)
             self.assertEqual(sorted(plugins[pid]["surfaces"]),
                              ["core", "skills", "tab"], pid)
+        # THE MECHANISM, THE CRAFT AND THE CLOCK, and no page of its own: the
+        # comments and the inbox land on the board and in Aprobaciones.
+        for pid in ENGINE_FLOWS:
+            self.assertFalse(plugins[pid]["system"], pid)
+            self.assertEqual(sorted(plugins[pid]["surfaces"]),
+                             ["core", "flows", "skills"], pid)
         for pid in CLIENT:
             self.assertFalse(plugins[pid]["system"], pid)
             # A client plugin carries its skills surface, the curated flows that
@@ -1054,7 +1090,7 @@ class TheKitsOwnRegistry(unittest.TestCase):
         self.assertEqual(
             sorted(sources),
             sorted((set(SYSTEM + PORTED) - {"kanban", "flow"})
-                   | {"lower-thirds", "news-copy", "post"}))
+                   | {"lower-thirds", "news-copy", "post", "comments", "inbox"}))
         registry = plugin_registry.registry(KIT)
         for name, where in sources.items():
             owner = next(pid for pid, data in registry.items()
