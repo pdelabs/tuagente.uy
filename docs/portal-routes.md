@@ -28,6 +28,7 @@ in their portal and that we'll take them there as soon as they enter).
 |---|---|
 | Home | `/app/home` |
 | Chat | `/app/chat` |
+| Inbox | `/app/inbox` |
 | Flows | `/app/flows` |
 | Board | `/app/pipeline` |
 | Approvals | `/app/approvals` |
@@ -79,6 +80,7 @@ one.
 |---|---|---|---|
 | A conversation | `/app/chat?conversation=<session id>` | `/app/chat?conversation=api_1786585222_d45ee238` | opens |
 | A board task | `/app/pipeline?task=<ticket id>` | `/app/pipeline?task=t_b1fb02ad` | opens |
+| A conversation in the Inbox | `/app/inbox?thread=<ticket id>` | `/app/inbox?thread=t_b1fb02ad` | opens · stale id (9/16, lab) |
 | An approval request | `/app/approvals?request=<ticket id>` | `/app/approvals?request=t_36dbdd23` | opens · stale id |
 | An artifact | `/app/artifacts?artifact=<id>` | `/app/artifacts?artifact=art_1786584384_sales-by-branch` | opens |
 | A post | `/app/posts?post=<post id>` | `/app/posts?post=2026-09-15-agente-que-contesta` | opens · stale id (9/14, against a mock adapter) |
@@ -199,6 +201,32 @@ front. The other details don't need this because they open in a modal
 (`?task=`, `?scheduled=`, `?artifact=`, `?file=`), which appears centered
 with the background locked.
 
+## `?thread=` — and why `?task=` still works for a mail
+
+**A ticket that came in through a channel lives in the Inbox and nowhere
+else.** `source` says which: `mail`, `instagram` and `instagram-dm` are a
+conversation — somebody wrote in and is waiting — and everything else
+(`client`, `agent`, none) is work and stays on the Board. The two tabs are the
+same call with a filter: `/portal/tickets?source=channels` and `?source=work`.
+So a mail is NOT on `/app/pipeline` any more, and the param that opens it is
+`thread` on `/app/inbox` — `conversation` was already taken by the chat's
+session and one word cannot name two things.
+
+**A `?task=` link to a mail is not broken and never will be.** The id alone
+does not say which screen it belongs to — not in a link the agent quoted last
+week, not in the chat's `t_ab12` chip — so the Board reads the ticket, sees a
+channel source and forwards to `/app/inbox?thread=…` with `replace`: the link
+lands where the conversation is and «back» goes where the client came from.
+The chat's chip still opens its own modal with the same thread in it, which is
+what it has always done.
+
+The Inbox's own link to Aprobaciones is **the one thing on this page that can
+be less precise than the rest**: the engine records no link from a ticket to
+the request the agent opened about it, so a card that names the ticket's id in
+its text (the mail plugin's does) gets `?request=<id>`, and one that does not
+(an Instagram reply's card is about the comment) gets the tab. It never says
+something false; it can say something general.
+
 ## `?p=` — the chat with the request already sent
 
 `/app/chat?p=<the message>` isn't a detail: it's the portal handing the agent a
@@ -211,6 +239,10 @@ Who builds one today:
 
 - **Flows** — the example cards and the two offers on a flow that lost its
   scheduled task (`app/app/lib/flowExamples.tsx`, `app/app/flows/FlowStatus.tsx`).
+- **Inbox** — «Pedirle al agente», on the open conversation: the client writes
+  in one line what she wants done and the link carries «Sobre la conversación
+  «<título>» (t_ab12): contestale que sí, pero pedile la dirección». The
+  sentence is finished before the link exists, for the reason above.
 - **Posts** — two of them, and for the same reason: the tab never asks the
   agent for anything of its own.
   - «Arreglar esta imagen», under each slide of an open post: the client
