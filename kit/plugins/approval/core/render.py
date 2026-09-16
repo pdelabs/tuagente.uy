@@ -11,12 +11,13 @@ negotiation instead of the one the client already rejected.
 
 Everything this module returns is read by the client, so it is all in Spanish.
 
-ANOTHER PLUGIN'S TOOL DRAWS ITS OWN CARD. The four sections above are this
-plugin's and never move; what goes UNDER them is the thing being approved, and
-only the plugin that owns the tool knows what that is — the social plugin's
-`publish_instagram` takes one post id, and a card built from its arguments
-would say nothing about the pictures and the caption about to go out. So a
-plugin may hand over a renderer for one tool, by name:
+EVERY GATED TOOL IS ANOTHER PLUGIN'S, AND IT DRAWS ITS OWN CARD. The four
+sections above are this plugin's and never move; what goes UNDER them is the
+thing being approved, and only the plugin that owns the tool knows what that is
+— the social plugin's `publish_instagram` takes one post id and the mail
+plugin's `send_email` one ticket id, and a card built from those arguments
+would say nothing about the pictures, the caption or the mail about to go out.
+So the plugin hands over a renderer for its tool, by name:
 
     engine.provide("approval.render.publish_instagram", publishing.card)
 
@@ -60,14 +61,17 @@ def quoted(text: str) -> str:
 
 
 def drawn_by(tool_name: str, args: dict) -> tuple[str, str] | None:
-    """The card another plugin draws for its own tool, or `None` for ours."""
+    """The card the plugin that owns this tool draws for it.
+
+    `None` is a gated tool whose plugin filed no renderer, and what the client
+    then reads is the tool's name and its arguments — true, ugly, and the
+    reason every gated tool in the kit files one.
+    """
     renderer = SHARED.get(RENDERER + tool_name)
     return renderer(args) if renderer else None
 
 
 def approval_title(tool_name: str, args: dict) -> str:
-    if tool_name == "send_email":
-        return flat(f"Mail a {args['to']}: {args['subject']}")[:120]
     theirs = drawn_by(tool_name, args)
     if theirs:
         return flat(theirs[0])[:120]
@@ -79,12 +83,6 @@ def approval_summary(args: dict) -> str:
 
 
 def content(tool_name: str, args: dict) -> str:
-    if tool_name == "send_email":
-        return (
-            f"**Para:** {args['to']}\n\n"
-            f"**Asunto:** {args['subject']}\n\n"
-            f"{quoted(args['body'])}"
-        )
     theirs = drawn_by(tool_name, args)
     if theirs:
         return theirs[1]

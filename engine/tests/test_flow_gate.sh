@@ -8,13 +8,14 @@
 #
 #     ./tests/test_flow_gate.sh          ~2 minutes, ~US$0.01
 #
-# Runs against the LIVE container. It writes one flow whose body sends an email
-# (the `approval` plugin gates `send_email`), presses run-now and follows the
-# row:
+# Runs against the LIVE container and the lab's stub mailbox (`greenmail`). It
+# drops one mail in, writes one flow whose body is «read the inbox and answer
+# what is there» — which reaches `send_email`, the `mail` plugin's gated tool —
+# presses run-now and follows the row:
 #
 #   a. the run stops: the row reads `paused` and `/api/jobs.last_status` too
 #   b. the request says which flow asked for it
-#   c. the client approves and the row closes `ok`, with the file in outbox
+#   c. the client approves and the row closes `ok`, with the mail delivered
 #
 # The only Spanish is what the agent and the client read.
 set -uo pipefail
@@ -28,6 +29,8 @@ SLUG="prueba-de-la-puerta"
 NAME="Prueba de la puerta"
 FLOW_DIR="$ROOT/workspace/flows/$SLUG"
 JOB="flujo-$SLUG"
+SUBJECT="Pedido de 20 bisagras (prueba de la puerta)"
+MAIL="Buenas, quería saber si el pedido de 20 bisagras ya está para retirar. Juan."
 FAILURES=0
 
 # Generous: approving waits for a whole model turn.
@@ -56,6 +59,7 @@ db.row_factory = sqlite3.Row
 print(json.dumps([dict(r) for r in db.execute(sys.argv[1], sys.argv[2:])], default=str))
 ' "$@"
 }
+inside() { docker exec "$CONTAINER" python3 -c "$@"; }
 runs() { sql "SELECT * FROM flow_runs WHERE slug = ? ORDER BY scheduled_at" "$SLUG"; }
 status() { runs | jq -r '.[-1].status // "none"'; }
 session_of() { runs | jq -r '.[-1].session_id // ""'; }
@@ -89,13 +93,41 @@ for table in ("messages", "history", "sessions"):
     db.executemany(f"DELETE FROM {table} WHERE "
                    + ("id" if table == "sessions" else "session_id") + " = ?",
                    [(i,) for i in ids])
+tickets = [r[0] for r in db.execute(
+    "SELECT id FROM tickets WHERE source = ? AND source_ref = ?", ("mail", sys.argv[2]))]
+for ticket in tickets:
+    db.execute("DELETE FROM tickets WHERE id = ?", (ticket,))
+    db.execute("DELETE FROM ticket_comments WHERE ticket_id = ?", (ticket,))
+    db.execute("DELETE FROM mail_seen WHERE ticket_id = ?", (ticket,))
+    db.execute("DELETE FROM mail_threads WHERE ticket_id = ?", (ticket,))
+    db.execute("DELETE FROM events WHERE json_extract(payload, ?) = ?", ("$.ticket_id", ticket))
 db.commit()
-print(f"took out {len(ids)} run(s), {len(approvals)} request(s) and their conversations")
-' "$SLUG"
+print(f"took out {len(ids)} run(s), {len(approvals)} request(s), "
+      f"{len(tickets)} ticket(s) and their conversations")
+' "$SLUG" "${SENT_ID:-}"
 }
 trap cleanup EXIT
 
-step "(a) a flow whose work is a mail, run by hand"
+step "(a) a mail waiting, and a flow whose work is to answer it"
+SENT_ID="$(inside '
+import smtplib, sys
+from email.message import EmailMessage
+from email.utils import formatdate, make_msgid
+
+message = EmailMessage()
+message["From"] = "Juan Pérez <cliente@lab.test>"
+message["To"] = "agente@lab.test"
+message["Subject"] = sys.argv[1]
+message["Message-ID"] = make_msgid(domain="lab.test")
+message["Date"] = formatdate(localtime=True)
+message.set_content(sys.argv[2])
+with smtplib.SMTP("greenmail", 3025, timeout=20) as smtp:
+    smtp.login("cliente", "secret")
+    smtp.send_message(message)
+print(message["Message-ID"])
+' "$SUBJECT" "$MAIL")"
+[ -n "$SENT_ID" ] && ok "the mail is in the stub: $SENT_ID" \
+  || { bad "the mail could not be delivered"; exit 1; }
 rm -rf "$FLOW_DIR"
 mkdir -p "$FLOW_DIR"
 # THE CRON IS ONCE A YEAR on purpose: the run is started with the tab's
@@ -104,22 +136,23 @@ mkdir -p "$FLOW_DIR"
 cat > "$FLOW_DIR/FLOW.md" <<MD
 ---
 name: $NAME
-client_summary: Le aviso por mail a Juan que su pedido está listo para retirar.
+client_summary: Miro si llegó un mail y lo contesto.
 trigger: schedule
 trigger_detail: Una vez por año
 cron: '0 4 1 1 *'
 timezone: America/Montevideo
 status: active
-connections: []
+connections:
+  - email
 ---
 
-1. Mandale un mail a juan@acme.com avisando que el pedido de 20 bisagras está
-   listo para retirar, de lunes a viernes de 9 a 18.
-2. No hagas nada más.
+1. Fijate si hay mails nuevos.
+2. Contestá el que haya, en dos líneas.
+3. No hagas nada más.
 
 ## Notas técnicas
 
-- Una sola llamada a \`send_email\`. No leas ni listes archivos.
+- Una llamada a \`fetch_mail\` y una a \`send_email\`. No leas ni listes archivos.
 MD
 before="$(pending_ids)"
 mark="$(mktemp)"
@@ -185,11 +218,29 @@ assert "$(api "$ENDPOINT/api/jobs" | jq -r --arg j "$JOB" \
   '.jobs[] | select(.id == $j) | .last_status')" "ok" "the task publishes it as ok"
 [ "$(runs | jq -r '.[-1].finished_at // "null"')" != "null" ] \
   && ok "and it has a finish time now" || bad "the row has no finish time"
-written="$(find "$ROOT/workspace/outbox" -type f -newer "$mark" 2>/dev/null)"
-[ -n "$written" ] \
-  && ok "the mail landed in outbox: $(basename "$written")" \
-  || bad "nothing new landed in outbox"
-rm -f "$written" "$mark"
+# AND THE MAIL IS IN THE OTHER MAILBOX. The row closing `ok` is what this test
+# is about; that the work actually happened is what makes `ok` mean anything.
+DELIVERED="$(inside '
+import email, imaplib, json, sys
+from email.header import decode_header, make_header
+conn = imaplib.IMAP4("greenmail", 3143)
+conn.login("cliente", "secret")
+conn.select("INBOX")
+found = {}
+for uid in conn.search(None, "ALL")[1][0].split():
+    message = email.message_from_bytes(conn.fetch(uid, "(BODY.PEEK[])")[1][0][1])
+    if (message.get("From") or "").find("agente@lab.test") < 0:
+        continue
+    if str(make_header(decode_header(message.get("Subject") or ""))) != "Re: " + sys.argv[1]:
+        continue
+    found = {"in_reply_to": message.get("In-Reply-To"),
+             "body": (message.get_payload(decode=True) or b"").decode("utf-8", "replace")}
+conn.logout()
+print(json.dumps(found, ensure_ascii=False))
+' "$SUBJECT")"
+assert "$(jq -r '.in_reply_to // ""' <<<"$DELIVERED")" "$SENT_ID" \
+  "the answer went out, threaded to the mail that started it"
+rm -f "$mark"
 
 step "(f) result"
 printf 'runs: %s\n' "$(runs | jq -c '[.[] | {status, manual}]')"

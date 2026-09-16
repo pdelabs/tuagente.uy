@@ -6,6 +6,14 @@
 # on purpose: a pause that only lives in memory is not a gate, it is a
 # coincidence. Reads the key from secrets.env itself.
 #
+# THE SENSITIVE TOOL IS THE MAIL PLUGIN'S `send_email`, against the lab's stub
+# mailbox (`greenmail`, `docker-compose.yml`). It used to be the approval
+# plugin's own fake one, which wrote a file into `workspace/outbox/` and went
+# out with it: two tools with that name, one of them real, is the model
+# choosing between them by the shape of a sentence. So a mail is dropped in
+# first, and what proves the correction was applied is the message that lands
+# in the OTHER mailbox.
+#
 #     ./tests/test_approval_crash.sh
 #
 # Every step prints PASS or FAIL; the exit code is 1 if any of them failed.
@@ -17,8 +25,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KEY="$(grep '^API_SERVER_KEY=' "$ROOT/secrets.env" | cut -d= -f2-)"
 ENDPOINT="${ENDPOINT:-http://127.0.0.1:8642}"
 ADAPTER="${ADAPTER:-http://127.0.0.1:8643}"
-PROMPT="Mandale un mail a juan@acme.com avisando que el pedido de 20 bisagras está listo para retirar"
-CORRECTION="que diga 25 bisagras, no 20"
+SUBJECT="Pedido de bisagras (prueba de la puerta)"
+MAIL="Buenas, quería saber si el pedido de 20 bisagras ya está para retirar. Juan."
+PROMPT="Fijate si hay mails nuevos y contestá el que dice «${SUBJECT}». Contestalo ahora."
+# A CORRECTION REPLACES THE TEXT, it is not an instruction about it: the portal
+# preloads the box with the draft and sends back whatever the client leaves in
+# it, so what arrives is a finished mail (`app/app/approvals/page.tsx`).
+CORRECTION="Hola Juan: son 25 bisagras y ya están para retirar, de lunes a viernes de 9 a 18."
 FAILURES=0
 
 # Generous on purpose: approve and reject both wait for a whole model turn.
@@ -27,12 +40,64 @@ post() { api -X POST -H 'Content-Type: application/json' -d "$2" "$1"; }
 pending_ids() { api "$ADAPTER/portal/approvals" | jq -r '.approvals[].id' | sort; }
 proposals() { api "$ADAPTER/portal/tickets/$1" | jq '[.comments[] | select(.author == "agente")] | length'; }
 
+inside() { docker exec tuagente-core python3 -c "$@"; }
 ok()  { printf 'PASS  %s\n' "$1"; }
 bad() { printf 'FAIL  %s\n' "$1"; FAILURES=$((FAILURES + 1)); }
 step() { printf '\n-- %s\n' "$1"; }
 assert() { [ "$1" = "$2" ] && ok "$3" || bad "$3 (wanted '$2', got '$1')"; }
 
-step "(a) a turn that reaches a sensitive tool"
+step "(a) a mail waiting, and a turn that reaches a sensitive tool"
+SENT_ID="$(inside '
+import smtplib, sys
+from email.message import EmailMessage
+from email.utils import formatdate, make_msgid
+
+message = EmailMessage()
+message["From"] = "Juan Pérez <cliente@lab.test>"
+message["To"] = "agente@lab.test"
+message["Subject"] = sys.argv[1]
+message["Message-ID"] = make_msgid(domain="lab.test")
+message["Date"] = formatdate(localtime=True)
+message.set_content(sys.argv[2])
+with smtplib.SMTP("greenmail", 3025, timeout=20) as smtp:
+    smtp.login("cliente", "secret")
+    smtp.send_message(message)
+print(message["Message-ID"])
+' "$SUBJECT" "$MAIL")"
+[ -n "$SENT_ID" ] && ok "the mail is in the stub: $SENT_ID" \
+  || { bad "the mail could not be delivered"; exit 1; }
+
+cleanup() {
+  step "cleanup"
+  inside '
+import sqlite3, sys
+db = sqlite3.connect("/state/core.db")
+ids = [r[0] for r in db.execute(
+    "SELECT id FROM sessions WHERE id IN (SELECT session_id FROM messages WHERE content LIKE ?)",
+    (f"%{sys.argv[1]}%",))]
+holes = ",".join("?" * len(ids)) or "NULL"
+approvals = [r[0] for r in db.execute(
+    f"SELECT id FROM approvals WHERE session_id IN ({holes})", ids)] if ids else []
+db.executemany("DELETE FROM approval_comments WHERE approval_id = ?", [(a,) for a in approvals])
+db.executemany("DELETE FROM approvals WHERE id = ?", [(a,) for a in approvals])
+for table in ("events", "messages", "history", "sessions"):
+    column = "id" if table == "sessions" else "session_id"
+    db.executemany(f"DELETE FROM {table} WHERE {column} = ?", [(i,) for i in ids])
+tickets = [r[0] for r in db.execute(
+    "SELECT id FROM tickets WHERE source = ? AND source_ref = ?", ("mail", sys.argv[2]))]
+for ticket in tickets:
+    db.execute("DELETE FROM tickets WHERE id = ?", (ticket,))
+    db.execute("DELETE FROM ticket_comments WHERE ticket_id = ?", (ticket,))
+    db.execute("DELETE FROM mail_seen WHERE ticket_id = ?", (ticket,))
+    db.execute("DELETE FROM mail_threads WHERE ticket_id = ?", (ticket,))
+    db.execute("DELETE FROM events WHERE json_extract(payload, ?) = ?", ("$.ticket_id", ticket))
+db.commit()
+print(f"took out {len(approvals)} request(s), {len(tickets)} ticket(s) "
+      f"and {len(ids)} conversation(s)")
+' "$SUBJECT" "$SENT_ID"
+}
+trap cleanup EXIT
+
 before="$(pending_ids)"
 stream="$(post "$ADAPTER/portal/chat/stream" \
   "$(jq -nc --arg m "$PROMPT" '{stream: true, messages: [{role: "user", content: $m}]}')")"
@@ -92,8 +157,6 @@ for reason in \
 done
 
 step "(e) approve with a correction and look at what it did"
-mark="$(mktemp)"
-sleep 1
 approved="$(post "$ADAPTER/portal/approvals/$ID/approve" \
   "$(jq -nc --arg c "$CORRECTION" '{correction: $c}')")"
 assert "$(jq -r '.ok' <<<"$approved")" "true" "the approval answered ok"
@@ -102,14 +165,29 @@ pending_ids | grep -qx "$ID" \
   || ok "the request left the queue"
 assert "$(api "$ADAPTER/portal/tickets/$ID" | jq -r '.ticket.status')" "done" \
   "the detail reads as closed"
-written="$(find "$ROOT/workspace/outbox" -type f -newer "$mark" 2>/dev/null)"
-[ -n "$written" ] \
-  && ok "the tool wrote into outbox: $(basename "$written")" \
-  || bad "nothing new landed in outbox"
-grep -q "$CORRECTION" $written 2>/dev/null \
-  && ok "the mail went out with the client's correction applied" \
-  || bad "the correction is not in what was sent"
-rm -f "$mark"
+DELIVERED="$(inside '
+import email, imaplib, json, sys
+from email.header import decode_header, make_header
+conn = imaplib.IMAP4("greenmail", 3143)
+conn.login("cliente", "secret")
+conn.select("INBOX")
+found = {}
+for uid in conn.search(None, "ALL")[1][0].split():
+    message = email.message_from_bytes(conn.fetch(uid, "(BODY.PEEK[])")[1][0][1])
+    if (message.get("From") or "").find("agente@lab.test") < 0:
+        continue
+    if str(make_header(decode_header(message.get("Subject") or ""))) != "Re: " + sys.argv[1]:
+        continue
+    found = {"in_reply_to": message.get("In-Reply-To"),
+             "body": (message.get_payload(decode=True) or b"").decode("utf-8", "replace")}
+conn.logout()
+print(json.dumps(found, ensure_ascii=False))
+' "$SUBJECT")"
+assert "$(jq -r '.in_reply_to // ""' <<<"$DELIVERED")" "$SENT_ID" \
+  "the mail went out, threaded to the one that asked"
+jq -r '.body // ""' <<<"$DELIVERED" | grep -qF "$CORRECTION" \
+  && ok "and the correction IS the text, not something appended to it" \
+  || bad "the correction is not what was sent: $(jq -r '.body' <<<"$DELIVERED" | head -c 200)"
 
 step "(f) result"
 [ "$FAILURES" -eq 0 ] && printf 'G1 PASS - 0 failures\n' || printf 'G1 FAIL - %s failures\n' "$FAILURES"
