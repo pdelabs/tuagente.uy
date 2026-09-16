@@ -76,9 +76,11 @@ The seeded identity has `contact.channel: "none"`, which the portal reads as
 ## Plugins
 
 **A mechanism is a plugin of the kit, not a module of this engine** — unless it
-is the clock, which is the engine's own (see **Flows** below). The five this
-engine runs by default — `CORE_PLUGINS=approval,deliverable,memory,image,social`
-— are the kit's own plugins, and each one declares `"surfaces": {"core": "core/"}` in
+is the clock, which is the engine's own (see **Flows** below). The six this
+engine runs by default —
+`CORE_PLUGINS=kanban,approval,deliverable,memory,image,social` — are the kit's
+own plugins, in dependency order (`requires.plugins` in each manifest says who
+must come first), and each one declares `"surfaces": {"core": "core/"}` in
 its `plugin.json`: a directory holding `plugin.py` and, when the mechanism
 needs words, an `instructions.md`. `core/plugins.py` imports that file and
 calls `register(engine)`, in `CORE_PLUGINS` order.
@@ -103,9 +105,15 @@ engine/                          the engine, and nothing about any mechanism
   core/db.py, server/*.py          storage, the two bases, the SSE dialects
   server/flows.py                  /portal/flows*, /api/jobs*
 
+kit/plugins/kanban/core/    the board: board_store.py (the tickets, the
+                                   five statuses, the dedupe key, closed_at),
+                                   board_routes.py (/portal/tickets*),
+                                   board_tools.py (create_ticket,
+                                   update_ticket, ungated), instructions.md
 kit/plugins/approval/core/  the gate: sensitive.py (the gated toolset),
                                    store.py (the row), render.py (what she
-                                   reads), routes.py (/portal/approvals*),
+                                   reads), routes.py (/portal/approvals*; the
+                                   THREAD is read through the board's route),
                                    instructions.md, and SKILLS = []
 kit/plugins/deliverable/core/  nothing to register: instructions.md
 kit/plugins/memory/core/    the notebook: plugin.py (the capability, the
@@ -586,11 +594,11 @@ python3 kit/tools/portal-check.py --key "$KEY" \
     --origin http://localhost:8090
 ```
 
-Last run: **15 ok · 3 warnings · 0 failures**. The three warnings are the
-modules the manifest does not declare — `kanban`, `artifacts` and `crons`,
-out of scope in `docs/engine-plan.md` and never coming. `approvals`, `usage`,
-`flows` and `posts` are declared and answer, and two of those checks look past
-the listing: flows crosses it against `/api/jobs`, so a flow that runs on the
+Last run: **16 ok · 2 warnings · 0 failures**. The two warnings are the modules
+the manifest does not declare — `artifacts` and `crons`, out of scope in
+`docs/engine-plan.md` and never coming. `kanban`, `approvals`, `usage`, `flows`
+and `posts` are declared and answer, and two of those checks look past the
+listing: flows crosses it against `/api/jobs`, so a flow that runs on the
 clock with no task in the gateway is a failure and not something to notice in
 the browser, and posts downloads the newest post's first piece, so a card whose
 picture does not come back is one too.
@@ -643,6 +651,82 @@ leave standing is here.
 | G4 | Compaction | **passes**: `python3 tests/test_compaction.py` — 41 turns on one session, 39 compactions, the persisted history ends at **7 messages** against 82 displayed, and the fact planted at turn 2 is still answered. 249 s, US$0.0198 |
 | G5 | The promises check rewrites the PERSISTED message | **passes**: `python3 tests/test_promises.py` — the kit's own 8/13 phrase comes back corrected, the deliverable counter-case comes back untouched, and `GET /api/sessions/{id}/messages` returns the corrected text |
 | G6 | Cost per turn on the baseline model | **measured**: `python3 tests/cost.py` — **US$0.000564** conversational and **US$0.000859** with four tool calls, against a baseline of US$0.0036 and US$0.0247. The engine's own estimate matched the provider's meter to the last decimal on both |
+
+## The board
+
+The board is a PLUGIN too — `kit/plugins/kanban/`, loaded because `kanban` is
+in `CORE_PLUGINS` — and it is the first thing the other plugins write into: a
+mail becomes a ticket, an Instagram comment that reads like a lead becomes a
+ticket, and the client finds both on the one screen she already has
+(`/app/pipeline`). Take it out of the list and the engine has no tickets table,
+no `/portal/tickets*` and no Board tab; what was there before this plugin was
+an empty list the engine answered out of `server/portal.py`.
+
+**Two tables, made when the plugin loads.** `tickets` (`id, title, body,
+status, tenant, source, source_ref, created_at, updated_at, closed_at`) and
+`ticket_comments`, in the engine's own SQLite through `core/db.py`. The id is
+`t_` + 12 hex, which is the shape the chat's entity chips recognize
+(`app/app/lib/entities.tsx`): the agent names a ticket in its answer and the
+portal turns it into a link, with nothing asked of the model but the id.
+
+**The five statuses are the portal's and the plugin invents none.**
+
+| status | column (`app/app/lib/labels.ts`) |
+|---|---|
+| `ready` | Por hacer |
+| `in_progress` | En curso |
+| `blocked` | Esperando aprobación — or **Lo estamos viendo** when `source` is `client`, because then the ball is ours |
+| `done` | Completado |
+| `archived` | off the board; the link still opens it |
+
+A sixth value is refused by the routes (400) and by the tools (`ModelRetry`),
+both naming the five: an unknown status falls into «En curso» on the board, and
+a ticket that is not moving then reads as one that is. `closed_at` is written
+entering `done` or `archived` and cleared leaving them — by the move, never by
+the model.
+
+**`source` and `source_ref` say where a ticket came from, and they are the
+dedupe.** `client` is one the client made from the portal, `agent` one the
+agent opened, and anything else is the plugin that brought it (`mail` +
+the message id, `instagram` + the comment id). `(source, source_ref)` is a
+UNIQUE index, and `create_ticket` on a pair that is already there answers with
+the id that is there and says so: for a plugin that ticks over the same inbox
+every five minutes, «already have it» is the normal case and not an error.
+
+**Two tools on the face, not gated.** `create_ticket(title, body, source?,
+source_ref?)` and `update_ticket(id, status?, comment?)`. A ticket is internal —
+writing one down changes nothing outside the client's own portal — and the gate
+is for what the agent does outwards. What they do leave is a trail: every call
+writes an event carrying the ticket's id and the session it was made from.
+
+**The ticket's history is the event log, filtered.** `ticket.created`,
+`ticket.moved` and `ticket.commented` go into the engine's `events` table with
+`ticket_id` in the payload, and the detail reads them back by it — there is no
+second timeline, because Activity is where the client reads what her agent did
+and a ticket's history has to be the same rows. The Activity line is written by
+the code, in Spanish, with the ticket's title and the column's name in it
+(«Moví «Consulta por mail» a Completado»).
+
+**The `outcome`** the Board draws above the thread is built from the move that
+put the ticket where it is: the words that came with the move, or failing that
+the last thing the agent wrote on the ticket. Nothing said about it is no
+outcome — a banner reading «Sin detalle» tells the client nothing.
+
+**`/portal/tickets/{id}` IS THIS ROUTER'S, FOR EVERY PLUGIN WITH A THREAD TO
+SHOW THERE.** The Approvals tab opens a request with the same call
+(`getTicketDetail(approvalId)`), and two routers cannot answer one path:
+FastAPI matches whichever registered first and the other is dead code nobody
+notices. So the approval plugin hands its lookup over —
+`engine.provide("tickets.detail.approvals", store.detail)` — and the board asks
+every `tickets.detail.*` it finds for an id that is not a ticket of its own,
+at REQUEST time, so neither plugin cares which order they load in.
+
+```bash
+python3 engine/tests/test_board.py    # no model, free, a second
+```
+
+Both halves: the two tools called directly inside the container, and the five
+calls the portal types, over HTTP. It cleans up after itself.
 
 ## Approvals
 
