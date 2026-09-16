@@ -85,10 +85,17 @@ after it, and whose:
   EMAIL_FOLDER=<la etiqueta, o INBOX>
   ```
 
-  and `mail` is already in the instance's `CORE_PLUGINS`. The flow arrives
-  `active`: from the restart on, the agent is reading. The lab's own copy is
-  PAUSED on purpose, so the lab does not spend a turn every five minutes
-  (`engine/workspace/flows/bandeja-de-entrada/FLOW.md`).
+  and `mail` is already in the instance's `CORE_PLUGINS` — it inherits
+  `instance.yml`'s default list, which `instance.env` does not override.
+
+  **The flow arrives `active`, so the order matters**: with the six lines in
+  place the agent is reading from the restart on, and WITHOUT them it wakes up
+  every five minutes to answer «Falta conectar el correo: no está
+  EMAIL_IMAP_HOST» — a turn and a conversation each time. If the mailbox is not
+  ready the same day, pause «Bandeja de entrada» from Flujos, which is one
+  click, and resume it when it is. The lab's own copy is PAUSED for exactly
+  that reason (`engine/workspace/flows/bandeja-de-entrada/FLOW.md`), so the lab
+  does not spend a turn every five minutes on a stub mailbox.
 
 ## Migration to English (2026-08-23)
 
