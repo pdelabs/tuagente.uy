@@ -28,6 +28,25 @@ services:
       # leaves the endpoint empty.
       CORE_OTEL_ENDPOINT: http://phoenix:6006/v1/traces
       CORE_OTEL_INCLUDE_CONTENT: "1"
+      # THE MAILBOX IS THE STUB BELOW, and these are written out instead of
+      # passed through on purpose: the lab's inbox is `greenmail`, never a real
+      # account. A real mailbox is an INSTANCE's `secrets.env`
+      # (`engine/instances/<name>/`), which is the only place a client's
+      # credential ever lives.
+      # The LOGIN, which on a real provider is the whole address and on
+      # GreenMail is the local part: it creates `agente@lab.test` and
+      # authenticates `agente`. `EMAIL_FROM` below is the address.
+      EMAIL_ADDRESS: agente
+      EMAIL_PASSWORD: secret
+      EMAIL_IMAP_HOST: greenmail:3143
+      EMAIL_SMTP_HOST: greenmail:3025
+      EMAIL_FROM: agente@lab.test
+      EMAIL_FOLDER: INBOX
+      # No TLS anywhere: GreenMail's test ports speak plain IMAP and SMTP. It
+      # is a VARIABLE and not a rule about the host name — a rule that reads
+      # the host is a rule that one day lets a real mailbox through in the
+      # clear (`kit/plugins/mail/core/mail_imap.py`).
+      EMAIL_TLS: "0"
     # One app, two bases: the portal's `endpoint` (/api/*) and its `adapter`
     # (/portal/*) are the same container.
     ports:
@@ -39,6 +58,35 @@ services:
       - ./agent:/agent:ro
       - ../kit/plugins:/opt/kit/plugins:ro
       - ../kit/plugins/deliverable/skills/deliverable:/opt/kit/skills/deliverable:ro
+    restart: unless-stopped
+
+  # THE MAILBOX THE LAB READS AND WRITES: a whole SMTP+IMAP server in one
+  # container, with no state that outlives it. `greenmail.setup.test.all` is
+  # what puts SMTP on 3025 and IMAP on 3143, in the clear, and `greenmail.users`
+  # is what makes `agente@lab.test` a real account with a password — without it
+  # the users are created on the fly and `smtplib.login()` has nothing to log
+  # into. `cliente@lab.test` is the other side of every test: it writes to the
+  # agent and reads what the agent answered.
+  #
+  # A PLAIN SERVICE AND NOT A `test` PROFILE. The lab runs the `mail` plugin, so
+  # the agent's inbox has to be there whenever the agent is — a profile would
+  # make `docker compose up -d` bring up an agent whose mailbox refuses the
+  # connection, which is a failure nobody asked for.
+  greenmail:
+    image: greenmail/standalone:2.0.1
+    container_name: tuagente-core-greenmail
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.all
+        -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.users=agente:secret@lab.test,cliente:secret@lab.test
+        -Dgreenmail.verbose
+    # Loopback only, like everything else here: the ports are for looking at
+    # the stub by hand, the agent reaches it by service name on the compose's
+    # own network.
+    ports:
+      - "127.0.0.1:3025:3025"
+      - "127.0.0.1:3143:3143"
     restart: unless-stopped
 
   # The trace viewer: http://127.0.0.1:6006. Loopback only, never 0.0.0.0.
