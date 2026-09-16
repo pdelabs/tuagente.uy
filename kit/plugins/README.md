@@ -67,6 +67,7 @@ string or a list of strings) is allowed and ignored.
 | `quotes` | no | a request becomes a priced quote in the client's template (sales) |
 | `social` | no | one Instagram post a day, written, drawn, checked and left in the Posts tab — `core` and a skill, so it exists on `engine` only |
 | `instagram` | no | the other half of that account: the comments read every fifteen minutes, answered or hidden behind the gate, a lead onto the board — `core`, a skill and the flow that runs it |
+| `mail` | no | the company's casilla read every five minutes: each mail a ticket on the board, the answer written in the brand's voice and sent through the gate — `core`, a skill and the flow that runs it |
 | `drive-inbox` | no | Drive folders as an inbox: the agent's front door for material |
 | `interview-production` | no | an interview becomes what goes on air — ten lower-thirds, or a news item |
 
