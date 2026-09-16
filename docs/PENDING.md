@@ -330,9 +330,21 @@ in `docs/east-requirements.md` §5; what is left is here.
    trimming SOUL prose is the wrong place to save.
 5. **Graduate the portal's local fetchers to `lib/agent.ts`** (pipeline,
    approvals, artifacts, tasks each have their own copy, marked with a TODO).
-6. **Watch** that the `kanban.db-shm` error doesn't come back (fixed with
+6. **A ticket has no way to name the approval that was opened about it**
+   (found 9/16 building the Inbox). A row in `approvals` carries the session
+   the run stopped in and the tool call it stopped at, not the ticket
+   (`kit/plugins/approval/core/store.py`), and `/portal/approvals` publishes
+   `id, title, summary, body, created_at, status`. So the Inbox's «Ver en
+   Aprobaciones» finds the card by looking for the ticket's id INSIDE the
+   card's text — the mail plugin writes it there, an Instagram reply's card has
+   no ticket to write — and falls back to the tab. What would close it: the
+   gate reading a `ticket_id` out of the stopped tool call's arguments when it
+   has one, storing it on the row, and `list_pending` publishing it. Then the
+   chip points at the card, always, and Aprobaciones could show which
+   conversation a request belongs to.
+7. **Watch** that the `kanban.db-shm` error doesn't come back (fixed with
    `PRAGMA query_only`, but worth watching for a couple of days).
-7. **43 dossiers in `workspace/leads/`** whose tickets the 8/3 purge deleted.
+8. **43 dossiers in `workspace/leads/`** whose tickets the 8/3 purge deleted.
    They're real research on 43 companies: **recommend keeping them**, they're
    the raw material for the prospecting list. Close unless decided otherwise.
 
