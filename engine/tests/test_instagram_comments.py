@@ -197,7 +197,7 @@ try:
             out[f"unknown_{name}"] = f"{type(exc).__name__}: {exc}"
 
     # (g) what the creator reads.
-    out["performance"] = numbers["recent_performance"]()
+    out["performance"] = numbers["recent_performance"](ctx)
 
     out["calls"] = calls
     out["events"] = [dict(r) for r in db.query(
