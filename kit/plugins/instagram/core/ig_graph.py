@@ -215,10 +215,7 @@ def insights(media_id: str) -> dict:
     numbers, and a dictionary quietly missing `saved` is a creator concluding
     that nothing gets saved.
     """
-    data = answer(http().get(
-        f"{GRAPH}/{media_id}/insights",
-        params={"metric": METRICS, "access_token": token()},
-    )).get("data") or []
+    data = get(f"{media_id}/insights", metric=METRICS).get("data") or []
     return {row["name"]: row["values"][0]["value"] for row in data}
 
 
@@ -258,10 +255,11 @@ def refresh() -> int:
     step is this one. What it never does is answer the token: the adapter never
     returns a credential and neither does a tool.
     """
-    body = answer(http().get(REFRESH, params={
-        "grant_type": "ig_refresh_token",
-        "access_token": token(),
-    }))
+    with http() as client:
+        body = answer(client.get(REFRESH, params={
+            "grant_type": "ig_refresh_token",
+            "access_token": token(),
+        }))
     seconds = int(body["expires_in"])
     remember_token(body["access_token"], seconds)
     return seconds

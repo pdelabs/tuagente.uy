@@ -40,7 +40,7 @@ import ig_graph
 import ig_store
 from core import config, db
 
-FETCH = "fetch_comments"
+# The two tool names the approval plugin looks a card up by.
 REPLY = "reply_comment"
 HIDE = "hide_comment"
 
