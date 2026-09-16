@@ -1,4 +1,12 @@
-"""The Approvals tab: the queue, the thread, and the client's two verbs.
+"""The Approvals tab: the queue and the client's two verbs.
+
+THE THREAD IS NOT A ROUTE OF THIS PLUGIN ANY MORE. The portal opens a request
+with `getTicketDetail(approvalId)` — `/portal/tickets/{id}`, the board's path —
+and this router used to answer it because there was no board. There is one now
+(`kit/plugins/kanban/core/`), two routers cannot answer the same path, and
+whichever `CORE_PLUGINS` registers first silently wins. So `store.detail` is
+handed to the board through `engine.provide` and the board asks for it when an
+id is not one of its own (`plugin.py`).
 
 Approve and reject answer AFTER the resumed run finished. It blocks the
 request for as long as the model takes, and for the engine that is the right
@@ -9,7 +17,7 @@ a row that is still what it was a second ago.
 
 import json
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 
 import store
 
@@ -27,14 +35,6 @@ async def payload(request: Request) -> dict:
 @router.get("/portal/approvals")
 def pending():
     return {"approvals": store.list_pending()}
-
-
-@router.get("/portal/tickets/{ticket_id}")
-def ticket(ticket_id: str):
-    found = store.detail(ticket_id)
-    if found is None:
-        raise HTTPException(404, f"there is no request {ticket_id}")
-    return found
 
 
 @router.post("/portal/approvals/{approval_id}/approve")

@@ -254,13 +254,22 @@ class PluginsEndpoint(unittest.TestCase):
         self.assertNotIn("_comment", approval)
         self.assertNotIn("client_copy", approval)
 
-    def test_a_plugin_with_no_tab_and_no_skills_says_so(self):
-        """kanban is the case: a manifest that exists to be depended on."""
+    def test_a_plugin_with_no_skills_says_so(self):
+        """kanban is the case: a board and a page, and nothing to teach.
+
+        It used to be the emptier one — a manifest that existed to be depended
+        on, with `tab` its only surface and the Hermes `kanban` toolset its only
+        requirement. On `engine` the board is this plugin's own code
+        (`core/board_store.py`), so `core` is present and `requires` is empty:
+        there is no Hermes toolset to ask for any more.
+        """
         adapter.PLUGINS, _ = load(KIT)
         _, body = self.get("/portal/plugins")
         kanban = next(p for p in body["plugins"] if p["id"] == "kanban")
-        self.assertEqual(kanban["surfaces"]["present"], ["tab"])
-        self.assertEqual(kanban["requires"]["toolsets"], ["kanban"])
+        self.assertEqual(kanban["surfaces"]["present"], ["core", "tab"])
+        self.assertIsNone(kanban["surfaces"].get("skills"))
+        self.assertEqual(kanban["requires"],
+                         {"plugins": [], "connections": [], "toolsets": []})
         transcribe = next(p for p in body["plugins"] if p["id"] == "transcribe")
         # A skill and the curated flow that exercises it, and no tab: the flows
         # this plugin ships are drawn by the Flows page the `flow` plugin owns,

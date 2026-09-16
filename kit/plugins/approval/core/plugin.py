@@ -9,7 +9,10 @@ the engine:
   and field descriptions, which is where a rule about using a tool belongs.
 - `store.py` — the approval row: the pause, the negotiation, the resume.
 - `render.py` — the body the client reads, one shape for every tool.
-- `routes.py` — `/portal/approvals*` and `/portal/tickets/{id}`.
+- `routes.py` — `/portal/approvals*`. The request's THREAD is read at
+  `/portal/tickets/{id}`, which is the board's path and the board's router:
+  this plugin hands over `store.detail` and the board asks for it when an id is
+  not one of its own.
 - `instructions.md` — the two rules that are about behaviour and that no code
   can enforce. In the prompt only where this plugin is enabled.
 
@@ -52,6 +55,14 @@ def register(engine) -> None:
     # this one, so what is in it now is nothing and what matters is what is in
     # it when a run stops (`render.py`).
     render.SHARED = engine.shared
+    # THE THREAD THE PORTAL OPENS FOR A REQUEST. `/portal/tickets/{id}` is the
+    # board's route and there can only be one of it, so what travels is the
+    # lookup: the board asks every `tickets.detail.*` it finds for an id that
+    # is not a ticket of its own, and this is ours. The name is written out and
+    # not imported — two plugins share one `sys.modules` namespace and nothing
+    # else (`core/plugins.py`) — the same way the social plugin writes
+    # `approval.render.<tool>` to reach this one.
+    engine.provide("tickets.detail.approvals", store.detail)
     engine.toolset(sensitive.toolset().approval_required())
     engine.router(routes.router)
     engine.module("approvals", True)

@@ -1,32 +1,37 @@
 {
   "id": "kanban",
-  "version": "1.0.0",
-  "description": "The ticket store the other system plugins write into: the engine's own kanban, the Pipeline and Tasks pages over it, and the dispatcher that turns a client request into a ticket",
+  "version": "1.1.0",
+  "description": "The board: the ticket store on the engine, the two tools the agent opens and moves one with, and the Pipeline page the client reads it on",
   "client_copy": "El tablero donde ves en qué está trabajando tu agente y cómo va cada pedido.",
   "_comment": [
     "THE ROOT OF THE SYSTEM GRAPH, AND THE ONE PLUGIN WITH NO SKILLS SURFACE.",
     "There is no SKILL.md to ship because there is nothing to teach: the store",
-    "is the ENGINE's (the `kanban` toolset, `hermes kanban ...`, the sqlite the",
-    "adapter reads with PRAGMA query_only), and the screens are the portal's own",
-    "pages against /portal/boards and /portal/tickets, which the adapter has",
-    "served since long before anybody said the word plugin.",
+    "is code, the tools carry their own descriptions, and the screen is the",
+    "portal's own page against /portal/tickets.",
     "",
-    "SO WHAT THIS MANIFEST IS FOR: the dependency. approval, deliverable,",
-    "artifact and flow all write into a TICKET -- the approval skill tells the",
-    "agent to ask for it IN the ticket it is working -- so the graph says it out",
-    "loud and the build refuses a role that carries one of them without this.",
+    "THE STORE IS THIS PLUGIN'S NOW. Until 15/9/2026 this manifest existed only",
+    "for the dependency: the board was the ENGINE's (the `kanban` toolset,",
+    "`hermes kanban ...`, the sqlite the adapter read with PRAGMA query_only)",
+    "and `core` answered /portal/tickets with an empty list. On the engine the",
+    "board is a plugin like any other -- `core/board_store.py` creates its two",
+    "tables in the engine's SQLite when it loads, `core/board_routes.py` serves",
+    "the five calls the portal already types, and `core/board_tools.py` puts",
+    "`create_ticket` and `update_ticket` on the face, ungated: a ticket is",
+    "internal, and the gate is for what the agent does outwards.",
     "",
-    "`adapter` stays absent in phase 2 on purpose: declaring it would mean",
-    "moving adapter/kanban.py into this folder, and this phase does not touch",
-    "the install layout (notes/plugin-system-plan.md). Manifests over the code",
-    "that is already there, nothing else."
+    "AND THAT IS WHY `requires.toolsets: [kanban]` IS GONE. That named the",
+    "toolset Hermes turns on to give the agent its own board CLI, and there is",
+    "no Hermes here (docs/engine-verdict.md, CLAUDE.md's engine decision). A",
+    "plugin declaring it would be asking this engine for a word it does not",
+    "know.",
+    "",
+    "SO WHAT THE DEPENDENCY IS STILL FOR: approval, deliverable, artifact and",
+    "flow all write into a TICKET, so the graph says it out loud and the build",
+    "refuses a capability that carries one of them without this."
   ],
-  "requires": {
-    "toolsets": [
-      "kanban"
-    ]
-  },
+  "requires": {},
   "surfaces": {
+    "core": "core/",
     "tab": {
       "builtin": "pipeline"
     }

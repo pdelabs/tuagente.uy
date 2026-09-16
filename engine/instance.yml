@@ -18,7 +18,7 @@ services:
     environment:
       CORE_MODEL: ${CORE_MODEL:-openrouter:openai/gpt-5.6-luna}
       CORE_CORS_ORIGINS: ${CORE_CORS_ORIGINS:-http://localhost:8090,http://127.0.0.1:8090}
-      CORE_PLUGINS: ${CORE_PLUGINS:-approval,memory,image,social}
+      CORE_PLUGINS: ${CORE_PLUGINS:-kanban,approval,memory,image,social}
       TZ: America/Montevideo
       DELIVERABLES_DIR: /workspace/entregables
       CORE_OTEL_ENDPOINT: ${CORE_OTEL_ENDPOINT:-}

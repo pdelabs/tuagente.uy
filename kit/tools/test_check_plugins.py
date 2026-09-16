@@ -986,26 +986,40 @@ class TheKitsOwnRegistry(unittest.TestCase):
             self.assertIn("flows:uno", out)
 
     def test_the_two_plugins_the_engine_runs_carry_their_surface(self):
-        """`engine` runs `approval,deliverable,memory`, and each brings its own
-        mechanics: the gate and its page, the deliverable folders' prose, the
-        notebook. Whatever that engine does about any of them is in the plugin
-        — which is the point: a rule about a mechanism reaches the model only
-        where the mechanism is installed. `memory` brings no `instructions.md`:
-        the harness owns that slot (`engine/README.md`)."""
+        """`engine` runs `kanban,approval,deliverable,memory,…`, and each brings
+        its own mechanics: the board and its page, the gate and its page, the
+        deliverable folders' prose, the notebook. Whatever that engine does
+        about any of them is in the plugin — which is the point: a rule about a
+        mechanism reaches the model only where the mechanism is installed.
+        `memory` brings no `instructions.md`: the harness owns that slot
+        (`engine/README.md`)."""
         plugins = plugin_registry.registry(KIT)
-        for pid in ("approval", "deliverable", "memory"):
+        for pid in ("kanban", "approval", "deliverable", "memory"):
             self.assertEqual(plugins[pid]["surfaces"]["core"], "core/", pid)
             self.assertTrue((KIT / "plugins" / pid / "core" / "plugin.py").is_file(), pid)
-        for pid in ("approval", "deliverable"):
+        for pid in ("kanban", "approval", "deliverable"):
             self.assertTrue(
                 (KIT / "plugins" / pid / "core" / "instructions.md").is_file(), pid)
 
     def test_kanban_carries_no_skill_and_says_why(self):
-        """The store is the engine's; the manifest exists for the dependency."""
+        """The store is CODE and the screen is the portal's: nothing to teach.
+
+        Until 15/9/2026 the manifest existed only for the dependency -- the
+        board was Hermes' own kanban. On `engine` it is this plugin's:
+        `core/` holds the tables, the five routes and the two tools, and there
+        is still no SKILL.md, because a tool with a description is not a
+        procedure.
+        """
         kanban = plugin_registry.registry(KIT)["kanban"]
         self.assertNotIn("skills", kanban["surfaces"])
+        self.assertEqual(kanban["surfaces"]["core"], "core/")
         self.assertEqual(kanban["surfaces"]["tab"], {"builtin": "pipeline"})
         self.assertTrue(kanban["_comment"])
+        # THE HERMES TOOLSET IS GONE AND STAYS GONE. `requires.toolsets:
+        # [kanban]` named the toolset Hermes turns on for its board CLI; this
+        # engine has no such word, and declaring it would be a plugin asking
+        # for something nobody can give it (CLAUDE.md, the engine decision).
+        self.assertEqual(kanban["requires"], {})
 
     def test_every_system_plugin_with_a_tab_names_a_page_that_already_exists(self):
         """`builtin` is the only honest tab for a screen written long before

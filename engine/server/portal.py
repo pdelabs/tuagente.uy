@@ -1,10 +1,16 @@
 """What the portal calls the `adapter` base: everything the native gateway
 does not expose.
 
-What a PLUGIN adds is not here: `/portal/approvals*` and `/portal/tickets/{id}`
-are the `approval` plugin's router, registered with `engine.router(...)` and
-included after this one. The manifest's `modules` is the engine's base plus
-what those plugins flipped (`core/plugins.py`).
+What a PLUGIN adds is not here: `/portal/approvals*` is the `approval`
+plugin's router and `/portal/tickets*` the `kanban` plugin's, both registered
+with `engine.router(...)` and included after this one. The manifest's `modules`
+is the engine's base plus what those plugins flipped (`core/plugins.py`).
+
+THE BOARD USED TO BE ANSWERED HERE, EMPTY. `GET /portal/tickets` returned
+`{"tickets": []}` because this engine had no board; it has one now and it is a
+plugin's, so an engine without `kanban` in `CORE_PLUGINS` answers 404 — which
+is what the portal reads as "this agent does not have that module", and which
+its manifest already said.
 """
 
 import base64
@@ -102,12 +108,6 @@ async def session_chat_stream(session_id: str, request: Request):
 
 
 # ── the rest of the tabs ────────────────────────────────────────────────────
-
-@router.get("/portal/tickets")
-def tickets():
-    """No board in the engine: approvals are on the tool, not on a ticket."""
-    return {"tickets": []}
-
 
 @router.get("/portal/activity")
 def activity():
