@@ -66,6 +66,7 @@ string or a list of strings) is allowed and ignored.
 | `invoices-to-data` | no | an invoice becomes one row of data (accounting) |
 | `quotes` | no | a request becomes a priced quote in the client's template (sales) |
 | `social` | no | one Instagram post a day, written, drawn, checked and left in the Posts tab — `core` and a skill, so it exists on `engine` only |
+| `instagram` | no | the other half of that account: the comments read every fifteen minutes, answered or hidden behind the gate, a lead onto the board — `core`, a skill and the flow that runs it |
 | `drive-inbox` | no | Drive folders as an inbox: the agent's front door for material |
 | `interview-production` | no | an interview becomes what goes on air — ten lower-thirds, or a news item |
 
@@ -109,6 +110,18 @@ nothing left for a brand-kit plugin to be. The consequence is named rather than
 hidden: a client still on Hermes who buys this row gets `kit-skills/post/`,
 a SKILL.md that calls two tools only `engine` has. That is what Hermes dying
 looks like from the kit.
+
+`instagram` is the fifth shape, and what it adds to the fourth is THE CLOCK.
+`social` brings a mechanism, a craft and a page; this one brings a mechanism, a
+craft and a `flows/` surface — `comentarios-instagram`, every fifteen minutes —
+and no page at all, because what it produces lands on pages that already exist:
+a ticket on the board, a request in Aprobaciones. On this engine a curated flow
+has no install step to travel through (the kit is a read-only mount and the
+workspace is the client's), so the plugin copies its own FLOW.md into
+`workspace/flows/` when it loads and never over one that is there. It is also
+the first plugin that is HALF of a connection: `social` publishes to the
+Instagram account and `instagram` reads it, they share the token by name
+through the engine's `provide`/`use`, and each is sold on its own row.
 
 ### Harness skills: what `skills/` still holds, and why
 

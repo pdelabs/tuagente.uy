@@ -76,11 +76,12 @@ The seeded identity has `contact.channel: "none"`, which the portal reads as
 ## Plugins
 
 **A mechanism is a plugin of the kit, not a module of this engine** — unless it
-is the clock, which is the engine's own (see **Flows** below). The six this
+is the clock, which is the engine's own (see **Flows** below). The ones this
 engine runs by default —
-`CORE_PLUGINS=kanban,approval,deliverable,memory,image,social` — are the kit's
-own plugins, in dependency order (`requires.plugins` in each manifest says who
-must come first), and each one declares `"surfaces": {"core": "core/"}` in
+`CORE_PLUGINS=kanban,approval,deliverable,memory,image,instagram,social,mail` —
+are the kit's own plugins, in dependency order (`requires.plugins` in each
+manifest says who must come first, and `instagram` is also in front of `social`
+because `social` asks it for two things by name), and each one declares `"surfaces": {"core": "core/"}` in
 its `plugin.json`: a directory holding `plugin.py` and, when the mechanism
 needs words, an `instructions.md`. `core/plugins.py` imports that file and
 calls `register(engine)`, in `CORE_PLUGINS` order.
@@ -135,6 +136,16 @@ kit/plugins/social/core/    the post: creator.py (the SUB-AGENT that
                                    and the /portal/posts* routes),
                                    creator.md, instructions.md, and
                                    skills/post/SKILL.md, the craft
+kit/plugins/instagram/core/ the other half of the account: ig_graph.py
+                                   (the Graph calls, and the token in force),
+                                   ig_store.py (the comments already handled
+                                   and the account's own row), ig_tools.py
+                                   (fetch_comments and refresh_if_due on the
+                                   face, reply_comment and hide_comment behind
+                                   the gate with their cards, and
+                                   recent_performance for the creator),
+                                   instructions.md, skills/comments/SKILL.md
+                                   and flows/comentarios-instagram/
 ```
 
 `register(engine)` gets an object with eight verbs that ADD something and no
@@ -160,7 +171,7 @@ that make its `Agent(...)` fit this engine — see **Sub-agents** below:
 | `engine.identity` | what every agent of this client shares — the SOUL's opening and the `core:base` block. A string, so it renders FIRST |
 | `engine.today` | the date line, a callable, so it renders LAST |
 | `engine.provide(name, obj)` | an object for the plugins that load after this one |
-| `engine.use(name)` | one of those, by name |
+| `engine.use(name)` | one of those, by name. `engine.use(name, default)` makes it OPTIONAL — for the plugin that may not be installed, not for the one the manifest requires |
 | `engine.model` · `engine.model_settings` · `engine.Deps` | what a plugin's `Agent(...)` needs to fit |
 
 Two things are not verbs. **Skills** load from `surfaces.skills` as on any
@@ -479,6 +490,109 @@ Instagram (`IG_ACCESS_TOKEN`)» — an answer and not a dead turn — the post s
 unpublished, the request closed, and both halves in Activity. Last run
 2026-09-15: **0 failures, 6.5 s**. A real publish is Luis' to do, with his
 token.
+
+### The comments, which are the other half of the account
+
+**PUBLISHING IS THE SOCIAL PLUGIN'S AND READING IS `instagram`'s**, and they are
+two plugins because a client buys either one on its own: somebody who posts by
+hand still drowns in comments, and somebody who buys the posts may not want us
+answering anybody. `kit/plugins/instagram/` is the reading half — the capability
+row is `instagram-comments` — over the same door publishing uses
+(`graph.instagram.com` v21.0, the same long-lived token, the
+`instagram_business_manage_comments` scope it already carries).
+
+**READING IS A FLOW AND NOT A LOOP.** The plugin ships
+`flows/comentarios-instagram/FLOW.md` — cron `*/15 * * * *` — and COPIES IT INTO
+`workspace/flows/` WHEN IT LOADS, if it is not already there and never over what
+is. The kit is a read-only bind mount and the workspace is the client's, so
+there is no install step between them on this engine; a flow turned off is
+`status: paused`, which is still a file, so a restart does not switch it back
+on. The `mail` plugin does the same thing in the same shape, and the day the
+engine grows one helper for it both plugins will use that instead.
+
+**A TICK WITH NOTHING NEW IS ONE LINE.** `fetch_comments()` reads the last ten
+posts (`GET /{IG_USER_ID}/media`), then each one's comments with the replies
+NESTED (`…/comments?fields=…,replies{…}`), skips the account's own by username,
+writes what is left into `instagram_seen` and answers a listing — each comment's
+id, the post it is under, who wrote it, what it says, whether it is a reply. If
+there is nothing: «Sin comentarios nuevos.», and the run ends there.
+
+**THE USERNAME IS NOT AN ENV.** It is read once from `GET /me?fields=username`
+and cached, because it is a fact about the token and not a decision the client
+makes — and it is the whole mechanism for telling our own answers apart: the
+Graph hands them back nested under the comment they answer, and an agent that
+read its own reply as new would answer itself every fifteen minutes.
+
+**ANSWERING AND HIDING GO THROUGH THE GATE**, like everything this product does
+outwards. `reply_comment(comment_id, text, note)` is `POST /{comment-id}/
+replies` and `hide_comment(comment_id, note)` is `POST /{comment-id}?hide=true`
+— hiding, never deleting: it can be undone from the app and the author still
+sees it. Both draw their own card through the approval plugin's renderer hook
+(`engine.provide("approval.render.reply_comment", …)`), READ OFF DISK and never
+off the Graph, because the card is rendered inside the pause path and a network
+call there is a run that dies holding a request nobody sees. The card is the
+post — its permalink and its first slide, when the media id matches a post in
+`posteos/` — then the comment, in a table, and then the draft answer, which is
+therefore the editable tail the portal preloads: the client's correction
+REPLACES the text, the way a caption's does. Both tools refuse an id that is not
+in `instagram_seen`, in Spanish, before anything leaves.
+
+**A LEAD IS A TICKET**, and it is the board's own `create_ticket` with
+`source="instagram"` and the comment id as `source_ref` — the pair that is a
+UNIQUE index over there, so the same comment never opens two. What makes a
+comment a lead, what gets answered, what gets nothing and what gets hidden is
+`skills/comments/SKILL.md`; the reply invites them to the address on
+`marca/brand.md`, because **DMs are not built and cannot be**:
+`instagram_manage_messages` needs Meta's Advanced Access even on the account's
+own owner, and `plugin.json` names it as a known limit.
+
+**THE CREATOR READS THE NUMBERS BEFORE IT WRITES.** `recent_performance()` is
+the last ten posts with their date, caption, permalink, reach, saves, likes,
+comments and shares (`GET /{media-id}/insights`), and it is on the CREATOR
+sub-agent and on nobody else: what got saved is what to do more of, and that is
+decided before the first word. The plugin offers it as a toolset
+(`engine.provide("instagram.performance", …)`) and the social plugin's creator
+takes it with `engine.use(name, default=None)` — a real optional dependency,
+which is why that default exists at all — so `instagram` loads BEFORE `social`.
+Step 2 of the post skill says what to do with it.
+
+**THE TOKEN STOPS DYING SILENTLY, AND THE ENV IS NO LONGER WHERE IT LIVES.**
+`refresh_if_due()` is the flow's first step: with fewer than ten days left (or
+nothing known about the expiry, which is the state after a connection is set
+up) it calls `refresh_access_token`, stores the new token and its expiry in
+`instagram_account`, and every Graph call — this plugin's AND the social
+plugin's publish — reads that table first and `IG_ACCESS_TOKEN` second. The env
+is the SEED and the table is what is in force: the instance's `secrets.env` is
+outside the container and nothing in here can write it, so before this a
+refreshed token lived in one process's `os.environ` and died with it, which is
+exactly how a connection that refreshes itself still expires after sixty days.
+The two plugins share it by name — `engine.provide("instagram.token", …)` and
+`instagram.token.refreshed` — never by importing each other's module: every
+enabled plugin's surface modules live in one `sys.modules` namespace, so an
+import would be a bet on which of the two loads first. An agent with publishing
+and without comments has no table and nothing changes for it.
+
+```bash
+python3 engine/tests/test_instagram_comments.py   # free, a second, no model
+bash engine/tests/test_comments_gate.sh           # ~1 min, ~US$0.01, two turns
+```
+
+The first one is the mechanism, with the Graph behind an `httpx.MockTransport`
+and a throwaway post on disk: eight claims — the tick that walks the replies and
+skips our own, the second tick that says «Sin comentarios nuevos.», the answer
+posted under the right comment with the right text, the correction that replaces
+it, the spam hidden and nothing deleted, an id nobody saw refused by both tools,
+the card with the slide and the draft as its editable tail, the numbers the
+creator reads, and the token renewing itself and being what the NEXT call goes
+out with.
+
+The second is the gate, live, with `IG_*` unset — which is why it can be run as
+often as it likes. Two turns: the tick answers «falta conectar Instagram» and
+ends normally instead of dying, then a seeded comment is answered, the run
+pauses, the card carries the post, the comment and the draft below the last
+table row, and the client's yes comes back with the missing connection — an
+answer and not a dead turn — with the request closed and both halves in
+Activity. Last run 2026-09-16: **0 failures**.
 
 ## Sub-agents
 
