@@ -35,10 +35,14 @@ KIT_PLUGINS = Path(os.environ.get("CORE_KIT_PLUGINS", "/opt/kit/plugins"))
 # WHICH KIT PLUGINS THIS AGENT RUNS, in order. Each one may bring skills and a
 # `core/` surface: toolsets, routers, hooks, modules and the prose that belongs
 # to the mechanism it installs (`core/plugins.py`).
+#
+# THE ORDER IS THE LOAD ORDER AND `provide`/`use` READS IT. `instagram` sits
+# before `social` because the creator asks for the performance toolset that
+# plugin provides, and for the token the two of them share.
 PLUGINS = [
     p.strip()
     for p in os.environ.get(
-        "CORE_PLUGINS", "kanban,approval,deliverable,memory,image,social"
+        "CORE_PLUGINS", "kanban,approval,deliverable,memory,image,instagram,social"
     ).split(",")
     if p.strip()
 ]
