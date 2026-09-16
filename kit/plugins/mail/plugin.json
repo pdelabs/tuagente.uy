@@ -1,0 +1,63 @@
+{
+  "id": "mail",
+  "version": "1.0.0",
+  "description": "The company's inbox, read every five minutes: every mail becomes a ticket on the board, the reply is drafted in the brand's voice and goes out through the gate, as the company's own address",
+  "client_copy": "Lee la casilla de la empresa, te deja cada mail como tarea en el tablero y la respuesta escrita esperando tu ok.",
+  "_comment": [
+    "READING IS A FLOW AND ANSWERING IS A GATED TOOL, and that split is the",
+    "whole plugin. `flows/bandeja-de-entrada/FLOW.md` wakes the agent every five",
+    "minutes (the engine's floor, CORE_FLOWS_MIN_MINUTES); its run calls",
+    "`fetch_mail()` once and, with nothing new, ends in one line and costs a",
+    "cent. Nothing loops, nothing polls inside a turn, and a restart replays",
+    "nothing: IMAP's \\Seen flag is the state and the `mail_seen` table is the",
+    "second lock.",
+    "",
+    "IT REQUIRES kanban BECAUSE A MAIL IS A TICKET. There is no mail store of",
+    "our own and no second screen: a message that arrives lands on the board the",
+    "client already reads (`source: mail`, `source_ref`: the Message-ID, which",
+    "is the UNIQUE index the board dedupes on). And it requires `approval`",
+    "because answering is the one thing this plugin does outwards:",
+    "`send_email` is registered on the FACE wrapped in `approval_required()`,",
+    "so nothing leaves the building without the client's yes.",
+    "",
+    "THE TOOL HAS NO `to` AND NO `subject`. Both come off the ticket's thread",
+    "(`mail_threads`), written by the code when the mail came in, so there is no",
+    "way for the model to answer somebody who never wrote. It is the same shape",
+    "as the social plugin's `publish_instagram`, whose only argument is a post",
+    "id.",
+    "",
+    "THE MODULES CARRY THE `mail_` PREFIX ON PURPOSE. A plugin's surface modules",
+    "import each other by plain name and share ONE `sys.modules` namespace with",
+    "every other enabled plugin's (`engine/core/plugins.py`): a `store.py` here",
+    "would BE the approval plugin's `store`, already imported under that name.",
+    "Measured twice already, on the social plugin's `routes.py` and on the",
+    "board's.",
+    "",
+    "THE CURATED FLOW IS COPIED INTO THE WORKSPACE AT LOAD, if it is not there.",
+    "On Hermes `install.sh` delivered a plugin's `surfaces.flows` to",
+    "`data/flows/<slug>/`; on this engine a flow is a file in",
+    "`workspace/flows/` and there is no install step between the kit and the",
+    "container -- the kit is a read-only bind mount. So the plugin copies its",
+    "own, once, and never over a file that exists: what the client edited is",
+    "hers, and turning it off is `status: paused`, which is still a file."
+  ],
+  "requires": {
+    "plugins": [
+      "approval",
+      "kanban"
+    ],
+    "connections": [
+      "email"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "inbox"
+    ],
+    "flows": [
+      "flows/bandeja-de-entrada"
+    ],
+    "core": "core/"
+  },
+  "system": false
+}

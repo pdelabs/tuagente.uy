@@ -292,6 +292,22 @@ def comment(ticket_id: str, author: str, body: str, session_id: str | None = Non
     )
 
 
+def set_body(ticket_id: str, body: str) -> None:
+    """The ticket's body, rewritten. Not a tool and not a route: the ONE caller
+    is a plugin that only learns part of the body after the ticket exists.
+
+    The mail plugin is that caller. An attachment is saved under
+    `workspace/correo/<ticket_id>/`, and the folder's name is the id the insert
+    hands back — so the paths the body lists cannot be known while it is being
+    written. Everything else about a ticket's body is written once, by whoever
+    opened it.
+    """
+    db.write(
+        "UPDATE tickets SET body = ?, updated_at = ? WHERE id = ?",
+        (body, time.time(), ticket_id),
+    )
+
+
 def create(
     title: str,
     body: str = "",
