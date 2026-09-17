@@ -15,7 +15,10 @@ is one public thing on a real account and cannot be run twice.
      line, so a run that found nothing costs a cent and ends.
   c. AN ANSWER GOES OUT AS A REPLY TO THAT COMMENT — `POST /{comment-id}/
      replies` with the text, and it is written into Activity. The client's
-     correction REPLACES the text, the way a caption's does.
+     correction REPLACES the text, the way a caption's does. AND WHEN THE
+     COMMENT IS A LEAD WITH A TICKET, the answer lands on it and closes it: the
+     code that sent it writes it, so a thread cannot stay «waiting» after it
+     was answered.
   d. SPAM IS HIDDEN AND NOT DELETED — `POST /{comment-id}` with `hide=true`.
   e. A COMMENT THE AGENT NEVER SAW IS REFUSED — both tools, in Spanish, before
      anything leaves: the id comes from the model and the model can be wrong.
@@ -185,8 +188,18 @@ try:
     out["card"] = {"title": title, "body": body}
     out["hide_card"] = list(ig_tools.hide_card({"comment_id": "c_spam"}))
 
+    # A lead's ticket, the way the skill has the face open one: the answer has
+    # to land on it and close it.
+    import board_store
+    lead, _ = board_store.create(
+        title="Comentario de @juan.perez en «…»", body="¿Cuánto sale?",
+        source="instagram", source_ref="c_pregunta", session_id=SESSION)
+    out["lead"] = lead
+
     # (c) the answer, and the correction that replaces it.
     out["replied"] = gated["reply_comment"](ctx, "c_pregunta", DRAFT, NOTE)
+    out["lead_after"] = dict(board_store.row_of(lead))
+    out["lead_comments"] = board_store.comments(lead)
     out["corrected"] = gated["reply_comment"](
         ctx, "c_respuesta", DRAFT, NOTE, client_correction=CORRECTION)
     # (d) the spam.
@@ -209,6 +222,9 @@ try:
         "SELECT kind, label, payload FROM events WHERE session_id = ? ORDER BY id", (SESSION,))]
     print(json.dumps(out, ensure_ascii=False, default=str))
 finally:
+    for ticket in db.query("SELECT id FROM tickets WHERE source = ?", ("instagram",)):
+        db.write("DELETE FROM ticket_comments WHERE ticket_id = ?", (ticket["id"],))
+        db.write("DELETE FROM tickets WHERE id = ?", (ticket["id"],))
     shutil.rmtree(post, ignore_errors=True)
     db.write("DELETE FROM instagram_seen WHERE comment_id LIKE 'c_%'", ())
     db.write("DELETE FROM instagram_account", ())
@@ -295,6 +311,12 @@ def main() -> int:
         problems.append(f"Activity has {kinds.count('comment.replied')} comment.replied")
     elif "@juan.perez" not in measured["events"][0]["label"]:
         problems.append(f"the event reads {measured['events'][0]['label']!r}")
+    if measured["lead_after"]["status"] != "done":
+        problems.append(f"the lead's ticket is {measured['lead_after']['status']!r} "
+                        "after being answered")
+    answers = [c for c in measured["lead_comments"] if c["author"] == "agente"]
+    if not any(DRAFT in c["body"] for c in answers):
+        problems.append("what was answered is not on the lead's ticket")
     failures += judge("c. the answer goes out under that comment", problems)
 
     # (d) the spam

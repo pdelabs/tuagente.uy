@@ -51,6 +51,8 @@ already has.
 
 import json
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
 from pydantic_ai import ModelRetry, RunContext
@@ -78,6 +80,11 @@ PERFORMANCE = 10
 # and one ticket, and the second message of the same person is not a second lead.
 FROM_COMMENT = "instagram"
 FROM_DM = "instagram-dm"
+
+# The approval plugin's own answer to «is there still a request out for this?».
+# Bound by `plugin.py`; `None` would mean an engine with no gate, which this
+# plugin's manifest does not allow.
+PENDING_FOR = None
 
 # How many message threads a tick looks at, and how much of one is shown — on
 # the approval card and in the listing a tick comes back with. TEN AND NOT SIX:
@@ -270,6 +277,25 @@ def ticket_of(source: str, source_ref: str) -> str | None:
     return found["id"] if found else None
 
 
+def ticket_line(ticket_id: str, conversation_id: str) -> str:
+    """The ticket and what its column MEANS, which is not the same question.
+
+    `blocked` reads «waiting for the client», and that is true only while there
+    IS a request out: a rejected one leaves the ticket blocked with nothing
+    pending, and an agent that reads the column alone never answers that person
+    again — measured, 16/9/2026. So the column is crossed against the gate's own
+    queue (`approvals.pending_for`, the approval plugin's) and the line says
+    which of the two it is.
+    """
+    status = board.row_of(ticket_id)["status"]
+    if status != board.BLOCKED:
+        return f"tarea {ticket_id} ({board.COLUMN[status]})"
+    waiting = PENDING_FOR(SEND, conversation_id) if PENDING_FOR else None
+    if waiting:
+        return f"tarea {ticket_id} (hay un pedido tuyo esperando: no prepares otra respuesta)"
+    return f"tarea {ticket_id} (quedó frenada y no hay ningún pedido pendiente: seguí)"
+
+
 def said_by(row, participant_id: str | None) -> str:
     """Who said it, the way the listing and the card name them: «Vos» is us."""
     if row["from_id"] and participant_id and row["from_id"] != participant_id:
@@ -287,31 +313,138 @@ def thread_lines(conversation_id: str, participant_id: str | None,
     return lines
 
 
+# ── the ticket IS the conversation, and the code writes it ──────────────────
+
+# WHO SIGNS A COMMENT ON A CHANNEL TICKET, and it is not a matter of taste: the
+# Inbox tells the two sides apart with `isOurSide(author, person)`
+# (`app/app/inbox/conversation.ts`), where `person.handle` is the `@usuario` it
+# reads off the ticket's TITLE and everything that is not that handle is our
+# side. So a message of theirs is signed with their handle, exactly; one the
+# tool sent is signed `agente`, which the portal already draws under the name
+# the client gave her agent; and one the CLIENT sent from her own phone is
+# signed with the account's handle — our side, and not the agent claiming it
+# wrote it.
+TITLE = "Mensaje de @{username} en Instagram"
+# `**Fecha:**` is a header the Inbox strips from the bubble and `**De:**` is one
+# it would read as the person — and read wrong, because an Instagram handle is
+# not an address. The handle travels in the TITLE, which is where that screen
+# looks for it.
+BODY = "**Fecha:** {when}\n\n{text}"
+HIDDEN_ON_TICKET = "Oculté el comentario de @{username}: {text}"
+WAITING = "Esperando tu ok en Aprobaciones."
+
+# The three columns a channel ticket ever moves between, and what each one means
+# on the Inbox: `ready` «Nuevo», `blocked` «Esperando tu ok», `done` «Respondido».
+
+
+def when_of(stamp: float | None) -> str:
+    """The date the client reads on a ticket, in her own timezone."""
+    moment = datetime.fromtimestamp(stamp or time.time(), ZoneInfo(config.TIMEZONE))
+    return moment.strftime("%d/%m/%Y %H:%M")
+
+
+def signature(message: dict, mine: str | None) -> str:
+    """Who the comment is from, in the one vocabulary the Inbox reads."""
+    if not message["ours"]:
+        return f"@{message['username']}" if message["username"] else "la persona"
+    return f"@{mine}" if mine else board.AGENT
+
+
+def land(conversation_id: str, new: list[dict], row, mine: str | None,
+         session_id: str | None) -> str:
+    """The conversation on the board: the ticket, and every new message on it.
+
+    CODE OPENS IT AND CODE WRITES IT, which is the whole of what changed on
+    16/9/2026. A direct message is a lead by definition — nobody writes to a
+    business account by accident — so there is nothing for the model to decide
+    and nothing for it to remember; and what the client reads on the thread has
+    to be what was SAID, not the agent's account of what it was doing. The
+    narration («la respuesta está lista», «nuevo mensaje de…») is gone with it.
+
+    A NEW MESSAGE REOPENS THE TICKET, the same way a new mail does: `done`,
+    `blocked` or `in_progress` all go back to `ready`, because somebody is
+    waiting again. A ticket already `ready` is left alone.
+    """
+    who = row["participant_username"] if row else None
+    first = new[0]
+    ticket_id, opened = board.create(
+        title=TITLE.format(username=who or "alguien"),
+        body=BODY.format(when=when_of(first["when"]), text=first["text"]),
+        source=FROM_DM, source_ref=conversation_id, session_id=session_id,
+    )
+    # The message the ticket was OPENED with is its body; everything else is a
+    # comment. Opening with the first one and commenting it too would show the
+    # client the same sentence twice, one above the other.
+    for message in (new[1:] if opened else new):
+        board.comment(ticket_id, signature(message, mine), message["text"],
+                      session_id=session_id)
+    if not opened and any(not message["ours"] for message in new):
+        current = board.row_of(ticket_id)["status"]
+        if current != board.READY:
+            board.move(ticket_id, board.READY, session_id=session_id)
+    return ticket_id
+
+
+def answered(source: str, source_ref: str, text: str, session_id: str | None) -> None:
+    """What the tool just sent, written on the ticket, and the ticket closed.
+
+    The ticket of a thread nobody opened is nothing to write to — a comment the
+    model answered without opening one is not a lead — so this is a lookup and
+    never a create.
+    """
+    ticket_id = ticket_of(source, source_ref)
+    if not ticket_id:
+        return
+    board.comment(ticket_id, board.AGENT, text, session_id=session_id)
+    board.move(ticket_id, board.DONE, said=text, session_id=session_id)
+
+
+def paused(approval_id: str, args: dict) -> None:
+    """The gate stopped a run on one of this plugin's tools: the ticket says so.
+
+    Handed to the approval plugin by name (`approval.paused.<tool>`), which
+    calls it when the row is written — the only moment code can see, because a
+    gated tool's body does not run until the client has already decided. It used
+    to be prose in the tool's own docstring, and prose is what left a thread
+    `blocked` forever with every request approved.
+    """
+    if "conversation_id" in args:
+        ticket_id = ticket_of(FROM_DM, args["conversation_id"])
+    else:
+        ticket_id = ticket_of(FROM_COMMENT, args.get("comment_id", ""))
+    if ticket_id and board.row_of(ticket_id)["status"] != board.BLOCKED:
+        board.move(ticket_id, board.BLOCKED, said=WAITING)
+
+
 # ── the messages of one thread ──────────────────────────────────────────────
 
 
-def sift(conversation_id: str, found: list[dict], mine: str) -> set[str]:
+def sift(conversation_id: str, found: list[dict], mine: str) -> list[dict]:
     """Every message written down, and the NEW INBOUND ones handed back.
 
     Ours are told apart by `from.id`, which is the account's own id — the same
     fact `IG_USER_ID` is — and never by the text. Writing ours down too is what
     lets the approval card show a conversation instead of half of one.
     """
-    new = set()
-    for item in found:
+    new = []
+    for item in reversed(found):          # oldest first: the ticket is a thread
         author = item.get("from") or {}
         from_id = str(author.get("id") or "")
+        ours = from_id == mine
         text = item.get("message") or ""
         when = ig_graph.moment(item["created_time"]) if item.get("created_time") else None
         fresh = ig_store.record_message(
             item["id"], conversation_id, from_id, author.get("username"), text, when)
-        if from_id == mine:
-            continue
-        ig_store.save_conversation(
-            conversation_id, participant_id=from_id,
-            participant_username=author.get("username"), last_inbound_at=when)
+        if not ours:
+            ig_store.save_conversation(
+                conversation_id, participant_id=from_id,
+                participant_username=author.get("username"), last_inbound_at=when)
         if fresh:
-            new.add(item["id"])
+            # OURS COUNT AS NEW HERE AND NOT IN THE LISTING: a message the client
+            # sent from her phone belongs on the ticket, where the thread is
+            # read, and it is not work anybody has to do.
+            new.append({"id": item["id"], "ours": ours, "text": text, "when": when,
+                        "username": author.get("username")})
     return new
 
 
@@ -468,14 +601,20 @@ def toolset() -> FunctionToolset:
             threads = ig_graph.conversations(THREADS)
         except ig_graph.NotConnected as exc:
             return str(exc)
+        handle = ig_store.username()
         found = {}
         for item in threads:
             new = sift(item["id"], ig_graph.messages(item["id"]), mine)
-            if new:
+            if any(not message["ours"] for message in new):
                 found[item["id"]] = new
+            elif new:
+                # Only our own, from her phone: it belongs on the ticket and it
+                # is not work. The conversation is not listed.
+                land(item["id"], new, ig_store.conversation(item["id"]), handle,
+                     ctx.deps.session_id)
         if not found:
             return NO_MESSAGES
-        total = sum(len(v) for v in found.values())
+        total = sum(len([m for m in v if not m["ours"]]) for v in found.values())
         head = (f"{total} mensaje nuevo, en estas conversaciones:" if total == 1
                 else f"{total} mensajes nuevos, en estas conversaciones:")
         blocks = []
@@ -483,12 +622,12 @@ def toolset() -> FunctionToolset:
             row = ig_store.conversation(conversation_id)
             who = (f"@{row['participant_username']}" if row["participant_username"]
                    else "alguien")
-            ticket = ticket_of(FROM_DM, conversation_id)
-            title = f"- `{conversation_id}` · {who} · {window_line(row)}"
-            if ticket:
-                title += f" · tarea {ticket}"
+            ticket_id = land(conversation_id, new, row, handle, ctx.deps.session_id)
+            title = (f"- `{conversation_id}` · {who} · {window_line(row)}"
+                     f" · {ticket_line(ticket_id, conversation_id)}")
             blocks.append("\n".join(
-                [title] + thread_lines(conversation_id, row["participant_id"], new)))
+                [title] + thread_lines(conversation_id, row["participant_id"],
+                                       {m["id"] for m in new if not m["ours"]})))
         return head + "\n\n" + "\n\n".join(blocks)
 
     @ts.tool
@@ -531,7 +670,13 @@ def gated() -> FunctionToolset:
 
         Sale como respuesta abajo del comentario, con el nombre de la cuenta del
         cliente y a la vista de cualquiera. Es la única forma de contestar un
-        comentario.
+        comentario: cuando decidas contestar, llamala ahí mismo con la
+        respuesta escrita. Mostrarle al cliente lo que va a salir y esperar el
+        sí lo hace la puerta, no vos.
+
+        Si ya tenés el id, esto es lo que llamás: no vuelvas a pedir la lista de
+        comentarios para «verificar». Si falta algo —la conexión, el
+        comentario—, te lo digo yo.
 
         `note` es lo que el cliente lee para decidir: llenala siempre, en
         criollo, diciendo quién comentó y qué le vas a contestar.
@@ -562,6 +707,9 @@ def gated() -> FunctionToolset:
             ctx.deps.session_id,
             {"comment_id": comment_id, "media_id": row["media_id"], "text": message},
         )
+        # On the lead's ticket, WHEN THERE IS ONE: a comment the agent answered
+        # without opening a ticket is not a lead, and this is a lookup.
+        answered(FROM_COMMENT, comment_id, message, ctx.deps.session_id)
         return REPLIED.format(username=row["username"])
 
     @ts.tool
@@ -576,11 +724,20 @@ def gated() -> FunctionToolset:
 
         Le llega a la persona que escribió, en el mismo hilo, con el nombre de
         la cuenta del cliente. **A quién le va lo decide la conversación**: vos
-        pasás el id del hilo y nada más.
+        pasás el id del hilo y nada más. Cuando decidas contestar, llamala ahí
+        mismo con la respuesta escrita: mostrarle al cliente lo que va a salir y
+        esperar el sí lo hace la puerta, no vos.
+
+        Si ya tenés el id de la conversación, esto es lo que llamás: no vuelvas
+        a pedir los mensajes para «verificar». Si falta algo —la conexión, la
+        conversación, el plazo—, te lo digo yo.
 
         Instagram sólo deja contestar hasta 24 horas después del último mensaje
         de esa persona. Si ya se pasó, la herramienta no manda nada y te lo
-        dice: ahí lo que corresponde es dejarlo en el tablero.
+        dice.
+
+        De la tarea del tablero no te ocupás vos: la abro yo cuando llega el
+        mensaje, le escribo lo que salió y la muevo a «Completado» cuando sale.
 
         `note` es lo que el cliente lee para decidir: quién escribió, qué
         preguntó y qué le vas a contestar.
@@ -617,6 +774,11 @@ def gated() -> FunctionToolset:
             ctx.deps.session_id,
             {"conversation_id": conversation_id, "message_id": sent, "text": message},
         )
+        # WHAT WENT OUT, ON THE TICKET, BY THE CODE THAT SENT IT. The thread the
+        # client reads in Inbox is the conversation and not the agent's account
+        # of it, and a ticket that stays «Esperando tu ok» after the answer went
+        # out is the state that stopped this agent from ever writing again.
+        answered(FROM_DM, conversation_id, message, ctx.deps.session_id)
         return SENT.format(username=who)
 
     @ts.tool
@@ -657,6 +819,13 @@ def gated() -> FunctionToolset:
             "completed", ctx.deps.session_id,
             {"comment_id": comment_id, "media_id": row["media_id"]},
         )
+        ticket_id = ticket_of(FROM_COMMENT, comment_id)
+        if ticket_id:
+            board.comment(
+                ticket_id, board.AGENT,
+                HIDDEN_ON_TICKET.format(username=row["username"], text=flat(row["text"])),
+                session_id=ctx.deps.session_id,
+            )
         said = f" El cliente dijo: «{flat(client_correction)}»." if client_correction else ""
         return HIDDEN.format(username=row["username"]) + said
 

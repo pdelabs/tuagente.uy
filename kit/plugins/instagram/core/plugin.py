@@ -129,6 +129,16 @@ def register(engine) -> None:
     engine.provide(f"approval.render.{ig_tools.REPLY}", ig_tools.reply_card)
     engine.provide(f"approval.render.{ig_tools.HIDE}", ig_tools.hide_card)
     engine.provide(f"approval.render.{ig_tools.SEND}", ig_tools.send_card)
+    # AND WHAT HAPPENS TO THE TICKET WHILE SHE DECIDES. A gated tool's body does
+    # not run until the yes, so the «Esperando tu ok» on the thread cannot be
+    # written by the tool: the gate calls this when it writes the row
+    # (`approval/core/store.py`'s `PAUSED`). It was prose until 16/9/2026, and
+    # prose is what left a thread blocked forever with every request approved.
+    engine.provide(f"approval.paused.{ig_tools.SEND}", ig_tools.paused)
+    engine.provide(f"approval.paused.{ig_tools.REPLY}", ig_tools.paused)
+    # And the gate's own answer to «is that request still out?», which is what
+    # keeps a rejected one from reading as a pending one forever.
+    ig_tools.PENDING_FOR = engine.use("approvals.pending_for")
     # The token, shared with whoever else talks to this account.
     engine.provide("instagram.token", ig_store.current_token)
     engine.provide("instagram.token.refreshed", ig_graph.remember_token)

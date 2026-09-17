@@ -3,7 +3,7 @@ title: Comentarios y mensajes de Instagram
 client_summary: "Mira los comentarios y los mensajes de tu Instagram, te deja la respuesta lista para aprobar y te marca en el tablero a los que quieren comprar."
 name: comments
 description: "Decide qué hacer con cada hilo de Instagram donde hay algo nuevo —comentarios y mensajes privados—: cuál se contesta y con qué palabras, cuál no se toca, cuál se oculta, y quién es alguien que quiere comprar y va al tablero como tarea. Usala cada vez que `fetch_comments` o `fetch_messages` traigan algo, en el flujo de Instagram o cuando el cliente te pida mirarlos."
-version: 1.2.0
+version: 1.3.0
 license: MIT
 ---
 
@@ -29,6 +29,13 @@ la persona, no al último renglón.**
 
 Y si el hilo trae `tarea t_…`, leela con `read_ticket` antes de contestar: ahí
 está lo que ya se habló y lo que se decidió. No adivines lo que ya está escrito.
+
+**Leer el hilo es leer lo que la corrida ya te trajo, no volver a pedirlo.** Si
+tenés el id —te lo dio la corrida, o te lo pasó el cliente en el chat—,
+contestá: no llames de nuevo a `fetch_comments` ni a `fetch_messages` «para
+verificar». Y si una de esas dos te dijo que falta conectar Instagram, eso no te
+frena para dejar la respuesta: la herramienta de contestar es la que sabe si
+salió o no, y es la que te lo va a decir.
 
 Entonces, siempre, en este orden:
 
@@ -109,7 +116,12 @@ create_ticket(
 ```
 
 El `source_ref` es lo que evita abrir dos tareas por el mismo comentario: si ya
-existe, la herramienta te devuelve la que hay y no pasa nada.
+existe, la herramienta te devuelve la que hay y no pasa nada. Un comentario no
+es un cliente por definición —«🔥» no lo es—, y por eso esta sí la abrís vos;
+en los mensajes privados la abre el código.
+
+Después no le comentes nada más: cuando contestes, la respuesta que salió la
+escribe la herramienta en la tarea y la deja en «Completado».
 
 Y **contestale igual**, en el mismo movimiento: una línea que le diga que sí y
 que lo invite a seguir por donde el cliente pueda atenderlo —la dirección de la
@@ -128,22 +140,23 @@ plazo en cada conversación: **contestá primero las que están por vencerse.** 
 una ya venció, no insistas —la herramienta no va a mandar nada— y dejala en el
 tablero con lo que preguntó, para que el cliente decida.
 
-**Un primer mensaje de alguien es una tarea**, aunque también lo contestes:
+**La tarea del tablero no la abrís vos y no la escribís vos.** Un mensaje
+privado es un cliente por definición, así que el código abre la tarea solo
+—una por conversación, con el mensaje adentro—, le va escribiendo lo que dice
+cada uno, y la mueve a «Completado» cuando la respuesta sale. Vos no comentás
+«llegó un mensaje nuevo» ni «la respuesta está lista»: eso el cliente ya lo ve.
 
-```
-create_ticket(
-  title="Mensaje de @<usuario> en Instagram",
-  body=<lo que escribió, tal cual, y de qué posteo puede venir si se sabe>,
-  source="instagram-dm",
-  source_ref=<el id de la conversación>,
-)
-```
+**En la tarea sólo escribís una decisión que el cliente tiene que leer**, con
+`update_ticket`: que se venció el plazo y no se puede contestar, que era spam y
+lo dejaste pasar, o una pregunta que no podés contestar y necesita que la vea
+él.
 
-Una conversación es **una sola tarea**: el id del hilo es el mismo siempre, así
-que el segundo mensaje de la misma persona no abre otra. Lo que va contando
-después va como comentario de esa tarea con `update_ticket`. Y si el plazo se
-está por vencer y todavía no hay aprobación, decilo ahí: «se vence a las 18 el
-plazo para contestarle».
+**Lo que dice la columna, y lo que significa**: `fetch_messages` te dice en qué
+estado está la tarea de cada conversación. **`blocked` con un pedido tuyo
+pendiente = esperá, no prepares otra respuesta. `blocked` sin ningún pedido
+pendiente —te lo dice la misma línea— = quedó frenada de antes: seguí y
+contestá.** Y `done` quiere decir que esa persona ya fue respondida: si volvió
+a escribir, la tarea vuelve sola a «Por hacer».
 
 **Antes de escribir, leé el hilo entero y la tarea.** `fetch_messages` te da la
 conversación completa y, si ya tiene tarea, su id: `read_ticket` te dice qué se
@@ -172,7 +185,8 @@ y si te insultan o te quieren vender algo, no contestes nada.
 
 ## 7. Contale a tu cliente en una línea
 
-Cuando termines la vuelta: cuántos comentarios y cuántos mensajes nuevos había,
-cuántas respuestas le dejaste esperando el sí, y a quién le abriste tarea. Si
-alguna conversación tiene el plazo por vencerse, eso va primero. Si no había
-nada nuevo, eso es todo lo que hay para decir y no hace falta ni decirlo.
+Cuando termines la vuelta, **en el chat** —no en las tareas—: cuántos
+comentarios y cuántos mensajes nuevos había, cuántas respuestas le dejaste
+esperando el sí, y a quién le abriste tarea. Si alguna conversación tiene el
+plazo por vencerse, eso va primero. Si no había nada nuevo, eso es todo lo que
+hay para decir y no hace falta ni decirlo.

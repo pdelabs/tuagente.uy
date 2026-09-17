@@ -106,7 +106,7 @@ grep -qE '"tool": "(fetch_comments|refresh_if_due)"' <<<"$first" \
 grep -qi 'conectar' <<<"$first" \
   && ok "the client is told the connection is missing" \
   || bad "the answer does not mention the connection: $(tail -3 <<<"$first")"
-grep -q 'No pude responder' <<<"$first" \
+grep -q 'No pude responder:' <<<"$first" \
   && bad "the turn died" || ok "and the run ended normally"
 
 step "(b) a comment it has seen, and a turn that answers it"
@@ -171,7 +171,10 @@ LAST="$(api "$ENDPOINT/api/sessions/$SID/messages" | jq -r '.data[-1] | "\(.role
 grep -q '^assistant|' <<<"$LAST" \
   && ok "the run ended with an answer, not with a crash" \
   || bad "the last message is $LAST"
-grep -q 'No pude responder' <<<"$LAST" \
+# The engine's own failure line is «No pude responder: <reason>» — the colon is
+# what makes it that line and not the agent's «No pude responderlo: falta
+# conectar…», which is an answer and the one this test wants.
+grep -q 'No pude responder:' <<<"$LAST" \
   && bad "the turn died: $LAST" || ok "and it is not an engine error"
 grep -qi 'conectar' <<<"$LAST" \
   && ok "the client is told the connection is missing: $(head -c 140 <<<"$LAST")" \

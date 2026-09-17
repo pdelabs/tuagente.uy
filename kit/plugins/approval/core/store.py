@@ -165,7 +165,61 @@ def record_pending(
         kind, label = "approval_requested", f"Te pedí permiso: {title}"
     comment(approval_id, AGENT, body)
     db.append_event(kind, label, "pendiente", session_id, {"approval_id": approval_id})
+    paused(call.tool_name, approval_id, args)
     return approval_id
+
+
+# ── what a plugin learns when ITS tool stopped a run ────────────────────────
+
+# The second thing a plugin may hand over for a tool of its own, next to the
+# renderer (`render.py`'s `RENDERER`): something to run when that tool's call
+# stops a run.
+#
+#     engine.provide("approval.paused.send_message", ig_tools.paused)
+#
+# WHY IT EXISTS. A gated tool's body does not run until the client says yes, so
+# anything that has to be true WHILE she decides — the Instagram thread's ticket
+# reading «Esperando tu ok», the mail's doing the same — cannot be written by
+# the tool. Until now it was written by prose («antes de llamarla, mové la tarea
+# a blocked»), and prose is what failed: measured on our own agent on 16/9/2026,
+# a DM thread sat `blocked` with four narration comments while every request had
+# already been approved and answered, and the next tick read that as «still
+# waiting» and refused to draft. What the client sees about a request is the
+# gate's own fact, so the gate is what tells the plugin.
+#
+# It is called AFTER the row exists, with the row's id and the call's arguments,
+# and it is called again on a re-proposal — which is also a pause, and the same
+# thing is true of it. Anything it raises is the plugin's own bug and takes the
+# pause with it: this is not a place for a side effect that can fail.
+PAUSED = "approval.paused."
+
+
+def paused(tool_name: str, approval_id: str, args: dict) -> None:
+    """Tell the plugin that owns this tool that its call is waiting for the client."""
+    hook = render.SHARED.get(PAUSED + tool_name)
+    if hook:
+        hook(approval_id, args)
+
+
+def pending_for(tool_name: str, needle: str) -> str | None:
+    """The pending request for this tool whose call carries `needle`, if there is one.
+
+    WHAT IT IS FOR: a plugin that writes «Esperando tu ok» on a ticket has to be
+    able to ask whether that is still true — a rejected request leaves the
+    ticket blocked with nothing pending, and an agent reading that as «there is
+    a request out» never answers the person again.
+
+    `needle` is matched against the SERIALIZED CALL, which is where a tool's
+    arguments live, and it is meant for an id: a conversation id, a comment id,
+    a post id. A short or common string would match another call's prose, so
+    what a caller passes has to be a key.
+    """
+    row = db.one(
+        "SELECT id FROM approvals WHERE status = ? AND tool_name = ? AND requests LIKE ?"
+        " ORDER BY created_at DESC LIMIT 1",
+        (PENDING, tool_name, f"%{needle}%"),
+    )
+    return row["id"] if row else None
 
 
 def list_pending() -> list[dict]:

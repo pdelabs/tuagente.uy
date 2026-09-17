@@ -5,6 +5,12 @@ the engine:
 
 - `store.py` — the approval row: the pause, the negotiation, the resume.
 - `render.py` — the body the client reads, one shape for every tool.
+- and two things a plugin may hand over for a tool of ITS own: a renderer
+  (`approval.render.<tool>`, `render.py`) and something to run when that tool's
+  call stops a run (`approval.paused.<tool>`, `store.py`). The second one exists
+  because a gated tool's body does not run until the yes, so what has to be true
+  WHILE the client decides — a ticket reading «Esperando tu ok» — cannot be
+  written by the tool and must not be written by prose.
 - `routes.py` — `/portal/approvals*`. The request's THREAD is read at
   `/portal/tickets/{id}`, which is the board's path and the board's router:
   this plugin hands over `store.detail` and the board asks for it when an id is
@@ -75,6 +81,10 @@ def register(engine) -> None:
     # else (`core/plugins.py`) — the same way the social plugin writes
     # `approval.render.<tool>` to reach this one.
     engine.provide("tickets.detail.approvals", store.detail)
+    # AND WHETHER A REQUEST IS STILL OUT, for a plugin that wrote «Esperando tu
+    # ok» somewhere the client reads. A rejected request leaves that state
+    # behind, and nothing else in this engine can answer the question.
+    engine.provide("approvals.pending_for", store.pending_for)
     engine.router(routes.router)
     engine.module("approvals", True)
     engine.deferred(paused)

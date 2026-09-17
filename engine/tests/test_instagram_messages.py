@@ -15,6 +15,12 @@ it is a clock and a live test would have to wait a day to see it close.
      one new message carries the QUESTION FROM BEFORE, unmarked, so the answer
      can be to the person and not to the last line. Ours are written down and
      named, never listed as new.
+  b2. THE TICKET IS THE CONVERSATION AND THE CODE WRITES IT — a first message
+     opens one by itself (nobody asked the model), signed with the person's
+     handle so the Inbox draws the two sides; the nudge lands as a comment and
+     REOPENS it from `blocked`; what `send_message` sent lands as the agent's
+     comment and closes it `done`. No narration: every comment on the ticket is
+     something somebody actually said.
   c. THE ANSWER IS THE CALL META DOCUMENTS — `POST /{IG_USER_ID}/messages`, a
      JSON body carrying the recipient's IGSID and the text, the token as a
      Bearer header. The recipient comes from the CONVERSATION and never from
@@ -147,17 +153,22 @@ try:
     os.environ["IG_ACCESS_TOKEN"] = TOKEN
     os.environ["IG_USER_ID"] = USER
 
-    # The thread's own ticket on the board: the listing has to name it.
+    # (a) the first tick, (b) the nudge, and then nothing. NOBODY OPENS A TICKET
+    # HERE: the code does it, which is the claim.
     import board_store
-    ticket_id, _ = board_store.create(
-        title="Mensaje de prueba en Instagram", body=ASKED,
-        source="instagram-dm", source_ref=OPEN_THREAD, session_id=SESSION)
-    out["ticket_id"] = ticket_id
-
-    # (a) the first tick, (b) the nudge, and then nothing.
     out["first_tick"] = tools["fetch_messages"](ctx)
+    ticket = board_store.by_source("instagram-dm", OPEN_THREAD)
+    out["ticket_id"] = ticket["id"] if ticket else ""
+    out["after_first"] = dict(ticket) if ticket else {}
+    out["comments_first"] = board_store.comments(out["ticket_id"]) if ticket else []
+
+    # The state the thread is in while a request waits — and the one that used to
+    # outlive it. A new message has to reopen it.
+    board_store.move(out["ticket_id"], "blocked", said="Esperando tu ok.")
     THREADS[OPEN_THREAD].insert(0, NUDGE)
     out["nudge_tick"] = tools["fetch_messages"](ctx)
+    out["after_nudge"] = dict(board_store.row_of(out["ticket_id"])) if ticket else {}
+    out["comments_nudge"] = board_store.comments(out["ticket_id"]) if ticket else []
     out["third_tick"] = tools["fetch_messages"](ctx)
     out["rows"] = [dict(r) for r in db.query(
         "SELECT message_id, conversation_id, from_id, from_username, text"
@@ -173,6 +184,8 @@ try:
     out["sent"] = gated["send_message"](ctx, OPEN_THREAD, DRAFT, NOTE)
     out["corrected"] = gated["send_message"](
         ctx, OPEN_THREAD, DRAFT, NOTE, client_correction=CORRECTION)
+    out["after_send"] = dict(board_store.row_of(out["ticket_id"]))
+    out["comments_send"] = board_store.comments(out["ticket_id"])
     # (d) the one whose window shut.
     out["closed"] = gated["send_message"](ctx, CLOSED_THREAD, DRAFT, NOTE)
     out["closed_card"] = ig_tools.send_card({"conversation_id": CLOSED_THREAD,
@@ -240,6 +253,8 @@ def main() -> int:
         problems.append("it does not say which window is already shut")
     if f"tarea {measured['ticket_id']}" not in listing:
         problems.append("the thread's ticket is not named in the listing")
+    if "(Por hacer)" not in listing:
+        problems.append("the listing does not say what column the ticket is in")
     # Oldest first: the greeting is above the question it came before.
     if listing.index("Hola!") > listing.index(ASKED):
         problems.append("the thread is not oldest first")
@@ -278,6 +293,51 @@ def main() -> int:
         problems.append("the conversation does not carry the person's handle")
     failures += judge("b. and an old question is still there when a nudge arrives",
                       problems)
+
+    # (b2) the ticket, written by code
+    problems = []
+    ticket = measured["after_first"]
+    if not ticket:
+        problems.append("no ticket was opened for the conversation")
+    else:
+        if ticket["source"] != "instagram-dm" or ticket["source_ref"] != OPEN_THREAD:
+            problems.append(f"it is keyed {ticket['source']}/{ticket['source_ref']}")
+        if f"@{WHO}" not in ticket["title"]:
+            problems.append(f"the title does not carry the handle: {ticket['title']!r}")
+        if ASKED not in ticket["body"] and "Hola!" not in ticket["body"]:
+            problems.append("the ticket's body is not the first message")
+        if "**De:**" in ticket["body"]:
+            problems.append("the body carries a **De:** line, which the Inbox reads as "
+                            "the person and would read wrong")
+        if ticket["status"] != "ready":
+            problems.append(f"it was born {ticket['status']}")
+    signed = {c["author"] for c in measured["comments_first"]}
+    if signed - {f"@{WHO}", "agente", f"@{MINE}"}:
+        problems.append(f"a comment is signed {signed}")
+    if not any(c["body"] == ASKED for c in measured["comments_first"]):
+        problems.append("the person's second message is not on the ticket")
+    # The nudge: a comment, and the ticket comes back from `blocked`.
+    after = measured["after_nudge"]
+    if after.get("status") != "ready":
+        problems.append(f"a new message left the ticket {after.get('status')!r}")
+    fresh = [c for c in measured["comments_nudge"] if "leyeron mi mensaje" in c["body"]]
+    if len(fresh) != 1:
+        problems.append(f"{len(fresh)} comments for the nudge")
+    elif fresh[0]["author"] != f"@{WHO}":
+        problems.append(f"the nudge is signed {fresh[0]['author']!r}, so the Inbox "
+                        "would draw it on our side")
+    # What went out, and the ticket closed by the tool that sent it.
+    sent_ticket = measured["after_send"]
+    if sent_ticket["status"] != "done":
+        problems.append(f"after the answer the ticket is {sent_ticket['status']!r}")
+    answers = [c for c in measured["comments_send"] if c["author"] == "agente"]
+    if not any(DRAFT in c["body"] for c in answers):
+        problems.append("what was sent is not on the ticket")
+    narration = [c["body"] for c in measured["comments_send"]
+                 if "esperando" in c["body"].lower() or "nuevo mensaje" in c["body"].lower()]
+    if narration:
+        problems.append(f"the ticket carries narration: {narration}")
+    failures += judge("b2. the ticket is the conversation, written by code", problems)
 
     # (c) the answer
     problems = []
