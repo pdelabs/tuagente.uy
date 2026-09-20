@@ -917,7 +917,19 @@ export type Flow = {
 export const getFlows = (c: PortalConfig) =>
   get<{ available: boolean; flows: Flow[] }>(c.adapter, "/portal/flows", c);
 /** Detail: full results + the "how I work" from FLOW.md (>=0.30). */
-export type FlowDetail = Flow & { how: string };
+/** One past run of a flow. `session_id` is the conversation it happened in —
+ *  a run's conversation is NOT in the chat's list, this is how it is opened —
+ *  and it is null once the engine has cleaned up an old run that went well. */
+export type FlowRun = {
+  id: string;
+  status: "running" | "completed" | "failed" | "paused" | string;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+  manual: boolean;
+  session_id: string | null;
+};
+export type FlowDetail = Flow & { how: string; runs?: FlowRun[] };
 export const getFlowDetail = (c: PortalConfig, slug: string) =>
   get<FlowDetail>(c.adapter, `/portal/flows/${encodeURIComponent(slug)}`, c);
 

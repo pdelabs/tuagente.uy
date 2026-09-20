@@ -1374,6 +1374,25 @@ clock and resume starts it; run-now answers in milliseconds and the row is
 marked manual. It takes the flow, its rows and its conversations out on the way
 out and puts the container back on the default floor.
 
+### A run's conversation is opened from its flow
+
+A run is a session of kind `flow`, and `/api/sessions` does NOT list it: a flow
+that runs every 15 minutes is a hundred conversations a day nobody typed in,
+and on our own agent (2026-09-20) they had buried the ones somebody did. The
+way in is the flow's own page: `GET /portal/flows/{slug}` carries `runs`, the
+last 24, each with its outcome and the `session_id` the portal opens in the
+chat. A run that failed or is waiting for a yes also has its link in Activity
+and in Approvals, as before.
+
+`db.forget_quiet_runs` runs on every tick and deletes the CONVERSATION of a run
+that went well, asked for no approval and finished more than
+`CORE_FLOWS_QUIET_RUN_DAYS` (7) ago. The `flow_runs` row stays, so the history
+still says it ran; its `session_id` comes back `null` and the row is not a
+link. A failed run keeps its transcript, because that is where why is written.
+No session of kind `chat` is ever touched.
+
+`python3 engine/tests/test_flow_sessions.py` is the gate: five claims, no model.
+
 ## Compaction, promises and what a turn costs (G4, G5, G6)
 
 Three scripts, all run from the repo root against the container that is

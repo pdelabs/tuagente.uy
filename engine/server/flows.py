@@ -123,6 +123,23 @@ def execution(run) -> dict:
     }
 
 
+# How many runs the flow's own page lists. A day of a flow that runs hourly.
+RUNS_SHOWN = 24
+
+
+def past(run) -> dict:
+    """One run in the flow's history, the `FlowRun` shape of `lib/agent.ts`.
+
+    `session_id` is the conversation the run happened in, and it is how the
+    client opens one: a run's session is not in the chat's list
+    (`db.sessions`). `None` once `db.forget_quiet_runs` has taken it.
+    """
+    return execution(run) | {
+        "manual": bool(run["manual"]),
+        "session_id": run["session_id"] if run["has_session"] else None,
+    }
+
+
 def scheduled() -> list[flows.Flow]:
     return [f for f in flows.read_all() if f.trigger == "schedule"]
 
@@ -149,7 +166,7 @@ def detail(slug: str):
     # `how` is the half of the body above `## Notas técnicas`: what the client
     # reads as "cómo lo trabaja tu agente". The notes are the run's, and they
     # never leave the engine.
-    return card(flow) | {"how": flow.how}
+    return card(flow) | {"how": flow.how, "runs": [past(r) for r in db.flow_runs(slug, RUNS_SHOWN)]}
 
 
 # ── the scheduled tasks the tab crosses it against ──────────────────────────

@@ -26,7 +26,7 @@ import logging
 import time
 from datetime import datetime
 
-from . import db, flows, session
+from . import config, db, flows, session
 from .flows import Flow
 
 log = logging.getLogger(__name__)
@@ -201,6 +201,7 @@ def recover() -> None:
 
 async def tick() -> None:
     now = time.time()
+    db.forget_quiet_runs(now - config.FLOWS_QUIET_RUN_DAYS * 86400)
     for flow in flows.read_all():
         if flow.trigger != "schedule" or flow.status != "active":
             continue

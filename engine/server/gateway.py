@@ -13,6 +13,8 @@ NO_TITLE = "Falta el nombre nuevo de la conversación."
 
 @router.get("/api/sessions")
 def sessions():
+    """The conversations the client started. The runs of a flow are not here:
+    each is opened from its flow (`/portal/flows/{slug}`, `runs`)."""
     return {
         "data": [
             {
@@ -34,6 +36,9 @@ def sessions():
 @router.get("/api/sessions/{session_id}/messages")
 def messages(session_id: str):
     return {
+        # What the conversation is called, for the one the portal opens WITHOUT
+        # having it in its list: a flow's run, reached from the flow's page.
+        "title": db.session_title(session_id),
         "data": [
             {"id": str(row["id"]), "role": row["role"], "content": row["content"]}
             for row in db.messages(session_id)

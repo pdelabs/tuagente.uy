@@ -54,6 +54,10 @@ PLUGINS = [
 # infinite wake-ups. `engine/tests/test_flows.sh` drops it to 1 so the clock
 # can be watched in a test instead of in an afternoon.
 FLOWS_MIN_MINUTES = int(os.environ.get("CORE_FLOWS_MIN_MINUTES", "5"))
+# How long the conversation of a run that went well and asked for nothing is
+# kept (`db.forget_quiet_runs`). A week is long enough to open yesterday's run
+# and ask why it said what it said; a flow every 15 minutes is ~670 of them.
+FLOWS_QUIET_RUN_DAYS = int(os.environ.get("CORE_FLOWS_QUIET_RUN_DAYS", "7"))
 
 TIMEZONE = os.environ.get("TZ", "America/Montevideo")
 ADAPTER_VERSION = "core-0.1.0"

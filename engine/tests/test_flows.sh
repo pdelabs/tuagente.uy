@@ -150,9 +150,15 @@ assert "$(sql "SELECT id FROM sessions WHERE id IN (SELECT session_id FROM flow_
   "2" "each run opened its own conversation"
 assert "$(sql "SELECT DISTINCT kind FROM sessions WHERE id IN (SELECT session_id FROM flow_runs WHERE slug = ?)" "$SLUG" | jq -r '.[0].kind')" \
   "flow" "the conversations are of kind flow"
-api "$ENDPOINT/api/sessions" | jq -r '.data[].title' | grep -q '^Prueba del reloj · ' \
+sql "SELECT title FROM sessions WHERE id IN (SELECT session_id FROM flow_runs WHERE slug = ?)" "$SLUG" \
+  | jq -r '.[].title' | grep -q '^Prueba del reloj · ' \
   && ok "the conversation is titled with the flow and the time" \
   || bad "no conversation titled after the flow"
+api "$ENDPOINT/api/sessions" | jq -r '.data[].title' | grep -q '^Prueba del reloj · ' \
+  && bad "a run's conversation is in the chat's list" \
+  || ok "a run's conversation is not in the chat's list"
+assert "$(api "$ADAPTER/portal/flows/$SLUG" | jq '[.runs[] | select(.session_id != null)] | length')" \
+  "2" "the flow's own page is the way into each run's conversation"
 [ -f "$OUT_DIR/$SLUG.txt" ] && ok "the flow did its work: $(cat "$OUT_DIR/$SLUG.txt" | head -1)" \
   || bad "nothing landed in flows-test/"
 assert "$(api "$ENDPOINT/api/jobs" | jq -r --arg j "$JOB" '.jobs[] | select(.id == $j) | .last_status')" \

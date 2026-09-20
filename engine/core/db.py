@@ -99,9 +99,10 @@ if "history" not in _columns:
 if "decision" not in _columns:
     _conn.execute("ALTER TABLE approvals ADD COLUMN decision TEXT")
 # `kind` tells a conversation the client started from a run the clock started.
-# `source` cannot: the portal counts `api_server` as a human conversation and
-# hides anything else, and a flow's session IS shown — it is the client's, they
-# just did not type in it.
+# `source` cannot: both are `api_server`. A flow's session is the client's and
+# they can open it, but FROM THE FLOW and not from the chat's list: a flow that
+# runs every 15 minutes is a hundred conversations a day nobody typed in, and
+# on our own agent (2026-09-20) they had buried the ones somebody did.
 _session_columns = {c["name"] for c in _conn.execute("PRAGMA table_info(sessions)")}
 if "kind" not in _session_columns:
     _conn.execute("ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'")
@@ -158,6 +159,11 @@ def session_kind(session_id: str) -> str | None:
     return row["kind"] if row else None
 
 
+def session_title(session_id: str) -> str | None:
+    row = one("SELECT title FROM sessions WHERE id = ?", (session_id,))
+    return row["title"] if row else None
+
+
 def rename_session(session_id: str, title: str) -> None:
     write("UPDATE sessions SET title = ? WHERE id = ?", (title, session_id))
 
@@ -171,9 +177,11 @@ def delete_session(session_id: str) -> None:
 
 
 def sessions() -> list[sqlite3.Row]:
+    """The conversations the client started. A run's session is reached from
+    its flow (`flow_runs`), never from this list."""
     return query(
         "SELECT s.*, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count"
-        " FROM sessions s ORDER BY s.last_active DESC"
+        " FROM sessions s WHERE s.kind = 'chat' ORDER BY s.last_active DESC"
     )
 
 
@@ -284,6 +292,40 @@ def last_finished_flow_run(slug: str) -> sqlite3.Row | None:
         " ORDER BY scheduled_at DESC LIMIT 1",
         (slug,),
     )
+
+
+def flow_runs(slug: str, limit: int) -> list[sqlite3.Row]:
+    """A flow's latest runs, newest first. `has_session` is whether the run's
+    conversation is still there to open: `forget_quiet_runs` takes the old
+    uneventful ones away and leaves the row."""
+    return query(
+        "SELECT r.*, EXISTS(SELECT 1 FROM sessions s WHERE s.id = r.session_id) AS has_session"
+        " FROM flow_runs r WHERE r.slug = ? ORDER BY r.scheduled_at DESC LIMIT ?",
+        (slug, limit),
+    )
+
+
+def forget_quiet_runs(older_than: float) -> int:
+    """Delete the CONVERSATIONS of runs that went well and asked for nothing.
+
+    The run's row stays: that it ran, when, and that it went well is the
+    flow's history. What goes is the transcript of a run nobody has a reason to
+    open. A run that FAILED keeps its conversation, because that is where why
+    is written; so does one that asked for an approval, because the approval
+    links to it. Returns how many went.
+    """
+    quiet = (
+        "SELECT r.session_id FROM flow_runs r WHERE r.status = 'ok' AND r.finished_at < ?"
+        " AND NOT EXISTS (SELECT 1 FROM approvals a WHERE a.session_id = r.session_id)"
+    )
+    with _lock:
+        _conn.execute(f"DELETE FROM messages WHERE session_id IN ({quiet})", (older_than,))
+        _conn.execute(f"DELETE FROM history WHERE session_id IN ({quiet})", (older_than,))
+        gone = _conn.execute(
+            f"DELETE FROM sessions WHERE kind = 'flow' AND id IN ({quiet})", (older_than,)
+        ).rowcount
+        _conn.commit()
+    return gone
 
 
 def flow_run_in_flight(slug: str) -> sqlite3.Row | None:

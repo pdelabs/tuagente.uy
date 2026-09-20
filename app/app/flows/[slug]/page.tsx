@@ -14,8 +14,9 @@ import {
 } from "lucide-react";
 import {
   createTicket, connectionLabel, getFlowDetail, getFlows, getJobs, loadConfig,
-  type CronJob, type Flow, type FlowDetail, type HttpError, type PortalConfig,
+  type CronJob, type Flow, type FlowDetail, type FlowRun, type HttpError, type PortalConfig,
 } from "../../lib/agent";
+import { whenItHappened } from "../../lib/labels";
 import {
   crossTask, inFlight, realStatus, resumePauseQueue, useRuns, runOf,
 } from "../runs";
@@ -26,7 +27,7 @@ import { EntityChip } from "../../lib/entities";
 import {
   StaleLinkNotice, Btn, Card, Chip, ErrorState, IconBtn, PageHeader, Spinner,
 } from "../../lib/ui";
-import { CopyLink } from "../../lib/routes";
+import { CopyLink, PARAM } from "../../lib/routes";
 
 const WRAP = "mx-auto max-w-4xl px-6 py-6 md:px-8";
 
@@ -243,6 +244,8 @@ export default function FlowDetailPage() {
           )}
         </section>
 
+        <PastRuns runs={flow.runs ?? []} />
+
         {flow.how && (
           <section className="mb-6">
             <h2 className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
@@ -257,6 +260,61 @@ export default function FlowDetailPage() {
         <RequestChange cfg={cfg} flow={flow} />
       </div>
     </EntityProvider>
+  );
+}
+
+const RUN_OUTCOME: Record<string, { label: string; tone: "green" | "coral" | "amber" | "violet" }> = {
+  completed: { label: "Salió bien", tone: "green" },
+  failed: { label: "Falló", tone: "coral" },
+  paused: { label: "Esperando tu ok", tone: "amber" },
+  running: { label: "Trabajando ahora", tone: "violet" },
+};
+
+/** Every run of this flow, newest first, and THE WAY INTO ITS CONVERSATION.
+ *  A run is a conversation the client did not type in, and the chat's list
+ *  does not carry them (a flow every 15 minutes buried the real ones): this is
+ *  where one is opened. A run with no `session_id` went well long enough ago
+ *  that the engine let its transcript go; the row still says it ran. */
+function PastRuns({ runs }: { runs: FlowRun[] }) {
+  if (runs.length === 0) return null;
+  return (
+    <section className="mb-6">
+      <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
+        Últimas corridas
+      </h2>
+      <Card className="!p-0">
+        <ul className="divide-y divide-black/[0.07]">
+          {runs.map((r) => {
+            const outcome = RUN_OUTCOME[r.status];
+            const when = whenItHappened(r.finished_at ?? r.started_at);
+            const row = (
+              <>
+                <span className="min-w-0 flex-1 truncate text-[13px] text-ink first-letter:uppercase">
+                  {when}
+                  {r.manual && <span className="ml-1.5 text-ink-soft">· la pediste vos</span>}
+                </span>
+                {outcome && <Chip tone={outcome.tone}>{outcome.label}</Chip>}
+                {r.session_id && <ArrowRight className="h-3.5 w-3.5 shrink-0 text-ink-soft" />}
+              </>
+            );
+            return (
+              <li key={r.id}>
+                {r.session_id ? (
+                  <Link
+                    href={`/app/chat?${PARAM.conversation}=${encodeURIComponent(r.session_id)}`}
+                    className="flex items-center gap-2.5 px-3.5 py-2.5 transition hover:bg-black/[0.02]"
+                  >
+                    {row}
+                  </Link>
+                ) : (
+                  <div className="flex items-center gap-2.5 px-3.5 py-2.5">{row}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+    </section>
   );
 }
 

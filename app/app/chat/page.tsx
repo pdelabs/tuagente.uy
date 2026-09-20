@@ -239,6 +239,9 @@ export default function ChatPage() {
     }
   }, [input]);
 
+  // The name of a conversation that is open but NOT in the list: a flow's run,
+  // reached from the flow's page. The list is the client's own conversations.
+  const [threadTitle, setThreadTitle] = useState<string | null>(null);
   const activeSession = useMemo(
     () => (activeId ? sessions?.find((s) => s.id === activeId) : undefined),
     [activeId, sessions],
@@ -311,12 +314,17 @@ export default function ChatPage() {
     setEditingIdx(null);
     setLoadingThread(true);
     setAtBottom(true);
+    setThreadTitle(null);
     getSessionMessages(c, id)
-      .then((r: { data?: StoredMessage[] }) => (r.data ?? [])
-        .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
-        .map((m): Msg => ({ role: m.role as "user" | "assistant", content: m.content as string })))
-      .then((turns: Msg[]) => {
+      .then((r: { title?: string | null; data?: StoredMessage[] }) => ({
+        title: r.title ?? null,
+        turns: (r.data ?? [])
+          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
+          .map((m): Msg => ({ role: m.role as "user" | "assistant", content: m.content as string })),
+      }))
+      .then(({ title, turns }) => {
         if (openSeq.current !== seq) return;
+        setThreadTitle(title);
         setMsgs(turns);
       })
       .catch((e) => {
@@ -539,7 +547,7 @@ export default function ChatPage() {
   };
 
   const exportMd = () => {
-    const title = activeSession ? sessionTitle(activeSession) : "Conversación";
+    const title = activeSession ? sessionTitle(activeSession) : threadTitle || "Conversación";
     const body = msgs
       .map((m) => `## ${m.role === "user" ? "Vos" : "Tu agente"}\n\n${m.content}`)
       .join("\n\n---\n\n");
@@ -619,7 +627,7 @@ export default function ChatPage() {
             <Menu className="h-4 w-4" />
           </button>
           <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-            {activeSession ? sessionTitle(activeSession) : "Nueva conversación"}
+            {activeSession ? sessionTitle(activeSession) : (activeId && threadTitle) || "Nueva conversación"}
           </p>
           {/* Only saved conversations have a link. One just started doesn't
               exist yet on the agent's side: promising a link that leads
