@@ -27,7 +27,7 @@ import Onboarding, {
   NoChannelNotice, loadAgentName, onboardingAlreadyAnswered, saveAgentName,
 } from "./lib/onboarding";
 import {
-  AgentitoAvatar, hasSavedLook, loadAgentLook, lookFromAgent, saveAgentLook,
+  AgentitoAvatar, loadAgentLook, lookFromAgent, saveAgentLook,
 } from "./lib/agentito";
 
 // Module order and labels; only the ones the manifest enables get shown
@@ -244,22 +244,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Not showing it now is enough (`showIntro` already checks `withIntent`,
   // which stays set as long as they're on that tab).
 
-  // If this browser doesn't know the agent but the agent knows itself (the
-  // client named it from another machine, or entered with a different link
-  // and the previous one got wiped), the portal copies it over.
+  // THE AGENT IS WHO KNOWS WHAT IT IS CALLED AND WHAT IT LOOKS LIKE; the
+  // browser keeps a copy so the half dozen screens that have no manifest at
+  // hand (`loadAgentName() || "Tu agente"`) can still name it. Every change
+  // made from the portal is written to the agent first (`saveIdentity`), so
+  // when the two disagree the browser's copy is the stale one: renamed from
+  // another machine, or by whoever operates the agent.
   //
-  // The NAME too, not just the look: half a dozen screens read it from the
-  // browser with no manifest at hand (`loadAgentName() || "Tu agente"`), so
-  // without this copy a client entering from another machine sees their agent
-  // called "Tu agente" on the board and in approvals.
+  // It used to be copied only when the browser had NOTHING, which meant the
+  // first name a browser ever saw was the one it showed forever. Measured on
+  // our own agent on 2026-09-20: renamed and redrawn on the agent, and the
+  // portal went on greeting «Tu Agente» in violet.
+  //
+  // An agent with no name yet is the onboarding's to fill in: nothing to adopt.
   const learnFromAgent = (m: Manifest) => {
-    if (m.named && m.agent && !loadAgentName()) {
+    if (!m.named || !m.agent) return;
+    if (m.agent !== loadAgentName()) {
       saveAgentName(m.agent);
       setName(m.agent);
     }
-    if (hasSavedLook()) return;
     const theirs = lookFromAgent(m.look);
-    if (theirs) { saveAgentLook(theirs); setAgentLook(theirs); }
+    if (theirs && JSON.stringify(theirs) !== JSON.stringify(loadAgentLook())) {
+      saveAgentLook(theirs);
+      setAgentLook(theirs);
+    }
   };
 
   // WHAT CLOCK THE BUSINESS LIVES ON, BEFORE PAINTING ANYTHING. Every screen
