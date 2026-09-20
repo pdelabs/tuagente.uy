@@ -83,9 +83,19 @@ from core import config, db
 CAPTION = HEAD + "\nLa segunda línea del pie, que no se ve en la tarjeta."
 SIXTY_DAYS = 5184000
 
-# The feed: two posts, and the comments under the first one. `c_ours` is the
-# account's own reply, nested under the comment it answers, which is exactly how
-# Instagram hands it back and exactly what must not come back as new.
+# The feed: two posts, and the comments under the first one, IN THE SHAPE THE
+# GRAPH REALLY SENDS (measured on our own account, 2026-09-20), which is not the
+# shape anybody would guess:
+#
+#   - a stranger's comment has no `username`, its handle is in `from`; only our
+#     own rows carry `username`;
+#   - the edge is flat: our reply `c_nuestro` is a row of its own with a
+#     `parent_id`, next to the comment it answers;
+#   - and nested under its parent a reply is `id`, `text`, `timestamp` and NO
+#     AUTHOR. That is what had the agent draft an answer to its own answer.
+#
+# `c_respuesta` is NOT in the flat rows, the way a reply past the first page is
+# not: its author is only to be had by asking for the comment by id (`SINGLE`).
 FEED = [
     {"id": MEDIA, "caption": CAPTION, "permalink": PERMALINK,
      "timestamp": "2020-01-04T09:00:00+0000"},
@@ -95,18 +105,28 @@ FEED = [
 ]
 COMMENTS = {
     MEDIA: [
-        {"id": "c_pregunta", "text": "¿Cuánto sale?", "username": "juan.perez",
+        {"id": "c_nuestro", "text": "Te contesto por acá.", "username": MINE,
+         "from": {"id": "1", "username": MINE}, "parent_id": "c_pregunta",
+         "timestamp": "2020-01-04T10:05:00+0000"},
+        {"id": "c_pregunta", "text": "¿Cuánto sale?",
+         "from": {"id": "2", "username": "juan.perez"},
          "timestamp": "2020-01-04T10:00:00+0000",
          "replies": {"data": [
-             {"id": "c_nuestro", "text": "Te contesto por acá.", "username": MINE,
+             {"id": "c_nuestro", "text": "Te contesto por acá.",
               "timestamp": "2020-01-04T10:05:00+0000"},
              {"id": "c_respuesta", "text": "A mí también me interesa, ¿cómo hago?",
-              "username": "ana.gomez", "timestamp": "2020-01-04T10:10:00+0000"},
+              "timestamp": "2020-01-04T10:10:00+0000"},
          ]}},
         {"id": "c_spam", "text": "GANÁ PLATA DESDE CASA http://spam.example",
-         "username": "cuenta.rara", "timestamp": "2020-01-04T11:00:00+0000"},
+         "from": {"id": "3", "username": "cuenta.rara"},
+         "timestamp": "2020-01-04T11:00:00+0000"},
     ],
     "18000000000000002": [],
+}
+SINGLE = {
+    "c_respuesta": {"id": "c_respuesta", "text": "A mí también me interesa, ¿cómo hago?",
+                    "from": {"id": "4", "username": "ana.gomez"}, "parent_id": "c_pregunta",
+                    "timestamp": "2020-01-04T10:10:00+0000"},
 }
 NUMBERS = {"reach": 320, "saved": 12, "likes": 18, "comments": 3, "shares": 2}
 
@@ -129,6 +149,8 @@ def handle(request):
         return httpx.Response(200, json={"data": FEED})
     if path.endswith("/comments") and request.method == "GET":
         return httpx.Response(200, json={"data": COMMENTS[path.split("/")[2]]})
+    if request.method == "GET" and path.split("/")[-1] in SINGLE:
+        return httpx.Response(200, json=SINGLE[path.split("/")[-1]])
     if path.endswith("/insights"):
         return httpx.Response(200, json={"data": [
             {"name": name, "values": [{"value": value}]} for name, value in NUMBERS.items()]})

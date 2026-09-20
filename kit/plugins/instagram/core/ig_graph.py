@@ -229,16 +229,56 @@ def media(limit: int = 10) -> list[dict]:
                fields="id,caption,permalink,timestamp", limit=limit).get("data") or []
 
 
-def comments(media_id: str) -> list[dict]:
-    """One post's comments, each with its replies nested.
+COMMENT_FIELDS = "id,text,username,from,parent_id,timestamp"
 
-    The replies come in the same call (`replies{…}`) because a conversation
-    under a post is one thing: a question asked as a reply to somebody else's
-    comment is still a question at us.
+
+def author(item: dict) -> str | None:
+    """Who wrote a comment. `username` is only there on OUR OWN; everybody
+    else's handle comes in `from`."""
+    return item.get("username") or (item.get("from") or {}).get("username")
+
+
+def comments(media_id: str) -> list[dict]:
+    """One post's comments, each with its replies nested, EVERY ONE WITH ITS
+    AUTHOR in `username`. The rest of the plugin reads that shape and no other.
+
+    WHAT THE GRAPH ACTUALLY SENDS is not that, measured on our own account on
+    2026-09-20:
+
+    - a stranger's comment has no `username`: the handle is in `from`;
+    - the edge is FLAT: a reply is a row of its own, with `parent_id`, next to
+      the comment it answers;
+    - and the same reply nested under its parent (`replies{…}`) carries `id`,
+      `text` and `timestamp` and NO AUTHOR AT ALL, whatever fields are asked
+      for. So does `/{comment}/replies`.
+
+    Reading the nested copy is what had our agent answer itself: our own reply
+    came back with no author, so it was not ours, so it was new, so it got a
+    draft («Gracias, nos alegra que te haya gustado», under our own «Gracias,
+    nos alegra que te haya gustado»). And every stranger was «alguien».
+
+    So: the top level is the rows with no `parent_id`; the replies are the
+    nested ones, for their order; and each reply's author is looked up in the
+    flat rows by id, or asked for by id when the flat page did not carry it. A
+    reply whose author nobody can name is never handed over as a stranger's.
     """
-    return get(f"{media_id}/comments",
-               fields="id,text,username,timestamp,"
-                      "replies{id,text,username,timestamp}").get("data") or []
+    rows = get(f"{media_id}/comments",
+               fields=f"{COMMENT_FIELDS},replies{{id,text,timestamp}}").get("data") or []
+    authors = {row["id"]: author(row) for row in rows}
+    found = []
+    for row in rows:
+        if row.get("parent_id"):
+            continue
+        nested = (row.get("replies") or {}).get("data") or []
+        for item in nested:
+            if not authors.get(item["id"]):
+                authors[item["id"]] = author(get(item["id"], fields=COMMENT_FIELDS))
+            item["username"] = authors[item["id"]]
+        found.append({
+            "id": row["id"], "text": row.get("text"), "username": authors[row["id"]],
+            "timestamp": row.get("timestamp"), "replies": {"data": nested},
+        })
+    return found
 
 
 def reply(comment_id: str, message: str) -> str:
