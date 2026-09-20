@@ -191,6 +191,7 @@ export default function FlowDetailPage() {
             e={e}
             name={flow.name}
             trigger={flow.trigger}
+            triggerType={flow.trigger_type}
             onChange={load}
           />
         </div>

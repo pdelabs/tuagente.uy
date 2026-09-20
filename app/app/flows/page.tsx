@@ -206,7 +206,7 @@ function FlowCard({ f, e, cfg, connections, posts, onChange }: {
         </p>
       )}
 
-      <FlowActions cfg={cfg} e={e} name={f.name} trigger={f.trigger} onChange={onChange} />
+      <FlowActions cfg={cfg} e={e} name={f.name} trigger={f.trigger} triggerType={f.trigger_type} onChange={onChange} />
     </Card>
   );
 }

@@ -215,11 +215,13 @@ type Notice = { text: string; ok: boolean } | null;
  *  verified against the lab; noted in `docs/PENDING.md`. Meanwhile the
  *  button neither stays silent nor lies: it goes to chat with the request
  *  already written, which is what both clients ended up doing by hand. */
-export function FlowActions({ cfg, e, name, trigger, onChange }: {
+export function FlowActions({ cfg, e, name, trigger, triggerType, onChange }: {
   cfg: PortalConfig;
   e: RealStatus;
   name: string;
   trigger?: string;
+  /** `event` = it runs when something arrives: there is no day or time to move. */
+  triggerType?: string;
   onChange: () => void;
 }) {
   const [busy, setBusy] = useState<"pause" | "resume" | null>(null);
@@ -306,13 +308,15 @@ export function FlowActions({ cfg, e, name, trigger, onChange }: {
             Pausar
           </SmallButton>
         )}
-        <Link
-          href={rescheduleLink}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-black/10 bg-white px-2.5 text-[12.5px] font-semibold text-ink transition hover:bg-black/[0.03]"
-        >
-          <CalendarClock className="h-3.5 w-3.5" />
-          Cambiar día u hora
-        </Link>
+{triggerType !== "event" && (
+                <Link
+            href={rescheduleLink}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-black/10 bg-white px-2.5 text-[12.5px] font-semibold text-ink transition hover:bg-black/[0.03]"
+          >
+            <CalendarClock className="h-3.5 w-3.5" />
+            Cambiar día u hora
+          </Link>
+        )}
       </div>
 
       {/* BEFORE pressing it: on a paused flow, "Probarlo ahora" does not

@@ -265,7 +265,13 @@ export function realStatus(f: Flow, cross: Cross, opts: StatusOptions = {}): Rea
   let raw = "";
   if (execTime && execTime >= jobTime && execTime >= adapterTime) {
     whenISO = exec?.finished_at || exec?.claimed_at || "";
-    outcome = exec?.finished_at ? readOutcome(exec?.status) : null;
+    // A run waiting at the approval gate has no `finished_at` AND has an
+    // outcome: it is the one state that is neither in flight nor over. Reading
+    // it as "no outcome yet" painted a flow with a request sitting in
+    // Aprobaciones as «Activo», with not a word about it (seen on our own
+    // agent, 2026-09-20).
+    const waitingNow = WAITING_STATUSES.has((exec?.status ?? "").trim().toLowerCase());
+    outcome = exec?.finished_at || waitingNow ? readOutcome(exec?.status) : null;
     raw = exec?.error ?? "";
   } else if (jobTime && jobTime >= adapterTime) {
     whenISO = job?.last_run_at ?? "";
