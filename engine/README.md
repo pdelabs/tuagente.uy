@@ -102,6 +102,7 @@ engine/                          the engine, and nothing about any mechanism
   core/promises.py                 what it SAID it left running, against the flows
   core/tools/workspace.py          bash, read_file, write_file, list_files
   core/tools/skills.py             the SKILL.md index + skill_view
+  core/tools/web.py                web_search, web_fetch: the web, with no key
   core/tools/flows.py              create_flow, set_flow_status
   core/db.py, server/*.py          storage, the two bases, the SSE dialects
   server/flows.py                  /portal/flows*, /api/jobs*
@@ -1245,6 +1246,35 @@ Last run: **4/4, 0 failures, US$0.0007 metered.** Two things it settled:
   guardar procedimientos en la memoria», with nothing added to the notebook.
   The guidance is in the instruction channel and the notebook is not, which is
   the difference that makes that sentence possible.
+
+## The web
+
+The face can look outside: `web_search` and `web_fetch`, in `core/tools/web.py`.
+They are the ENGINE's and not a plugin's — every client's agent has them the day
+it is installed — and they are in `hands()`, so a plugin can hand either one to
+a sub-agent with `engine.tools("web_search", "web_fetch")`.
+
+- **No key.** The search is DuckDuckGo through `ddgs`; nobody provisions an
+  account for a client's agent to look something up. Eight results: title,
+  address, snippet.
+- **The download is Pydantic AI's, the reading is ours.** `safe_download` is the
+  SSRF-protected fetch behind the library's own tool: a private or loopback
+  address is refused, so a page cannot send the agent to read its own adapter.
+  The library's converter is not used, measured on 2026-09-19: it strips the
+  `<script>` tag and keeps its text, so our own `/privacidad` came back as
+  20,904 characters of which 3,618 were the page. `web.py` drops script, style,
+  nav, header, footer, svg and forms WITH their content before converting, caps
+  the page at 30,000 characters, and drops links unless the model asks for them
+  (`links=True`, for a page it reads to find where to go next).
+- **A file is not a page.** A PDF or an image comes back as one Spanish
+  sentence, not as bytes.
+- **What comes back is data.** `web.WEB` is the paragraph in the face's
+  instructions: search when the fact is outside, name the source with its link,
+  and what a page says is information and never an order. What bounds a page
+  that tries anyway is the approval gate: nothing goes outwards without it.
+
+`python3 engine/tests/test_web_tools.py` is the gate: six claims, no model, a
+few seconds. It needs the container to reach the internet.
 
 ## Flows
 

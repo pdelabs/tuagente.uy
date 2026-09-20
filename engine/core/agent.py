@@ -19,7 +19,7 @@ from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.toolsets import AbstractToolset, CombinedToolset
 
 from . import config, plugins
-from .tools import flows, skills, workspace
+from .tools import flows, skills, web, workspace
 
 
 @dataclass
@@ -124,7 +124,7 @@ IDENTITY = identity()
 
 
 def instructions(ctx: RunContext[Deps]) -> str:
-    """SOUL + the enabled plugins' prose + the skills index + today's date.
+    """SOUL + the engine's own rules + the enabled plugins' prose + the skills index + today's date.
 
     THE ORDER IS THE POINT. The SOUL says who the agent is and nothing else;
     each mechanism's rules arrive with the plugin that brings the mechanism, so
@@ -140,7 +140,7 @@ def instructions(ctx: RunContext[Deps]) -> str:
     delegate gets. Not the same text and not meant to be: the face is the one
     with a scope, a chat and manners in it.
     """
-    parts = [soul(), FLOWS, *plugins.prose(), skills.index_text(), today()]
+    parts = [soul(), FLOWS, web.WEB, *plugins.prose(), skills.index_text(), today()]
     return "\n\n".join(p for p in parts if p)
 
 
@@ -151,7 +151,7 @@ def hands() -> list[AbstractToolset[Deps]]:
     work that repeats — what it delivers, how she knows it went well — and a
     sub-agent never talks to her, so `create_flow` is the face's alone.
     """
-    return [workspace.toolset(), skills.toolset()]
+    return [workspace.toolset(), skills.toolset(), web.toolset()]
 
 
 def tools(*names: str) -> AbstractToolset[Deps]:

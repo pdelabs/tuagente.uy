@@ -66,7 +66,7 @@ function gestureFor(tool: string | undefined): AgentitoState {
   if (/^(write_file|patch|image_generate|video_generate|kanban_(create|comment|complete|block|unblock|link)|project_create)$/.test(tool)) {
     return "writing";
   }
-  if (/^(web_search|web_extract|x_search|browser_|vision_analyze|video_analyze)/.test(tool)) {
+  if (/^(web_search|web_fetch|web_extract|x_search|browser_|vision_analyze|video_analyze)/.test(tool)) {
     return "searching";
   }
   return "doing";

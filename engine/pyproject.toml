@@ -5,7 +5,10 @@ description = "The tuagente.uy agent engine: the portal served by Pydantic AI"
 requires-python = ">=3.12"
 dependencies = [
     # The `openrouter` extra exists for 2.43.0 (checked against PyPI metadata).
-    "pydantic-ai-slim[openrouter]==2.43.0",
+    # `duckduckgo` and `web-fetch` are the two halves of core/tools/web.py:
+    # `ddgs` for the search that needs no key, `markdownify` for the page
+    # reader.
+    "pydantic-ai-slim[openrouter,duckduckgo,web-fetch]==2.43.0",
     # The `memory` plugin's capability: the notebook, its four tools and the
     # bounded injection. Pinned, like the engine it plugs into — the harness is
     # on 0.x and says so, and its API moves between minor releases.
