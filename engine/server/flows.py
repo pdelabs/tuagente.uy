@@ -60,9 +60,9 @@ def card(flow: flows.Flow) -> dict:
             if last else None
         ),
         # Finally published, instead of the portal guessing it from the name:
-        # a flow that runs on the clock has a task, one that waits to be asked
-        # has none.
-        "trigger_job": job_id(flow.slug) if flow.trigger == "schedule" else None,
+        # a flow that runs on its own — on the clock, or when something
+        # arrives — has a task, one that waits to be asked has none.
+        "trigger_job": job_id(flow.slug) if flow.trigger in ON_ITS_OWN else None,
         "results": [],
         "results_total": 0,
     }
@@ -90,7 +90,10 @@ def job(flow: flows.Flow) -> dict:
         "name": job_id(flow.slug),
         "enabled": flow.status == "active",
         "state": "running" if running else ("paused" if flow.status == "paused" else "scheduled"),
-        "schedule": {"kind": "cron", "expr": flow.cron, "display": flow.trigger_detail},
+        # An `event` flow has no expression and no next run: it runs when
+        # something arrives, and `next_run_at` below is `None` for it.
+        "schedule": {"kind": "cron" if flow.cron else "event", "expr": flow.cron,
+                     "display": flow.trigger_detail},
         "schedule_display": flow.trigger_detail,
         "next_run_at": iso(upcoming.timestamp()) if upcoming else None,
         "last_run_at": iso(last["finished_at"] or last["started_at"]) if last else None,
@@ -140,8 +143,13 @@ def past(run) -> dict:
     }
 
 
+# The triggers that make a flow run without anybody asking. Each of those
+# flows has a task the tab can pause, resume and run now.
+ON_ITS_OWN = ("schedule", "event")
+
+
 def scheduled() -> list[flows.Flow]:
-    return [f for f in flows.read_all() if f.trigger == "schedule"]
+    return [f for f in flows.read_all() if f.trigger in ON_ITS_OWN]
 
 
 def by_job(job_id_: str) -> flows.Flow:
@@ -178,6 +186,18 @@ def jobs(include_disabled: bool = False):
     }
 
 
+async def run_now(flow: flows.Flow, now: datetime) -> None:
+    """«Probarlo ahora». For an `event` flow that is one look of its watcher
+    right now, and the run gets what it found plus whatever was already
+    waiting — or, when nothing arrived, a line that says so: she asked for a
+    run and the tab is watching for one."""
+    if flow.trigger != "event":
+        return await scheduler.run(flow, now, manual=True)
+    await asyncio.to_thread(scheduler.look, flow)
+    arrived = "\n\n".join(db.take_pending(flow.slug)) or scheduler.NOTHING_ARRIVED
+    await scheduler.run(flow, now, manual=True, arrived=arrived)
+
+
 @router.post("/api/jobs/{job_id_}/{action}")
 async def act(job_id_: str, action: str):
     """Pause, resume and run now — the three buttons on a flow's card.
@@ -190,7 +210,7 @@ async def act(job_id_: str, action: str):
     flow = by_job(job_id_)
     if action == "run":
         now = datetime.now(flows.zone(flow)).replace(microsecond=0)
-        asyncio.create_task(scheduler.run(flow, now, manual=True))
+        asyncio.create_task(run_now(flow, now))
         return {"job": job(flow)}
     if action not in ("pause", "resume"):
         raise HTTPException(400, NO_ACTION.format(action=action))

@@ -1,7 +1,8 @@
 ## Instagram: comentarios y mensajes
 
-Lo nuevo te lo traen `fetch_comments` y `fetch_messages`, y no viene suelto:
-viene el hilo entero, con lo tuyo marcado «Vos». Le contestás a la persona, no
+En el flujo, lo nuevo ya viene adentro del pedido, bajo «Lo que llegó»; en el
+chat, te lo traen `fetch_comments` y `fetch_messages`. Nunca viene suelto: viene
+el hilo entero, con lo tuyo marcado «Vos». Le contestás a la persona, no
 al último renglón, y si el hilo trae una tarea, leela con `read_ticket` antes de
 escribir. Si ya tenés el id de un comentario o de una conversación, contestá con
 la herramienta: no vuelvas a pedir la lista para verificar. Qué hacer con cada

@@ -22,7 +22,9 @@ posteo con el nombre del cliente arriba.
 
 ## 2. Leé el hilo entero antes de escribir una palabra
 
-`fetch_comments` y `fetch_messages` no te traen renglones sueltos: te traen **el
+Lo nuevo —bajo «Lo que llegó» cuando corre el flujo, o lo que devuelven
+`fetch_comments` y `fetch_messages` cuando te lo piden en el chat— no son
+renglones sueltos: es **el
 hilo completo** de cada persona que dijo algo nuevo, de lo más viejo a lo más
 nuevo, con lo tuyo marcado «Vos» y lo nuevo marcado «(nuevo)». **Le contestás a
 la persona, no al último renglón.**

@@ -69,6 +69,12 @@ CREATE TABLE IF NOT EXISTS flow_runs (
     manual       INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (slug, scheduled_at)
 );
+CREATE TABLE IF NOT EXISTS flow_pending (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug       TEXT NOT NULL,
+    payload    TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     ts         REAL NOT NULL,
@@ -326,6 +332,38 @@ def forget_quiet_runs(older_than: float) -> int:
         ).rowcount
         _conn.commit()
     return gone
+
+
+# ── what a watcher found, waiting to become a run ───────────────────────────
+#
+# ON DISK AND NOT IN MEMORY. A watcher marks what it found as seen the moment it
+# finds it, so between that moment and the run this table is the only place the
+# news exists. A restart in that window would otherwise lose a client's message
+# without anybody ever knowing there had been one.
+
+def add_pending(slug: str, payload: str) -> None:
+    write(
+        "INSERT INTO flow_pending (slug, payload, created_at) VALUES (?, ?, ?)",
+        (slug, payload, time.time()),
+    )
+
+
+def pending_since(slug: str) -> float | None:
+    """When the oldest thing waiting for this flow was found."""
+    row = one("SELECT MIN(created_at) AS at FROM flow_pending WHERE slug = ?", (slug,))
+    return row["at"]
+
+
+def take_pending(slug: str) -> list[str]:
+    """Everything waiting for this flow, oldest first, and it is no longer
+    waiting: the caller is the run."""
+    with _lock:
+        rows = _conn.execute(
+            "SELECT id, payload FROM flow_pending WHERE slug = ? ORDER BY id", (slug,)
+        ).fetchall()
+        _conn.execute("DELETE FROM flow_pending WHERE slug = ?", (slug,))
+        _conn.commit()
+    return [row["payload"] for row in rows]
 
 
 def flow_run_in_flight(slug: str) -> sqlite3.Row | None:

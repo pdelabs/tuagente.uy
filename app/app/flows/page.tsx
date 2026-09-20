@@ -57,6 +57,8 @@ const TRIGGER_ICON: Record<string, LucideIcon> = {
   drive: FolderOpen,
   schedule: Clock,
   webhook: Zap,
+  // Runs when something arrives: a comment, a message, a mail.
+  event: Zap,
   request: MessageSquare,
 };
 

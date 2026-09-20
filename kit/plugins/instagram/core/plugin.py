@@ -16,8 +16,10 @@ customer actually shows up.
 - `skills/comments/SKILL.md` — which comment gets an answer, which gets
   nothing, which gets hidden, what a first message deserves, and when either
   one is a client.
-- `flows/instagram/` — the curated flow that makes all of it happen every
-  fifteen minutes without anybody asking.
+- `flows/instagram/` — the curated flow that makes all of it happen without
+  anybody asking: `trigger: event`, fired by `ig_tools.watch`, which looks at
+  the account every thirty seconds WITH NO MODEL and only wakes the agent up
+  when something arrived.
 
 WHAT IT PROVIDES TO THE PLUGINS THAT LOAD AFTER IT, which is why `instagram`
 sits before `social` in `CORE_PLUGINS`:
@@ -96,6 +98,42 @@ def retire_flows() -> None:
               flush=True)
 
 
+# A FLOW THIS PLUGIN STILL SHIPS, IN A VERSION IT NO LONGER SHIPS: slug, and the
+# sha256 of every copy we ever shipped under it. On 20/9/2026 `instagram` stopped
+# running on a cron and started running when something arrives (`trigger:
+# event`), which is a change to the FILE — and the file is the client's.
+#
+# Same rule as `SUPERSEDED`, for the same reason: an installed copy that is byte
+# for byte one of ours was never touched, so it is replaced by today's; anything
+# else is hers and stays, with a line in the log. It keeps working as it was —
+# the fetch tools are still on the face — it just keeps costing a turn every
+# fifteen minutes until somebody moves it over.
+UPGRADED = {
+    "instagram": {
+        "3772d40d3a11f45809b9092ad5de3727dd37b6f815d0d3f908a94b2a107f9e0c",
+    },
+}
+
+
+def upgrade_flows() -> None:
+    """Our own untouched copies of a flow, brought up to the one we ship now."""
+    for slug, shipped in UPGRADED.items():
+        installed = flows.file_of(slug)
+        if not installed.is_file():
+            continue
+        current = (ROOT / CURATED / slug / flows.FLOW_FILE).read_bytes()
+        had = installed.read_bytes()
+        if had == current:
+            continue
+        if hashlib.sha256(had).hexdigest() not in shipped:
+            print(f"instagram: workspace/flows/{slug}/ was edited, so it stays as it is "
+                  f"— the version we ship now is a different one", flush=True)
+            continue
+        installed.write_bytes(current)
+        print(f"instagram: brought workspace/flows/{slug}/ up to the version we ship",
+              flush=True)
+
+
 def install_flows() -> None:
     """The flows this plugin ships, into the workspace, if they are not there.
 
@@ -118,7 +156,11 @@ def install_flows() -> None:
 
 def register(engine) -> None:
     retire_flows()
+    upgrade_flows()
     install_flows()
+    # WHAT FIRES THE FLOW: code that looks at the account with no model in it
+    # (`ig_tools.watch`). The flow names it in its frontmatter, `event:`.
+    engine.watcher(ig_tools.WATCHER, ig_tools.watch, every=ig_tools.WATCH_EVERY)
     engine.toolset(ig_tools.toolset())
     # THE WHOLE TOOLSET IS GATED, with no predicate, exactly as the approval and
     # social plugins gate theirs: a tool added here tomorrow is gated without

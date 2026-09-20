@@ -81,7 +81,7 @@ from pydantic_ai.toolsets import (
 )
 from pydantic_ai_harness.subagents import SubAgent, SubAgents
 
-from . import config, delegation
+from . import config, delegation, watchers
 
 ENTRY = "plugin.py"
 PROSE = "instructions.md"
@@ -279,6 +279,13 @@ class Engine:
         from . import agent
 
         return agent.today
+
+    def watcher(self, name: str, fn: Callable[[], str | None], every: int = 60) -> None:
+        """What fires an `event` flow. `fn` looks for what is new WITH NO MODEL
+        and returns it as text, or `None`; a flow that names it
+        (`event: <name>`) runs when it returns something, with that text in its
+        prompt. `core/watchers.py` is the why."""
+        watchers.register(name, fn, every)
 
     def provide(self, name: str, obj: Any) -> None:
         """Offer an object to the plugins that load after this one."""

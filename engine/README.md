@@ -512,9 +512,22 @@ row is `instagram-comments` — over the same door publishing uses
 (`graph.instagram.com` v21.0, the same long-lived token, the
 `instagram_business_manage_comments` scope it already carries).
 
-**READING IS A FLOW AND NOT A LOOP.** The plugin ships
-`flows/instagram/FLOW.md` — «Instagram: comentarios y mensajes», cron
-`*/15 * * * *` — and COPIES IT INTO `workspace/flows/` WHEN IT LOADS, if it is
+**READING IS A FLOW, AND WHAT FIRES IT IS CODE.** The plugin ships
+`flows/instagram/FLOW.md` — «Instagram: comentarios y mensajes»,
+`trigger: event`, `event: instagram.inbox` — and registers the watcher behind
+that name, `ig_tools.watch`: every thirty seconds, with no model, it asks the
+Graph for the feed and the conversation list. A post whose `comments_count`
+moved is opened; a conversation whose `updated_time` moved is read; nothing
+else is, so A QUIET LOOK IS TWO CALLS. Every fifteen minutes a look opens
+everything anyway, because the marks are a shortcut Instagram owes us nothing
+about. What it finds is the text the run receives («A flow that runs when
+something arrives», below), the token's sixty days are renewed from the same
+function, and the fetch tools stay on the face for when somebody asks in the
+chat. It was a `*/15` cron until 2026-09-20; `UPGRADED` in `plugin.py` is what
+moves an installed copy that nobody edited over to the new file, by hash, the
+same way `SUPERSEDED` retires a renamed one.
+
+The plugin COPIES THE FLOW INTO `workspace/flows/` WHEN IT LOADS, if it is
 not already there and never over what is. The kit is a read-only bind mount and the workspace is the client's, so
 there is no install step between them on this engine; a flow turned off is
 `status: paused`, which is still a file, so a restart does not switch it back
@@ -1373,6 +1386,54 @@ and the minutes it was away collapse into ONE catch-up run; pause stops the
 clock and resume starts it; run-now answers in milliseconds and the row is
 marked manual. It takes the flow, its rows and its conversations out on the way
 out and puts the container back on the default floor.
+
+### A flow that runs when something arrives (`trigger: event`)
+
+`trigger: schedule` is for work that belongs to a time. Work that belongs to
+something ARRIVING — a comment, a message, a mail — is `trigger: event`, and
+the looking is code, never a turn of the agent.
+
+Until 2026-09-20 the Instagram flow was `*/15 * * * *`: a whole turn, some
+23,000 input tokens, to call two tools and say «sin novedades». Nearly a hundred
+turns a day for nothing, a hundred conversations nobody typed in, and an answer
+a quarter of an hour late on a channel that gives 24 hours.
+
+```
+trigger: event
+trigger_detail: Cada vez que llega un comentario o un mensaje
+event: instagram.inbox        # required iff event, forbidden otherwise
+```
+
+- **A plugin registers the watcher**: `engine.watcher(name, fn, every=60)`
+  (`core/watchers.py`). `fn` is sync, has no model in it, and returns `None` or
+  THE TEXT OF WHAT IS NEW, as the run will read it.
+- **The scheduler calls it on its own clock**, in a thread, one look at a time
+  per flow (`scheduler.watch`). What a look finds is written to `flow_pending`
+  and WAITS: the next tick looks again, and the run starts on the first look
+  that finds nothing more. That is the throttle — three messages in a row are
+  one conversation and one run — and `SETTLE_CEILING` (120 s) is the limit
+  under an account where every look finds something. Nothing runs on top of a
+  run of the same flow that is still going.
+- **On disk, not in memory**: a watcher marks what it found as seen when it
+  finds it, so between the look and the run `flow_pending` is the only place the
+  news exists. A restart in that window picks it up on the first tick.
+- **The run gets it in its prompt**, last, under «## Lo que llegó», and the
+  client reads the same in the run's conversation. The run looks for nothing.
+- **A watcher that breaks is one `flow.failed` line in Activity**, not one per
+  look: the same error twice is said once.
+- **It has a task** (`/api/jobs`), so the tab pauses it, resumes it and runs it
+  now; `next_run_at` is `null` and `schedule.kind` is `event`. «Probarlo ahora»
+  is one look right now, and a run that says «No llegó nada nuevo» when nothing
+  did.
+- **The agent cannot create one**: `create_flow` offers `schedule` and
+  `request`. An event flow ships with the plugin that owns the watcher.
+
+A push from outside (Meta's webhooks) is a second reason to call the same
+function, not a second mechanism. It lands here when an agent has a public URL
+to receive it on; the poll stays under it, because Meta does not promise
+delivery.
+
+`python3 engine/tests/test_event_flows.py` is the gate: nine claims, no model.
 
 ### A run's conversation is opened from its flow
 

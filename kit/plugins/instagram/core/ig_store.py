@@ -99,10 +99,37 @@ SCHEMA = (
         seen_at    REAL NOT NULL
     )
     """,
+    # What the watcher last saw of each post and each conversation: a post's
+    # `comments_count`, a conversation's `updated_time`. It is what lets a look
+    # that finds nothing cost two calls instead of sixty (`ig_tools.watch`).
+    """
+    CREATE TABLE IF NOT EXISTS instagram_marks (
+        kind TEXT NOT NULL,
+        id   TEXT NOT NULL,
+        mark TEXT NOT NULL,
+        PRIMARY KEY (kind, id)
+    )
+    """,
 )
 
 for statement in SCHEMA:
     db.write(statement)
+
+
+# ── what the watcher last saw ───────────────────────────────────────────────
+
+
+def mark(kind: str, id_: str) -> str | None:
+    row = db.one("SELECT mark FROM instagram_marks WHERE kind = ? AND id = ?", (kind, id_))
+    return row["mark"] if row else None
+
+
+def set_mark(kind: str, id_: str, value: str) -> None:
+    db.write(
+        "INSERT INTO instagram_marks (kind, id, mark) VALUES (?, ?, ?)"
+        " ON CONFLICT(kind, id) DO UPDATE SET mark = excluded.mark",
+        (kind, id_, value),
+    )
 
 
 # ── the comments ────────────────────────────────────────────────────────────

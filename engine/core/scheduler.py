@@ -26,7 +26,7 @@ import logging
 import time
 from datetime import datetime
 
-from . import config, db, flows, session
+from . import config, db, flows, session, watchers
 from .flows import Flow
 
 log = logging.getLogger(__name__)
@@ -49,7 +49,21 @@ def title(flow: Flow, scheduled_at: datetime) -> str:
     return f"{flow.name} · {scheduled_at.strftime('%d/%m %H:%M')}"
 
 
-def prompt(flow: Flow) -> str:
+# The heading what a watcher found travels under, in the run's prompt and in
+# what the client reads of it. Spanish: both read it.
+ARRIVED = "## Lo que llegó"
+
+# A run somebody asked for by hand on a flow that waits for things to arrive,
+# when nothing has.
+NOTHING_ARRIVED = "No llegó nada nuevo desde la última vez."
+
+# How long what a watcher found may wait for the look that finds nothing more.
+# The settle is one tick; this is the ceiling under an account where something
+# new arrives on every tick.
+SETTLE_CEILING = 120
+
+
+def prompt(flow: Flow, arrived: str | None = None) -> str:
     """The one user turn a run is, AS THE MODEL READS IT. Spanish: the agent
     reads it.
 
@@ -64,10 +78,14 @@ def prompt(flow: Flow) -> str:
     ]
     if flow.notes:
         parts.append(f"{flows.NOTES_HEADING}\n\n{flow.notes}")
+    if arrived:
+        # LAST, under its own heading: it is the one part of this prompt that
+        # is different every run, and it is the work.
+        parts.append(f"{ARRIVED}\n\n{arrived}")
     return "\n\n".join(parts)
 
 
-def display(flow: Flow, scheduled_at: datetime) -> str:
+def display(flow: Flow, scheduled_at: datetime, arrived: str | None = None) -> str:
     """The same turn AS THE CLIENT READS IT, in Chat.
 
     The prompt above is not something a client should ever see: it names the
@@ -75,10 +93,12 @@ def display(flow: Flow, scheduled_at: datetime) -> str:
     the portal strips everywhere else. What is shown instead is what started
     the run and the steps she already reads on the flow's page.
     """
-    return (
+    shown = (
         f"Corrida del flujo «{flow.name}» ({scheduled_at.strftime('%d/%m %H:%M')})."
         f"\n\n{flow.how}"
     )
+    # What arrived IS shown: it is what started the run, in the client's words.
+    return f"{shown}\n\n{ARRIVED}\n\n{arrived}" if arrived else shown
 
 
 def base_time(flow: Flow) -> float:
@@ -112,8 +132,14 @@ def due_at(flow: Flow, now: datetime | None = None) -> datetime | None:
     return flows.next_run(flow, now)
 
 
-async def run(flow: Flow, scheduled_at: datetime, manual: bool = False) -> None:
-    """One occurrence of one flow, if nobody claimed it first."""
+async def run(
+    flow: Flow, scheduled_at: datetime, manual: bool = False, arrived: str | None = None
+) -> None:
+    """One occurrence of one flow, if nobody claimed it first.
+
+    `arrived` is what a watcher found, for an `event` flow: it travels in the
+    prompt, so the run starts with the work in its hand and looks for nothing.
+    """
     session_id = session.new_session_id()
     if not db.claim_flow_run(flow.slug, scheduled_at.timestamp(), session_id, manual):
         return
@@ -127,7 +153,7 @@ async def run(flow: Flow, scheduled_at: datetime, manual: bool = False) -> None:
     paused = False
     try:
         async for event in session.run_turn(
-            session_id, prompt(flow), display(flow, scheduled_at)
+            session_id, prompt(flow, arrived), display(flow, scheduled_at, arrived)
         ):
             paused = paused or isinstance(event, session.Paused)
     except Exception as exc:
@@ -199,11 +225,78 @@ def recover() -> None:
         db.append_event("flow.failed", KILLED, "error", row["session_id"], {"slug": row["slug"]})
 
 
+# When each `event` flow's watcher last looked, and the ones looking right now.
+# In memory on purpose: a restart looks again at once, which is what it should do.
+_looked: dict[str, float] = {}
+_looking: set[str] = set()
+# The last thing each watcher failed with, so a Graph that is down for an hour
+# is ONE line in Activity and not a hundred and twenty.
+_watch_errors: dict[str, str] = {}
+
+
+def look(flow: Flow) -> str | None:
+    """Everything this flow's watcher finds, plus what was already waiting."""
+    found = watchers.WATCHERS[flow.event].fn()
+    if found:
+        db.add_pending(flow.slug, found)
+    return found
+
+
+async def watch(flow: Flow) -> None:
+    """One look of one `event` flow, and the run if it is time for one.
+
+    THE SETTLE IS ONE QUIET LOOK. Somebody who writes three messages in a row
+    is one conversation, and a run per message is three turns stepping on each
+    other. So what a look finds WAITS (`flow_pending`), the next tick looks
+    again, and the run starts on the first look that finds nothing more — or
+    after `SETTLE_CEILING`, for the account where there is always something.
+    """
+    _looking.add(flow.slug)
+    try:
+        _looked[flow.slug] = time.time()
+        try:
+            found = await asyncio.to_thread(look, flow)
+        except Exception as exc:
+            reason = session.one_line(exc)
+            if _watch_errors.get(flow.slug) != reason:
+                _watch_errors[flow.slug] = reason
+                log.exception("flow %s: the watcher broke", flow.slug)
+                db.append_event(
+                    "flow.failed", f"No pude mirar si llegó algo para «{flow.name}»: {reason}",
+                    "error", None, {"slug": flow.slug},
+                )
+            return
+        _watch_errors.pop(flow.slug, None)
+        since = db.pending_since(flow.slug)
+        if since is None or db.flow_run_in_flight(flow.slug):
+            return
+        if found and time.time() - since < SETTLE_CEILING:
+            return
+        now = datetime.now(flows.zone(flow)).replace(microsecond=0)
+        await run(flow, now, arrived="\n\n".join(db.take_pending(flow.slug)))
+    finally:
+        _looking.discard(flow.slug)
+
+
+def wants_a_look(flow: Flow, now: float) -> bool:
+    """Its turn on the watcher's own clock, or something is already waiting —
+    in which case the very next tick looks again, which is the settle."""
+    if flow.slug in _looking or flow.event not in watchers.WATCHERS:
+        return False
+    if db.pending_since(flow.slug) is not None:
+        return True
+    return now - _looked.get(flow.slug, 0) >= watchers.WATCHERS[flow.event].every
+
+
 async def tick() -> None:
     now = time.time()
     db.forget_quiet_runs(now - config.FLOWS_QUIET_RUN_DAYS * 86400)
     for flow in flows.read_all():
-        if flow.trigger != "schedule" or flow.status != "active":
+        if flow.status != "active":
+            continue
+        if flow.trigger == "event" and wants_a_look(flow, now):
+            asyncio.create_task(watch(flow))
+        if flow.trigger != "schedule":
             continue
         due = due_at(flow, datetime.fromtimestamp(now, flows.zone(flow)))
         if due and due.timestamp() <= now:

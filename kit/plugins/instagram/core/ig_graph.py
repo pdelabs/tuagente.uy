@@ -226,7 +226,8 @@ def whoami() -> str:
 def media(limit: int = 10) -> list[dict]:
     """The account's own posts, newest first: what there is to read comments on."""
     return get(f"{user_id()}/media",
-               fields="id,caption,permalink,timestamp", limit=limit).get("data") or []
+               fields="id,caption,permalink,timestamp,comments_count",
+               limit=limit).get("data") or []
 
 
 COMMENT_FIELDS = "id,text,username,from,parent_id,timestamp"

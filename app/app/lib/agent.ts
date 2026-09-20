@@ -899,7 +899,7 @@ export type Flow = {
   slug: string;
   name: string;
   client_summary: string;
-  trigger_type: "drive" | "schedule" | "webhook" | "request" | string;
+  trigger_type: "drive" | "schedule" | "event" | "webhook" | "request" | string;
   trigger: string;
   status: "active" | "paused" | "incomplete" | string;
   missing_connections: string[];

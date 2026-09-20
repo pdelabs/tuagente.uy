@@ -55,9 +55,12 @@ class Flow(BaseModel):
     slug: str
     name: str
     client_summary: str
-    trigger: Literal["schedule", "request"]
+    trigger: Literal["schedule", "event", "request"]
     trigger_detail: str
     cron: str | None = None
+    # The name of the watcher that fires an `event` flow (`core/watchers.py`):
+    # a plugin's own code that looks for what is new, with no model in it.
+    event: str | None = None
     timezone: str = Field(default_factory=lambda: config.TIMEZONE)
     status: Literal["active", "paused"] = "active"
     connections: list[str] = Field(default_factory=list)
@@ -83,6 +86,12 @@ class Flow(BaseModel):
             raise ValueError("un flujo que corre solo necesita `cron`")
         if self.trigger != "schedule" and self.cron:
             raise ValueError("solo un flujo con gatillo `schedule` lleva `cron`")
+        # EVENT IFF EVENT, for the same reason: an `event` flow that names no
+        # watcher is a card that says «cada vez que llega algo» and never runs.
+        if self.trigger == "event" and not self.event:
+            raise ValueError("un flujo que corre cuando llega algo necesita `event`")
+        if self.trigger != "event" and self.event:
+            raise ValueError("solo un flujo con gatillo `event` lleva `event`")
         if self.cron:
             if not croniter.is_valid(self.cron):
                 raise ValueError(f"«{self.cron}» no es una expresión cron válida")
@@ -126,8 +135,8 @@ def read_all() -> list[Flow]:
 
 
 def front(flow: Flow) -> dict:
-    """The frontmatter, in the order it is written. `cron` only when there is
-    one, so a `request` flow's file does not carry an empty key."""
+    """The frontmatter, in the order it is written. `cron` and `event` only
+    when there is one, so a `request` flow's file does not carry an empty key."""
     fields = {
         "name": flow.name,
         "client_summary": flow.client_summary,
@@ -136,6 +145,8 @@ def front(flow: Flow) -> dict:
     }
     if flow.cron:
         fields["cron"] = flow.cron
+    if flow.event:
+        fields["event"] = flow.event
     fields["timezone"] = flow.timezone
     fields["status"] = flow.status
     fields["connections"] = flow.connections

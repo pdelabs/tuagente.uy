@@ -536,6 +536,129 @@ def walk(comment: dict, media: dict, mine: str) -> str | None:
     return "\n".join(lines)
 
 
+# ── looking for what is new, with no model in it ────────────────────────────
+#
+# The two functions below are the whole of «is there anything new», and they
+# have two callers: the face's tools, when somebody asks in the chat, and
+# `watch`, which is what fires the flow (`core/watchers.py`). `None` is «no».
+
+
+def moved(kind: str, items: list[dict], field: str, everything: bool) -> list[dict]:
+    """The items whose mark is not the one written down last time."""
+    if everything:
+        return items
+    return [item for item in items if ig_store.mark(kind, item["id"]) != str(item.get(field))]
+
+
+def new_comments(everything: bool = True) -> str | None:
+    """The comment threads with something new, as the model reads them.
+
+    `everything=False` is the watcher's cheap look: only the posts whose
+    `comments_count` moved are opened. The mark is written AFTER the post was
+    read, so a look that breaks halfway reads it again.
+    """
+    mine = ig_graph.whoami()
+    feed = ig_graph.media(FEED)
+    blocks = []
+    for item in moved("media", feed, "comments_count", everything):
+        for comment in ig_graph.comments(item["id"]):
+            block = walk(comment, item, mine)
+            if block:
+                blocks.append(block)
+        ig_store.set_mark("media", item["id"], str(item.get("comments_count")))
+    if not blocks:
+        return None
+    head = ("1 comentario nuevo, en este hilo:" if len(blocks) == 1
+            else f"Comentarios nuevos, en {len(blocks)} hilos:")
+    return head + "\n\n" + "\n\n".join(blocks)
+
+
+def new_messages(session_id: str | None, everything: bool = True) -> str | None:
+    """The conversations with something new from the other side, whole.
+
+    `everything=False` opens only the conversations whose `updated_time` moved.
+    Every new message lands on its ticket here, by code, whoever is calling.
+    """
+    mine = ig_graph.user_id()
+    threads = ig_graph.conversations(THREADS)
+    handle = ig_store.username()
+    found = {}
+    for item in moved("conversation", threads, "updated_time", everything):
+        new = sift(item["id"], ig_graph.messages(item["id"]), mine)
+        if any(not message["ours"] for message in new):
+            found[item["id"]] = new
+        elif new:
+            # Only our own, from her phone: it belongs on the ticket and it
+            # is not work. The conversation is not listed.
+            land(item["id"], new, ig_store.conversation(item["id"]), handle, session_id)
+        ig_store.set_mark("conversation", item["id"], str(item.get("updated_time")))
+    if not found:
+        return None
+    total = sum(len([m for m in v if not m["ours"]]) for v in found.values())
+    head = (f"{total} mensaje nuevo, en estas conversaciones:" if total == 1
+            else f"{total} mensajes nuevos, en estas conversaciones:")
+    blocks = []
+    for conversation_id, new in found.items():
+        row = ig_store.conversation(conversation_id)
+        who = (f"@{row['participant_username']}" if row["participant_username"]
+               else "alguien")
+        ticket_id = land(conversation_id, new, row, handle, session_id)
+        title = (f"- `{conversation_id}` · {who} · {window_line(row)}"
+                 f" · {ticket_line(ticket_id, conversation_id)}")
+        blocks.append("\n".join(
+            [title] + thread_lines(conversation_id, row["participant_id"],
+                                   {m["id"] for m in new if not m["ours"]})))
+    return head + "\n\n" + "\n\n".join(blocks)
+
+
+# The name the curated flow asks for in its frontmatter (`event:`), and how
+# often the scheduler calls `watch` when nothing is happening.
+WATCHER = "instagram.inbox"
+WATCH_EVERY = 30
+
+# How often a look opens EVERY post and EVERY conversation whatever the marks
+# say. The marks are a shortcut and Instagram owes us nothing about them: a
+# comment deleted and another written between two looks leaves the count where
+# it was. Fifteen minutes is what the whole flow used to run on.
+SWEEP_EVERY = 900
+_swept = 0.0
+
+
+def watch() -> str | None:
+    """What is new on the account, or `None`. NO MODEL: this is the function the
+    scheduler calls every `WATCH_EVERY` seconds, and the flow only becomes a
+    turn of the agent when it returns something.
+
+    A quiet look is two calls, the feed and the conversation list. The token's
+    sixty days are renewed from here too, since the flow that used to do it no
+    longer runs when there is nothing to do. With no connection there is nothing
+    to watch: the flow's card already says the connection is missing.
+    """
+    global _swept
+    everything = time.time() - _swept >= SWEEP_EVERY
+    found, broke = [], None
+    try:
+        if ig_graph.due():
+            ig_graph.refresh()
+        # EACH HALF ON ITS OWN. What a look finds is marked as seen the moment
+        # it is found, so a Graph error in the messages must not take down with
+        # it the comments already read: they are returned, and the error comes
+        # back by itself on the next look if it is still there.
+        for look in (lambda: new_comments(everything), lambda: new_messages(None, everything)):
+            try:
+                found.append(look())
+            except ig_graph.Refused as exc:
+                broke = exc
+    except ig_graph.NotConnected:
+        return None
+    arrived = "\n\n".join(part for part in found if part)
+    if broke and not arrived:
+        raise broke
+    if everything and not broke:
+        _swept = time.time()
+    return arrived or None
+
+
 # ── the toolsets ────────────────────────────────────────────────────────────
 
 
@@ -561,21 +684,9 @@ def toolset() -> FunctionToolset:
         corrida: no inventes trabajo.
         """
         try:
-            mine = ig_graph.whoami()
-            feed = ig_graph.media(FEED)
+            return new_comments() or NOTHING_NEW
         except ig_graph.NotConnected as exc:
             return str(exc)
-        blocks = []
-        for item in feed:
-            for comment in ig_graph.comments(item["id"]):
-                block = walk(comment, item, mine)
-                if block:
-                    blocks.append(block)
-        if not blocks:
-            return NOTHING_NEW
-        head = ("1 comentario nuevo, en este hilo:" if len(blocks) == 1
-                else f"Comentarios nuevos, en {len(blocks)} hilos:")
-        return head + "\n\n" + "\n\n".join(blocks)
 
     @ts.tool
     def fetch_messages(ctx: RunContext) -> str:
@@ -597,38 +708,9 @@ def toolset() -> FunctionToolset:
         nuevo en ninguna, te lo dice en una línea y ahí se termina la corrida.
         """
         try:
-            mine = ig_graph.user_id()
-            threads = ig_graph.conversations(THREADS)
+            return new_messages(ctx.deps.session_id) or NO_MESSAGES
         except ig_graph.NotConnected as exc:
             return str(exc)
-        handle = ig_store.username()
-        found = {}
-        for item in threads:
-            new = sift(item["id"], ig_graph.messages(item["id"]), mine)
-            if any(not message["ours"] for message in new):
-                found[item["id"]] = new
-            elif new:
-                # Only our own, from her phone: it belongs on the ticket and it
-                # is not work. The conversation is not listed.
-                land(item["id"], new, ig_store.conversation(item["id"]), handle,
-                     ctx.deps.session_id)
-        if not found:
-            return NO_MESSAGES
-        total = sum(len([m for m in v if not m["ours"]]) for v in found.values())
-        head = (f"{total} mensaje nuevo, en estas conversaciones:" if total == 1
-                else f"{total} mensajes nuevos, en estas conversaciones:")
-        blocks = []
-        for conversation_id, new in found.items():
-            row = ig_store.conversation(conversation_id)
-            who = (f"@{row['participant_username']}" if row["participant_username"]
-                   else "alguien")
-            ticket_id = land(conversation_id, new, row, handle, ctx.deps.session_id)
-            title = (f"- `{conversation_id}` · {who} · {window_line(row)}"
-                     f" · {ticket_line(ticket_id, conversation_id)}")
-            blocks.append("\n".join(
-                [title] + thread_lines(conversation_id, row["participant_id"],
-                                       {m["id"] for m in new if not m["ours"]})))
-        return head + "\n\n" + "\n\n".join(blocks)
 
     @ts.tool
     def refresh_if_due(ctx: RunContext) -> str:
@@ -638,8 +720,9 @@ def toolset() -> FunctionToolset:
         menos de 10 días esta herramienta lo renueva y anota hasta cuándo vale
         el nuevo. Si todavía está lejos, no hace nada y te lo dice.
 
-        Es el primer paso del flujo de comentarios. No hace falta que se lo
-        cuentes al cliente: es mantenimiento, no trabajo suyo.
+        Se renueva solo mientras el flujo de Instagram está activo; usala si
+        el cliente te pregunta por la conexión. Es mantenimiento, no trabajo
+        suyo.
         """
         try:
             if not ig_graph.due():
