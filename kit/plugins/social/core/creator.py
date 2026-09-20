@@ -26,9 +26,16 @@ WHAT IT IS BUILT FROM, and why each piece:
   procedure is the instructions and there is nothing to decide. That is also
   why the plugin's `SKILLS` is empty: the face no longer has the tools the
   skill talks about, and an index entry it cannot act on is a trap.
-- `engine.tools("read_file", "list_files")` — the brand and yesterday's posts.
-  No `write_file`: what this agent leaves behind is a post, and `save_post` is
-  the only thing that writes one.
+- `engine.tools("read_file", "list_files", "web_search", "web_fetch")` — the
+  brand and yesterday's posts, and the web. No `write_file`: what this agent
+  leaves behind is a post, and `save_post` is the only thing that writes one.
+  THE WEB IS HERE BECAUSE THE WORK IS HERE, measured on our own agent on
+  2026-09-20: the client asked for a post about a model that had just come out,
+  the face delegated with «verificá en fuentes confiables», and this agent
+  could only read files. It did the honest thing it could and published its own
+  doubt: a slide that said «dato a confirmar». The one who writes the words is
+  the one who has to be able to check them; `creator.md` says when, and that
+  what could not be checked does not go into a post at all.
 - `posts.toolset()` — `save_post` and `replace_slide`, which exist only
   here: this hand writes a post and it is the only one that fixes a slide of
   one already saved.
@@ -133,7 +140,7 @@ def build(engine) -> SubAgent:
     calls the child's span tree.
     """
     hands = [
-        engine.tools("read_file", "list_files"),
+        engine.tools("read_file", "list_files", "web_search", "web_fetch"),
         posts.toolset(),
         stamp.toolset(),
     ]
