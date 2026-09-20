@@ -270,6 +270,18 @@ in `docs/east-requirements.md` §5; what is left is here.
 
 ## Open product decisions
 
+- **A way for a plugin or a sub-agent to FAIL OUT LOUD instead of delivering
+  bad work** (Luis, 2026-09-20: «prefiero que falle a que me escriba un post
+  con imágenes mal»). Today a delegate that cannot do the job well has one
+  channel, its report to the face, and the face decides what the client hears;
+  nothing marks the work as failed, nothing notifies, and a half-good post is
+  saved like a good one. The first case was handled in prose (`creator.md`:
+  what cannot be confirmed does not go into a post, save nothing and say why).
+  What is undecided is the mechanism: a typed «could not» result a delegate
+  returns and the engine turns into an event + a notification, and quality
+  checks owned by code (a slide whose text does not match the brief) that can
+  refuse a `save_post`. Not designed yet.
+
 - **Pricing and offer structure**: the proposal on the table is a small paid
   diagnostic (USD 200-250) that gets deducted from setup, instead of a
   USD 1000 upfront fee.
