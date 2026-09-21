@@ -124,7 +124,35 @@ La marca tiene estos looks: {all}. Todavía no hay posteos con look: elegí el q
 mejor le queda al tema y usá su bloque palabra por palabra en todas las slides."""
 
 
+# The same rotation for HOW THE STORY IS BUILT, which the creator declares to
+# `save_post`. The last two rest: six structures, and a week that is three
+# lists and two myths reads like a template however different it looks.
+STRUCTURES_REST = 2
+
+STORY = """\
+## La estructura de hoy
+
+Los últimos carruseles se armaron así, del más nuevo al más viejo: {recent}.
+**Hoy no repitas: {resting}.** Elegí otra de la tabla del paso 3, la que le
+quede a la idea."""
+
+
+def story_today(posts: list[dict]) -> str:
+    used = [post["structure"] for post in posts if post.get("structure")]
+    if not used:
+        return ""
+    rest = list(dict.fromkeys(used[:STRUCTURES_REST]))
+    return STORY.format(
+        recent=", ".join(f"`{name}`" for name in used[:5]),
+        resting=", ".join(f"`{name}`" for name in rest),
+    )
+
+
 def today(posts: list[dict]) -> str:
+    return "\n\n".join(part for part in (look_today(posts), story_today(posts)) if part)
+
+
+def look_today(posts: list[dict]) -> str:
     blocks, recent, rest = state(posts)
     if len(blocks) < 2:
         return ""

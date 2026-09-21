@@ -88,7 +88,7 @@ try:
     saved = tools["save_post"](
         ctx, SLUG, CAPTION, ["uno", "dos"], "carousel",
         [picture("prueba-a.png", "brief uno"), picture("prueba-b.png", "brief dos")],
-        None, ["alt uno", "alt dos"], True,
+        None, ["alt uno", "alt dos"], True, False, "lista", "guardar",
     )
     post_id = saved["saved"]
     directory = posts.folder(post_id)
@@ -98,7 +98,7 @@ try:
     # (a) the call that deleted the post.
     report["own_images"] = call(
         "save_post", SLUG, CAPTION, ["uno"], "carousel",
-        [f"posteos/{post_id}/01.png"], None, ["alt uno"], True,
+        [f"posteos/{post_id}/01.png"], None, ["alt uno"], True, False, "lista", "guardar",
     )
     report["after_own_images"] = {
         p.name: p.read_bytes() == before.get(p.name)
@@ -110,7 +110,7 @@ try:
     naked = picture("prueba-d.png", "", brief=False)
     report["missing_brief"] = call(
         "save_post", SLUG, "Otro pie", ["uno"], "carousel",
-        [good, naked], None, ["alt uno", "alt dos"], True,
+        [good, naked], None, ["alt uno", "alt dos"], True, False, "lista", "guardar",
     )
     report["after_missing_brief"] = {
         p.name: p.read_bytes() == before.get(p.name)

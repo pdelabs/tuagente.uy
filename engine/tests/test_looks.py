@@ -25,6 +25,9 @@ called it «the brand», and a model left to choose picks the safe one every day
      are still in `imagenes/`, no post exists, and the refusal names what is
      free. A look the client asked for by name goes through, and is recorded.
   g. AND A FREE ONE IS SAVED AND WRITTEN DOWN — `look` in `post.json`.
+  h. A CAROUSEL IS A STORY OR IT IS NOT SAVED — `save_post` refuses one with no
+     `structure` and no `goal`, writes both down, and the creator is told which
+     structures the last carousels used and that the last two rest.
 
 WHERE IT POINTS. `CORE_CONTAINER` moves it onto a second instance. NOT ONTO A
 CLIENT'S: it swaps `marca/brand.md` for the length of the run.
@@ -131,6 +134,20 @@ try:
     out["asked"] = try_save("prueba-tres", resting, look_asked_by_client=True)
     out["free"] = try_save("prueba-cuatro", picture("cuatro", brief("color", "Cuatro.")))
     out["written"] = {p["slug"]: p.get("look") for p in posts.read_all()}
+
+    # (h) the story. A carousel needs two pictures' worth of arguments.
+    def carousel(slug, tag, **more):
+        try:
+            return {"ok": save(ctx, slug, "Un pie.", ["prueba"], "carousel",
+                               [picture(f"{tag}a", brief("dia", "A.")), picture(f"{tag}b", brief("dia", "B."))],
+                               alts=["Una.", "Otra."], **more)}
+        except Exception as exc:
+            return {"raised": type(exc).__name__, "said": str(exc)}
+    out["no_story"] = carousel("prueba-cinco", "cinco")
+    out["story"] = carousel("prueba-seis", "seis", structure="mito", goal="mandar")
+    out["story_written"] = {p["slug"]: [p.get("structure"), p.get("goal")]
+                            for p in posts.read_all() if p["slug"] == "prueba-seis"}
+    out["story_told"] = looks.story_today(posts.read_all())
     print(json.dumps(out, ensure_ascii=False, default=str))
 finally:
     shutil.rmtree(posts.root(), ignore_errors=True)
@@ -189,7 +206,10 @@ def main() -> int:
     if "Todavía no hay posteos" not in r["first_day"]:
         problems.append("the first day is not told as the first day")
     told = r["told"]
-    if "Hoy no podés usar: `foto`, `noche`" not in told:
+    # The two posts are saved within the same second, so which is «newest» is
+    # not this test's to say: what rests is the PAIR, in either order.
+    resting = told.split("Hoy no podés usar: ")[-1].split(".**")[0]
+    if sorted(resting.replace("`", "").split(", ")) != ["foto", "noche"]:
         problems.append(f"what rests is not said: {told[:220]!r}")
     if "Elegí entre: `dia`, `color`" not in told:
         problems.append("what is free is not said")
@@ -215,6 +235,17 @@ def main() -> int:
     if r["written"] != expected:
         problems.append(f"post.json says {r['written']}")
     failures += judge("g. and a free one is saved and written down", problems)
+
+    problems = []
+    if r["no_story"].get("raised") != "ModelRetry" or "structure" not in r["no_story"].get("said", ""):
+        problems.append(f"a carousel with no story gave {r['no_story']}")
+    if "ok" not in r["story"]:
+        problems.append(f"a carousel with one gave {r['story']}")
+    if r["story_written"] != {"prueba-seis": ["mito", "mandar"]}:
+        problems.append(f"post.json says {r['story_written']}")
+    if "Hoy no repitas: `mito`" not in r["story_told"]:
+        problems.append(f"the creator is told {r['story_told']!r}")
+    failures += judge("h. a carousel is a story or it is not saved", problems)
 
     print("LOOKS: " + ("PASS" if not failures else "FAIL"))
     return 1 if failures else 0

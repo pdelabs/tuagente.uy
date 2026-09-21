@@ -237,17 +237,23 @@ exclamation mark that is not in it.
 
 ### The `photo` block
 
-Every slide of a `photo` post is the SAME PLACE seen from somewhere else.
-The model never saw the other slides, so the place is one sentence written
-once per post — «a small hardware store in Montevideo at night, closed,
-lit by one warm lamp over the counter» — and pasted word for word where the
-block says PLACE in every brief. After it, what this slide shows of that
-place: the counter, the phone on it, the shelves, the door from outside.
+A `photo` post is ONE PLACE AND A STORY THAT MOVES THROUGH IT. The model
+never saw the other slides, so the place is one sentence written once per
+post — «a small hardware store in Montevideo, wooden counter, shelves of
+boxes behind it» — and pasted word for word where the block says PLACE in
+every brief. What comes after it is what changes, and it has to change:
+THE MOMENT THIS SLIDE'S SENTENCE IS ABOUT. Another hour, another thing in
+the foreground, another distance. The phone lighting up on the dark counter
+at night; the shutter going up in grey morning light; a hand typing on the
+phone; the door from the pavement with somebody walking in. The first
+`photo` post we made said «same place from another angle» here, and came
+out as four pictures of a lamp on a desk: a place is not a story, what
+happens in it is. Never two slides with the same subject, the same hour or
+the same framing.
 
 ```
 Instagram slide, 1080x1350 portrait. A real editorial photograph, full
-bleed, of PLACE. Nobody in the scene, unless this slide's own line names a hand or
-a back; never a face. Natural light or one warm practical lamp, shallow depth of
+bleed, of PLACE. People only as a hand, a back or a silhouette; never a face. Natural light or one warm practical lamp, shallow depth of
 field, 35mm, eye level, honest and a little imperfect, never a stock photo.
 Color graded dark and warm, with violet #5B4BE8 or amber #F0B429 present in
 one object of the scene and nowhere else. The lower 45% of the image fades

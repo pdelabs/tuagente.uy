@@ -31,9 +31,78 @@ los últimos posteos. **Lo que la gente guarda es lo que hay que hacer más** �
 guardar es el que dice «esto me sirve»—, así que elegí del lado de lo que
 funcionó y no del lado de lo que te gustó.
 
-## 3. Escribí el pie
+## 3. Armá la historia. Todavía no escribas nada lindo
 
-La fórmula, en este orden:
+**Un carrusel es una historia que se pasa con el dedo, no cinco frases sueltas
+sobre un tema.** Quien lo ve decide en cada slide si pasa a la siguiente, y pasa
+sólo si la que está mirando le dejó una pregunta abierta. Cinco frases que
+podrían ir en cualquier orden son cinco afiches, y nadie pasa de un afiche.
+
+**a. Qué querés que haga quien lo lee.** Una sola cosa: que lo **guarde**
+(le sirve para después), que **se lo mande a alguien** (habla de otro) o que
+**te escriba** (se reconoció). De eso sale el cierre, y no se decide al final.
+
+**b. Elegí la estructura según lo que la idea ES**, no según cuál te gusta:
+
+| Estructura | Cuándo | El trabajo de cada slide |
+|---|---|---|
+| `historia` | Pasó, o pasa todas las semanas: una persona, una hora, una cosa | 1 la escena con la pregunta abierta · 2 lo que salió mal · 3 cuánto costó · 4 el giro · 5 cómo es ahora · cierre |
+| `antes-despues` | El mismo momento, de dos maneras | 1 la promesa · 2 el antes, concreto · 3 lo que cambió · 4 el después, el mismo momento · cierre |
+| `mito` | Algo que casi todos creen y no es así | 1 el mito, dicho como lo dicen · 2 por qué suena cierto · 3 dónde se rompe · 4 lo que sí es · cierre |
+| `pasos` | Cómo se hace UNA cosa | 1 qué vas a poder hacer · un paso por slide, en orden · la anteúltima los junta · cierre |
+| `lista` | Varias cosas del mismo tipo | 1 cuántas y de qué · la más fuerte en la 2, no al final · la anteúltima las junta · cierre |
+| `numero` | Un dato que sorprende | 1 el número solo · 2 de dónde sale · 3 qué significa para quien lee · cierre |
+
+Cuál usaron los últimos carruseles está al final de tus instrucciones, en «La
+estructura de hoy»: las dos últimas descansan.
+
+El número de slides sale de lo que hay para decir, de 3 a 6: **nunca rellenes**.
+Si la tapa promete tres cosas, adentro hay tres, ni dos ni cuatro.
+
+**c. Escribí el guion: un renglón por slide, con su trabajo y su oración.**
+
+- **La 1 promete y deja una pregunta.** Se entiende sola —es la que aparece en
+  el feed— y no se cierra sola: «A las 23:40 te preguntaron el precio.» deja
+  la pregunta «¿y qué pasó?»; «Contestar rápido es importante» no deja ninguna.
+- **Cada slide contesta la pregunta que dejó la anterior y abre la que sigue.**
+  Por eso el orden no se puede cambiar.
+- **Lo más fuerte va en la 2 o la 3.** Cada slide pierde lectores: lo mejor no
+  se guarda para el final.
+- **La anteúltima es la que se guarda**: lo que queda de todo, en una oración
+  que sirve sin haber leído el resto.
+- **La última pide una sola cosa**, la que elegiste en (a).
+- **Concreto gana a general, siempre.** Una hora, un rubro, un objeto, una
+  cifra que esté en la marca. «Una ferretería, un martes, 23:40» se lee;
+  «las empresas chicas, a veces, de noche» no.
+- Una oración corta por slide, hasta unas 12 palabras. Si necesita dos
+  oraciones, son dos slides o sobra una.
+
+**d. La prueba del hilo, antes de seguir.** Leé las oraciones en orden, de
+corrido, como un párrafo. Tiene que pasar las cuatro:
+
+1. Se entiende como UN párrafo, con principio y final.
+2. Si sacás cualquiera, se nota que falta.
+3. Si cambiás dos de lugar, se rompe.
+4. Ninguna dice lo mismo que otra con otras palabras.
+
+Si alguna falla, no es un problema de redacción: es que todavía no hay
+historia. Volvé a (b). **Una imagen cuesta y una oración no: acá es donde se
+corrige.**
+
+**e. Decidí qué MUESTRA cada slide**, en el mismo guion, al lado de su oración.
+La imagen muestra el momento del que habla ESA oración, no el tema del posteo:
+si la historia avanza, lo que se ve avanza con ella. **Dos slides del mismo
+carrusel nunca muestran lo mismo.** En un look con fotos u objetos eso quiere
+decir otro momento, otra cosa en primer plano, otra hora o otra distancia en
+cada una —el teléfono que se prende, la persiana a la mañana, una mano
+escribiendo, alguien en la puerta—, aunque el lugar sea siempre el mismo. En un
+look de texto solo, lo que cambia es la composición y dónde cae el resaltado.
+
+## 4. Escribí el pie
+
+El pie acompaña al carrusel, no lo repite: **agrega lo que las slides no
+dicen** —el contexto, el matiz, lo que el agente nunca hace— y termina con el
+mismo pedido que la última slide. La fórmula, en este orden:
 
 - **Gancho**: una línea, la frase más fuerte del posteo. Es lo único que se ve
   antes del «más», así que no la gastes saludando ni describiendo la imagen.
@@ -60,13 +129,10 @@ Y cómo suena:
 De cada slide vas a escribir también su **texto alternativo**: qué se ve en
 esa imagen, en una oración, para quien no la ve.
 
-## 4. Hacé el carrusel
+## 5. Hacé el carrusel
 
-El posteo del día es un **carrusel de 3 a 6 slides**, y cada una dice una sola
-cosa: la **1 es el gancho** —la frase más fuerte, grande, la que frena el
-scroll—, **las del medio una idea cada una** —las del cuerpo del pie dichas con
-otras palabras, una oración corta, nunca el pie copiado— y la **última cierra**
-con el único pedido del posteo.
+Las oraciones ya están: son las del guion del paso 3, **tal cual**. No las
+reescribas acá ni las cambies por las líneas del pie.
 
 Se leen como un solo posteo, así que **todas las slides de un carrusel llevan
 el mismo look, y el look es uno de los que están escritos en `marca/brand.md`**:
@@ -89,7 +155,7 @@ aire arriba y abajo: Instagram recorta los bordes de una pieza vertical.
 `generate_image(prompt, format="feed")`, **una slide por vez y en orden**:
 `feed` es la proporción 4:5 del carrusel y todas las piezas van iguales.
 
-## 5. Mirá cada una. Siempre
+## 6. Mirá cada una. Siempre
 
 La herramienta te devuelve la imagen y la ves, apenas la generás. Recorrela
 contra estos cinco puntos:
@@ -112,11 +178,12 @@ cuál quedó afuera y por qué. Si la que no pasa es la 1, no guardes el posteo
 —no se guarda sin el gancho—: volvé con el pie escrito y con qué no pudiste
 resolver, que un pie bueno sirve.
 
-## 6. Guardalo
+## 7. Guardalo
 
-`save_post(slug, caption, hashtags, format="carousel", images=[…], alts=[…])`:
-las imágenes en el orden en que se ven y un texto alternativo por cada una, en
-ese mismo orden. La herramienta pone la carpeta, los nombres y la fecha; vos
+`save_post(slug, caption, hashtags, format="carousel", images=[…], alts=[…],
+structure="…", goal="…")`: las imágenes en el orden en que se ven, un texto
+alternativo por cada una en ese mismo orden, y la estructura y el objetivo que
+elegiste en el paso 3. La herramienta pone la carpeta, los nombres y la fecha; vos
 ponés las palabras. El id es la fecha y el slug: otro tema en el mismo día es
 otro slug. El brief con el que hiciste cada slide queda guardado con ella, así
 que después se puede arreglar una sola sin rehacer el posteo.

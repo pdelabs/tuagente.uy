@@ -112,6 +112,13 @@ BRIEF = ".json"
 
 # Lowercase, hyphens, short: it is half a directory name and the whole of the
 # post's id, and the id travels into the portal's URLs.
+# THE STORY'S SHAPE, a closed list the skill explains (`skills/post/SKILL.md`,
+# step 3) and `looks.py` rotates. A carousel is refused without one: on our own
+# agent the carousels were four true sentences in no particular order, written
+# after the caption as «the same lines in other words» (2026-09-20).
+Structure = Literal["historia", "antes-despues", "mito", "pasos", "lista", "numero"]
+Goal = Literal["guardar", "mandar", "escribir"]
+
 MAX_SLUG = 40
 SLUG = re.compile(rf"^[a-z0-9][a-z0-9-]{{0,{MAX_SLUG - 1}}}$")
 
@@ -381,6 +388,8 @@ def toolset() -> FunctionToolset:
         alts: list[str] | None = None,
         replace: bool = False,
         look_asked_by_client: bool = False,
+        structure: Structure | None = None,
+        goal: Goal | None = None,
     ) -> dict:
         """Dejar el posteo del día listo para que el cliente lo revise y lo baje.
 
@@ -412,10 +421,19 @@ def toolset() -> FunctionToolset:
                 Es el de una imagen sola; en un carrusel va `alts` en su lugar.
             alts: uno por imagen y en el mismo orden que `images`.
             replace: pisar el posteo de hoy con este slug en vez de frenar.
+            structure: la estructura de la historia que elegiste en el paso 3
+                del procedimiento. En un carrusel va siempre.
+            goal: qué querías que hiciera quien lo lee: `guardar`, `mandar` o
+                `escribir`. En un carrusel va siempre.
             look_asked_by_client: `True` sólo si el pedido nombra el look con
                 todas las letras («hacelo en `ink`»). Si no, dejalo como está:
                 el look lo leo yo de los briefs, y uno que descansa no se guarda.
         """
+        if format == "carousel" and not (structure and goal):
+            raise ModelRetry(
+                "un carrusel es una historia: decime con qué `structure` la armaste "
+                "y cuál era el `goal`. Si no lo decidiste, el guion está sin hacer"
+            )
         if not SLUG.match(slug):
             raise ModelRetry(
                 f"«{slug}» no sirve como slug: minúsculas, números y guiones, "
@@ -495,6 +513,11 @@ def toolset() -> FunctionToolset:
             # Which of the brand's looks it wears, read off the first brief
             # (`looks.py`). `None` for a brand that declares none.
             "look": look,
+            # How the story was built and what it was for, as the creator
+            # declared them. With the numbers of `recent_performance` next to
+            # them, this is what says which kind of post gets saved.
+            "structure": structure,
+            "goal": goal,
             "caption": caption,
             "alt": descriptions[0],
             "alts": descriptions,
