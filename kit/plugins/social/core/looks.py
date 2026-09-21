@@ -26,7 +26,7 @@ from core import config
 
 BRAND = "marca/brand.md"
 
-# «### The `ink` block», then the first fenced block under it.
+# «### The `violet` block», then the first fenced block under it.
 HEADING = re.compile(r"^###\s+The\s+`([a-z0-9-]+)`\s+block\s*$", re.MULTILINE)
 FENCE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 
@@ -157,7 +157,9 @@ def look_today(posts: list[dict]) -> str:
     if len(blocks) < 2:
         return ""
     names = ", ".join(f"`{name}`" for name in blocks)
-    worn = [look for look in recent if look][: len(blocks)]
+    # Only looks the brand still declares: a post in a look that was retired
+    # is history, and naming it here would read as an option.
+    worn = [look for look in recent if look in blocks][: len(blocks)]
     if not worn:
         return FIRST.format(all=names)
     return TODAY.format(

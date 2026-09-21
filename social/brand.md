@@ -83,14 +83,14 @@ Each one with its "nunca". Reuse verbatim or tighten, never soften the limit.
 5. **El bautismo** — name + face, the dice, why a name changes how people
    treat it. Formats: `statement` with agentito large, carousel of faces.
 
-## Visual identity — six looks, one per post
+## Visual identity — four looks, one per post
 
 The slides are generated, one prompt each, and the model never sees the
-previous slide. So the look is not improvised: it is one of SIX fixed looks,
+previous slide. So the look is not improvised: it is one of FOUR fixed looks,
 chosen once per post and used on every slide of it, and the whole block for
 that look goes **verbatim into every brief**, before the slide's text.
 
-One real slide of each new look, as the blocks below produce it, is in
+One real slide of each look, as the blocks below produce it, is in
 `social/looks/`.
 
 A feed of these has to look like ONE ACCOUNT THAT IS ALIVE: the same voice,
@@ -99,10 +99,13 @@ What makes it one account is pinned below. What makes it alive is the look,
 and the look ROTATES: the creator is told which looks the last posts used and
 may not repeat them. No look is the default.
 
+There used to be two more, `ink` and `light`: type on a flat dark or
+off-white background with thin violet line geometry. They were the only looks
+for the first posts, and Luis retired them on 2026-09-21 once the object look
+existed: the lines read as a template. They are in the git history.
+
 Which look fits what (a preference, never a reason to repeat one):
 
-- `ink` — the control and the honest posts. Dark, sober.
-- `light` — the money, the process, the behind-the-scenes. Clean, airy.
 - `violet` — a strong opinion, an announcement, a post that has to stop the
   scroll by color alone.
 - `amber` — the warm ones: our own agent, a small win, a thank-you, humor.
@@ -140,7 +143,7 @@ Pinned, whatever the look:
   the asset, a placeholder, or what will go there: told that, the model draws
   a blob for it.
 - **One breath per carousel, optional:** a middle slide with no text at all.
-  In the four flat looks it is the look's ornament grown into a composition;
+  In the two flat looks it is the look's ornament grown into a composition;
   in `photo` it is the photograph alone, with no band; in `object` it is the
   object alone, bigger. Never the hook, never the close, never more than one.
 - **One number slide per carousel, optional:** when the idea IS a number
@@ -152,47 +155,6 @@ Pinned, whatever the look:
 
 After the block, every brief ends with the slide's own two lines: the
 headline, and which phrase (if any) gets the marker.
-
-### The `ink` block
-
-```
-Instagram slide, 1080x1350 portrait. Flat solid dark background #14131F, no
-gradient, no texture, no photo. Headline in a geometric sans-serif like Plus
-Jakarta Sans, extra bold, white #FFFFFF, sentence case, left aligned, tight
-line height, text block starting 9% from the left edge, at most 75% wide,
-vertically centered, top and bottom 12% of the image empty. If a phrase is
-marked, it sits on a violet #5B4BE8 rounded marker, white text on top.
-Decoration: thin 2px violet #5B4BE8 line geometry only — one large arc or
-rounded-rectangle outline running off the edge, a small solid violet dot
-where a line ends, optionally a small grid of violet dots in one corner —
-never touching the text. No characters, no robots, no mascots, no people, no
-hands, no icons, no 3D objects, no illustrations, no logos, no
-watermarks, no URLs, no slide numbers, no color codes. The ONLY text on the
-image is the headline below, reproduced character by character: same words,
-same accents, same punctuation, nothing added — no question mark or
-exclamation mark that is not in it.
-```
-
-### The `light` block
-
-```
-Instagram slide, 1080x1350 portrait. Flat solid off-white background
-#FBFAFF, no gradient, no texture, no photo. Headline in a geometric
-sans-serif like Plus Jakarta Sans, extra bold, dark ink #14131F, sentence
-case, left aligned, tight line height, text block starting 9% from the left
-edge, at most 75% wide, vertically centered, top and bottom 12% of the image
-empty. If a phrase is marked, it sits on a violet #5B4BE8 rounded marker,
-white text on top. Decoration: thin 2px violet #5B4BE8 line geometry only —
-one large arc or rounded-rectangle outline running off the edge, a small
-solid violet dot where a line ends, optionally a small grid of violet dots
-in one corner — never touching the text. No characters, no robots, no
-mascots, no people, no hands, no icons, no 3D objects, no illustrations,
-no logos, no
-watermarks, no URLs, no slide numbers, no color codes. The ONLY text on the
-image is the headline below, reproduced character by character: same words,
-same accents, same punctuation, nothing added — no question mark or
-exclamation mark that is not in it.
-```
 
 ### The `violet` block
 
@@ -298,7 +260,7 @@ exclamation mark that is not in it.
 ```
 
 For a breath slide, the same block with the last two sentences replaced by:
-«No text at all on this image.» and, in the four flat looks, «The decoration
+«No text at all on this image.» and, in the two flat looks, «The decoration
 grows into the whole composition, balanced, with most of the image empty.»
 
 ## Caption formula

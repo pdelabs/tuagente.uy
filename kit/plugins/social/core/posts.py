@@ -426,7 +426,7 @@ def toolset() -> FunctionToolset:
             goal: qué querías que hiciera quien lo lee: `guardar`, `mandar` o
                 `escribir`. En un carrusel va siempre.
             look_asked_by_client: `True` sólo si el pedido nombra el look con
-                todas las letras («hacelo en `ink`»). Si no, dejalo como está:
+                todas las letras («hacelo en `violet`»). Si no, dejalo como está:
                 el look lo leo yo de los briefs, y uno que descansa no se guarda.
         """
         if format == "carousel" and not (structure and goal):

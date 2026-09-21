@@ -339,9 +339,10 @@ how posts are made changed to fix it; two things did.
 - **The brand declares its looks, as many as it wants.** Every heading
   «### The `name` block» in `marca/brand.md` with a fenced block under it is
   one: the text a slide's brief starts with, word for word. The kit names no
-  look; ours has six (`ink`, `light`, `violet`, `amber`, `photo`, `object`,
-  one real slide of each in `social/looks/`), and the skill's checklist says
-  «the look you chose» where it used to say «dark background».
+  look. Ours has four, `violet`, `amber`, `photo` and `object`, with one real
+  slide of each in `social/looks/`; `ink` and `light`, the two with thin violet
+  lines, were retired on 2026-09-21. The skill's checklist says «the look you
+  chose» where it used to say «dark background».
 - **The look of a post is read off its first brief**, by which block it
   carries, so the model declares nothing and the posts from before have one
   too. `save_post` writes it to `post.json` as `look`.
