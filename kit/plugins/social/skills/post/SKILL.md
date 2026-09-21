@@ -78,12 +78,22 @@ Si la tapa promete tres cosas, adentro hay tres, ni dos ni cuatro.
   oraciones, son dos slides o sobra una.
 
 **d. La prueba del hilo, antes de seguir.** Leé las oraciones en orden, de
-corrido, como un párrafo. Tiene que pasar las cuatro:
+corrido, como un párrafo. Tiene que pasar las seis:
 
 1. Se entiende como UN párrafo, con principio y final.
 2. Si sacás cualquiera, se nota que falta.
 3. Si cambiás dos de lugar, se rompe.
 4. Ninguna dice lo mismo que otra con otras palabras.
+5. **Cada slide hace el trabajo que la tabla le da a su lugar.** Un `mito` sin
+   el mito dicho en la 1, como lo dice la gente, no es un mito: es otra
+   estructura mal nombrada. Si la idea no entra en la que elegiste, cambiá de
+   estructura, no le cambies el nombre.
+6. **El pedido del cierre se puede cumplir con lo que el carrusel dio.** Si
+   pedís que lo guarden, tiene que haber una slide que valga guardar: los
+   pasos, la regla, la frase exacta para contestar, algo que sirva el mes que
+   viene sin leer el resto. «Guardá esto» sobre cuatro opiniones es pedir por
+   pedir. Si lo que hay es una historia en la que alguien se reconoce, el
+   pedido es que te escriba o que se lo mande a alguien.
 
 Si alguna falla, no es un problema de redacción: es que todavía no hay
 historia. Volvé a (b). **Una imagen cuesta y una oración no: acá es donde se
