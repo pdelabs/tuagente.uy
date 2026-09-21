@@ -88,6 +88,7 @@ from fastapi.responses import Response
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 
+import looks
 from core import config, db
 from core.tools.workspace import under
 
@@ -290,10 +291,16 @@ def brief_of(image: Path) -> str:
     start from. It breaks here, where the model reads the traceback, instead of
     a week from now in front of the client.
     """
-    sidecar = image.with_suffix(BRIEF)
-    prompt = json.loads(sidecar.read_text())["prompt"]
-    sidecar.unlink()
+    prompt = peek_brief(image)
+    image.with_suffix(BRIEF).unlink()
     return prompt
+
+
+def peek_brief(image: Path) -> str:
+    """The same brief, LEFT WHERE IT IS. For whoever has to read it before
+    deciding whether the post gets saved at all: a refusal must leave
+    `imagenes/` exactly as it found it, sidecars included."""
+    return json.loads(image.with_suffix(BRIEF).read_text())["prompt"]
 
 
 def clean_caption(caption: str) -> str:
@@ -373,6 +380,7 @@ def toolset() -> FunctionToolset:
         alt: str | None = None,
         alts: list[str] | None = None,
         replace: bool = False,
+        look_asked_by_client: bool = False,
     ) -> dict:
         """Dejar el posteo del día listo para que el cliente lo revise y lo baje.
 
@@ -404,6 +412,9 @@ def toolset() -> FunctionToolset:
                 Es el de una imagen sola; en un carrusel va `alts` en su lugar.
             alts: uno por imagen y en el mismo orden que `images`.
             replace: pisar el posteo de hoy con este slug en vez de frenar.
+            look_asked_by_client: `True` sólo si el pedido nombra el look con
+                todas las letras («hacelo en `ink`»). Si no, dejalo como está:
+                el look lo leo yo de los briefs, y uno que descansa no se guarda.
         """
         if not SLUG.match(slug):
             raise ModelRetry(
@@ -440,6 +451,20 @@ def toolset() -> FunctionToolset:
                 "cliente te pidió cambiarlo, llamame con `replace=True`; si es "
                 "otro tema, dale otro slug"
             )
+        # THE LOOK, READ OFF THE FIRST BRIEF, AND REFUSED IF IT RESTS — here,
+        # before a single file moves, so a refusal costs the model a sentence
+        # and the client nothing. The post being replaced does not count
+        # against itself. A brief that carries no block of the brand's has no
+        # look, and that is not refused: a brand with no looks declared is a
+        # brand this rule is not about (`looks.py`).
+        blocks, _, rest = looks.state([p for p in read_all() if p["id"] != post_id])
+        look = looks.of_brief(peek_brief(sources[0]), blocks)
+        if look in rest and not look_asked_by_client:
+            free = ", ".join(f"`{name}`" for name in blocks if name not in rest)
+            raise ModelRetry(
+                f"el look `{look}` descansa hoy: lo usaron los últimos posteos. "
+                f"Rehacé las slides con uno de estos: {free}. No guardé nada."
+            )
         # THE NEW POST IS BUILT BESIDE THE OLD ONE AND SWAPPED IN AT THE END.
         # Everything that can fail — a sidecar that is not there, a rename —
         # happens while `directory` is still the post the client has, and the
@@ -467,6 +492,9 @@ def toolset() -> FunctionToolset:
             "slug": slug,
             "date": date,
             "format": format,
+            # Which of the brand's looks it wears, read off the first brief
+            # (`looks.py`). `None` for a brand that declares none.
+            "look": look,
             "caption": caption,
             "alt": descriptions[0],
             "alts": descriptions,

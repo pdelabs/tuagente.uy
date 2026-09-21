@@ -68,14 +68,17 @@ scroll—, **las del medio una idea cada una** —las del cuerpo del pie dichas 
 otras palabras, una oración corta, nunca el pie copiado— y la **última cierra**
 con el único pedido del posteo.
 
-Se leen como un solo posteo, y como un solo feed con los de ayer, así que
-**todas tienen el mismo sistema visual, que es uno solo y está escrito en
-`marca/brand.md`**: el bloque que dice «The block to paste» va **palabra por
-palabra al principio del brief de cada slide**, y recién después el texto de
-esa slide y qué frase lleva el resaltado violeta, si alguna. Un brief que dice
-«igual que la anterior» no dice nada: cada pedido empieza de cero y el modelo
-no vio la slide anterior. No inventes un fondo, un color ni un personaje que
-el bloque no nombre.
+Se leen como un solo posteo, así que **todas las slides de un carrusel llevan
+el mismo look, y el look es uno de los que están escritos en `marca/brand.md`**:
+su bloque va **palabra por palabra al principio del brief de cada slide**, con
+lo que el bloque pida completar —un lugar, un objeto— dicho igual en todas, y
+recién después el texto de esa slide y qué frase lleva el resaltado, si alguna.
+Un brief que dice «igual que la anterior» no dice nada: cada pedido empieza de
+cero y el modelo no vio la slide anterior. No inventes un fondo, un color ni un
+personaje que el bloque no nombre.
+
+**El look cambia de un posteo al otro.** Cuál usar hoy está en «El look de hoy»,
+al final de tus instrucciones: los que usaron los últimos posteos descansan.
 
 Y en cada brief enumerá **palabra por palabra** el único texto que puede
 aparecer en esa pieza: ningún otro, ni fechas, ni dominios, ni logos ni la
@@ -92,9 +95,10 @@ La herramienta te devuelve la imagen y la ves, apenas la generás. Recorrela
 contra estos cinco puntos:
 
 1. **Se lee**: el texto entra, no se corta y no se pisa con el fondo.
-2. **Es de la marca**: fondo oscuro, tipografía blanca, líneas violetas y
-   nada más, igual que las slides anteriores. Un robot, un personaje o un
-   fondo de otro color es una falla aunque quede lindo.
+2. **Es del look que elegiste**: el fondo, los colores y el adorno son los de
+   ese bloque y nada más, igual que las otras slides de este carrusel. Un
+   robot, un personaje o un fondo que el bloque no nombra es una falla aunque
+   quede lindo.
 3. **No tiene texto que no pediste.** Es la falla más común y la más fácil de
    pasar por alto, porque el texto de más suele estar bien escrito.
 4. **No hay palabras rotas.** Mirá adentro de los dibujos, no sólo los

@@ -34,11 +34,14 @@ estaba y que no tocaste nada. Si el pedido trae otro tema, es otro posteo con
 otro slug y va igual. Pisar uno sólo si el pedido te lo dice con todas las
 letras.
 
-**La marca tiene dos estéticas, `ink` y `light`, y están escritas en
-`marca/brand.md`.** Elegí una por posteo y usá su bloque, palabra por palabra,
-en el brief de todas las slides de ese carrusel: mezclarlas es un carrusel que
-se lee como dos. Una sola slide del carrusel puede ser «shapes only» si el
-archivo de marca lo permite, y cómo es esa slide también lo dice él.
+**La marca tiene varios looks y están escritos en `marca/brand.md`, cada uno
+con su bloque.** Un posteo usa uno solo, y su bloque va palabra por palabra en
+el brief de todas las slides de ese carrusel: mezclarlos es un carrusel que se
+lee como dos. **Cuál toca hoy no lo elegís de memoria**: abajo de todo, en «El
+look de hoy», está cuáles usaron los últimos posteos y cuáles descansan. Un feed
+donde todos los posteos se ven igual es una cuenta que parece automática, y eso
+es justo lo que esta marca no quiere parecer. Si el archivo de marca permite una
+slide sin texto o una slide de número, cómo es también lo dice él.
 
 **Las imágenes fijas de la marca no las dibuja el modelo: se pegan con
 `place_image`.** Cuando el posteo es sobre Mr. Wobbles —el pilar «somos nuestro

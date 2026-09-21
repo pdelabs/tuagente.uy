@@ -141,8 +141,10 @@ kit/plugins/image/core/     one tool, on nobody: plugin.py PROVIDES
                                    generate.py is OpenRouter, the PNG and the
                                    picture back. No instructions.md
 kit/plugins/social/core/    the post: creator.py (the SUB-AGENT that
-                                   makes it), posts.py (save_post, the reader
-                                   and the /portal/posts* routes),
+                                   makes it), looks.py (which look a post
+                                   wears and which rest today), posts.py
+                                   (save_post, the reader and the
+                                   /portal/posts* routes),
                                    creator.md, instructions.md, and
                                    skills/post/SKILL.md, the craft
 kit/plugins/instagram/core/ the other half of the account: ig_graph.py
@@ -327,6 +329,38 @@ of a saved post is refused as a source and the post is untouched; a save that
 dies on a missing sidecar leaves the old post whole and the tab listing it
 once; and `update_caption` changes the words, keeps the pictures and the
 briefs, and refuses both an unknown post and a published one.
+
+**NO TWO POSTS ALIKE IN A ROW, AND CODE IS WHO SAYS SO** (`looks.py`). On our
+own agent every post came out dark with thin violet lines (2026-09-20): the
+brand file called that look the default, the skill's checklist called it «the
+brand», and a model left to choose picks the safe one every day. Nothing about
+how posts are made changed to fix it; two things did.
+
+- **The brand declares its looks, as many as it wants.** Every heading
+  «### The `name` block» in `marca/brand.md` with a fenced block under it is
+  one: the text a slide's brief starts with, word for word. The kit names no
+  look; ours has six (`ink`, `light`, `violet`, `amber`, `photo`, `object`,
+  one real slide of each in `social/looks/`), and the skill's checklist says
+  «the look you chose» where it used to say «dark background».
+- **The look of a post is read off its first brief**, by which block it
+  carries, so the model declares nothing and the posts from before have one
+  too. `save_post` writes it to `post.json` as `look`.
+- **Half the wardrobe rests.** The looks of the last `len(looks) // 2` posts
+  are off today: strict alternation with two looks, the last three with six.
+  The creator reads it as a CALLABLE instruction (`creator.todays_look`), so it
+  is the state of the folder on this delegation and not a rule to remember:
+  what the last posts wore, what rests, what is free.
+- **And `save_post` refuses a resting look BEFORE IT MOVES A FILE** — the
+  pictures stay in `imagenes/` with their sidecars (`peek_brief`, which reads a
+  brief without consuming it), no post exists, and the refusal names what is
+  free. `look_asked_by_client=True` is the way through when the request names
+  a look in so many words.
+
+```bash
+python3 engine/tests/test_looks.py   # free, a second, no model
+```
+
+Seven claims, on a brand file written for the test and put back on the way out.
 
 **ONE SLIDE CAN BE FIXED WITHOUT TOUCHING THE OTHERS**, and that is what the
 briefs are for. `post.json` carries `prompts`, parallel to `images` and `alts`:

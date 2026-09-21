@@ -67,6 +67,7 @@ import os
 from pathlib import Path
 
 import frontmatter
+import looks
 import posts
 import stamp
 from pydantic_ai import Agent
@@ -132,6 +133,11 @@ def procedure() -> str:
     return frontmatter.load(SKILL).content
 
 
+def todays_look() -> str:
+    """Which of the brand's looks today's post may wear. Code's, not memory's."""
+    return looks.today(posts.read_all())
+
+
 def build(engine) -> SubAgent:
     """The delegate, ready for `engine.subagent`.
 
@@ -152,7 +158,11 @@ def build(engine) -> SubAgent:
         deps_type=engine.Deps,
         name=NAME,
         description=DESCRIPTION,
-        instructions=[engine.identity, PROSE.read_text(), procedure(), engine.today],
+        # `todays_look` is a CALLABLE, read on every delegation: what the last
+        # posts wore and which looks rest today is the state of the client's
+        # folder, not something a prompt written at load can know (`looks.py`).
+        instructions=[engine.identity, PROSE.read_text(), procedure(), todays_look,
+                      engine.today],
         toolsets=hands,
         capabilities=[
             engine.use("image"),
