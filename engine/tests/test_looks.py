@@ -13,8 +13,9 @@ called it «the brand», and a model left to choose picks the safe one every day
   a. THE BRAND DECLARES ITS LOOKS — every «### The `name` block» with a fenced
      block under it is one, in the file's order. The module names none.
   b. A BRIEF'S LOOK IS READ OFF IT — the block re-wrapped by a model, with the
-     slide's own lines after it, is still that look; two blocks that open with
-     the same sentence are not confused; a brief with no block has no look.
+     slide's own lines after it, is still that look; so is a block with a SLOT
+     the creator filled in, early in it; blocks that share sentences are not
+     confused; a brief with no block has no look.
   c. A POST FROM BEFORE HAS A LOOK TOO — no `look` key, and its first brief
      says which.
   d. HALF THE WARDROBE RESTS — with four looks, the last two posts' looks are
@@ -56,7 +57,11 @@ BLOCKS = {
     "noche": SHARED + "Flat solid dark background, white type, thin violet lines running off the edge." + TAIL,
     "dia": SHARED + "Flat solid off-white background, dark type, thin violet lines running off the edge." + TAIL,
     "color": SHARED + "Flat solid saturated violet background, white type, big tone on tone circles." + TAIL,
-    "foto": SHARED + "A real editorial photograph, full bleed, of PLACE, fading into a dark band." + TAIL,
+    # THE SLOT IS EARLY, the way a real block has it: the creator replaces PLACE,
+    # so everything from there on is not the block's words any more.
+    "foto": "Instagram slide, 1080x1350 portrait. A real editorial photograph, full bleed, of PLACE. "
+            "Shallow depth of field, honest, never a stock photo. The lower 45% fades into a dark band. "
+            "On that band, the headline in a geometric sans-serif, extra bold, white." + TAIL,
 }
 
 
@@ -69,7 +74,7 @@ def brand(names):
 
 def brief(name, line):
     # Re-wrapped at 60 columns, the way a model hands a block back, plus the slide's own lines.
-    words, rows, row = BLOCKS[name].split(), [], ""
+    words, rows, row = BLOCKS[name].replace("PLACE", "a bakery in Salto at dawn").split(), [], ""
     for word in words:
         if len(row) + len(word) > 60:
             rows.append(row); row = ""

@@ -31,10 +31,16 @@ HEADING = re.compile(r"^###\s+The\s+`([a-z0-9-]+)`\s+block\s*$", re.MULTILINE)
 FENCE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 
 # How much of a block has to be in a brief for the brief to be that look's.
-# The blocks of one brand share their first and last sentences — the size, the
-# rule about the text — so the beginning alone tells nothing apart; two hundred
-# characters in is where a background, a material or a photograph is named.
-PROBE = 200
+# Measured in the block's own SENTENCES found word for word in the brief, because
+# a block can carry a slot the creator fills in («of PLACE», «OBJECT, made of»):
+# the sentence with the slot never matches, and every other one does. The first
+# version measured one unbroken run from the start of the block, and on our own
+# agent the first `photo` post was saved with no look at all — its slot is in
+# the second sentence (2026-09-20). Most of a block is enough; the blocks of one
+# brand share sentences (the size, the rule about the text), so the look is the
+# block with the MOST of itself in the brief, not the first one past the bar.
+ENOUGH = 0.6
+SENTENCE = re.compile(r"(?<=[.!?])\s+")
 
 
 def squash(text: str) -> str:
@@ -59,27 +65,15 @@ def declared() -> dict[str, str]:
 
 
 def of_brief(brief: str, blocks: dict[str, str]) -> str | None:
-    """The look whose block this brief carries, or `None`.
-
-    THE LONGEST SHARED RUN WINS. A brief is compared with every block, by how
-    far into the block it still agrees, and the look is the one that agrees the
-    furthest — past `PROBE`, so two blocks that open with the same sentence are
-    not confused for each other.
-    """
+    """The look whose block this brief carries, or `None`."""
     brief = squash(brief)
-    best, reach = None, 0
+    best, share = None, 0.0
     for name, block in blocks.items():
-        start = brief.find(block[:40])
-        if start < 0:
-            continue
-        shared = 0
-        for a, b in zip(block, brief[start:]):
-            if a != b:
-                break
-            shared += 1
-        if shared > reach:
-            best, reach = name, shared
-    return best if reach >= PROBE else None
+        sentences = SENTENCE.split(block)
+        found = sum(1 for sentence in sentences if sentence in brief) / len(sentences)
+        if found > share:
+            best, share = name, found
+    return best if share >= ENOUGH else None
 
 
 def of_post(post: dict, blocks: dict[str, str]) -> str | None:

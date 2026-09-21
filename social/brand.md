@@ -254,7 +254,8 @@ one object of the scene and nowhere else. The lower 45% of the image fades
 into a solid dark ink #14131F band. On that band, the headline in a
 geometric sans-serif like Plus Jakarta Sans, extra bold, white #FFFFFF,
 sentence case, left aligned, tight line height, starting 9% from the left
-edge, at most 80% wide, bottom 12% of the image empty. If a phrase is
+edge, set large so that it fills about 80% of the image's width on two or
+three lines, bottom 12% of the image empty. If a phrase is
 marked, it sits on a violet #5B4BE8 rounded marker, white text on top. No
 signs, no screens with readable text, no labels, no brand names anywhere in
 the photograph, no logos, no
