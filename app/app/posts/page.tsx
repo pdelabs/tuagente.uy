@@ -458,8 +458,18 @@ function DownloadImage({ cfg, id, name, as }: {
 /** The sentence that travels to the chat. The id and the number are in it
  *  because they are what the creator's tool needs, and the rest are the
  *  client's own words: what is wrong is the one thing the portal cannot know. */
+// THE CLIENT'S DOUBLE QUOTES BECOME « ». A `"` in what she typed travels into
+// the agent's delegation to the creator, and inside that tool call's JSON an
+// unescaped quote ENDS the text: on our own agent the creator received «Saca
+// el» and nothing else (2026-09-21). The engine now refuses a brief cut like
+// that, but the cheapest place to never cut it is here, where the text is
+// born. A stray quote with no pair becomes a typographic one, which JSON does
+// not care about.
+const guillemets = (text: string) =>
+  text.replace(/"([^"]*)"/g, "«$1»").replace(/"/g, "”");
+
 const fixRequest = (id: string, number: number, what: string) =>
-  `Arreglá la slide ${number} del posteo «${id}»: ${what}`;
+  `Arreglá la slide ${number} del posteo «${id}»: ${guillemets(what)}`;
 
 // The primary button as a LINK: `Btn` only draws a <button>, and this one has
 // to be an <a> so middle-click and "open in a new tab" keep working — the same

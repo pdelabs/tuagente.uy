@@ -21,6 +21,7 @@ creador de posteos» is what the client is told, and the plugin passes it with
 
 from dataclasses import dataclass
 
+from pydantic_ai import ModelRetry
 from pydantic_ai.capabilities import AbstractCapability, on_event
 from pydantic_ai.tools import RunContext
 from pydantic_ai_harness.subagents import DelegationEndEvent, DelegationStartEvent
@@ -63,6 +64,28 @@ WHY = {
     "failed": "falló en el medio",
     "contained": "se rompió en el medio",
 }
+
+# A BRIEF CUT IN HALF, and what the face is told about it. Measured on our own
+# agent (2026-09-21): the client asked to change a slide's text and wrote the
+# new text between double quotes; the face copied her words into the brief, the
+# model did not escape the first `"`, and in a tool call's JSON that quote ENDS
+# the string. The creator got «El cliente pidió: «Saca el» and nothing else,
+# twice, and the face's third, whole brief hit the two-delegation cap. The cut
+# is visible from here: the face quotes the client between « », and a brief
+# that opens one and never closes it stopped mid-quote. Refused BEFORE the
+# delegate runs, so it costs a retry and not one of the delegations.
+CUT = (
+    "Tu pedido al {label} quedó cortado a la mitad: abre «, nunca lo cierra, y "
+    "termina en «{tail}». Pasa cuando una comilla doble entra en el pedido. "
+    "Mandalo de nuevo, entero, citando las palabras del cliente entre « » y sin "
+    "comillas dobles."
+)
+
+# And the rule that keeps it from happening, in the face's instructions.
+QUOTING = (
+    "Cuando le pases a un ayudante las palabras del cliente, citalas entre « ». "
+    "Nunca uses comillas dobles adentro del pedido: una comilla doble lo corta ahí."
+)
 
 # How many delegations each run made, by `run_id`. Read once and forgotten, by
 # `core/turn_usage.py`, which is what puts `delegations` on the turn's event.
@@ -115,6 +138,18 @@ class Delegation(AbstractCapability):
     belongs to whoever wants them. It is registered only when a plugin
     registered a delegate — with no delegate there is nothing to listen to.
     """
+
+    def get_instructions(self):
+        return QUOTING
+
+    async def before_tool_execute(self, ctx: RunContext, *, call, tool_def, args):
+        """A brief that stopped mid-quote goes back to the face, not to the delegate."""
+        if tool_def.name == TOOL:
+            task = args.get("task") or ""
+            if task.count("«") > task.count("»"):
+                raise ModelRetry(CUT.format(label=label(args.get("agent_name") or ""),
+                                            tail=task.rstrip()[-40:]))
+        return args
 
     @on_event(DelegationStartEvent)
     async def _started(self, ctx: RunContext, event: DelegationStartEvent) -> None:

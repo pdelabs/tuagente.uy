@@ -854,6 +854,20 @@ images, which is where the input tokens are); and a refused image and a
 five-second timeout both come back as an answer in Spanish. It moves the day's
 post out of the workspace and puts it back.
 
+
+**A BRIEF CUT IN HALF NEVER REACHES THE DELEGATE** (`delegation.Delegation.
+before_tool_execute`). The client wrote a slide's new text between double
+quotes, the face copied her words into the brief, the model did not escape the
+first `"`, and in a tool call's JSON that quote ends the string: the creator got
+«El cliente pidió: «Saca el» and nothing else, twice, and the face's third,
+whole brief hit `max_calls`. The face quotes the client between « » (the
+capability's own instructions now say so, and never double quotes), so a brief
+that opens « and never closes it stopped mid-quote: it goes back to the face as
+a `ModelRetry` BEFORE the delegate runs, which costs a retry and not one of the
+delegations. And the portal turns the client's double quotes into « » in the
+«Arreglar esta imagen» request, where most of them are typed.
+`python3 engine/tests/test_delegation_guard.py` is the gate.
+
 ## Check it
 
 ```bash
