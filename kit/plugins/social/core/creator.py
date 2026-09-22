@@ -36,9 +36,11 @@ WHAT IT IS BUILT FROM, and why each piece:
   doubt: a slide that said «dato a confirmar». The one who writes the words is
   the one who has to be able to check them; `creator.md` says when, and that
   what could not be checked does not go into a post at all.
-- `posts.toolset()` — `save_post` and `replace_slide`, which exist only
-  here: this hand writes a post and it is the only one that fixes a slide of
-  one already saved.
+- `posts.toolset()` — `save_post`, `update_caption`, `replace_slide` and
+  `view_slide`, which exist only here: this hand writes a post and it is the
+  only one that fixes a slide of one already saved. `view_slide` is how it
+  SEES the slide it is fixing; before it, a fix was made from the brief and
+  the client's words alone, blind to what had actually come out.
 - `stamp.toolset()` — `place_image`, the brand's own pictures pasted onto a
   slide by code. A second toolset and not a tool inside `posts.py` because it
   is not about the post: it is about a picture, before there is a post.

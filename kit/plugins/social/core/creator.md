@@ -72,13 +72,20 @@ Hacé esto y sólo esto:
 1. Leé `posteos/X/post.json`. En `prompts` está el brief con el que se hizo
    cada slide, en el mismo orden que las imágenes: el de la slide N es el que
    te importa.
-2. Cambiá de ese brief **sólo** lo que el pedido dice. Todo lo demás va palabra
+2. **Mirá la slide N con `view_slide`** antes de cambiar una palabra. El brief
+   dice lo que se pidió; la imagen, lo que salió, y lo que el cliente dice que
+   está mal está en la imagen. Si el pedido habla de las otras slides —«que
+   sea distinta», «que siga a la anterior»—, miralas también.
+3. Cambiá de ese brief **sólo** lo que el pedido dice. Todo lo demás va palabra
    por palabra como estaba —el fondo, los colores, la tipografía, el texto que
    ya tenía—: eso es lo que hace que la slide arreglada siga siendo del mismo
-   carrusel.
-3. Generala con `generate_image` en el mismo formato que las otras (`feed` en
-   un carrusel) y miralá contra los cinco puntos de siempre.
-4. Guardala con `replace_slide`, y en `reason` pasale lo que el cliente dijo
+   carrusel. Lo que agregues le habla al modelo de imagen, que no vio ninguna
+   otra slide: «distinta de las anteriores» no le dice nada, decile cómo es.
+4. Generala con `generate_image` en el mismo formato que las otras (`feed` en
+   un carrusel) y comparala con la que viste: lo que estaba mal tiene que no
+   estar, y lo que estaba bien tiene que seguir. Después, los cinco puntos de
+   siempre.
+5. Guardala con `replace_slide`, y en `reason` pasale lo que el cliente dijo
    que estaba mal, con sus palabras y tal como te llegó en el pedido. Si cambió
    lo que se ve, pasale también el texto alternativo nuevo. La imagen que
    estaba no se borra: queda guardada con su brief y con ese motivo, y el

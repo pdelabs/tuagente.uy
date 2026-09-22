@@ -86,6 +86,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic_ai import ModelRetry, RunContext
+from pydantic_ai.messages import BinaryImage
 from pydantic_ai.toolsets import FunctionToolset
 
 import looks
@@ -625,6 +626,43 @@ def toolset() -> FunctionToolset:
                 "url": f"/portal/posts/{post_id}"}
 
     @ts.tool
+    def view_slide(ctx: RunContext, post_id: str, number: int) -> list:
+        """Ver una slide de un posteo guardado, tal como está ahora.
+
+        Te devuelvo la imagen y la ves. Usala antes de arreglar una slide:
+        lo que el cliente dice que está mal —el texto cortado, un dibujo raro,
+        un fondo que no le gusta— lo ves acá, y el brief sólo te dice lo que
+        se pidió, no lo que salió. Si el pedido habla de las otras slides
+        («que sea distinta a las demás», «que siga a la anterior»), mirá
+        también esas.
+
+        Args:
+            post_id: el id del posteo, como `2026-09-21-tema`.
+            number: qué slide, contando desde 1.
+        """
+        data = read(post_id)
+        if data is None:
+            raise ModelRetry(
+                f"no hay ningún posteo «{post_id}»: el id es la fecha y el "
+                "tema, mirá el que vino en el pedido"
+            )
+        names = [image["name"] for image in data["images"]]
+        if not 1 <= number <= len(names):
+            raise ModelRetry(
+                f"el posteo «{post_id}» tiene {len(names)} slides y me pediste "
+                f"la {number}"
+            )
+        path = folder(post_id) / names[number - 1]
+        # The same two things `generate_image` hands back: the line the model
+        # can quote, and the picture itself, which Pydantic AI puts in front of
+        # the model as an image. Without this the creator fixed slides it had
+        # never seen, from the brief and the client's words alone.
+        return [
+            f"La slide {number} de {len(names)} de «{post_id}», tal como está ahora.",
+            BinaryImage(path.read_bytes(), media_type=TYPES[path.suffix.lower()]),
+        ]
+
+    @ts.tool
     def replace_slide(
         ctx: RunContext,
         post_id: str,
@@ -686,6 +724,14 @@ def toolset() -> FunctionToolset:
         source = incoming(ctx.deps.workspace, image)
         brief = brief_of(source)
         old = names[number - 1]
+        # A POST FROM BEFORE BRIEFS WERE KEPT has no `prompts`: its slides were
+        # made from briefs nobody wrote down. Their place is `None`, and the
+        # new slide's brief fills its own. Read HERE, before any file moves:
+        # the first version read it after the rename, and on the lab a fix of
+        # such a post died on the missing key with the old slide already
+        # moved out and the new one not yet in — a post with a hole in it
+        # (2026-09-21).
+        prompts = data.setdefault("prompts", [None] * len(names))
         # THE SLIDE THAT WAS THERE IS KEPT, and with everything that made it:
         # its brief, its alt and the client's own words about what was wrong.
         # The history is popped under the OLD name and put back under the new
@@ -693,17 +739,17 @@ def toolset() -> FunctionToolset:
         # earlier versions filed under a name the post no longer has.
         history = data.setdefault("versions", {}).pop(old, [])
         kept = f"{number:02d}-{len(history) + 1}{Path(old).suffix}"
-        (directory / PREVIOUS).mkdir(exist_ok=True)
-        (directory / old).rename(directory / PREVIOUS / kept)
         history.append({
             "file": f"{PREVIOUS}/{kept}",
-            "prompt": data["prompts"][number - 1],
+            "prompt": prompts[number - 1],
             "alt": data["alts"][number - 1],
             "reason": reason,
             "replaced_at": datetime.now(ZoneInfo(config.TIMEZONE)).isoformat(
                 timespec="seconds"
             ),
         })
+        (directory / PREVIOUS).mkdir(exist_ok=True)
+        (directory / old).rename(directory / PREVIOUS / kept)
         # THE NUMBER IS THE POSITION AND THE SUFFIX IS THE NEW PICTURE'S: a
         # slide that comes back as a different type takes its own extension,
         # and the post would otherwise list `02.png` with `02.webp` beside it.
@@ -711,7 +757,7 @@ def toolset() -> FunctionToolset:
         source.rename(directory / name)
         names[number - 1] = name
         data["versions"][name] = history
-        data["prompts"][number - 1] = brief
+        prompts[number - 1] = brief
         if alt:
             data["alts"][number - 1] = alt
             # `alt` is the post's own description and it is the first slide's,

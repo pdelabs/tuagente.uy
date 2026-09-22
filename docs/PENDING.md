@@ -281,6 +281,13 @@ in `docs/east-requirements.md` §5; what is left is here.
   returns and the engine turns into an event + a notification, and quality
   checks owned by code (a slide whose text does not match the brief) that can
   refuse a `save_post`. Not designed yet.
+  Measured on the lab on 2026-09-21: two delegations of a slide fix crashed
+  (a bug since fixed), the face hit the delegation cap, and it went on alone —
+  copied a file over the post's slide with `bash` and then edited the picture
+  with Pillow, cropping and enlarging the text. `instructions.md` tells it
+  post files are not its to edit; prose did not hold once the proper path was
+  closed. Whatever the mechanism is, «the delegate could not» has to end the
+  turn with that sentence, not open the face's workshop.
 
 - **Pricing and offer structure**: the proposal on the table is a small paid
   diagnostic (USD 200-250) that gets deducted from setup, instead of a

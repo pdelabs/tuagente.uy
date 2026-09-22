@@ -330,6 +330,21 @@ dies on a missing sidecar leaves the old post whole and the tab listing it
 once; and `update_caption` changes the words, keeps the pictures and the
 briefs, and refuses both an unknown post and a published one.
 
+**THE CREATOR SEES THE SLIDE IT FIXES** (`view_slide`). A fix used to travel
+as text all the way: the portal's one sentence, the face's delegation, the
+brief in `post.json`. The creator's only reader opens text, so it rewrote a
+brief for a picture it had never seen — fine for «otro fondo», blind for «el
+texto quedó cortado». `view_slide(post_id, number)` hands back the picture the
+way `generate_image` does, and `creator.md` has it look before touching the
+brief and compare after generating. Measured on the lab: `view_slide`, two
+`generate_image`, `replace_slide`, and the headline came back bigger with the
+rest of the slide as it was.
+
+The same run found a hole in `replace_slide`: it moved the old slide out BEFORE
+reading its brief, and a post saved before briefs were kept (no `prompts`)
+died there with the slide missing. It reads everything first now, and such a
+post's missing briefs are `None`. Two of our own agent's posts are that old.
+
 **NO TWO POSTS ALIKE IN A ROW, AND CODE IS WHO SAYS SO** (`looks.py`). On our
 own agent every post came out dark with thin violet lines (2026-09-20): the
 brand file called that look the default, the skill's checklist called it «the

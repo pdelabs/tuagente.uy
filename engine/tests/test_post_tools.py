@@ -25,6 +25,18 @@ instead of them. Free, a second, and every claim is about what is left on disk:
      Instagram is not rewritten from here, and the refusal carries the
      permalink because that is the fact that settles it.
 
+  d. THE CREATOR CAN SEE THE SLIDE IT IS FIXING — `view_slide` hands back a
+     line and the picture itself, the bytes of that slide with its media type,
+     the way `generate_image` hands back a new one. An unknown post and a slide
+     number out of range come back as words. Before it, a fix was made blind:
+     the creator's only reader opens text.
+
+  e. A POST FROM BEFORE BRIEFS WERE KEPT CAN HAVE A SLIDE FIXED — no
+     `prompts`, no `versions`, the way the first posts were saved: the new
+     slide goes in, the old one is kept with a `None` brief, and nothing is
+     left missing. The first version read the brief after moving the old
+     slide out, and died there with a hole in the post.
+
 IT CLEANS UP AFTER ITSELF: the post, the pictures, the scratch folders and the
 events it wrote are gone by the end, whatever happened.
 
@@ -94,6 +106,38 @@ try:
     directory = posts.folder(post_id)
     report["saved"] = saved
     before = {p.name: p.read_bytes() for p in sorted(directory.iterdir()) if p.is_file()}
+
+    # (d) seeing a slide. The picture is not JSON, so what is reported is what
+    # it is and whether its bytes are the slide's.
+    seen = tools["view_slide"](ctx, post_id, 2)
+    report["view"] = {
+        "line": seen[0],
+        "kind": type(seen[1]).__name__,
+        "media_type": seen[1].media_type,
+        "same_bytes": seen[1].data == (directory / "02.png").read_bytes(),
+    }
+    report["view_unknown"] = call("view_slide", "2026-01-01-no-existe", 1)
+
+    # (e) the same post, as the first posts were saved: no briefs, no history.
+    old_style = json.loads((directory / "post.json").read_text())
+    old_style.pop("prompts"); old_style.pop("versions")
+    (directory / "post.json").write_text(json.dumps(old_style, ensure_ascii=False, indent=2))
+    report["old_fix"] = call("replace_slide", post_id, 1, picture("prueba-e.png", "brief nuevo"), "se ve chico")
+    fixed = json.loads((directory / "post.json").read_text())
+    report["old_after"] = {
+        "prompts": fixed.get("prompts"),
+        "kept": [v["file"] for v in fixed["versions"].get("01.png", [])],
+        "kept_prompt": [v["prompt"] for v in fixed["versions"].get("01.png", [])],
+        "files": sorted(p.name for p in directory.iterdir() if p.is_file()),
+        "kept_file": (directory / "anteriores" / "01-1.png").is_file(),
+    }
+    # Back to how (a) to (c) expect it, byte for byte: they compare the folder
+    # with what it was right after the save.
+    (directory / "01.png").write_bytes(before["01.png"])
+    (directory / "post.json").write_bytes(before["post.json"])
+    import shutil as _shutil
+    _shutil.rmtree(directory / "anteriores")
+    report["view_out_of_range"] = call("view_slide", post_id, 3)
 
     # (a) the call that deleted the post.
     report["own_images"] = call(
@@ -260,6 +304,31 @@ def main() -> int:
     print(f"  {published.get('said', '')[:160]}")
     print(f"  events: {', '.join(kinds)}")
     failures += judge("c. words are changed with update_caption", problems)
+
+    problems = []
+    view = r["view"]
+    if view["kind"] != "BinaryImage" or view["media_type"] != "image/png":
+        problems.append(f"it handed back {view['kind']} as {view['media_type']}")
+    if not view["same_bytes"]:
+        problems.append("the picture is not slide 2's bytes")
+    if "slide 2 de 2" not in view["line"]:
+        problems.append(f"the line says {view['line']!r}")
+    for key in ("view_unknown", "view_out_of_range"):
+        if r[key].get("raised") != "ModelRetry":
+            problems.append(f"{key} gave {r[key]}")
+    failures += judge("d. the creator can see the slide it is fixing", problems)
+
+    problems = []
+    if "ok" not in r["old_fix"]:
+        problems.append(f"the fix gave {r['old_fix']}")
+    after = r["old_after"]
+    if after["prompts"] != ["brief nuevo", None]:
+        problems.append(f"the briefs are {after['prompts']}")
+    if after["kept"] != ["anteriores/01-1.png"] or after["kept_prompt"] != [None]:
+        problems.append(f"the history is {after['kept']} {after['kept_prompt']}")
+    if "01.png" not in after["files"] or "02.png" not in after["files"] or not after["kept_file"]:
+        problems.append(f"the folder has {after['files']}")
+    failures += judge("e. a post from before briefs were kept can have a slide fixed", problems)
 
     print("POST TOOLS: PASS" if not failures else "POST TOOLS: FAIL")
     return 1 if failures else 0
