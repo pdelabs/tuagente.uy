@@ -289,9 +289,7 @@ export default function SkillsPage() {
       // something it can't do ("what to deliver, how to say it without dressing
       // it up"). In the showcase of what it can do they came out as "Cuando no
       // podés buscar en internet", which was verbatim what the test client
-      // flagged as written for whoever programmed it. What IS useful for them
-      // to know -- that web search can be turned on -- is the capabilities
-      // catalog, which has its own card and its own text.
+      // flagged as written for whoever programmed it.
       .filter((s) => !(norm(String(s.source ?? "")) === "kit" && /^sin-/.test(s.name)))
       .map((s) => {
         const label = (s.label || "").trim();

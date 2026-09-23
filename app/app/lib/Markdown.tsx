@@ -282,12 +282,11 @@ function Thing({ entity, text }: { entity: Entity; text?: string }) {
   );
 }
 
-/** The chip for an entity, whatever kind it is. Capabilities and posts have
- *  their own chip (`entities.tsx`) — the first is a card and the post is a
- *  link to its tab, where it is drawn at the size it is going out at;
- *  everything else opens in the viewer. */
+/** The chip for an entity, whatever kind it is. A post has its own chip
+ *  (`entities.tsx`), a link to its tab, where it is drawn at the size it is
+ *  going out at; everything else opens in the viewer. */
 function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
-  if (entity.kind === "post" || entity.kind === "capability") {
+  if (entity.kind === "post") {
     return <EntityChip entity={entity} label={text?.trim() || entity.id} />;
   }
   return <Thing entity={entity} text={text} />;
@@ -299,8 +298,6 @@ function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
 // backticks. The \b sits INSIDE each alternative: if it were before the
 // optional /opt/data/ prefix, it would never match (`/` isn't a word
 // character) and the prefix would be left dangling as text next to the chip.
-// `capability:` goes here too: the SOUL teaches the agent to write it alone on
-// its own line, but it writes it in prose about half the time.
 //
 // The workspace's top-level folders also go with no prefix: the kit teaches it
 // to cite `workspace/entregables/…` (the deliverable plugin's SKILL.md), but
@@ -318,7 +315,6 @@ function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
 // letter and whose dot ends the match before the extension.
 const INLINE_ENTITY_RE = new RegExp(
   "(\\bt_[0-9a-f]{6,16}\\b" +
-  "|\\bcapability:[a-z0-9][a-z0-9-]*\\b" +
   "|\\b\\d{4}-\\d{2}-\\d{2}-(?=[a-z0-9-]*[a-z])[a-z0-9][a-z0-9-]{0,39}\\b" +
   `|(?:/opt/data/)?\\b(?:workspace|entregables|entrada|interno)/[\\w./-]+\\.(?:${FILE_EXTENSIONS})\\b)`,
   "gi");

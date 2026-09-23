@@ -107,7 +107,7 @@ export const CONFIG_KEY = "tuagente_portal_config";
 const KEY = CONFIG_KEY;
 // Everything the portal stores about ONE agent goes under this prefix: the
 // credential, the name the client gave it, its look, which welcome screens
-// were seen, the chat pins, the capabilities requested. NOTHING under here can
+// were seen, the chat pins. NOTHING under here can
 // survive a change of agent.
 const PREFIX = "tuagente_";
 
@@ -810,56 +810,6 @@ export const getSkillContent = (c: PortalConfig, name: string) =>
  *  on its own within a few minutes, nothing needs restarting. */
 export const saveSkill = (c: PortalConfig, name: string, content: string) =>
   post<{ ok: boolean }>(c.adapter, `/portal/skills/${encodeURIComponent(name)}`, c, { content });
-
-/** What the agent CAN'T do yet and could be turned on. The adapter computes it
- *  by PRESENCE (`active`), same as connections, and hides our own internals
- *  (`installs`, `verifies`): only what the client reads makes it here. */
-export type Capability = {
-  id: string;
-  label: string;
-  group?: string;
-  purpose: string;
-  how?: string;
-  cost?: string;
-  effort?: string;
-  who?: string;
-  /** `base` ships on EVERY agent: drawn as included and NEVER with a request
-   *  button (asking for something you already have is the worst possible
-   *  screen). `menu` is what can be added. An older adapter doesn't send it:
-   *  with the field absent, `menu` is assumed, which is how the portal used
-   *  to behave. */
-  level?: "base" | "menu" | string;
-  /** null = can't be asserted (the engine doesn't expose the tool index). */
-  active: boolean | null;
-};
-export const getCapabilities = (c: PortalConfig) =>
-  get<{ available: boolean; capabilities: Capability[] }>(c.adapter, "/portal/capabilities", c);
-
-/** What the client wrote that they need, translated into catalog ids.
- *
- *  The agent resolves it with ONE short call to the model -- not a whole
- *  run -- and answers with ids validated against the catalog: whatever the
- *  model makes up never reaches this far.
- *
- *  `no_match` is the honest answer to "couldn't ask" (the agent has nothing
- *  to call the model with): the screen shows the whole menu unmarked instead
- *  of cutting the flow short. An empty list WITHOUT that field says something
- *  else: it did ask, and nothing in the menu was what the client requested. */
-export const suggestCapabilities = (c: PortalConfig, text: string) =>
-  post<{ suggested: string[]; no_match?: boolean }>(
-    c.adapter, "/portal/capabilities/suggest", c, { text });
-
-/** The client requests a capability. It gets recorded on the agent's side (one
- *  line per request) and WE look at it: nothing turns on by itself. */
-export const requestCapability = async (c: PortalConfig, id: string | null, text: string) => {
-  const r = await post<{ ok?: boolean; error?: string; duplicate?: boolean }>(
-    c.adapter, "/portal/capabilities/request", c, { id, text });
-  // The adapter can answer 200 with `{ok:false}`: without this check the
-  // portal would tell the client "requested" for something that never got
-  // recorded anywhere, which is the worst possible version of this button.
-  if (r?.ok === false) throw new Error(r.error || "el pedido no quedó registrado");
-  return r;
-};
 
 export type ArtifactMeta = {
   id: string; title: string; kind: string; summary: string;

@@ -158,11 +158,10 @@ function EntityViewer({ cfg, entity, onClose }: {
   useEffect(() => {
     let alive = true;
     setErr(null);
-    // "capability" never reaches here: its chip IS the card and opens no
-    // modal. Neither does "post": its chip is a link to Posteos, where the
+    // "post" never reaches here: its chip is a link to Posteos, where the
     // picture is drawn at the size it is going out at instead of squeezed
     // into a modal.
-    if (entity.kind === "capability" || entity.kind === "post") return;
+    if (entity.kind === "post") return;
     // A photo or a PDF isn't requested as text: it's shown or downloaded.
     if (isPhoto || downloadOnly) return;
     const p =
@@ -180,7 +179,6 @@ function EntityViewer({ cfg, entity, onClose }: {
         ticket: "Esa tarea ya no existe.",
         artifact: "Esa visualización ya no está disponible.",
         file: "No encontré ese archivo.",
-        capability: "",
         post: "",
       }[entity.kind];
       setErr(msg.startsWith("404") ? missingMessage : msg);
@@ -201,7 +199,6 @@ function EntityViewer({ cfg, entity, onClose }: {
     }
   }, [cfg, isFile, path]);
 
-  if (entity.kind === "capability") return null; // its chip IS the card
   if (entity.kind === "post") return null; // its chip is a link to Posteos
 
   const title =
