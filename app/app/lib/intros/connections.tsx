@@ -6,11 +6,11 @@
 // the systems the company ALREADY uses, and every plug is your own decision.
 //
 // THERE'S NO MOCKUP HERE, ON PURPOSE. The earlier version drew a made-up
-// board of plugs with green checkmarks next to Telegram, the company's email
-// and the spreadsheets. A test client walked in convinced she already had all
-// of that plugged in; the only thing actually connected was the model quota
-// we set up for her. A green checkmark next to "Telegram" isn't an
-// illustration: it's a claim about HER account.
+// board of plugs with green checkmarks next to a messaging channel, the
+// company's email and the spreadsheets. A test client walked in convinced she
+// already had all of that plugged in; the only thing actually connected was
+// the model quota we set up for her. A green checkmark next to a channel isn't
+// an illustration: it's a claim about HER account.
 //
 // The portal knows the real state, so the real state gets shown -- the same
 // `GET /portal/connections` the tab itself uses, via `lib/agent.ts`. For a
@@ -160,7 +160,7 @@ function LoadingColumn({ title }: { title: string }) {
 // With no catalog from the agent, NOTHING about anyone's status can be said:
 // the fallback shows what kind of things we're talking about, with not a
 // single checkmark.
-const EXAMPLE_CHANNELS = ["Telegram", "Correo de la empresa", "WhatsApp"];
+const EXAMPLE_CHANNELS = ["Correo de la empresa", "WhatsApp"];
 const EXAMPLE_SYSTEMS = ["Planillas y Drive", "Agenda"];
 
 function ExampleColumn({ title, items }: { title: string; items: string[] }) {

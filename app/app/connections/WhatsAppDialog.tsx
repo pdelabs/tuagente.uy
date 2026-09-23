@@ -1,7 +1,7 @@
 "use client";
 
 // WhatsApp's own steps. Each connection has its own: Google exchanges an
-// OAuth code, Telegram pastes a pairing code, and here a QR gets scanned.
+// OAuth code, and here a QR gets scanned.
 //
 // Pairing does NOT start on its own. The bridge used to request a QR the
 // moment it came up, it expired after 3 minutes, restarted, and asked for

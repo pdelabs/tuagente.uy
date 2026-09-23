@@ -364,7 +364,7 @@ function RequestChange({ cfg, flow }: { cfg: PortalConfig; flow: FlowDetail }) {
       <Card className="flex flex-col gap-2.5">
         <p className="text-[13px] leading-snug text-ink-soft">
           Contale en tus palabras qué querés distinto — &ldquo;no uses emojis&rdquo;,
-          &ldquo;las frases más cortas&rdquo;, &ldquo;avisame también por Telegram&rdquo;.
+          &ldquo;las frases más cortas&rdquo;, &ldquo;mandame el resumen por mail&rdquo;.
           Lo aplica solo y el cambio queda a la vista acá arriba.
         </p>
         <textarea

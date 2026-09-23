@@ -18,7 +18,7 @@ import { ExampleCarousel } from "./flowExamples";
 import ChatOnboarding from "./ChatOnboarding";
 import { urlPointsToDetail } from "./routes";
 import {
-  activateTelegramPairing, createConnectionRequest, getConnections, saveIdentity,
+  createConnectionRequest, getConnections, saveIdentity,
   type Connection, type Manifest, type PortalConfig,
 } from "./agent";
 import {
@@ -37,51 +37,6 @@ const SUGGESTED_NAMES = [
   "Tota", "Rulo", "Pepa", "Milo", "Nina", "Beto", "Cuca", "Tito", "Lola",
   "Kiko", "Mora", "Nino", "Pocha", "Chispa", "Lino", "Juana", "Bruno", "Tuca", "Rosita", "Nilo",
 ];
-
-/** The face it chose, captured from Rive's canvas: it ends up as the Telegram
- *  bot's photo (one of our tools uploads it over MTProto). If the canvas
- *  doesn't cooperate, naming still goes through, just without a photo. */
-function agentitoCapture(): { avatar_png?: string } {
-  try {
-    const canvas = document.querySelector("canvas");
-    if (!canvas || !canvas.width) return {};
-
-    // The canvas does NOT get uploaded as-is. Rive draws with a TRANSPARENT
-    // BACKGROUND, and Telegram doesn't support alpha in profile photos: it
-    // flattens it against BLACK. The client's little orange face ended up
-    // cropped onto a black square, with jagged edges. (Seen on 8/11 with
-    // Washington.)
-    //
-    // So it gets composited onto the portal's own background, square, at
-    // 512: that's the size Telegram uses for the large avatar, and shipping
-    // anything smaller lets it get upscaled to that -- which is where the
-    // jagged edges came from.
-    const SIDE = 512;
-    const offscreen = document.createElement("canvas");
-    offscreen.width = SIDE;
-    offscreen.height = SIDE;
-    const ctx = offscreen.getContext("2d");
-    if (!ctx) return {};
-
-    ctx.fillStyle = "#FBFAFF";           // bg-surface: the same one seen in the portal
-    ctx.fillRect(0, 0, SIDE, SIDE);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-
-    // Square, centered and undistorted: onboarding's canvas isn't always
-    // square, and a stretched face shows more than anything else would.
-    const scale = Math.min(SIDE / canvas.width, SIDE / canvas.height);
-    const w = canvas.width * scale;
-    const h = canvas.height * scale;
-    ctx.drawImage(canvas, (SIDE - w) / 2, (SIDE - h) / 2, w, h);
-
-    const data = offscreen.toDataURL("image/png");
-    if (data.startsWith("data:image/png") && data.length > 2000) {
-      return { avatar_png: data.split(",", 2)[1] };
-    }
-  } catch { /* tainted canvas or no buffer: we carry on with no photo */ }
-  return {};
-}
 
 /** A random look, guaranteed different from the current one: the dice the
  *  naming step rolls when the client asks for another face. */
@@ -216,19 +171,12 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   // for not using Telegram" and "nobody in my neighborhood uses Telegram" --
   // and both ended up giving a piece of data just so the screen would let
   // them through.
-  const [channel, setChannel] = useState<"telegram" | "whatsapp" | "email" | "none" | "">("");
+  const [channel, setChannel] = useState<"whatsapp" | "email" | "none" | "">("");
   const [mail, setMail] = useState("");
   const [phone, setPhone] = useState("");
-  // Choosing "Telegram" without activating it would leave the agent with
-  // nowhere to write, so it gets activated right here. And the whole catalog,
-  // not just Telegram: it's where we learn what THIS agent can do (does it
-  // have a bot, is its email already connected) and what each connection is
-  // called.
+  // The catalog, for what each connection is called: a WhatsApp request
+  // gets titled the way Connections expects (see `requestConnection`).
   const [connections, setConnections] = useState<Connection[] | null>(null);
-  const [code, setCode] = useState("");
-  const [activating, setActivating] = useState(false);
-  const [pairErr, setPairErr] = useState<string | null>(null);
-  const [paired, setPaired] = useState(false);
   // What the client picked from the carousel: starts the chat without leaving here.
   const [prompt, setPrompt] = useState("");
   // WHERE TO GO BACK TO ON FINISHING. Onboarding puts itself in front of ANY
@@ -244,69 +192,20 @@ export default function Onboarding({ manifest, cfg, onDone }: {
       ? window.location.pathname + window.location.search
       : null;
   });
-  // While the photo is taken, the character STAYS STILL. The capture grabs
-  // whatever frame is on screen, and in `calm` the agentito sips some
-  // mate at ~20s and then every so often -- so it almost always got caught
-  // mid-sip, straw halfway there. Nobody names their agent in under twenty
-  // seconds. (Seen on 8/11 in Mr.Wobble's photo.)
-  const [posing, setPosing] = useState(false);
-
   useEffect(() => {
     if (step !== "overview" && step !== "notify") return;
     getConnections(cfg)
-      .then((r) => {
-        setConnections(r.connections ?? []);
-        if ((r.connections ?? []).some((c) => c.id === "telegram" && c.status === "connected")) {
-          setPaired(true);
-        }
-      })
-      .catch(() => { /* no catalog, we carry on: whatever can be tried gets offered */ });
+      .then((r) => setConnections(r.connections ?? []))
+      .catch(() => { /* no catalog: the request falls back to its own label */ });
   }, [step, cfg]);
 
   const connectionOf = (id: string) => connections?.find((c) => c.id === id) ?? null;
-  const tg = connectionOf("telegram");
 
-  // Two sources for the same datum, because the step CANNOT complete without
-  // it: the manifest (adapter 0.35+, always present) and the connection
-  // (which may not have arrived if the catalog call failed).
-  const botHandle = manifest.telegram_bot
-    || tg?.link?.replace(/^https:\/\/t\.me\//, "")
-    || null;
-  const botLink = botHandle ? `https://t.me/${botHandle}` : null;
-  // Does THIS agent have Telegram? PRINCIPLE ZERO: the portal serves any
-  // agent and we install the bot ourselves, one per client. With no
-  // `TELEGRAM_BOT_TOKEN` there's no bot, the connection stays `disconnected`
-  // and the manifest sends `telegram_bot: null` -- meaning there's nobody to
-  // write to and the code step is impossible to finish. (Measured on 8/13 on
-  // the lab's three agents: all three with no bot.) If the catalog didn't
-  // arrive, we assume there isn't one: the cost of over-promising is paid by
-  // the client waiting for a message that's never going to come.
-  const hasTelegram = Boolean(manifest.telegram_bot)
-    || tg?.status === "ready" || tg?.status === "connected";
-  // Email only works as a channel if the company's inbox is ALREADY
-  // connected: otherwise the agent has nowhere to write from.
-  const emailConnected = connectionOf("email")?.status === "connected";
-
-  const activateTelegram = async () => {
-    if (!code.trim()) return;
-    setActivating(true);
-    setPairErr(null);
-    try {
-      const d = await activateTelegramPairing(cfg, code);
-      if (!d.ok) throw new Error("No se pudo activar Telegram.");
-      setPaired(true);
-      // The channel gets recorded THE MOMENT it starts to exist, not at the
-      // end of onboarding: if the client closes here, Telegram is already
-      // running and the portal can't keep reminding them they're missing a
-      // channel.
-      saveIdentity(cfg, { contact: { channel: "telegram", value: "portal" } })
-        .catch(() => { /* old or down adapter: retried on continue */ });
-    } catch (e) {
-      setPairErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setActivating(false);
-    }
-  };
+  // What THIS agent can send through, as the manifest says -- not what the
+  // portal knows how to draw. PRINCIPLE ZERO: an agent with no channel gets no
+  // options, only the truth that everything waits for them here. Email goes
+  // out from our domain, so an address is all it takes.
+  const canEmail = (manifest.notify_channels ?? []).includes("email");
 
   // Researching a website is TWO things and the character has both: first the
   // magnifying glass sweeping (finding the site, going through it) and then
@@ -337,28 +236,16 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   // piece of data just to get through, which isn't a channel, it's a fake
   // formality. The only thing asked is to ANSWER the question: "Not now" is
   // an answer and sits next to the others.
-  const answeredSomething = channel !== "";
+  // With nothing to pick there's nothing to answer: continuing IS the answer.
+  const answeredSomething = channel !== "" || !canEmail;
   // ONE SINGLE CRITERION: can the agent write to them THROUGH HERE, TODAY?
-  // It's the only question, and it's answered the same way for all four answers.
-  //
-  // Telegram only counts if it ended up paired (otherwise the agent would
-  // write to a chat that doesn't exist). Email only counts if the company's
-  // inbox is already connected -- which is what this very screen tells the
-  // client two lines below. WhatsApp never counts yet. Everything else is "no
-  // channel", and that gets SAVED (see `continueFromNotify`): a channel that
-  // doesn't exist and a client who never answered can't be the same datum.
-  const realChannel = channel === "telegram" && paired ? "telegram"
-    : channel === "email" && mailOk && emailConnected ? "email"
-      : null;
+  // Email with a valid address can; WhatsApp never does yet. Everything else
+  // is "no channel", and that gets SAVED (see `continueFromNotify`): a channel
+  // that doesn't exist and a client who never answered can't be the same datum.
+  const realChannel = channel === "email" && mailOk ? "email" : null;
   // What gets handled by hand: there's nothing here the client can plug in
   // themselves, so it becomes a request of ours with their info attached.
-  // Telegram lands on this list when the agent has no bot: the shortcut
-  // doesn't exist, and instead of sending them to a screen where they still
-  // couldn't do it, we request it for them.
-  const connectionRequest = channel === "whatsapp" && phoneOk ? "whatsapp"
-    : channel === "email" && mailOk && !emailConnected ? "email"
-      : channel === "telegram" && !hasTelegram ? "telegram"
-        : null;
+  const connectionRequest = channel === "whatsapp" && phoneOk ? "whatsapp" : null;
   // Celebration counter: every naming fires the character's trigger.
   const [celebrations, setCelebrations] = useState(0);
   const [look, setLook] = useState<AgentitoLook>(
@@ -373,13 +260,9 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     setLook(next);
   };
 
-  const submitName = async () => {
+  const submitName = () => {
     if (!ready) return;
     const n = name.trim();
-    // Pose first, photo after. The 450ms give Rive time to finish the
-    // transition: capturing it on the same tick returns the old frame.
-    setPosing(true);
-    await new Promise((r) => setTimeout(r, 450));
     saveAgentName(n);
     setName(n);
     setCelebrations((f) => f + 1);
@@ -387,12 +270,9 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     // The name gets saved HERE, when it happens, not at the end of
     // onboarding. When the last step became mandatory (picking a channel),
     // the name used to sit in the browser until the very end: the agent went
-    // through the whole Telegram pairing without knowing its own name, its
-    // bot kept the old one, and if the client abandoned the flow there the
-    // name was lost.
-    const photo = agentitoCapture();
-    setPosing(false);
-    saveIdentity(cfg, { name: n, look, ...photo })
+    // through the whole channel step without knowing its own name, and if the
+    // client abandoned the flow there the name was lost.
+    saveIdentity(cfg, { name: n, look })
       .catch(() => { /* old or down adapter: the browser's copy stays */ });
   };
 
@@ -418,19 +298,12 @@ export default function Onboarding({ manifest, cfg, onDone }: {
    *  correo de la empresa" while the catalog says "Correo de la empresa", it
    *  never matched -- the client who requested it in onboarding went to
    *  Connections, saw "Sin conectar", and requested it again. */
-  const requestConnection = (id: "whatsapp" | "email" | "telegram") => {
-    const label = connectionOf(id)?.label
-      ?? (id === "whatsapp" ? "WhatsApp" : id === "email" ? "Correo de la empresa" : "Telegram");
-    const detail = id === "whatsapp"
-      ? `Número: ${phone.trim()}\n\n` +
-        `Vía oficial (Cloud API): pide verificación de la empresa ante Meta y ` +
-        `la tramitamos nosotros.`
-      : id === "email"
-        ? `Casilla: ${mail.trim()}\n\n` +
-          `Hay que conectar la casilla de la empresa (IMAP/SMTP) para que el ` +
-          `agente pueda escribir desde ahí.`
-        : `Todavía no tiene un bot de Telegram propio: hay que crearlo y pasarle ` +
-          `el link para que le mande el primer mensaje.`;
+  const requestConnection = (id: "whatsapp") => {
+    const label = connectionOf(id)?.label ?? "WhatsApp";
+    const detail =
+      `Número: ${phone.trim()}\n\n` +
+      `Vía oficial (Cloud API): pide verificación de la empresa ante Meta y ` +
+      `la tramitamos nosotros.`;
     createConnectionRequest(cfg, {
       title: `Conectar ${label}`,
       body:
@@ -449,7 +322,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
    *  an ALREADY-named agent picked a channel that never got saved.
    *
    *  What does NOT get sent: `whatsapp` as a notify channel. The adapter only
-   *  accepts telegram/email/none, and sending anything else fails the whole
+   *  accepts email/none, and sending anything else fails the whole
    *  call. Until the kit adds it, WhatsApp lives as a request -- a ticket,
    *  same as in Connections -- and not as a channel.
    *
@@ -461,15 +334,13 @@ export default function Onboarding({ manifest, cfg, onDone }: {
    *  for the one who picked WhatsApp, who's the one who'll go longest with no
    *  channel. */
   const continueFromNotify = () => {
-    const contact = realChannel === "telegram"
-      ? { channel: "telegram" as const, value: "portal" }
-      : realChannel === "email"
-        ? { channel: "email" as const, value: mail.trim() }
-        // No channel that actually works came out of this, no matter which
-        // one they picked: it gets saved EXPLICITLY. It's what lets the
-        // portal offer it again inside, and lets the agent know it has
-        // nowhere to write.
-        : { channel: "none" as const };
+    const contact = realChannel === "email"
+      ? { channel: "email" as const, value: mail.trim() }
+      // No channel that actually works came out of this, no matter which
+      // one they picked: it gets saved EXPLICITLY. It's what lets the
+      // portal offer it again inside, and lets the agent know it has
+      // nowhere to write.
+      : { channel: "none" as const };
     if (answeredSomething) {
       saveIdentity(cfg, { contact })
         .catch(() => { /* old or down adapter: the portal carries on */ });
@@ -561,8 +432,9 @@ export default function Onboarding({ manifest, cfg, onDone }: {
               ¿Por dónde te aviso?
             </h1>
             <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-soft">
-              Cuando termine algo tuyo o necesite tu ok, te escribo por donde
-              vos digas. Si preferís verlo más adelante, también está bien.
+              {canEmail
+                ? "Cuando termine algo tuyo o necesite tu ok, te escribo por donde vos digas. Si preferís verlo más adelante, también está bien."
+                : "Cuando termine algo tuyo o necesite tu ok, te lo dejo acá."}
             </p>
           </div>
         )}
@@ -588,7 +460,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
           <AgentitoAnimated
             celebrations={celebrations}
             look={look}
-            state={posing ? "normal" : readingWeb ? gesture : "calm"}
+            state={readingWeb ? gesture : "calm"}
             className="h-full w-full"
           />
           {/* The dice lives glued to the character: it changes ITS look, not the page. */}
@@ -725,97 +597,49 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                 portal is any use -- a test client said it plainly: "the sheet
                 is waiting for me to show up and I'm not going to". */}
             <div className="mx-auto mt-2 w-full max-w-md rounded-card border border-black/[0.07] bg-white p-5 text-left">
-              <p className="text-[15px] font-bold text-ink">
-                ¿Por dónde te aviso cuando pase algo?
-              </p>
-              <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
-                Cuando algo necesite tu ok, o cuando anote algo tuyo y quiera confirmarlo.
-                Te escribo yo, no te llegan mails del sistema.
-              </p>
-              {/* FOUR ANSWERS, ALL NAMED. The fourth is "not now" and sits next
+              {canEmail && (
+                <>
+                  <p className="text-[15px] font-bold text-ink">
+                    ¿Por dónde te aviso cuando pase algo?
+                  </p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                    Cuando algo necesite tu ok, o cuando anote algo tuyo y quiera confirmarlo.
+                    Como mucho un mail cada media hora, y nunca de noche.
+                  </p>
+                </>
+              )}
+              {/* THREE ANSWERS, ALL NAMED. The last is "not now" and sits next
                   to the others on purpose: it's an answer, not an escape hatch
                   hidden at the bottom. WhatsApp is listed because it's what
                   half the country uses -- and it's listed telling the truth
                   about what it takes, instead of being missing and leaving the
                   client thinking the product doesn't get her. */}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {([
-                  ["telegram", "Telegram"],
-                  ["whatsapp", "WhatsApp"],
-                  ["email", "Correo"],
-                  ["none", "Ahora no"],
-                ] as const).map(([k, label]) => (
-                  <button
-                    key={k}
-                    onClick={() => { setChannel(k); setPairErr(null); }}
-                    className={`rounded-lg border px-3 py-2 text-[13px] font-semibold transition ${
-                      channel === k
-                        ? "border-primary bg-c-violet/60 text-primary"
-                        : "border-black/10 text-ink-soft hover:text-ink"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Telegram gets activated HERE, but ONLY if this agent has a
-                  bot. With no bot there's nobody to write to: the code box
-                  used to sit there asking for something that was never going
-                  to arrive. */}
-              {channel === "telegram" && !hasTelegram && (
-                <div className="mt-3">
-                  <p className="text-[12.5px] leading-relaxed text-ink-soft">
-                    Todavía no tengo un Telegram propio: el bot te lo creamos
-                    nosotros y no lo puedo prender yo desde acá. Es rápido —
-                    cuando esté, te pasamos el link para que le mandes un hola y
-                    listo.
-                  </p>
+              {canEmail ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {([
+                    ["email", "Correo"],
+                    ["whatsapp", "WhatsApp"],
+                    ["none", "Ahora no"],
+                  ] as const).map(([k, label]) => (
+                    <button
+                      key={k}
+                      onClick={() => setChannel(k)}
+                      className={`rounded-lg border px-3 py-2 text-[13px] font-semibold transition ${
+                        channel === k
+                          ? "border-primary bg-c-violet/60 text-primary"
+                          : "border-black/10 text-ink-soft hover:text-ink"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
-              )}
-              {channel === "telegram" && hasTelegram && (
-                paired ? (
-                  <p className="mt-3 text-[13px] font-semibold text-c-green-ink">
-                    Listo, ya nos hablamos por ahí.
-                  </p>
-                ) : (
-                  <div className="mt-3 flex flex-col gap-2">
-                    {botLink && (
-                      <a
-                        href={botLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
-                      >
-                        Abrir el chat conmigo
-                      </a>
-                    )}
-                    {/* The handle is ALSO written out, not just in the button:
-                        if the connections call fails, the step goes back to
-                        impossible. And this way it can be searched by hand
-                        from the phone, which is where people have Telegram. */}
-                    <p className="text-[12px] leading-snug text-ink-soft">
-                      {botHandle
-                        ? <>Buscame en Telegram como <span className="font-semibold text-ink">@{botHandle}</span> y mandame un hola. Te contesto con un código: pegalo acá.</>
-                        : <>Mandame un hola por Telegram. Te contesto con un código: pegalo acá.</>}
-                    </p>
-                    <div className="flex gap-2">
-                      <input
-                        value={code}
-                        onChange={(e) => { setCode(e.target.value); setPairErr(null); }}
-                        onKeyDown={(e) => e.key === "Enter" && activateTelegram()}
-                        placeholder="Código"
-                        maxLength={16}
-                        aria-label="Código de Telegram"
-                        className={`${inputCls} w-36 font-mono uppercase`}
-                      />
-                      <Btn size="sm" disabled={!code.trim() || activating} onClick={activateTelegram}>
-                        {activating ? "Activando…" : "Activar"}
-                      </Btn>
-                    </div>
-                    {pairErr && <p className="text-[12px] text-c-coral-ink">{pairErr}</p>}
-                  </div>
-                )
+              ) : (
+                <p className="text-[13px] leading-relaxed text-ink-soft">
+                  Por ahora no tengo cómo escribirte afuera de acá: lo que haga te
+                  va a estar esperando en el portal y lo ves cuando entres.
+                  Trabajo igual — lo que cambia es que te enterás cuando venís.
+                </p>
               )}
 
               {/* WHATSAPP SAYS WHAT IT COSTS AND ISN'T OFFERED AS IF IT WERE A
@@ -831,7 +655,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                     Por WhatsApp todavía no te puedo escribir solo. La vía que sirve
                     para un número de empresa pide que Meta verifique el negocio, y
                     ese trámite lo hacemos nosotros: suele llevar unos días. Dejanos
-                    el número y lo arrancamos hoy.
+                    el número y lo arrancamos hoy. Mientras tanto, si querés que te
+                    avise desde hoy, elegí Correo.
                   </p>
                   <input
                     autoFocus
@@ -843,18 +668,11 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                     aria-label="Tu número de WhatsApp"
                     className={`${inputCls} mt-2`}
                   />
-                  {/* The shortcut is offered ONLY if it exists on this agent.
-                      Offering "Telegram in two taps" to an agent with no bot
-                      sends her to a screen where she still can't do it either. */}
-                  {hasTelegram && (
-                    <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
-                      Mientras tanto, si querés que te avise desde hoy, Telegram se
-                      activa acá en dos toques.
-                    </p>
-                  )}
                 </div>
               )}
 
+              {/* Just the address: the mail goes out from our side, so
+                  nothing of the company's has to be connected first. */}
               {channel === "email" && (
                 <div className="mt-3">
                   <input
@@ -865,17 +683,6 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                     aria-label="Tu mail"
                     className={inputCls}
                   />
-                  {/* Honesty: by mail I do NOT write to you yet, UNLESS the
-                      company's inbox is already connected. We connect the
-                      email ourselves (it needs the inbox's own credentials),
-                      so without that it's a request, not a promise. */}
-                  <p className="mt-2 text-[12px] leading-relaxed text-ink-soft">
-                    {emailConnected
-                      ? "La casilla de tu empresa ya está conectada: te escribo desde ahí."
-                      : "Para escribirte por mail necesitamos conectar la casilla de la empresa, "
-                        + "y eso lo hacemos nosotros. Dejanos tu dirección y te contactamos para "
-                        + "dejarlo andando."}
-                  </p>
                 </div>
               )}
 
@@ -887,11 +694,6 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                     Entonces no te escribo a ningún lado: lo que haga te va a estar
                     esperando acá y lo ves cuando entres. Trabaja igual — lo que
                     cambia es que te enterás cuando venís, en vez de que te avise yo.
-                  </p>
-                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-soft">
-                    {hasTelegram
-                      ? "Cuando quieras prenderlo, está en Conexiones y son dos minutos."
-                      : "Cuando quieras, entrá a Conexiones y pedilo desde ahí: lo dejamos andando nosotros y te avisamos."}
                   </p>
                 </div>
               )}
@@ -906,25 +708,19 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                   client who picked something, continued, and only found out
                   inside that nothing was going to reach her. */}
               <span className="max-w-sm text-[12px] leading-relaxed text-ink-soft">
-                {channel === ""
-                  ? "Elegí una, o tocá «Ahora no» si preferís verlo más adelante."
-                  : realChannel === "telegram"
-                    ? "Listo: te escribo por Telegram."
+                {!canEmail
+                  ? null
+                  : channel === ""
+                    ? "Elegí una, o tocá «Ahora no» si preferís verlo más adelante."
                     : realChannel === "email"
                       ? "Listo: te escribo a esa dirección."
-                      : channel === "telegram"
-                        ? hasTelegram
-                          ? "Todavía no lo activaste: entrás sin avisos y lo terminás cuando quieras desde Conexiones."
-                          : "Queda pedido: te lo dejamos andando y te avisamos. Mientras tanto entrás sin avisos."
-                        : channel === "whatsapp"
-                          ? phoneOk
-                            ? "Queda pedido: te escribimos para conectarlo. Mientras tanto entrás sin avisos."
-                            : "Dejanos el número, o seguí y lo vemos más adelante."
-                          : channel === "email"
-                            ? mailOk
-                              ? "Queda pedido: te escribimos para conectar la casilla. Mientras tanto entrás sin avisos."
-                              : "Escribí tu dirección, o seguí y lo vemos más adelante."
-                            : "Seguís sin avisos. Lo vemos cuando quieras desde Conexiones."}
+                      : channel === "whatsapp"
+                        ? phoneOk
+                          ? "Queda pedido: te escribimos para conectarlo. Mientras tanto entrás sin avisos."
+                          : "Dejanos el número, o seguí y lo vemos más adelante."
+                        : channel === "email"
+                          ? "Escribí tu dirección, o seguí y lo vemos más adelante."
+                          : "Seguís sin avisos."}
                 {url.trim() && (
                   <> Mientras tanto sigo leyendo tu web: lo que saque queda en Entregas.</>
                 )}
@@ -981,7 +777,7 @@ const CHANNEL_POSTPONED_KEY = "tuagente_channel_postponed";
 const CHANNEL_IN_PROGRESS_KEY = "tuagente_channel_in_progress";
 
 /** What we asked them to connect, if they asked for anything. */
-export function rememberChannelInProgress(channel: "whatsapp" | "email" | "telegram" | null) {
+export function rememberChannelInProgress(channel: "whatsapp" | null) {
   try {
     if (channel) localStorage.setItem(CHANNEL_IN_PROGRESS_KEY, channel);
     else localStorage.removeItem(CHANNEL_IN_PROGRESS_KEY);
@@ -990,8 +786,6 @@ export function rememberChannelInProgress(channel: "whatsapp" | "email" | "teleg
 
 const IN_PROGRESS_MESSAGE: Record<string, string> = {
   whatsapp: "Estamos conectando tu WhatsApp; hasta que esté, lo que haga te espera acá.",
-  email: "Estamos conectando la casilla de tu empresa; hasta que esté, lo que haga te espera acá.",
-  telegram: "Te estamos prendiendo el Telegram; hasta que esté, lo que haga te espera acá.",
 };
 
 /** The reminder that there's still no channel to notify through.
@@ -1026,15 +820,12 @@ export function NoChannelNotice({ manifest }: { manifest: Manifest }) {
     } catch { /* private mode: good for this session */ }
   };
   // Where it leads: to whatever it left requested, if it left something; if
-  // not, to the Telegram shortcut ONLY when this agent has a bot; and if not
-  // that either, to the whole screen, where the real path is to request it.
+  // not, to the whole screen, where the real path is to request it.
   // And the link doesn't say "pick a channel": it's the one time the client
   // would see the word the whole flow deliberately avoided.
   const target = inProgress && IN_PROGRESS_MESSAGE[inProgress]
     ? `/app/connections?connection=${inProgress}`
-    : manifest.telegram_bot
-      ? "/app/connections?connection=telegram"
-      : "/app/connections";
+    : "/app/connections";
   return (
     <div className="border-b border-black/[0.07] bg-c-amber/25 px-6 py-2.5 md:px-8">
       <div className="mx-auto flex max-w-5xl items-center gap-3">
