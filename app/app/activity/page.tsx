@@ -72,11 +72,36 @@ const WRAP = "mx-auto max-w-4xl px-6 py-6 md:px-8";
 
 // Adapter's raw kind → readable label (the chips come from the data).
 // `archivo` and `conversacion` are built by the portal: see the note above.
+// The kinds the engine writes (`db.append_event` across `engine/` and the
+// plugins). The old list was the Hermes adapter's (`job_run`, `archivo`,
+// `conversacion`), which this engine never writes: every chip read raw, as
+// `flow.finished` or `delegation.started`.
 const KIND_LABEL: Record<string, string> = {
-  job_run: "Trabajo automático",
-  ticket: "Tarea",
-  archivo: "Documento",
-  conversacion: "Conversación",
+  respuesta: "Respuesta",
+  error: "Error",
+  "flow.started": "Flujo",
+  "flow.finished": "Flujo",
+  "flow.failed": "Flujo",
+  "flow.paused": "Flujo",
+  "flow.incomplete": "Flujo",
+  "delegation.started": "Encargo",
+  "delegation.finished": "Encargo",
+  "post.saved": "Posteo",
+  "post.updated": "Posteo",
+  "post.slide_replaced": "Posteo",
+  "post.published": "Posteo",
+  approval_requested: "Aprobación",
+  approval_approved: "Aprobación",
+  approval_rejected: "Aprobación",
+  "ticket.created": "Tarea",
+  "ticket.moved": "Tarea",
+  "ticket.commented": "Tarea",
+  "message.sent": "Mensaje",
+  "comment.replied": "Comentario",
+  "mail.sent": "Mail",
+  memoria: "Memoria",
+  notify: "Aviso",
+  turn_usage: "Consumo",
 };
 
 // The status arrives raw from the engine and in English. It now comes from
