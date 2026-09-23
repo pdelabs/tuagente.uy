@@ -113,7 +113,7 @@ def toolset() -> FunctionToolset:
         que la veas.
 
         Es para las imágenes que la marca ya tiene y que son siempre las mismas:
-        Mr. Wobbles, el isologo. **Es la ÚNICA forma de que una de esas entre en
+        el personaje de la marca, su logo. **Es la ÚNICA forma de que una de esas entre en
         una slide**: en el brief nunca las pidas: el modelo dibuja un personaje
         distinto cada vez y escribe mal el logo. La slide se genera sin eso, y
         acá se le pega el archivo que nos dio el cliente.
@@ -125,8 +125,8 @@ def toolset() -> FunctionToolset:
         Args:
             image: la slide ya generada, por su ruta en el espacio de trabajo:
                 la que te devolvió `generate_image`.
-            asset: el nombre del archivo en `marca/`, por ejemplo
-                `mr-wobbles.png`.
+            asset: el nombre del archivo en `marca/`, tal como lo nombra el
+                archivo de marca.
             corner: dónde va: una esquina (`bottom-right`, `bottom-left`,
                 `top-right`, `top-left`), o centrado horizontalmente en
                 `center` (el medio de la slide), `top` o `bottom`. Centrado es
