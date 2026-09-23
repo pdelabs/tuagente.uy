@@ -1,7 +1,8 @@
 "use client";
 
-// The chat INSIDE onboarding: the client picks something from the carousel
-// and the conversation starts right there, without leaving the welcome screen.
+// The chat INSIDE onboarding: the client picks something from the carousel,
+// reads the request it wrote for her, edits it and sends it, and the
+// conversation starts right there, without leaving the welcome screen.
 //
 // WHY THE CHAT TAB ISN'T REUSED: onboarding's gate stays mounted and swallows
 // any route, so navigating from here does NOTHING visible. And even if it
@@ -33,7 +34,11 @@ export default function ChatOnboarding({ cfg, request, agentName, onDone, return
   returningTo?: boolean;
 }) {
   const [msgs, setMsgs] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
+  // THE PICKED CARD WRITES THE MESSAGE, THE OWNER SENDS IT. Tapping «Contenido
+  // para redes» used to send it on the spot: the owner hadn't read what was
+  // going out in her name, and couldn't say "only Instagram" or "one a week"
+  // before the agent started building. The request lands here as a draft.
+  const [input, setInput] = useState(request);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // WHAT IT'S DOING WHILE IT WRITES NOTHING. Onboarding's first reply takes a
@@ -44,7 +49,6 @@ export default function ChatOnboarding({ cfg, request, agentName, onDone, return
   const [doing, setDoing] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const inFlight = useRef(false);
-  const started = useRef(false);
   const box = useRef<HTMLDivElement>(null);
 
   const run = async (text: string, base: ChatMessage[]) => {
@@ -88,12 +92,12 @@ export default function ChatOnboarding({ cfg, request, agentName, onDone, return
     }
   };
 
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    run(request, []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const sendInput = () => {
+    const t = input.trim();
+    if (sending || !t) return;
+    setInput("");
+    run(t, msgs.filter((m) => m.content.trim()));
+  };
 
   // The waiting clock. Not decoration: while the agent hasn't written a
   // single letter, it's the only thing that tells "it's working" apart from
@@ -137,6 +141,7 @@ export default function ChatOnboarding({ cfg, request, agentName, onDone, return
 
   return (
     <div className="w-full animate-fadeup text-left">
+      {msgs.length > 0 && (
       <div
         ref={box}
         onScroll={onScroll}
@@ -165,33 +170,30 @@ export default function ChatOnboarding({ cfg, request, agentName, onDone, return
           </p>
         )}
       </div>
+      )}
 
-      <div className="mt-3 flex gap-2">
-        <input
+      {msgs.length === 0 && (
+        <p className="mb-2 text-[13px] leading-relaxed text-ink-soft">
+          Te dejé el pedido escrito. Cambiale lo que quieras —qué redes, cada cuánto,
+          lo que sea— y mandámelo cuando esté como vos lo dirías.
+        </p>
+      )}
+      <div className={`flex items-end gap-2 ${msgs.length > 0 ? "mt-3" : ""}`}>
+        <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !sending && input.trim()) {
-              const t = input.trim();
-              setInput("");
-              run(t, msgs.filter((m) => m.content.trim()));
-            }
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendInput(); }
           }}
+          autoFocus={msgs.length === 0}
           disabled={sending}
+          rows={msgs.length === 0 ? 4 : 1}
           placeholder="Contestale…"
-          aria-label="Tu respuesta"
-          className={inputCls}
+          aria-label="Tu mensaje"
+          className={`${inputCls} h-auto resize-none py-2 leading-relaxed`}
         />
-        <Btn
-          size="sm"
-          disabled={sending || !input.trim()}
-          onClick={() => {
-            const t = input.trim();
-            setInput("");
-            run(t, msgs.filter((m) => m.content.trim()));
-          }}
-        >
-          <ArrowUp className="h-4 w-4" />
+        <Btn size="sm" disabled={sending || !input.trim()} onClick={sendInput}>
+          {msgs.length === 0 ? "Mandar" : <ArrowUp className="h-4 w-4" />}
         </Btn>
       </div>
 
@@ -200,7 +202,9 @@ export default function ChatOnboarding({ cfg, request, agentName, onDone, return
           {returningTo ? "Llevame a lo que vine a ver" : "Entrar al portal"}
         </Btn>
         <span className="text-[12px] text-ink-soft">
-          Esta charla te espera en el chat, no se pierde.
+          {msgs.length > 0
+            ? "Esta charla te espera en el chat, no se pierde."
+            : "Si preferís, se lo pedís más tarde desde el chat."}
         </span>
       </div>
     </div>
