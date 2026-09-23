@@ -8,7 +8,6 @@ services:
       CORE_MODEL: openrouter:openai/gpt-6-luna
       CORE_CORS_ORIGINS: http://localhost:8090,http://127.0.0.1:8090
       TZ: America/Montevideo
-      DELIVERABLES_DIR: /workspace/entregables
       # Passthroughs so `CORE_COMPACT_AT_TOKENS=6000 docker compose up -d`
       # lowers the compaction threshold for the gate without editing this file.
       CORE_COMPACT_AT: ${CORE_COMPACT_AT:-0.6}
@@ -57,7 +56,6 @@ services:
       - ./workspace:/workspace
       - ./agent:/agent:ro
       - ../kit/plugins:/opt/kit/plugins:ro
-      - ../kit/plugins/deliverable/skills/deliverable:/opt/kit/skills/deliverable:ro
     restart: unless-stopped
 
   # THE MAILBOX THE LAB READS AND WRITES: a whole SMTP+IMAP server in one

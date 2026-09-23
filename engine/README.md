@@ -127,7 +127,10 @@ kit/plugins/mail/core/      the inbox: mail_store.py (the connection
                                    behind the gate, with its card),
                                    instructions.md, skills/inbox/SKILL.md and
                                    flows/bandeja-de-entrada/FLOW.md
-kit/plugins/deliverable/core/  nothing to register: instructions.md
+kit/plugins/deliverable/core/  instructions.md, and the reader of a
+                                   flow's deliverables (flow.results.*). The
+                                   skill runs its script from the kit's own
+                                   mount, /opt/kit/plugins/deliverable/…
 kit/plugins/memory/core/    the notebook: plugin.py (the capability, the
                                    rule it carries as `guidance`, and the two
                                    factories it provides — a notebook of its
@@ -955,7 +958,7 @@ leave standing is here.
 |---|---|---|
 | G1 | Fail-closed approval that survives a crash | **passes**: `./tests/test_approval_crash.sh` against the running container — one gated turn, `docker kill`, five rejections, approve with a correction. 32 checks, 0 failures |
 | G2 | The existing portal works with only the magic link changed | **portal-check 0 failures**; the browser walkthrough is Wave 5's |
-| G3 | Kit plugins load as toolsets, SKILL.md unchanged | **works already**: asked in chat for an informe, the agent read the skill with `skill_view`, ran `/opt/kit/skills/deliverable/deliver.py` and the file landed in `workspace/entregables/`. Nothing in Wave 2 changed that: the plugin's skill still loads from its own frontmatter, unmodified |
+| G3 | Kit plugins load as toolsets, SKILL.md unchanged | **works already**: asked in chat for an informe, the agent read the skill with `skill_view`, ran `/opt/kit/skills/deliverable/deliver.py` and the file landed in `workspace/entregables/`. Since 2026-09-23 the SKILL.md is the engine's — the script at `/opt/kit/plugins/deliverable/skills/deliverable/deliver.py`, `/workspace` paths, no `artifact` skill — and the extra mount that put it at `/opt/kit/skills/` is gone from both composes |
 | G4 | Compaction | **passes**: `python3 tests/test_compaction.py` — 41 turns on one session, 39 compactions, the persisted history ends at **7 messages** against 82 displayed, and the fact planted at turn 2 is still answered. 249 s, US$0.0198 |
 | G5 | The promises check rewrites the PERSISTED message | **passes**: `python3 tests/test_promises.py` — the kit's own 8/13 phrase comes back corrected, the deliverable counter-case comes back untouched, and `GET /api/sessions/{id}/messages` returns the corrected text |
 | G6 | Cost per turn on the baseline model | **measured**: `python3 tests/cost.py` — **US$0.000564** conversational and **US$0.000859** with four tool calls, against a baseline of US$0.0036 and US$0.0247. The engine's own estimate matched the provider's meter to the last decimal on both |

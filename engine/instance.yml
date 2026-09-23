@@ -21,7 +21,6 @@ services:
       CORE_PLUGINS: ${CORE_PLUGINS:-kanban,approval,memory,image,instagram,social,mail,notify}
       PORTAL_URL: ${PORTAL_URL:-http://localhost:8090}
       TZ: America/Montevideo
-      DELIVERABLES_DIR: /workspace/entregables
       CORE_OTEL_ENDPOINT: ${CORE_OTEL_ENDPOINT:-}
       CORE_OTEL_INCLUDE_CONTENT: ${CORE_OTEL_INCLUDE_CONTENT:-0}
       CORE_OTEL_SERVICE: tuagente-${INSTANCE}
@@ -33,7 +32,6 @@ services:
       - ./instances/${INSTANCE}/workspace:/workspace
       - ./instances/${INSTANCE}/agent:/agent:ro
       - ../kit/plugins:/opt/kit/plugins:ro
-      - ../kit/plugins/deliverable/skills/deliverable:/opt/kit/skills/deliverable:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

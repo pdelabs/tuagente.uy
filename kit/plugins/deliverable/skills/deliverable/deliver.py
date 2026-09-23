@@ -21,7 +21,9 @@ import time
 import unicodedata
 from pathlib import Path
 
-DELIVERABLES = Path(os.environ.get("DELIVERABLES_DIR", "/opt/data/workspace/entregables"))
+# The engine's workspace is `/workspace` (engine/core/config.py). The variable
+# stays so a test can point the script somewhere else.
+DELIVERABLES = Path(os.environ.get("DELIVERABLES_DIR", "/workspace/entregables"))
 # The workspace root comes from there, not from a separate constant: if
 # someone moves the destination (or overrides it in a test), the references
 # handed to the portal still come out right instead of blowing up on a
@@ -30,11 +32,10 @@ WORKSPACE = DELIVERABLES.parent
 KINDS = ("informe", "lista", "borrador", "nota", "analisis")
 MAX_BYTES = 5 * 1024 * 1024
 
-# THE ATTACHMENT CAP IS NOT OURS: it is the one the adapter serves
-# (MAX_FILE_BYTES in portal_adapter.py). A bigger file still gets copied to
-# entregables/, but the portal answers 413 and the client sees an error
-# instead of their file, so this warns loudly instead of letting it through.
-MAX_ATTACHMENT = 5 * 1024 * 1024
+# NO CAP ON AN ATTACHMENT. There was one, 5 MB, and it was the Hermes adapter's
+# (`MAX_FILE_BYTES`, a 413 past it); the engine serves a file of any size
+# (`engine/server/portal.py`), so the cap was refusing videos the client could
+# open.
 # What the portal knows how to preview or download (app/app/files/page.tsx).
 # Other extensions still get copied -- the portal downloads them as binary --
 # but it's worth naming the ones that have their own preview.
@@ -121,14 +122,6 @@ def main():
                              ensure_ascii=False))
             return 2
         size = source.stat().st_size
-        if size > MAX_ATTACHMENT:
-            print(json.dumps({
-                "ok": False,
-                "error": f"el adjunto {source.name} pesa {size / 1048576:.1f} MB y el portal "
-                         f"sirve hasta {MAX_ATTACHMENT // 1048576} MB: el cliente no lo va a poder "
-                         "abrir. Achicalo (o entregá un recorte) antes de anunciarlo",
-            }, ensure_ascii=False))
-            return 2
         suffix = source.suffix.lower() or ".bin"
         name = f"{day}-{slug}{suffix}" if len(args.attachment) == 1 else f"{day}-{slug}-{i}{suffix}"
         dest_attachment = dest / name
@@ -155,11 +148,11 @@ def main():
     rel = path.relative_to(WORKSPACE)
 
     # TWO paths, and the names matter: the agent used to pick `referencia` to
-    # reread the file and it failed. When it runs as a ticket worker, its
-    # working directory is the ticket's scratch dir
-    # (/opt/data/kanban/workspaces/t_xxx), so a relative path points somewhere
-    # else. Verified on 5/8 with "File not found:
-    # /opt/data/kanban/workspaces/t_f218256d/workspace/entregables/...".
+    # reread the file and it failed (5/8, "File not found"). The reference
+    # starts with `workspace/`, which is how the portal's chips recognize a
+    # file, and the engine's `read_file` resolves a relative path INSIDE the
+    # workspace — `workspace/entregables/…` would be `/workspace/workspace/…`.
+    # The absolute one reads from anywhere.
     print(json.dumps({
         "ok": True,
         "reopen_path": str(path),          # absolute: works from anywhere
