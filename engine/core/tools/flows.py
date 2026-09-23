@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_ai import RunContext
 from pydantic_ai.toolsets import FunctionToolset
 
-from .. import flows
+from .. import flows, plugins
 
 MAX_STEPS = 7
 MAX_STEP_LENGTH = 320
@@ -84,16 +84,10 @@ class NewFlow(BaseModel):
         return value
 
 
-def missing_connections(declared: list[str]) -> list[str]:
-    """Of what the flow declares, what is NOT set up. Everything, here.
-
-    This engine has no connections catalog and nothing connected to check
-    against, so anything the flow names is missing until one exists. Saying so
-    is the honest answer and it is the one the client needs: a flow that cannot
-    do its work today has to be told, in the same message that says it was
-    created.
-    """
-    return [c for c in declared if c.strip().lower() != NONE]
+def declared(connections: list[str]) -> list[str]:
+    """What goes into the file: every connection named, minus the word that
+    means none."""
+    return [c for c in connections if c.strip().lower() != NONE]
 
 
 def toolset() -> FunctionToolset:
@@ -112,8 +106,9 @@ def toolset() -> FunctionToolset:
         decidir mal se repite todas las semanas sin que nadie mire.
 
         Devuelve `next_run` (cuándo corre por primera vez) y
-        `missing_connections`. Si falta una conexión, el flujo queda igual pero
-        HOY no puede hacer su trabajo: decíselo al cliente en la misma
+        `missing_connections`: lo que el flujo necesita y todavía no está
+        conectado en este agente. Si falta algo, el flujo queda guardado pero NO
+        corre solo hasta que esté conectado: decíselo al cliente en la misma
         respuesta, con qué se pierde mientras tanto.
         """
         if flows.read(spec.slug):
@@ -127,16 +122,22 @@ def toolset() -> FunctionToolset:
             trigger=spec.trigger,
             trigger_detail=spec.trigger_detail,
             cron=spec.cron,
-            connections=missing_connections(spec.connections),
+            connections=declared(spec.connections),
             how="\n".join(f"{i}. {step}" for i, step in enumerate(spec.steps, 1)),
             notes=spec.notes,
         )
         flows.write(flow)
-        upcoming = flows.next_run(flow, datetime.now(flows.zone(flow)))
+        # WHAT IS NOT SET UP ON THIS AGENT, not what the flow names: the plugin
+        # that owns each connection answers (`plugins.connected`). A flow
+        # missing one does not run on its own until it is there, so it has no
+        # first run to announce, and the docstring above is what tells the
+        # agent to say so.
+        missing = plugins.missing(flow.connections)
+        upcoming = None if missing else flows.next_run(flow, datetime.now(flows.zone(flow)))
         return {
             "created": flow.slug,
             "next_run": upcoming.strftime("%d/%m/%Y %H:%M") if upcoming else None,
-            "missing_connections": flow.connections,
+            "missing_connections": missing,
         }
 
     @ts.tool

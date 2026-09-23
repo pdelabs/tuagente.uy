@@ -13,6 +13,10 @@ kept to the letter: the tab is not changed for this engine.
 `results` and `results_total` travel empty. Where a flow's output lands is the
 business of the plugin that produces it, and that plugin brings its own view
 (`docs/own-agent-plan.md`); the two fields stay because the type has them.
+
+A MANUAL RUN OF AN INCOMPLETE FLOW STILL RUNS. The scheduler does not wake the
+agent up for one, but «Probarlo ahora» is the client asking, and what she gets
+is the run telling her, in its own words, what is missing.
 """
 
 import asyncio
@@ -45,16 +49,26 @@ def job_id(slug: str) -> str:
 
 
 def card(flow: flows.Flow) -> dict:
-    """One flow, the `Flow` shape of `lib/agent.ts`."""
+    """One flow, the `Flow` shape of `lib/agent.ts`.
+
+    `incomplete` IS DERIVED, NEVER STORED: an `active` flow that names a
+    connection this agent does not have set up (`plugins.connected`). It is
+    the status the portal warns on — «Le falta una conexión» — and the one the
+    scheduler does not wake the agent up for. The file still says `active`, so
+    the day the secret is there the flow runs with nobody touching it.
+    `missing_connections` is what is missing, not what is declared, and it
+    travels on a paused flow too.
+    """
     last = db.last_finished_flow_run(flow.slug)
+    missing = scheduler.missing(flow)
     return {
         "slug": flow.slug,
         "name": flow.name,
         "client_summary": flow.client_summary,
         "trigger_type": flow.trigger,
         "trigger": flow.trigger_detail,
-        "status": flow.status,
-        "missing_connections": flow.connections,
+        "status": "incomplete" if flow.status == "active" and missing else flow.status,
+        "missing_connections": missing,
         "last_run": (
             {"at": iso(last["finished_at"] or last["started_at"]), "status": last["status"]}
             if last else None
@@ -83,7 +97,10 @@ def job(flow: flows.Flow) -> dict:
     """
     last = db.last_finished_flow_run(flow.slug)
     running = db.flow_run_in_flight(flow.slug)
-    upcoming = scheduler.due_at(flow)
+    # AN INCOMPLETE FLOW HAS NO NEXT RUN, because the scheduler skips it. A
+    # next run it would never make is one the tab reads, an hour later, as
+    # «No arrancó cuando le tocaba».
+    upcoming = None if scheduler.missing(flow) else scheduler.due_at(flow)
     latest = db.last_flow_run(flow.slug)
     return {
         "id": job_id(flow.slug),

@@ -62,6 +62,11 @@ it is in the prompt only where that mechanism is installed — which is what a
 plugin is. The approval gate, the deliverable folders and the promises guard
 are three plugins of the kit, not three modules of the engine.
 
+A CONNECTION IS ANSWERED FOR BY NAME. A plugin that uses one provides
+`connection.<id>`, a callable that says whether it is set up right now, and
+that is what makes a flow that names it `incomplete` or not (`connected()`
+below). No new verb: it is `provide`, read by the engine instead of by a plugin.
+
 CURATED FLOWS ARE `surfaces.flows`, and the loader copies them into
 `workspace/flows/` itself (`install_flows` below): no plugin writes its own
 FLOW.md into the client's workspace.
@@ -506,6 +511,29 @@ def enabled() -> list[Plugin]:
 def prose() -> list[str]:
     """The plugins' instructions, in the order they were loaded."""
     return _engine.prose
+
+
+def connected(connection_id: str) -> bool:
+    """Whether the connection a flow names is set up on this agent.
+
+    A CONNECTION IS A PLUGIN'S, AND SO IS THE ANSWER. The plugin that uses a
+    connection is the only one that knows what «set up» means for it — four
+    variables for the mailbox, a token and an account id for Instagram — so it
+    provides the check by name, `engine.provide("connection.<id>", fn)`, and
+    `fn()` answers from what is there NOW: a secret added and a restart later,
+    the flow is complete again.
+
+    AN ID NO PLUGIN ANSWERS FOR IS NOT CONNECTED. That is the honest reading:
+    nothing on this agent can use it, so a flow that needs it cannot do its
+    work today, and the client has to be told.
+    """
+    check = _engine.shared.get(f"connection.{connection_id}")
+    return bool(check and check())
+
+
+def missing(connections: list[str]) -> list[str]:
+    """Of what a flow declares, what is not set up, in the order declared."""
+    return [c for c in connections if not connected(c)]
 
 
 def modules() -> dict[str, bool]:

@@ -109,6 +109,18 @@ def env(name: str) -> str:
     return value
 
 
+# The four without which neither half can work: what `connected()` means.
+# `EMAIL_FROM`, `EMAIL_FOLDER` and `EMAIL_TLS` all have a default.
+REQUIRED = ("EMAIL_ADDRESS", "EMAIL_PASSWORD", "EMAIL_IMAP_HOST", "EMAIL_SMTP_HOST")
+
+
+def connected() -> bool:
+    """Whether the mailbox is set up, for a flow that names `email`
+    (`engine.provide("connection.email", ...)`). Read now, like everything
+    else here: a secret added and a restart later, the answer changes."""
+    return all(os.environ.get(name, "").strip() for name in REQUIRED)
+
+
 def address() -> str:
     return env("EMAIL_ADDRESS")
 

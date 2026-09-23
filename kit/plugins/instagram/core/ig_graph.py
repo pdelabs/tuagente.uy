@@ -151,6 +151,19 @@ def env(name: str) -> str:
     return value
 
 
+def connected() -> bool:
+    """Whether the account is set up, for a flow that names `instagram`
+    (`engine.provide("connection.instagram", ...)`): a token in force and the
+    account's id. Whether Graph accepts that token is a call, and the watcher
+    makes it."""
+    try:
+        token()
+        user_id()
+    except NotConnected:
+        return False
+    return True
+
+
 def user_id() -> str:
     return env("IG_USER_ID")
 

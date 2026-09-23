@@ -7,7 +7,7 @@ engine's loader (`core/plugins.py`'s `retire_flows` and `install_flows`), which
 every plugin's `surfaces.flows` goes through.
 
   a. THE REAL ONES ARRIVED — on this lab's workspace, which starts empty, the
-     flows of `mail` and `instagram` are there after boot, byte for byte.
+     flows of `mail` and `instagram` are there after boot.
   b. ABSENT IS COPIED — a curated flow that is not in the workspace lands.
   c. PRESENT IS NEVER OVERWRITTEN — a copy the client edited stays as it is,
      for a flow with no history.
@@ -78,8 +78,10 @@ try:
         for folder in manifest["surfaces"].get("flows") or []:
             source = root / folder / flows.FLOW_FILE
             installed = flows.file_of(source.parent.name)
+            # The same FLOW, not the same bytes: pausing it from the tab
+            # rewrites the file, and that is the client's to do.
             out["real"][source.parent.name] = (
-                installed.is_file() and installed.read_bytes() == source.read_bytes()
+                installed.is_file() and flows.parse(installed).name == flows.parse(source).name
             )
 
     root = Path(tempfile.mkdtemp())

@@ -1510,6 +1510,38 @@ clock and resume starts it; run-now answers in milliseconds and the row is
 marked manual. It takes the flow, its rows and its conversations out on the way
 out and puts the container back on the default floor.
 
+### A flow that needs a connection nobody set up (`incomplete`)
+
+A flow names what it needs in `connections:` — `email`, `instagram` — and THE
+PLUGIN THAT USES A CONNECTION IS THE ONE THAT SAYS WHETHER IT IS SET UP. It
+provides a callable by name, `engine.provide("connection.<id>", fn)`: `mail`
+answers `email` from its four `EMAIL_*` variables, `instagram` answers
+`instagram` from the token in force and `IG_USER_ID` (and `social` answers the
+same id when `instagram` is not installed). `plugins.connected(id)` asks it,
+now, every time; an id no plugin provides is not connected.
+
+What it changes, and where:
+
+- **The card.** `missing_connections` is what is MISSING on this agent, not
+  what the flow declares, and an `active` flow missing something travels as
+  `status: "incomplete"` — derived, never written: the FLOW.md still says
+  `active`, so a secret added and a restart later the flow runs with nobody
+  touching it. The portal warns on exactly that («Le falta una conexión»).
+- **The clock.** The scheduler does not wake the agent up for an incomplete
+  flow, `schedule` or `event` — the mail flow with no mailbox used to spend a
+  turn every five minutes to say «Falta conectar el correo» to nobody. It
+  writes ONE Activity line per flow per boot (`flow.incomplete`, status
+  `skipped`: «No voy a correr el flujo «…» hasta que conectes …»), and the
+  task's `next_run_at` is `null`, so the tab never reads the skipped run as
+  «No arrancó cuando le tocaba». «Probarlo ahora» still runs: that is the
+  client asking.
+- **`create_flow`** returns the missing ones and no `next_run` when there are
+  any, and its description tells the agent to say so in the same answer.
+
+```bash
+python3 engine/tests/test_flow_connections.py   # free, a few seconds
+```
+
 ### A flow that runs when something arrives (`trigger: event`)
 
 `trigger: schedule` is for work that belongs to a time. Work that belongs to

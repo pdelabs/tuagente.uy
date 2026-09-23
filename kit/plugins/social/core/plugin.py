@@ -54,6 +54,13 @@ def register(engine) -> None:
     # `instagram-comments` and then the env is the only token there is.
     instagram.TOKEN = engine.use("instagram.token", default=None)
     instagram.SAVE_TOKEN = engine.use("instagram.token.refreshed", default=None)
+    # WHETHER THE ACCOUNT IS SET UP, for a flow that names `instagram`. The
+    # other plugin answers it when it is installed, and reads the same token;
+    # without it this one does, or a publishing flow on a client who bought
+    # only the posts would read «Le falta una conexión» with the token right
+    # there. The same optional dependency as the two lines above.
+    if engine.use("connection.instagram", default=None) is None:
+        engine.provide("connection.instagram", instagram.connected)
     engine.subagent(creator.build(engine), label=creator.LABEL)
     # THE WHOLE TOOLSET IS GATED, exactly as the approval plugin gates its own:
     # `approval_required()` with no predicate, so a tool added to it tomorrow

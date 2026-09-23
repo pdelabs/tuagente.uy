@@ -16,11 +16,15 @@ the engine:
   (`surfaces.flows`, `engine/core/plugins.py`).
 """
 
-import mail_store  # noqa: F401 — imported for the tables it creates on load
+import mail_store
 import mail_tools
 
 
 def register(engine) -> None:
+    # WHETHER THE MAILBOX IS SET UP, for a flow that names `email`. Without the
+    # four variables the inbox flow is `incomplete` and the scheduler does not
+    # wake the agent up every five minutes to read «Falta conectar el correo».
+    engine.provide("connection.email", mail_store.connected)
     engine.toolset(mail_tools.reading())
     # THE WHOLE SENDING TOOLSET IS GATED, the same way the approval plugin and
     # the social plugin gate theirs: `approval_required()` with no predicate,

@@ -26,7 +26,7 @@ import logging
 import time
 from datetime import datetime
 
-from . import config, db, flows, session, watchers
+from . import config, db, flows, plugins, session, watchers
 from .flows import Flow
 
 log = logging.getLogger(__name__)
@@ -311,6 +311,44 @@ async def call_ticker(name: str) -> None:
         _ticking.discard(name)
 
 
+# Read by the client in Activity, once per flow and not once per tick.
+INCOMPLETE = "No voy a correr el flujo «{name}» hasta que conectes {missing}."
+
+# The flows already said to be waiting, so the line above is written once. In
+# memory on purpose: a restart says it again, which is one line per boot, and a
+# flow that gets its connection leaves the set and is told about again if it
+# ever loses it.
+_incomplete: set[str] = set()
+
+
+def missing(flow: Flow) -> list[str]:
+    """What this flow names and this agent has not set up (`plugins.missing`)."""
+    return plugins.missing(flow.connections)
+
+
+def waiting_for_a_connection(flow: Flow) -> bool:
+    """An active flow that names a connection nobody set up is NOT RUN.
+
+    Measured on the mail flow: with no mailbox it woke the agent up every five
+    minutes, a whole turn and a conversation each time, to answer «Falta
+    conectar el correo» to nobody (`docs/PENDING.md`). The client already reads
+    it where it belongs — the card says «Le falta una conexión»
+    (`server/flows.py`) — so the clock does not spend a turn to say it again.
+    Only the clock: «Probarlo ahora» is the client asking, and it still runs.
+    """
+    gaps = missing(flow)
+    if not gaps:
+        _incomplete.discard(flow.slug)
+        return False
+    if flow.slug not in _incomplete:
+        _incomplete.add(flow.slug)
+        db.append_event(
+            "flow.incomplete", INCOMPLETE.format(name=flow.name, missing=" y ".join(gaps)),
+            "skipped", None, {"slug": flow.slug, "missing": gaps},
+        )
+    return True
+
+
 async def tick() -> None:
     now = time.time()
     db.forget_quiet_runs(now - config.FLOWS_QUIET_RUN_DAYS * 86400)
@@ -318,7 +356,7 @@ async def tick() -> None:
         if name not in _ticking and now - _ticked.get(name, 0) >= ticker.every:
             asyncio.create_task(call_ticker(name))
     for flow in flows.read_all():
-        if flow.status != "active":
+        if flow.status != "active" or waiting_for_a_connection(flow):
             continue
         if flow.trigger == "event" and wants_a_look(flow, now):
             asyncio.create_task(watch(flow))

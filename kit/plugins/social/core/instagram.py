@@ -160,6 +160,18 @@ def token() -> str:
     return (TOKEN() if TOKEN else None) or env("IG_ACCESS_TOKEN")
 
 
+def connected() -> bool:
+    """Whether the account is set up, for a flow that names `instagram`, on an
+    agent WITHOUT the `instagram` plugin (`plugin.py`): the same question that
+    plugin answers, a token in force and the account's id."""
+    try:
+        token()
+        env("IG_USER_ID")
+    except NotConnected:
+        return False
+    return True
+
+
 def http() -> httpx.Client:
     """The client every Graph call goes through. A function so a test can hand
     the module a transport of its own without touching what it is testing."""
