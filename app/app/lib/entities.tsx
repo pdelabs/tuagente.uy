@@ -7,17 +7,15 @@
 
 import { createContext, useContext } from "react";
 import Link from "next/link";
-import { FileText, Image as ImageIcon, Images, LayoutDashboard, Sheet, Ticket as TicketIcon } from "lucide-react";
+import { FileText, Image as ImageIcon, Images, Sheet, Ticket as TicketIcon } from "lucide-react";
 import { PARAM } from "./routes";
 
 export type Entity =
   | { kind: "ticket"; id: string }
   | { kind: "file"; path: string }
-  | { kind: "artifact"; id: string }
   | { kind: "post"; id: string };
 
 const TICKET_RE = /^t_[0-9a-f]{6,16}$/i;
-const ARTIFACT_RE = /^art_\d{10}_[\w-]+$/i;
 /** A post's id is its folder in `posteos/`: the date it is FOR and the slug
  *  (`save_post`, `kit/plugins/social/core/posts.py`). It is the one id in the
  *  product that reads like a sentence, which is why the agent quotes it in
@@ -79,7 +77,6 @@ export function detectEntity(raw: string): Entity | null {
   const text = raw.trim();
   if (!text || /\s/.test(text)) return null;
   if (TICKET_RE.test(text)) return { kind: "ticket", id: text };
-  if (ARTIFACT_RE.test(text)) return { kind: "artifact", id: text };
   if (POST_RE.test(text)) return { kind: "post", id: text.toLowerCase() };
   const m = FILE_RE.exec(text);
   if (m && m[1].includes(".")) return { kind: "file", path: m[1] };
@@ -93,7 +90,6 @@ export const EntityContext = EntityCtx;
 const ENTITY_HINT = {
   ticket: "Ver la tarea",
   file: "Abrir el archivo",
-  artifact: "Ver la visualización",
   post: "Ver el posteo",
 };
 
@@ -127,10 +123,9 @@ export function EntityChip({ entity, label }: { entity: Entity; label: string })
   // a spreadsheet opens to download.
   const Icon =
     entity.kind === "ticket" ? TicketIcon
-      : entity.kind === "artifact" ? LayoutDashboard
-        : isImage(entity.path) ? ImageIcon
-          : isSpreadsheet(entity.path) ? Sheet
-            : FileText;
+      : isImage(entity.path) ? ImageIcon
+        : isSpreadsheet(entity.path) ? Sheet
+          : FileText;
   // With no provider (outside the chat) there's nowhere to open it: it stays
   // as code.
   if (!open) {

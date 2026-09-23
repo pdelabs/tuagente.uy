@@ -32,7 +32,6 @@ in their portal and that we'll take them there as soon as they enter).
 | Flows | `/app/flows` |
 | Board | `/app/pipeline` |
 | Approvals | `/app/approvals` |
-| Artifacts | `/app/artifacts` |
 | Posts | `/app/posts` |
 | Activity | `/app/activity` |
 | Files | `/app/files` |
@@ -81,7 +80,6 @@ one.
 | A board task | `/app/pipeline?task=<ticket id>` | `/app/pipeline?task=t_b1fb02ad` | opens |
 | A conversation in the Inbox | `/app/inbox?thread=<ticket id>` | `/app/inbox?thread=t_b1fb02ad` | opens · stale id (9/16, lab) |
 | An approval request | `/app/approvals?request=<ticket id>` | `/app/approvals?request=t_36dbdd23` | opens · stale id |
-| An artifact | `/app/artifacts?artifact=<id>` | `/app/artifacts?artifact=art_1786584384_sales-by-branch` | opens |
 | A post | `/app/posts?post=<post id>` | `/app/posts?post=2026-09-15-agente-que-contesta` | opens · stale id (9/14, against a mock adapter) |
 | A folder | `/app/files?folder=<path>` | `/app/files?folder=interno` | opens |
 | A file | `/app/files?file=<path>` | `/app/files?file=workspace/entregables/2026-08-12-instagram-post-trash-bags-20-off.md` | opens (with the `workspace/` prefix) |
@@ -179,7 +177,7 @@ afternoon of 8/12. Before that it didn't: measured in the lab, `scrollY` at
 would open the link to the request waiting on their own approval and land
 looking at someone else's request, with its own Approve/Reject pair in
 front. The other details don't need this because they open in a modal
-(`?task=`, `?scheduled=`, `?artifact=`, `?file=`), which appears centered
+(`?task=`, `?scheduled=`, `?file=`), which appears centered
 with the background locked.
 
 ## `?thread=` — and why `?task=` still works for a mail
@@ -262,7 +260,7 @@ a new request, over chat.
 ## What the client sees
 
 Ids are never shown: the screen always puts up the **human name** (the
-ticket's title, the artifact's title, the deliverable's frontmatter
+ticket's title, the deliverable's frontmatter
 `title`, the conversation's name). An id in the URL is the price of being
 able to link to it; it has no reason to reach the client's eyes.
 
@@ -272,13 +270,13 @@ to close). It copies the address of the thing, without the hash.
 ## When a link is worth it and when it isn't
 
 - **Inside the portal's own chat it isn't needed.** The agent's markdown
-  already turns `t_80ff7609`, `art_…` and file paths into chips that open
+  already turns `t_80ff7609` and file paths into chips that open
   the thing right there. A raw link there is worse.
 - **Outside the portal, yes** — an email, a comment read from a
   phone: there the link is the only way for "I left you the report" to be
   something you can open with one tap.
 - **One link per notice**, the one for the actual thing. Sending the tab
-  (`/app/artifacts`) instead of the deliverable makes them go hunting.
+  (`/app/files`) instead of the deliverable makes them go hunting.
 
 ## Why query params and not path segments
 
@@ -320,6 +318,15 @@ never an error number, never a screen that says nothing.
 - A link to a specific thing **skips that tab's welcome screen**: whoever
   arrives via a link came to see one thing, not to be introduced to the
   module.
+
+## Retired: `/app/artifacts` and `?artifact=`
+
+**Removed 23/9/2026.** Entregas listed the `artifact` plugin's HTML
+visualizations through `/portal/artifacts*`, a Hermes-adapter surface: the
+plugin has no `core/` half, the engine serves nothing under that path and its
+manifest says `artifacts: false`. What the agent delivers on the engine is a
+file under `entregables/` (the deliverable plugin), and that lives in Files
+(`?file=`) and on its flow's card. An `art_…` id in the chat is plain text now.
 
 ## Retired: `/app/connections` and `?connection=`
 

@@ -23,7 +23,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  AlertTriangle, ArrowRight, Clock, FolderOpen, MessageSquare, RefreshCw,
+  AlertTriangle, Clock, FolderOpen, MessageSquare, RefreshCw,
   WifiOff, Workflow, Zap, type LucideIcon,
 } from "lucide-react";
 import {

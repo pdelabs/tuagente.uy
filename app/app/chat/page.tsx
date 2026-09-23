@@ -20,7 +20,6 @@ import {
 } from "../lib/routes";
 import { EntityProvider } from "../lib/EntityViewer";
 import Markdown from "../lib/Markdown";
-import ArtifactPreview, { artifactIdsIn } from "../lib/ArtifactPreview";
 import { loadAgentName } from "../lib/onboarding";
 import { AgentitoAnimated, AgentitoAvatar, loadAgentLook } from "../lib/agentito";
 import type { AgentitoState } from "../lib/AgentitoRive";
@@ -740,14 +739,6 @@ export default function ChatPage() {
                         />
                       )}
                       {m.content.trim() && <Markdown>{m.content}</Markdown>}
-                      {/* The visualization is viewed HERE. The chip stays in
-                          the prose so it can be cited; this is so you don't
-                          have to switch tabs when the agent asks "does this
-                          look right?". */}
-                      {cfg && !(sending && i === lastIdx) &&
-                        artifactIdsIn(m.content).map((id) => (
-                          <ArtifactPreview key={id} cfg={cfg} id={id} />
-                        ))}
                       {m.content.trim() && !(sending && i === lastIdx) && (
                         <div className="mt-1 flex opacity-0 transition group-hover:opacity-100">
                           <CopyBtn text={m.content} />

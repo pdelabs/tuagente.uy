@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home, Images,
-  Inbox, LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Puzzle, Workflow,
+  Inbox, LifeBuoy, LogOut, MessageSquare, Puzzle, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -68,9 +68,6 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   // another.
   { key: "posts", path: "/app/posts", label: "Posteos", icon: Images },
   { key: "approvals", path: "/app/approvals", label: "Aprobaciones", icon: Hand },
-  // Primary by Luis's decision (8/7): the showcase of what's been produced --
-  // flow deliverables + visualizations, on a single tab.
-  { key: "artifacts", path: "/app/artifacts", label: "Entregas", icon: LayoutDashboard },
   // ACTIVIDAD WENT BACK UNDER "Más" (9/16, Luis). It came out of there on 8/13
   // with a good reason -- two blind-QA clients went hunting for it and one of
   // them found out THERE that her flows had failed -- and that reason is

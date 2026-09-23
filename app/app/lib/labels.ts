@@ -313,29 +313,6 @@ export function scheduledStatus(
   return { label: "Activa", tone: "green", countsAsFailure: false };
 }
 
-/* ── What the agent produced ──────────────────────────────────────────────── */
-
-// Three screens had their own little table for this and didn't agree: an
-// `other` artifact was "Otro" in Artifacts, "Artefacto" in the modal, and came
-// out raw -- "other" -- in Home.
-const ARTIFACT_LABEL: Record<string, { label: string; tone: Tone }> = {
-  chart: { label: "Gráfico", tone: "violet" },
-  table: { label: "Tabla", tone: "green" },
-  report: { label: "Informe", tone: "amber" },
-  dashboard: { label: "Panel", tone: "coral" },
-  diagram: { label: "Diagrama", tone: "violet" },
-  other: { label: "Otro", tone: "neutral" },
-};
-
-/** What kind of deliverable this is, in one word. A new kind from the agent
- *  isn't hidden: it's shown humanized, same as an unknown event. */
-export function artifactLabel(kind: string | null | undefined): { label: string; tone: Tone } {
-  const k = (kind || "").trim().toLowerCase();
-  if (ARTIFACT_LABEL[k]) return ARTIFACT_LABEL[k];
-  const cleaned = k.replace(/[_-]+/g, " ").trim();
-  return { label: cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : "Entrega", tone: "neutral" };
-}
-
 /* ── Why it couldn't ─────────────────────────────────────────────────────── */
 
 /** A failure told in a way the client can tell what happened and what to do.

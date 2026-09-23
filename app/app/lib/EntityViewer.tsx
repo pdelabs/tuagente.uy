@@ -7,11 +7,11 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Download, File as FileIcon, X } from "lucide-react";
 import {
-  getTicketDetail, getFileBytes, getFileText, getArtifact, authorLabel,
-  type ArtifactMeta, type PortalConfig, type TicketDetail,
+  getTicketDetail, getFileBytes, getFileText, authorLabel,
+  type PortalConfig, type TicketDetail,
 } from "./agent";
 import { EntityContext, isImage, type Entity } from "./entities";
-import { taskStatus, dateTime, artifactLabel } from "./labels";
+import { taskStatus, dateTime } from "./labels";
 import Spreadsheet, { CsvPreview } from "./Spreadsheet";
 import { Btn } from "./ui";
 import { loadAgentName } from "./onboarding";
@@ -31,7 +31,6 @@ const viewerAuthorLabel = (author: string) =>
 /** The same banner the Board puts on this task, in one line, so the two
  *  screens can't say different things about the same ticket. */
 const ticketStatus = (t: { status: string }) => taskStatus(t.status);
-import Artifact from "./Artifact";
 
 export function EntityProvider({ cfg, children }: { cfg: PortalConfig; children: ReactNode }) {
   const [open, setOpen] = useState<Entity | null>(null);
@@ -130,9 +129,6 @@ export function FileBody({ path, text }: { path: string; text: string }) {
  *  the agent quotes (see `docs/portal-routes.md`). */
 function canonicalUrlOf(entity: Entity): string {
   if (entity.kind === "ticket") return urlFor("/app/pipeline", { [PARAM.task]: entity.id });
-  if (entity.kind === "artifact") {
-    return urlFor("/app/artifacts", { [PARAM.artifact]: entity.id });
-  }
   if (entity.kind === "file") return urlFor("/app/files", { [PARAM.file]: entity.path });
   return urlFor("/app/posts", { [PARAM.post]: entity.id });
 }
@@ -142,7 +138,6 @@ function EntityViewer({ cfg, entity, onClose }: {
 }) {
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [text, setText] = useState<string | null>(null);
-  const [artifact, setArtifact] = useState<(ArtifactMeta & { html: string }) | null>(null);
   const [sheet, setSheet] = useState<ArrayBuffer | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -167,17 +162,14 @@ function EntityViewer({ cfg, entity, onClose }: {
     const p =
       entity.kind === "ticket"
         ? getTicketDetail(cfg, entity.id).then((d) => { if (alive) setTicket(d); })
-        : entity.kind === "artifact"
-          ? getArtifact(cfg, entity.id).then((a) => { if (alive) setArtifact(a); })
-          : isBinarySpreadsheet
-            ? getFileBytes(cfg, entity.path).then((b) => { if (alive) setSheet(b); })
-            : getFileText(cfg, entity.path).then((t) => { if (alive) setText(t); });
+        : isBinarySpreadsheet
+          ? getFileBytes(cfg, entity.path).then((b) => { if (alive) setSheet(b); })
+          : getFileText(cfg, entity.path).then((t) => { if (alive) setText(t); });
     p.catch((e) => {
       if (!alive) return;
       const msg = e instanceof Error ? e.message : "error";
       const missingMessage = {
         ticket: "Esa tarea ya no existe.",
-        artifact: "Esa visualización ya no está disponible.",
         file: "No encontré ese archivo.",
         post: "",
       }[entity.kind];
@@ -202,15 +194,12 @@ function EntityViewer({ cfg, entity, onClose }: {
   if (entity.kind === "post") return null; // its chip is a link to Posteos
 
   const title =
-    entity.kind === "ticket" ? ticket?.ticket.title ?? entity.id
-      : entity.kind === "artifact" ? artifact?.title ?? entity.id
-        : entity.path;
+    entity.kind === "ticket" ? ticket?.ticket.title ?? entity.id : entity.path;
   const loading = !err && (
     entity.kind === "ticket" ? !ticket
-      : entity.kind === "artifact" ? !artifact
-        : isPhoto || downloadOnly ? false
-          : isBinarySpreadsheet ? sheet === null
-            : text === null
+      : isPhoto || downloadOnly ? false
+        : isBinarySpreadsheet ? sheet === null
+          : text === null
   );
 
   return (
@@ -237,19 +226,6 @@ function EntityViewer({ cfg, entity, onClose }: {
                   <span className="text-[11px] text-ink-soft">
                     {fmtDate(ticket.ticket.created_at)}
                   </span>
-                )}
-              </>
-            ) : entity.kind === "artifact" ? (
-              <>
-                {artifact && (
-                  <>
-                    <Chip tone={artifactLabel(artifact.kind).tone}>
-                      {artifactLabel(artifact.kind).label}
-                    </Chip>
-                    <span className="text-[11px] text-ink-soft">
-                      {fmtDate(artifact.created_at)}
-                    </span>
-                  </>
                 )}
               </>
             ) : (
@@ -284,13 +260,6 @@ function EntityViewer({ cfg, entity, onClose }: {
           <p className="py-6 text-center text-sm text-ink-soft">{err}</p>
         ) : loading ? (
           <Spinner />
-        ) : entity.kind === "artifact" ? (
-          <>
-            {artifact?.summary && (
-              <p className="mb-3 text-sm text-ink-soft">{artifact.summary}</p>
-            )}
-            <Artifact code={artifact?.html ?? ""} lang="html" />
-          </>
         ) : entity.kind === "file" ? (
           isPhoto ? (
             <AgentImage cfg={cfg} path={entity.path} />

@@ -20,7 +20,7 @@ import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import {
-  FileText, Image as ImageIcon, LayoutDashboard, Sheet, Ticket as TicketIcon,
+  FileText, Image as ImageIcon, Sheet, Ticket as TicketIcon,
 } from "lucide-react";
 import {
   detectEntity, EntityChip, imageMime, isImage, isSpreadsheet, useOpenEntity,
@@ -206,9 +206,6 @@ const enc = (s: string) => encodeURIComponent(s).replace(/%2F/gi, "/");
  *  and in the browser, and that's a hydration mismatch on a static page. */
 function urlOfThing(entity: Entity): string {
   if (entity.kind === "ticket") return `/app/pipeline?${PARAM.task}=${enc(entity.id)}`;
-  if (entity.kind === "artifact") {
-    return `/app/artifacts?${PARAM.artifact}=${enc(entity.id)}`;
-  }
   if (entity.kind === "file") return `/app/files?${PARAM.file}=${enc(entity.path)}`;
   return `/app/posts?${PARAM.post}=${enc(entity.id)}`;
 }
@@ -243,15 +240,12 @@ function Thing({ entity, text }: { entity: Entity; text?: string }) {
 
   const Icon =
     entity.kind === "ticket" ? TicketIcon
-      : entity.kind === "artifact" ? LayoutDashboard
-        : entity.kind === "file" && isImage(entity.path) ? ImageIcon
-          : entity.kind === "file" && isSpreadsheet(entity.path) ? Sheet
-            : FileText;
+      : entity.kind === "file" && isImage(entity.path) ? ImageIcon
+        : entity.kind === "file" && isSpreadsheet(entity.path) ? Sheet
+          : FileText;
 
   const title =
-    entity.kind === "ticket" ? "Ver la tarea"
-      : entity.kind === "artifact" ? "Ver la visualización"
-        : "Abrir el archivo";
+    entity.kind === "ticket" ? "Ver la tarea" : "Abrir el archivo";
 
   const inner = (
     <>

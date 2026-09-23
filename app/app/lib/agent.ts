@@ -337,12 +337,6 @@ async function post<T>(base: string, path: string, cfg: PortalConfig, body?: unk
   return res.json();
 }
 
-async function del<T>(base: string, path: string, cfg: PortalConfig): Promise<T> {
-  const res = await fetch(base + path, { method: "DELETE", headers: headers(cfg) });
-  if (!res.ok) throw await failure(res, path);
-  return res.json();
-}
-
 /** The shape the `approval` skill gives a request: a markdown box ("if you
  *  approve / if you reject / why"). It's what tells a PROPOSAL apart from any
  *  other text from the agent. */
@@ -810,17 +804,6 @@ export const getSkillContent = (c: PortalConfig, name: string) =>
  *  on its own within a few minutes, nothing needs restarting. */
 export const saveSkill = (c: PortalConfig, name: string, content: string) =>
   post<{ ok: boolean }>(c.adapter, `/portal/skills/${encodeURIComponent(name)}`, c, { content });
-
-export type ArtifactMeta = {
-  id: string; title: string; kind: string; summary: string;
-  created_at: number; bytes: number;
-};
-export const getArtifacts = (c: PortalConfig) =>
-  get<{ artifacts: ArtifactMeta[] }>(c.adapter, "/portal/artifacts", c);
-export const getArtifact = (c: PortalConfig, id: string) =>
-  get<ArtifactMeta & { html: string }>(c.adapter, `/portal/artifacts/${encodeURIComponent(id)}`, c);
-export const deleteArtifact = (c: PortalConfig, id: string) =>
-  del<{ ok: boolean }>(c.adapter, `/portal/artifacts/${encodeURIComponent(id)}`, c);
 
 /** A post the agent left READY TO PUBLISH: the image, the text and the
  *  hashtags. Served by the social plugin's own router, and only present when

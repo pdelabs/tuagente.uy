@@ -38,8 +38,6 @@ export const PARAM = {
   thread: "thread",
   /** /app/approvals?request=<blocked ticket id> */
   request: "request",
-  /** /app/artifacts?artifact=<artifact id> */
-  artifact: "artifact",
   /** /app/posts?post=<post id, `<YYYY-MM-DD>-<slug>`> */
   post: "post",
   /** /app/files?folder=<path> */

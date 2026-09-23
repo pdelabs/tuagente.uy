@@ -22,23 +22,23 @@ import {
 import Link from "next/link";
 import {
   Activity, ArrowRight, CheckCircle2, ChevronRight, Clock, Columns3,
-  FolderOpen, Hand, LayoutDashboard, MessageSquare, Plus, RefreshCw, Workflow,
+  FolderOpen, Hand, MessageSquare, Plus, RefreshCw, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
-  getActivity, getApprovals, getArtifacts, getFiles, getFlows, getJobs,
+  getActivity, getApprovals, getFiles, getFlows, getJobs,
   getManifest, getSessions, getTickets, loadConfig,
-  type ArtifactMeta, type CronJob, type Flow, type HttpError,
+  type CronJob, type Flow, type HttpError,
   type Manifest, type PortalConfig, type Ticket,
 } from "../lib/agent";
 // The SAME flow ↔ scheduled-task match that Flows uses: if each screen
 // picked its own, we'd be back to two answers for "when does it run?".
 import { crossTask } from "../flows/runs";
 import { HIDDEN_MODULES } from "../layout";
-import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
+import { Card, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
 import {
   BOARD_COLUMNS, learnUtcOffset, cronCadence, columnForTask, whenItRuns, timeOf,
-  momentOf, artifactLabel, greetingOfTheDay, type TaskColumn, type Tone,
+  momentOf, greetingOfTheDay, type TaskColumn, type Tone,
 } from "../lib/labels";
 import { humanizeRuns } from "../lib/events";
 import { agentDisplayName } from "../lib/onboarding";
@@ -138,14 +138,6 @@ function enumerate(xs: string[]): string {
   if (xs.length <= 1) return xs[0] ?? "";
   return `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`;
 }
-
-// Artifact kind → client label. This little table used to live here, another
-// in Artifacts, and another in the modal, and all three said different
-// things about the same thing: an `other` was "Otro" over there, "Artefacto"
-// in the modal, and here it came out raw, in English. Now there's just one,
-// in `lib/labels.ts`.
-const kindLabel = (k: string) => artifactLabel(k).label;
-const kindTone = (k: string) => artifactLabel(k).tone;
 
 /** Deliverable name with no folder and no date, which it usually comes with. */
 function deliverableName(path: string): string {
@@ -456,7 +448,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const [approvals, setApprovals] = useState<Slot<Approval[]>>({ t: "loading" });
   const [tickets, setTickets] = useState<Slot<Ticket[]>>({ t: "loading" });
   const [events, setEvents] = useState<Slot<Event[]>>({ t: "loading" });
-  const [artifacts, setArtifacts] = useState<Slot<ArtifactMeta[]>>({ t: "loading" });
   const [files, setFiles] = useState<Slot<FileEntry[]>>({ t: "loading" });
   const [flows, setFlows] = useState<Slot<Flow[]>>({ t: "loading" });
   // The engine's scheduled tasks: the only ones that know when each job
@@ -472,7 +463,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
       setApprovals({ t: "loading" });
       setTickets({ t: "loading" });
       setEvents({ t: "loading" });
-      setArtifacts({ t: "loading" });
       setFiles({ t: "loading" });
       setFlows({ t: "loading" });
       setJobs({ t: "loading" });
@@ -532,8 +522,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
               learnUtcOffset(...evs.map((e) => e.ts));
               return evs;
             }), setEvents),
-          request(on("artifacts"), "los artefactos",
-            () => getArtifacts(cfg).then((r) => arr<ArtifactMeta>(r?.artifacts)), setArtifacts),
           request(on("files"), "los archivos",
             () => getFiles(cfg).then((r) => arr<FileEntry>(r?.files)), setFiles),
           request(on("flows"), "tus trabajos",
@@ -610,13 +598,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
       .slice(0, 5);
   }, [events, flows]);
 
-  const recent = useMemo(() => {
-    if (artifacts.t !== "ready") return null;
-    return [...artifacts.data]
-      .sort((a, b) => toMs(b.created_at) - toMs(a.created_at))
-      .slice(0, 3);
-  }, [artifacts]);
-
   const deliverables = useMemo(() => {
     if (files.t !== "ready") return null;
     return files.data
@@ -654,15 +635,13 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const agentState: AgentitoState =
     pendingCount === null ? "normal" : pendingCount > 0 ? "waiting" : "calm";
 
-  // Celebrates when something new it produced shows up (an artifact or a
-  // deliverable). The first load doesn't count: there it hasn't done
-  // anything yet, we're just finding out.
+  // Celebrates when a new deliverable shows up. The first load doesn't count:
+  // there it hasn't done anything yet, we're just finding out.
   const produced = useMemo(() => {
-    if (artifacts.t !== "ready" || files.t !== "ready") return null;
-    const delivered = files.data.filter(
+    if (files.t !== "ready") return null;
+    return files.data.filter(
       (f) => (f.path || "").replace(/^\/+/, "").startsWith(DELIVERABLES)).length;
-    return artifacts.data.length + delivered;
-  }, [artifacts, files]);
+  }, [files]);
   const [celebrations, setCelebrations] = useState(0);
   const producedPrev = useRef<number | null>(null);
   useEffect(() => {
@@ -684,7 +663,7 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
 
   if (!manifest) return <div className={WRAP}><Spinner /></div>;
 
-  const slots = [approvals, tickets, events, artifacts, files, flows];
+  const slots = [approvals, tickets, events, files, flows];
   // Chats don't build their own block, but the life signal waits for them:
   // without this the line stays mute for an instant instead of saying it's looking.
   const waitingForData = slots.some((s) => s.t === "loading") || chats.t === "loading";
@@ -697,11 +676,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const statusLine = [`${agentDisplayName(manifest)}, tu agente`];
   if (lastSignal) statusLine.push(`última actividad ${lastSignal}`);
   else if (waitingForData) statusLine.push("buscando novedades…");
-
-  const producedBlocks = [
-    recent && recent.length > 0 ? "artefactos" : null,
-    deliverables && deliverables.length > 0 ? "entregables" : null,
-  ].filter(Boolean);
 
   return (
     <div className={WRAP}>
@@ -808,43 +782,24 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
           )}
 
           {/* 4 · The last thing it produced */}
-          {(artifacts.t === "loading" || files.t === "loading") && <Skeleton rows={3} />}
-          {producedBlocks.length > 0 && (
-            <div className={`grid gap-3 ${producedBlocks.length > 1 ? "md:grid-cols-2" : ""}`}>
-              {recent && recent.length > 0 && (
-                <Section title="Lo último que produjo" icon={LayoutDashboard} href="/app/artifacts" viewLabel="Ver entregas">
-                  <ul className="-my-1">
-                    {recent.map((a) => (
-                      <li key={a.id} className="flex items-center gap-2 py-1.5">
-                        <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{a.title}</span>
-                        <span className="shrink-0">
-                          <Chip tone={kindTone(a.kind)}>{kindLabel(a.kind)}</Chip>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </Section>
-              )}
-
-              {deliverables && deliverables.length > 0 && (
-                <Section title="Archivos nuevos para vos" icon={FolderOpen} href="/app/files" viewLabel="Ver archivos">
-                  <ul className="-my-1">
-                    {deliverables.map((f) => (
-                      <li key={f.path} className="flex items-center gap-2 py-1.5">
-                        <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
-                          {deliverableName(f.path)}
-                        </span>
-                        {ago(f.mtime) && (
-                          <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-soft">
-                            {ago(f.mtime)}
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </Section>
-              )}
-            </div>
+          {files.t === "loading" && <Skeleton rows={3} />}
+          {deliverables && deliverables.length > 0 && (
+            <Section title="Archivos nuevos para vos" icon={FolderOpen} href="/app/files" viewLabel="Ver archivos">
+              <ul className="-my-1">
+                {deliverables.map((f) => (
+                  <li key={f.path} className="flex items-center gap-2 py-1.5">
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
+                      {deliverableName(f.path)}
+                    </span>
+                    {ago(f.mtime) && (
+                      <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-soft">
+                        {ago(f.mtime)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Section>
           )}
 
           {/* "Consumo" ("Usage") used to live here. It left on 8/16/2026:
