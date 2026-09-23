@@ -34,8 +34,6 @@ export type AgentEvent = {
 // WORD, not one per kind, or «Flujo» shows up three times in a row.
 const KIND_LABEL: Record<string, string> = {
   respuesta: "Respuesta",
-  // The promises check completing an answer: still the answer.
-  correction: "Respuesta",
   error: "Error",
   "flow.started": "Flujo",
   "flow.finished": "Flujo",
@@ -71,15 +69,9 @@ const KIND_LABEL: Record<string, string> = {
 export const kindLabel = (kind: string): string =>
   KIND_LABEL[(kind || "").trim().toLowerCase()] ?? "Otro";
 
-// WHAT IS THE ENGINE'S BOOKKEEPING AND NOT THE OWNER'S NEWS. `turn_usage`
-// («Consumo del turno: 99049 tokens de entrada…») is one line per answer, in
-// tokens, which no owner reads -- what it cost lives in Uso, in money.
-// `compaction` is the engine folding a long conversation to fit.
-const NOT_FOR_THE_FEED = new Set(["turn_usage", "compaction"]);
-
-/** Does this event belong in the owner's feed (Home, Activity)? */
-export const isForTheFeed = (e: { kind: string }) =>
-  !NOT_FOR_THE_FEED.has((e.kind || "").trim().toLowerCase());
+// The engine's bookkeeping (`turn_usage`, `spend`, `compaction`,
+// `correction`) never reaches `/portal/activity`: the engine serves owner
+// sentences only (`db.owner_events`), so there is nothing to filter here.
 
 /* ── The label, as one line of plain text ─────────────────────────────────── */
 
@@ -96,18 +88,11 @@ export function postTitle(slugOrId: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** The engine writes a label per log line and the model's words travel in it:
- *  the first line of an answer arrives with its markdown («Está en
- *  **Posteos**», cut in half at 120 characters) and a post's id as a slug. A
- *  row in a list is one line of plain text, so the marks go and the id reads
- *  as the post's name. */
+/** The engine serves a label as one line of plain text (its markdown already
+ *  flattened), but a post still travels in it by its id («Cambié la imagen 1
+ *  de «2026-09-23-pan-masa-madre»»): here it reads as the post's name. */
 export function plainLabel(label: string): string {
-  return (label || "")
-    .replace(/\*\*|__/g, "")
-    .replace(/`/g, "")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/^#+\s+/, "")
-    .replace(POST_ID_IN_TEXT, (_, slug: string) => postTitle(slug));
+  return (label || "").replace(POST_ID_IN_TEXT, (_, slug: string) => postTitle(slug));
 }
 
 /* ── What counts as a conversation ────────────────────────────────────────── */

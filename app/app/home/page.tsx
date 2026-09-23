@@ -41,7 +41,7 @@ import {
   BOARD_COLUMNS, learnUtcOffset, cronCadence, columnForTask, whenItRuns, timeOf,
   momentOf, greetingOfTheDay, type TaskColumn, type Tone,
 } from "../lib/labels";
-import { isForTheFeed, plainLabel, postTitle } from "../lib/events";
+import { plainLabel, postTitle } from "../lib/events";
 import { agentDisplayName } from "../lib/onboarding";
 import { AgentitoAnimated, loadAgentLook } from "../lib/agentito";
 import type { AgentitoState } from "../lib/AgentitoRive";
@@ -608,11 +608,9 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
     // and here they showed up as five identical rows: the client reads
     // "the same thing four times" and stops trusting the numbers. In the
     // day's summary, the last thing that happened to each thing is enough;
-    // the full detail, with its status, stays in Activity. And the engine's
-    // bookkeeping (a turn's tokens) is not something that happened.
+    // the full detail, with its status, stays in Activity.
     const seen = new Set<string>();
     return events.data
-      .filter(isForTheFeed)
       .map((e) => ({ ...e, label: plainLabel(e.label) }))
       .sort((a, b) => toMs(b.ts) - toMs(a.ts))
       .filter((e) => {

@@ -55,7 +55,7 @@ import {
   momentOf, channelLabel, eventLabel,
 } from "../lib/labels";
 import {
-  isForTheFeed, isHumanConversation, kindLabel, plainLabel, type AgentEvent,
+  isHumanConversation, kindLabel, plainLabel, type AgentEvent,
 } from "../lib/events";
 
 type ActivityEvent = AgentEvent;
@@ -69,8 +69,7 @@ const REFRESH_MS = 30_000;
 const PAGE_SIZE = 30; // events per batch
 const WRAP = "mx-auto max-w-4xl px-6 py-6 md:px-8";
 
-// The kind's word (the "Tipo" chips) comes from `lib/events.ts`, and so does
-// which kinds are engine bookkeeping that never reaches this list.
+// The kind's word (the "Tipo" chips) comes from `lib/events.ts`.
 
 // The status arrives raw from the engine and in English. It now comes from
 // the portal's single dictionary (`lib/labels.ts`), the same one the
@@ -190,13 +189,12 @@ const INBOX_PREFIX = "entrada/";
 
 
 // FOLDERS WHOSE FILES ALREADY HAVE THEIR OWN LINE. A post is `post.saved`
-// and its slides, a note is `memoria`: listing their files too put «Escribió
-// «post»», «Escribió «01»» and «Escribió «MEMORY»» in the owner's log -- the
-// storage, read aloud, next to the event that already said what happened.
-const COVERED_BY_EVENTS = ["interno/", "posteos/", "memoria/"];
+// and its slides, a note is `memoria`, a flow is its `flow.*` events: listing
+// their files too put «Escribió «post»», «Escribió «01»» and «Escribió
+// «MEMORY»» in the owner's log -- the storage, read aloud, next to the event
+// that already said what happened.
+const COVERED_BY_EVENTS = ["interno/", "posteos/", "memoria/", "flows/"];
 
-/** The flow a `flows/<slug>/FLOW.md` is: that file IS the flow, set up. */
-const FLOW_FILE = /^flows\/([^/]+)\/FLOW\.md$/;
 const BUSINESS_DRAFT = "negocio/borrador.md";
 
 /** What the agent wrote, as events. The scaffolding (its own scripts, what
@@ -210,29 +208,21 @@ function eventsFromFiles(
     .filter((f) => {
       const p = f.path || "";
       return p && !COVERED_BY_EVENTS.some((d) => p.startsWith(d)) && !SCRIPT_EXT.test(p)
-        && !p.split("/").some((part) => part.startsWith("."))
-        && (!p.startsWith("flows/") || FLOW_FILE.test(p));
+        && !p.split("/").some((part) => part.startsWith("."));
     })
     .slice(0, 60)
-    .map((f) => {
-      const flow = FLOW_FILE.exec(f.path)?.[1];
-      return {
-        ts: isoWithOffset(f.mtime * 1000, utcOffset),
-        kind: "archivo",
-        label: flow
-          ? `Armó el flujo «${readableFileName(flow)}»`
-          : f.path === BUSINESS_DRAFT
-            ? "Escribió el borrador de tu negocio"
-            // Who put it there matters: `entrada/` is what the client uploads,
-            // and saying "your agent wrote" about the CSV she uploaded would
-            // be a cheap lie.
-            : (f.path.startsWith(INBOX_PREFIX) ? "Recibió " : "Escribió ") + `«${readableFileName(f.path)}»`,
-        status: "",
-        href: flow
-          ? `/app/flows/${encodeURIComponent(flow)}`
-          : `/app/files?file=${encodeURIComponent(f.path)}`,
-      };
-    });
+    .map((f) => ({
+      ts: isoWithOffset(f.mtime * 1000, utcOffset),
+      kind: "archivo",
+      label: f.path === BUSINESS_DRAFT
+        ? "Escribió el borrador de tu negocio"
+        // Who put it there matters: `entrada/` is what the client uploads,
+        // and saying "your agent wrote" about the CSV she uploaded would be a
+        // cheap lie.
+        : (f.path.startsWith(INBOX_PREFIX) ? "Recibió " : "Escribió ") + `«${readableFileName(f.path)}»`,
+      status: "",
+      href: `/app/files?file=${encodeURIComponent(f.path)}`,
+    }));
 }
 
 type RawSession = {
@@ -483,7 +473,7 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
 
   const all = useMemo(
     () => [
-      ...(events ?? []).filter(isForTheFeed),
+      ...(events ?? []),
       ...eventsFromFiles(files, utcOffset),
       ...eventsFromSessions(sessions, utcOffset),
     ].sort((a, b) => msOf(b.ts) - msOf(a.ts)),
