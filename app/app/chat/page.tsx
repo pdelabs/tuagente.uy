@@ -12,7 +12,7 @@ import {
   MessageSquareOff, Paperclip, Pencil, Square, Wrench, X,
 } from "lucide-react";
 import {
-  loadConfig, chatStream, sessionChatStream, getSessions, getSessionMessages,
+  loadConfig, chatStream, sessionChatStream, getActivity, getSessions, getSessionMessages,
   uploadFile, type PortalConfig, type ChatMessage,
 } from "../lib/agent";
 import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
@@ -42,6 +42,7 @@ type Msg = {
   role: "user" | "assistant";
   content: string;
   tools?: string[]; // tools used in the run (live only)
+  notes?: string[]; // what it wrote down in its notebook during the run (live only)
 };
 
 const THINKING = "_thinking";
@@ -102,10 +103,10 @@ function sessionOfFirstTurn(list: SessionSummary[], firstMessage: string): strin
 function gestureFor(tool: string | undefined): AgentitoState {
   if (!tool || tool === THINKING) return "thinking";
   if (/^(clarify|todo|memory)$/.test(tool)) return "thinking";
-  if (/^(read_file|search_files|session_search|read_terminal|skill_view|skills_list|feishu_doc_read|kanban_(show|list)|project_list)$/.test(tool)) {
+  if (/^(read_file|list_files|read_memory|search_memory|read_ticket|search_files|session_search|read_terminal|skill_view|skills_list|feishu_doc_read|kanban_(show|list)|project_list)$/.test(tool)) {
     return "reading";
   }
-  if (/^(write_file|patch|image_generate|video_generate|kanban_(create|comment|complete|block|unblock|link)|project_create)$/.test(tool)) {
+  if (/^(write_file|write_memory|create_ticket|save_post|save_draft|patch|image_generate|generate_image|video_generate|kanban_(create|comment|complete|block|unblock|link)|project_create)$/.test(tool)) {
     return "writing";
   }
   if (/^(web_search|web_fetch|web_extract|x_search|browser_|vision_analyze|video_analyze)/.test(tool)) {
@@ -114,18 +115,39 @@ function gestureFor(tool: string | undefined): AgentitoState {
   return "doing";
 }
 
+/** What the agent wrote down in its notebook during a turn, as the owner reads
+ *  it. The memory plugin logs each one to Activity as «Anoté: …»
+ *  (`kit/plugins/memory/core/extraction.py`); the stream only says a note was
+ *  taken, never what it says. */
+const NOTE_PREFIX = /^Anoté:\s*/;
+
 /** Collapsible block with what the agent did before answering. */
-function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
+function ToolTrace({ tools, notes = [], live }: { tools: string[]; notes?: string[]; live?: boolean }) {
   const [open, setOpen] = useState(false);
-  if (!tools.length) return null;
+  if (!tools.length && !notes.length) return null;
   const last = tools[tools.length - 1];
   const used = tools.filter((t) => t !== THINKING);
-  const summary = summarizeActions(tools);
+  const summary = used.length || !notes.length ? summarizeActions(tools) : actionFor("write_memory").done;
+  // OPENING IT HAS TO SAY MORE THAN THE LINE ITSELF. With one step and nothing
+  // noted, the list below was the summary repeated word for word: the
+  // memory step read «Escribió lo suyo» closed and «Escribió lo suyo» open.
+  const expandable = live || used.length > 1 || notes.length > 0;
+  const lineCls = "flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12px] text-ink-soft";
+  if (!expandable) {
+    return (
+      <div className="mb-2">
+        <p className={lineCls}>
+          {used.length > 0 ? <Wrench className="h-3 w-3" /> : <Brain className="h-3 w-3" />}
+          {summary}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="mb-2">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12px] text-ink-soft transition hover:bg-black/[0.04] hover:text-ink"
+        className={`${lineCls} transition hover:bg-black/[0.04] hover:text-ink`}
       >
         <ChevronRight className={`h-3 w-3 transition-transform ${open ? "rotate-90" : ""}`} />
         {live ? (
@@ -145,6 +167,11 @@ function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
           {tools.map((t, i) => (
             <li key={`${t}-${i}`} title={t} className="text-[12px] text-ink-soft">
               {actionFor(t).done}
+            </li>
+          ))}
+          {notes.map((n, i) => (
+            <li key={`note-${i}`} className="text-[12px] text-ink">
+              <span className="text-ink-soft">Se anotó: </span>«{n}»
             </li>
           ))}
         </ol>
@@ -462,6 +489,20 @@ export default function ChatPage() {
   }, [cfg, activeId, loadThread]);
 
   // Sends `text`, starting from `base` as the prior history.
+  /** What the agent noted during the turn that started at `since` (epoch ms).
+   *  The turn's own events carry no session in `/portal/activity`, so the
+   *  window is the time the turn took; a couple of seconds of slack for the
+   *  agent's clock against the browser's. */
+  const notesSince = async (since: number): Promise<string[]> => {
+    if (!cfg) return [];
+    const r = await getActivity(cfg).catch(() => null);
+    return (r?.events ?? [])
+      .filter((e: { kind?: string; ts?: string }) =>
+        e.kind === "memoria" && new Date(e.ts ?? "").getTime() >= since - 3_000)
+      .flatMap((e: { label?: string }) =>
+        (e.label ?? "").replace(NOTE_PREFIX, "").split(" · ").map((n) => n.trim()).filter(Boolean));
+  };
+
   const run = async (text: string, base: Msg[]) => {
     if (!cfg || !text.trim() || sendingRef.current) return;
     sendingRef.current = true;
@@ -496,6 +537,7 @@ export default function ChatPage() {
     abortRef.current = ac;
 
     const tools: string[] = [];
+    const startedAt = Date.now();
     // A new conversation's id, learned once its first turn is over -- or
     // stopped: the engine keeps what was said up to the stop.
     let adopt: string | null = null;
@@ -573,7 +615,13 @@ export default function ChatPage() {
       if (isCurrent()) {
         setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
       }
-      await settle();
+      const [, notes] = await Promise.all([settle(), notesSince(startedAt)]);
+      if (notes.length && isCurrent()) {
+        setMsgs((ms) => {
+          const last = ms[ms.length - 1];
+          return last?.role === "assistant" ? [...ms.slice(0, -1), { ...last, notes }] : ms;
+        });
+      }
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         flush();
@@ -834,9 +882,10 @@ export default function ChatPage() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                      {(m.tools?.length || (sending && i === lastIdx && liveTools.length > 0)) && (
+                      {(m.tools?.length || m.notes?.length || (sending && i === lastIdx && liveTools.length > 0)) && (
                         <ToolTrace
                           tools={sending && i === lastIdx ? liveTools : m.tools ?? []}
+                          notes={sending && i === lastIdx ? [] : m.notes}
                           live={sending && i === lastIdx}
                         />
                       )}
