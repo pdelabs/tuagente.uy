@@ -184,7 +184,7 @@ def main() -> int:
         problems.append(f"{r['off_runs']} runs started")
     if len(r["off_lines"]) != 1:
         problems.append(f"{len(r['off_lines'])} lines in Activity for three ticks")
-    elif "hasta que conectes prueba y nadie-la-conoce" not in r["off_lines"][0]:
+    elif "hasta que conectemos prueba y nadie-la-conoce" not in r["off_lines"][0]:
         problems.append(f"the line says {r['off_lines'][0]!r}")
     failures += judge("d. the clock does not wake the agent for it", problems)
 

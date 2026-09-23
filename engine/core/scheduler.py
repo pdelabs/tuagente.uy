@@ -352,7 +352,7 @@ async def call_ticker(name: str) -> None:
 
 
 # Read by the client in Activity, once per flow and not once per tick.
-INCOMPLETE = "No voy a correr el flujo «{name}» hasta que conectes {missing}."
+INCOMPLETE = "No voy a correr el flujo «{name}» hasta que conectemos {missing}: nos lo pedís por WhatsApp y lo dejamos andando."
 
 # And by the client on the flow's card, when she asks for a run of one.
 NOT_CONNECTED = (

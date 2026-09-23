@@ -86,6 +86,8 @@ def register(engine) -> None:
     engine.provide("connection.instagram", ig_graph.connected)
     # And what the client calls it, in «falta conectar …» (`core/plugins.py`).
     engine.provide("connection.instagram.label", "tu cuenta de Instagram")
+    # The account's own @, for the Posteos preview (`social/core/posts.py`).
+    engine.provide("instagram.username", ig_store.username)
     # WHAT FIRES THE FLOW: code that looks at the account with no model in it
     # (`ig_tools.watch`). The flow names it in its frontmatter, `event:`.
     engine.watcher(ig_tools.WATCHER, ig_tools.watch, every=ig_tools.WATCH_EVERY)

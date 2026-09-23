@@ -220,7 +220,7 @@ class Engine:
 
         `label` is Spanish and the delegate's name is an id, and they are two
         different words on purpose: `delegation.py` writes «Le pedí al creador
-        de posteos: …» into Activity, and the id is never on a screen.
+        de posteos que …» into Activity, and the id is never on a screen.
 
         THREE CHECKS, AND EACH ONE IS A SHAPE THAT WOULD FAIL FAR FROM HERE:
 

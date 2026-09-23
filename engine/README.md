@@ -1597,7 +1597,7 @@ What it changes, and where:
   flow, `schedule` or `event` — the mail flow with no mailbox used to spend a
   turn every five minutes to say «Falta conectar el correo» to nobody. It
   writes ONE Activity line per flow per boot (`flow.incomplete`, status
-  `skipped`: «No voy a correr el flujo «…» hasta que conectes …»), and the
+  `skipped`: «No voy a correr el flujo «…» hasta que conectemos …»), and the
   task's `next_run_at` is `null`, so the tab never reads the skipped run as
   «No arrancó cuando le tocaba».
 - **«Probarlo ahora».** Refused: `POST /api/jobs/{id}/run` answers 409,

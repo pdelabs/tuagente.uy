@@ -28,7 +28,7 @@ SCHEMA = "CREATE TABLE IF NOT EXISTS business_marks (key TEXT PRIMARY KEY, at RE
 db.write(SCHEMA)
 
 # Read by the client in Activity.
-DONE = "Leí tu web y dejé un borrador de tu negocio en Archivos: {path}"
+DONE = "Leí tu web y te dejé un borrador de tu negocio en Archivos."
 FAILED = "No pude leer tu web ({url}): {reason}"
 
 
