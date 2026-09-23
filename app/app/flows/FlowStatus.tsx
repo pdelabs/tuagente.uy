@@ -10,9 +10,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  AlertTriangle, CalendarClock, CheckCircle2, HelpCircle, Loader2, Pause, Play, Zap,
+  AlertTriangle, CalendarClock, CheckCircle2, HelpCircle, Images, Loader2, Pause, Play, Zap,
 } from "lucide-react";
-import { connectionLabel, jobAction, type PortalConfig } from "../lib/agent";
+import { connectionLabel, jobAction, type FlowResult, type PortalConfig } from "../lib/agent";
+import { EntityChip } from "../lib/entities";
+import { PARAM } from "../lib/routes";
 import { Chip, SUPPORT } from "../lib/ui";
 import { buildChatLink } from "../lib/flowExamples";
 import {
@@ -22,6 +24,30 @@ import {
 /** What this flow is missing, by name. NO LINK: connecting it is ours to do,
  *  not a screen the client can finish on their own, so the notice says what
  *  is missing and who sets it up. */
+function fileName(path: string): string {
+  const base = (path || "").split("/").pop() || path;
+  return base.replace(/^\d{4}-\d{2}-\d{2}[-_ ]/, "") || base;
+}
+
+/** One thing a flow produced. A post's slide opens the POST, with the name its
+ *  plugin gave it: as a file chip it read «01.png» and opened one picture. */
+export function ResultChip({ result }: { result: FlowResult }) {
+  const post = /^posteos\/([^/]+)\//.exec(result.path)?.[1];
+  const label = result.label || fileName(result.path);
+  if (post) {
+    return (
+      <Link
+        href={`/app/posts?${PARAM.post}=${encodeURIComponent(post)}`}
+        className="inline-flex max-w-full items-center gap-1 rounded-md border border-c-violet bg-c-violet/40 px-1.5 py-0.5 align-middle text-[12px] text-primary transition hover:border-primary hover:bg-c-violet"
+      >
+        <Images className="h-3 w-3 shrink-0" />
+        <span className="truncate">{label}</span>
+      </Link>
+    );
+  }
+  return <EntityChip entity={{ kind: "file", path: result.path }} label={label} />;
+}
+
 export function MissingConnection({ ids, className = "" }: { ids: string[]; className?: string }) {
   const names = ids.map((id) => connectionLabel(id));
   const list = names.length > 1

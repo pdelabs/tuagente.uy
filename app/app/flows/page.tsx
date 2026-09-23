@@ -12,7 +12,8 @@
 //     trigger, status, missing_connections, last_run, results,
 //     results_total }] }
 //
-// Results are shown as file chips (EntityChip): the same viewer as the chat,
+// Results are shown as chips (`ResultChip`): a post opens the post, a file the
+// same viewer as the chat,
 // zero new preview code.
 //
 // AND SINCE 8/13 IT TELLS THE TRUTH ABOUT THE LAST RUN. This screen exists so
@@ -34,7 +35,7 @@ import {
   crossTask, inFlight, realStatus, sortByUrgency, summarizeFlows,
   resumePauseQueue, useRuns, runOf, type RealStatus,
 } from "./runs";
-import { FlowActions, MissingConnection, StatusBanner, Runs, WhyItCouldNot } from "./FlowStatus";
+import { FlowActions, MissingConnection, ResultChip, StatusBanner, Runs, WhyItCouldNot } from "./FlowStatus";
 import { EntityProvider } from "../lib/EntityViewer";
 import { EntityChip } from "../lib/entities";
 import { ExampleCarousel, buildChatLink } from "../lib/flowExamples";
@@ -69,10 +70,6 @@ function timeAgo(mtime: number): string {
   return d === 1 ? "ayer" : `hace ${d} días`;
 }
 
-function fileName(path: string): string {
-  const base = (path || "").split("/").pop() || path;
-  return base.replace(/^\d{4}-\d{2}-\d{2}[-_ ]/, "") || base;
-}
 
 function FlowCard({ f, e, cfg, posts, onChange }: {
   f: Flow;
@@ -131,10 +128,7 @@ function FlowCard({ f, e, cfg, posts, onChange }: {
             {f.results.slice(0, 5).map((r) => (
               <li key={r.path} className="flex items-center gap-2">
                 <span className="min-w-0 flex-1">
-                  <EntityChip
-                    entity={{ kind: "file", path: r.path }}
-                    label={fileName(r.path)}
-                  />
+                  <ResultChip result={r} />
                 </span>
                 <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-soft">
                   {timeAgo(r.mtime)}
@@ -158,10 +152,9 @@ function FlowCard({ f, e, cfg, posts, onChange }: {
           not that it hasn't produced yet, it is that it couldn't. It stays
           quiet whenever there is something to say -- even paused, which is
           how a broken flow the client stopped ends up looking.
-          AND IT NO LONGER PROMISES THAT THEY WILL SHOW UP HERE. Nothing fills
-          `results` on this engine and nothing is going to: where a flow's work
-          lands is the business of whatever capability produces it, and that
-          capability brings its own tab. So the line says where to go look. */}
+          Results are filled by the plugins that produce them (a post, a
+          deliverable); until the first one lands, the line says where the
+          flow's work will show up. */}
       {!e.note && e.missingConnections.length === 0 && !e.unconfirmed && f.results.length === 0 && (
         <p className="text-[12px] text-ink-soft/80">
           {posts ? "Lo que arma te queda en Posteos." : "Lo que produce te queda en Archivos."}

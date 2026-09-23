@@ -20,10 +20,9 @@ import { whenItHappened } from "../../lib/labels";
 import {
   crossTask, inFlight, realStatus, resumePauseQueue, useRuns, runOf,
 } from "../runs";
-import { FlowActions, MissingConnection, StatusBanner, Runs, WhyItCouldNot } from "../FlowStatus";
+import { FlowActions, MissingConnection, ResultChip, StatusBanner, Runs, WhyItCouldNot } from "../FlowStatus";
 import Markdown from "../../lib/Markdown";
 import { EntityProvider } from "../../lib/EntityViewer";
-import { EntityChip } from "../../lib/entities";
 import {
   StaleLinkNotice, Btn, Card, Chip, ErrorState, IconBtn, PageHeader, Spinner,
 } from "../../lib/ui";
@@ -48,10 +47,6 @@ function timeAgo(mtime: number): string {
   return d === 1 ? "ayer" : `hace ${d} días`;
 }
 
-function fileName(path: string): string {
-  const base = (path || "").split("/").pop() || path;
-  return base.replace(/^\d{4}-\d{2}-\d{2}[-_ ]/, "") || base;
-}
 
 export default function FlowDetailPage() {
   const params = useParams<{ slug: string }>();
@@ -217,7 +212,7 @@ export default function FlowDetailPage() {
                   <li key={r.path} className="flex items-center gap-2">
                     {/* min-w-0 + flex-1: the chip truncates INSIDE the row. */}
                     <span className="min-w-0 flex-1">
-                      <EntityChip entity={{ kind: "file", path: r.path }} label={fileName(r.path)} />
+                      <ResultChip result={r} />
                     </span>
                     <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-soft">
                       {timeAgo(r.mtime)}

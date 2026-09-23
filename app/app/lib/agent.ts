@@ -721,6 +721,8 @@ export type Inventory = {
 export const getInventory = (c: PortalConfig) =>
   get<Inventory>(c.adapter, "/portal/inventory", c);
 
+export type FlowResult = { path: string; mtime: number; label?: string };
+
 /** A flow: the client's work, with a name, a trigger and results
  *  (`engine/server/flows.py`). The `incomplete` status is derived from
  *  missing connections -- it's never stored. */
@@ -739,7 +741,9 @@ export type Flow = {
    *  it's a compatibility key on jobs already created inside deployed
    *  agents). See `flows/runs.ts`. */
   trigger_job?: string | null;
-  results: { path: string; mtime: number }[];
+  /** What the flow produced, newest first. `label` is a plugin's name for
+   *  it (a post's first caption line); without one the file name is it. */
+  results: FlowResult[];
   results_total: number;
 };
 export const getFlows = (c: PortalConfig) =>
