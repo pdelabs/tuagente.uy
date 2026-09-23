@@ -590,7 +590,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {/* Onboarding let them through with no notify channel: it gets
                 offered again here. Only drawn when the client answered "not
                 now"; the rest of the time it doesn't take up a single pixel. */}
-            <NoChannelNotice manifest={manifest} />
+            <NoChannelNotice
+              cfg={cfg}
+              manifest={manifest}
+              onSaved={() => getManifest(cfg).then(setManifest).catch(() => {})}
+            />
             {children}
           </>
         )}

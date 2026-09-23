@@ -801,9 +801,15 @@ const IN_PROGRESS_MESSAGE: Record<string, string> = {
  *  better to remind nobody than to remind someone who already has their
  *  channel set. It can be dismissed, and dismissing it lasts: the path isn't
  *  lost because Connections is still there. */
-export function NoChannelNotice({ manifest }: { manifest: Manifest }) {
+export function NoChannelNotice({ cfg, manifest, onSaved }: {
+  cfg: PortalConfig; manifest: Manifest; onSaved: () => void;
+}) {
   const [closed, setClosed] = useState(true);
   const [inProgress, setInProgress] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [mail, setMail] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     try {
       setClosed(localStorage.getItem(CHANNEL_POSTPONED_KEY) === "1");
@@ -812,34 +818,74 @@ export function NoChannelNotice({ manifest }: { manifest: Manifest }) {
       setClosed(false);
     }
   }, []);
-  if (manifest.notify_channel !== "none" || closed) return null;
+  const requested = inProgress ? IN_PROGRESS_MESSAGE[inProgress] : undefined;
+  const canEmail = (manifest.notify_channels ?? []).includes("email");
+  // NOTHING TO OFFER, NOTHING TO SAY. It used to link to Conexiones, a Hermes
+  // module this engine doesn't have: the client clicked "Decime por dónde te
+  // aviso" and landed on a 404. With no channel the agent can send through
+  // and nothing requested, there is nothing the client can do from here.
+  if (manifest.notify_channel !== "none" || closed || (!requested && !canEmail)) return null;
   const close = () => {
     setClosed(true);
     try {
       localStorage.setItem(CHANNEL_POSTPONED_KEY, "1");
     } catch { /* private mode: good for this session */ }
   };
-  // Where it leads: to whatever it left requested, if it left something; if
-  // not, to the whole screen, where the real path is to request it.
-  // And the link doesn't say "pick a channel": it's the one time the client
-  // would see the word the whole flow deliberately avoided.
-  const target = inProgress && IN_PROGRESS_MESSAGE[inProgress]
-    ? `/app/connections?connection=${inProgress}`
-    : "/app/connections";
+  const mailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail.trim());
+  // The address is asked for HERE: email needs nothing connected, so there is
+  // no other screen to send the client to.
+  const save = async () => {
+    setSaving(true);
+    setFailed(false);
+    try {
+      await saveIdentity(cfg, { contact: { channel: "email", value: mail.trim() } });
+      rememberChannelInProgress(null);
+      onSaved();
+    } catch {
+      setFailed(true);
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <div className="border-b border-black/[0.07] bg-c-amber/25 px-6 py-2.5 md:px-8">
-      <div className="mx-auto flex max-w-5xl items-center gap-3">
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3">
         <BellOff className="h-4 w-4 shrink-0 text-c-amber-ink" />
         <p className="min-w-0 flex-1 text-[13px] leading-snug text-c-amber-ink">
-          {(inProgress && IN_PROGRESS_MESSAGE[inProgress])
-            || "Todavía no tengo por dónde avisarte: lo que haga te espera acá hasta que entres."}{" "}
-          <Link
-            href={target}
-            className="font-semibold underline underline-offset-2"
-          >
-            {inProgress && IN_PROGRESS_MESSAGE[inProgress] ? "Ver cómo va" : "Decime por dónde te aviso"}
-          </Link>
+          {requested || "Todavía no tengo por dónde avisarte: lo que haga te espera acá hasta que entres."}{" "}
+          {requested ? (
+            // The request is a ticket on the board: that's where it moves.
+            <Link href="/app/pipeline" className="font-semibold underline underline-offset-2">
+              Ver cómo va
+            </Link>
+          ) : !asking && (
+            <button
+              onClick={() => setAsking(true)}
+              className="font-semibold underline underline-offset-2"
+            >
+              Avisame por mail
+            </button>
+          )}
         </p>
+        {asking && !requested && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); if (mailOk && !saving) save(); }}
+            className="flex w-full items-center gap-2 sm:w-auto"
+          >
+            <input
+              type="email"
+              autoFocus
+              value={mail}
+              onChange={(e) => setMail(e.target.value)}
+              placeholder="tu@mail.com"
+              className={`${inputCls} h-8 min-w-0 flex-1 text-[13px] sm:w-56`}
+            />
+            <Btn size="sm" disabled={!mailOk || saving} onClick={save}>
+              {saving ? "Guardando…" : "Guardar"}
+            </Btn>
+            {failed && <span className="text-[12px] text-c-coral-ink">No pude guardarlo.</span>}
+          </form>
+        )}
         <button
           onClick={close}
           aria-label="Cerrar el aviso"
