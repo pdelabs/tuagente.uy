@@ -78,7 +78,7 @@ The seeded identity has `contact.channel: "none"`, which the portal reads as
 **A mechanism is a plugin of the kit, not a module of this engine** — unless it
 is the clock, which is the engine's own (see **Flows** below). The ones this
 engine runs by default —
-`CORE_PLUGINS=kanban,approval,deliverable,memory,image,instagram,social,mail` —
+`CORE_PLUGINS=kanban,approval,deliverable,memory,image,instagram,social,mail,notify` —
 are the kit's own plugins, in dependency order (`requires.plugins` in each
 manifest says who must come first, and `instagram` is also in front of `social`
 because `social` asks it for two things by name), and each one declares `"surfaces": {"core": "core/"}` in
@@ -98,6 +98,8 @@ engine/                          the engine, and nothing about any mechanism
   core/turn_usage.py               what the turn cost (engine)
   core/tracing.py                  spans to Phoenix (engine)
   core/flows.py                    a flow is a file: the model, read/write, next run
+  core/notify.py                   the owner's channels and notify_owner (engine)
+  core/identity.py                 identity.json: the seed, and the live copy
   core/scheduler.py                the clock: the 30 s loop, a run, the rows
   core/promises.py                 what it SAID it left running, against the flows
   core/tools/workspace.py          bash, read_file, write_file, list_files
@@ -1323,6 +1325,39 @@ Last run: **4/4, 0 failures, US$0.0007 metered.** Two things it settled:
   guardar procedimientos en la memoria», with nothing added to the notebook.
   The guidance is in the instruction channel and the notebook is not, which is
   the difference that makes that sentence possible.
+
+## Telling the owner
+
+The agent works on its own — an event flow answers a comment, a run stops at the
+gate — and the owner is not looking. `core/notify.py` is how it reaches her;
+the `notify` plugin (`kit/plugins/notify/`, `system: true`) is what it says and
+when.
+
+- **A channel is a plugin's, the choice is the owner's.** A plugin registers
+  `engine.notifier(name, send)`; the owner picks one at onboarding and it lands
+  in `identity.json` as `contact: {channel, value}`. The manifest's
+  `notify_channels` is what this agent can send through, and the portal offers
+  only those. `notify_owner(subject, text, link)` joins the two and writes one
+  `notify` line in Activity per attempt: `completed`, `skipped` (no channel
+  chosen) or `error` — and a failed send raises.
+- **The one channel is email, from our domain.** Resend's HTTP API, one fleet
+  key (`RESEND_API_KEY`), sent as `"<agent name> <NOTIFY_FROM>"` to the address
+  the owner left. No key, no channel, `notify_channels: []` — the lab's state,
+  not an error. The mail carries a subject, a few lines and one link
+  (`PORTAL_URL` + a route, never a hash); the content stays in the portal.
+- **What gets said is code, not the model.** A ticker (`engine.ticker`, on the
+  scheduler's clock, every 60 s) reads the engine's `approvals` and `events`:
+  a request waiting for an ok (at once), still waiting after
+  `NOTIFY_REMIND_AFTER` (one reminder), and every `flow.failed`. At most one
+  mail per `NOTIFY_EVERY`, what happens inside the window goes out together,
+  and nothing between 22 and 8 in the agent's clock. With no channel chosen
+  nothing is saved up for later; a mail that failed marks nothing.
+- **Any plugin can talk through it**: `engine.use("notify.owner")`.
+
+Telegram was the channel on Hermes, where the bot was the agent itself; it
+never existed here and was taken out of the portal and the manifest on
+2026-09-22. Check it: `python3 engine/tests/test_notify.py` (Resend swapped,
+clock passed in).
 
 ## The web
 

@@ -17,8 +17,8 @@ both engines any more. Rules from that day on:
   `CORE_ONLY` in `kit/tools/check-plugins.py`, and the `flow` plugin's
   "no scheduled flows on this engine" prose.
 - The Hermes agents in `kit/fleet.md` (the local demo, the VPS
-  `tuagente`) stay up until the new engine has what they use — Telegram,
-  flows and cron — then they get rebuilt on it and the Hermes half of the kit
+  `tuagente`) stay up until the new engine has what they use — flows and
+  cron — then they get rebuilt on it and the Hermes half of the kit
   (`adapter/`, `compose/`, `mcp-guard/`, `install.sh`, `new-agent.sh`,
   `deploy-remote.sh`, `notes/` on engine knobs, `engine/` and `mcp` plugin
   surfaces) is deleted, not archived.
@@ -33,8 +33,14 @@ after it, and whose:
 - **The mascot** (Luis): generative 3D robot that drifts daily, or the HTML
   renderer in `social/` for the brand's SVG agentito.
 - **The agent's name** (Luis): «Tu Agente» for now.
-- **Telegram**, so a morning post announces itself; the **VPS deploy** of an
-  instance.
+- **Telling the owner: BUILT, waiting on Luis for the account** (2026-09-22,
+  replaces Telegram, which was taken out). The `notify` plugin mails the owner
+  when something waits for an ok, a reminder, and when a flow breaks
+  (`engine/README.md`, «Telling the owner»). Luis: create the Resend account,
+  verify `tuagente.uy` (DNS records in Cloudflare), and put `RESEND_API_KEY`
+  and `NOTIFY_FROM` in each instance's `secrets.env`. Open: nothing in the
+  portal lets the owner change the address after onboarding.
+- The **VPS deploy** of an instance.
 - **Publishing: BUILT, waiting on Luis for the credentials.** `publish_instagram`
   is on the face behind the gate, the approval card shows the slides and the
   caption read off `post.json`, and Posteos has the button and the «Publicado»
