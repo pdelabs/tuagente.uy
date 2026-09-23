@@ -61,6 +61,11 @@ def register(engine) -> None:
     # there. The same optional dependency as the two lines above.
     if engine.use("connection.instagram", default=None) is None:
         engine.provide("connection.instagram", instagram.connected)
+    # WHOSE ACCOUNT THE POSTS TAB DRAWS: the username the `instagram` plugin
+    # read from the connected account, when that plugin is installed and
+    # provides it. Without it the tab reads the handle off the business draft
+    # (`posts.account`). The same optional dependency as the token above.
+    posts.USERNAME = engine.use("instagram.username", default=None)
     engine.subagent(creator.build(engine), label=creator.LABEL)
     # THE WHOLE TOOLSET IS GATED, exactly as the approval plugin gates its own:
     # `approval_required()` with no predicate, so a tool added to it tomorrow

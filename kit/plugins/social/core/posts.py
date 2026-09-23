@@ -170,6 +170,7 @@ SIZE = {"feed": (1080, 1350), "carousel": (1080, 1350),
 # Read by the client: the portal shows `error.message` on the tab she is on.
 NO_POST = "No hay ningún posteo {post_id} en este agente."
 NO_IMAGE = "El posteo {post_id} no tiene ninguna imagen {name}."
+NO_LOGO = "No hay ningún logo {name} en la carpeta de tu marca."
 
 # A TRAILING BLOCK OF HASHTAG LINES COMES OFF THE CAPTION. They have a field of
 # their own and `caption.md` puts them back at the end, so a caption that
@@ -988,7 +989,97 @@ router = APIRouter()
 
 @router.get("/portal/posts")
 def listing():
-    return {"available": True, "posts": read_all()}
+    return {"available": True, "posts": read_all(), "account": account()}
+
+
+# ── whose account the tab draws the posts on ────────────────────────────────
+#
+# THE CARD IS DRAWN AS THE FEED THE POST IS GOING INTO, and the feed's header is
+# the ACCOUNT's: its handle and its picture. The tab used to make both up — the
+# company's name lowercased into a handle («aquabicicleteria», an account that
+# does not exist) and the agent's own face as the avatar — and QA read the
+# preview as somebody else's Instagram (2026-09-23). What is known, in order:
+#
+# - the account the `instagram` plugin is connected to, whose username it read
+#   from `/me` (`ig_store.username`). Optional: bound in `plugin.py` from
+#   `engine.use("instagram.username", default=None)`, `None` without it.
+# - the handle the business draft found on the business's own pages, in the
+#   section the `business` plugin writes it under: an `instagram.com/<x>` link
+#   first — a link is the account itself — and then a lone `@handle`.
+# - nothing, and the tab shows the business's name without an @.
+#
+# And the picture is the brand's logo when `marca/` has one — a file whose name
+# says `logo`, the way `place_image`'s assets are named — and otherwise the tab
+# draws the name's initial. Never the agent's face: the agent does not post.
+USERNAME = None
+
+# The business plugin's draft and the heading its channels go under
+# (`business_draft.SECTIONS`), named here as a workspace convention and not
+# imported: that plugin is not a dependency of this one.
+DRAFT = "negocio/borrador.md"
+CHANNELS = "## Por dónde te encuentran"
+PROFILE = re.compile(r"instagram\.com/([A-Za-z0-9._]{1,30})")
+# Not after a letter, a dot or another @: «info@negocio.uy» is a mail.
+HANDLE = re.compile(r"(?<![\w.@])@([A-Za-z0-9._]{1,30})")
+# Instagram paths that are not an account.
+NOT_ACCOUNTS = {"p", "reel", "reels", "explore", "stories", "tv"}
+BRAND = "marca"
+LOGO = "logo"
+
+
+def draft_handle() -> str | None:
+    """The Instagram handle the draft lists among the business's channels."""
+    path = config.WORKSPACE / DRAFT
+    text = path.read_text() if path.is_file() else ""
+    if CHANNELS not in text:
+        return None
+    channels = text.split(CHANNELS, 1)[1].split("\n## ", 1)[0]
+    # A handle never ends in a dot, and a sentence that ends on one does.
+    linked = [m.group(1).rstrip(".") for m in PROFILE.finditer(channels)]
+    linked = [name for name in linked if name.lower() not in NOT_ACCOUNTS]
+    if linked:
+        return linked[0]
+    found = HANDLE.search(channels)
+    return found.group(1).rstrip(".") if found else None
+
+
+def logo() -> str | None:
+    """The brand's logo in `marca/`, by file name, or `None`."""
+    brand = config.WORKSPACE / BRAND
+    if not brand.is_dir():
+        return None
+    found = sorted(
+        path.name for path in brand.iterdir()
+        if path.is_file() and path.suffix.lower() in TYPES and LOGO in path.stem.casefold()
+    )
+    return found[0] if found else None
+
+
+def account() -> dict:
+    """`{handle, name, avatar_url}`: whose feed the tab draws. `handle` has no
+    @ and is `None` when nothing knows it; `avatar_url` is relative to the
+    adapter and needs the bearer, like every picture the tab draws."""
+    handle = (USERNAME() if USERNAME else None) or draft_handle()
+    mark = logo()
+    return {
+        "handle": handle,
+        "name": company(),
+        "avatar_url": f"/portal/posts/brand/{mark}" if mark else None,
+    }
+
+
+# BEFORE `/portal/posts/{post_id}/{name:path}`, which would otherwise take
+# «brand» for a post id: a route is matched in the order it was added. A post
+# id is always `<YYYY-MM-DD>-<slug>`, so no post is ever called «brand».
+@router.get("/portal/posts/brand/{name}")
+def brand_picture(name: str):
+    """The logo's bytes. The allowlist is `logo()` itself: any other name is a
+    404, whatever it is made of."""
+    if name != logo():
+        raise HTTPException(404, NO_LOGO.format(name=name))
+    path = config.WORKSPACE / BRAND / name
+    return Response(path.read_bytes(), media_type=TYPES[path.suffix.lower()],
+                    headers={"Content-Disposition": f'inline; filename="{name}"'})
 
 
 # How long the label of a post is, on a flow's page: the hook, cut.
