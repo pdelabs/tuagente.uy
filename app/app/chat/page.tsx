@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import {
   loadConfig, chatStream, sessionChatStream, getActivity, getSessions, getSessionMessages,
-  uploadFile, type PortalConfig, type ChatMessage,
+  uploadFile, type HttpError, type PortalConfig, type ChatMessage,
 } from "../lib/agent";
 import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
 import {
@@ -69,6 +69,20 @@ function lastConversation(): string | null {
   }
 }
 
+/** A conversation as the engine has it: its name, its turns, and whether a
+ *  turn of it is still working. */
+async function fetchThread(c: PortalConfig, id: string) {
+  const r: { title?: string | null; running: boolean; data?: StoredMessage[] } =
+    await getSessionMessages(c, id);
+  return {
+    title: r.title ?? null,
+    running: r.running,
+    turns: (r.data ?? [])
+      .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
+      .map((m): Msg => ({ role: m.role as "user" | "assistant", content: m.content as string })),
+  };
+}
+
 /** Which session a NEW conversation's first turn landed in.
  *
  *  `/portal/chat/stream` (the OpenAI dialect) carries no session id back, so
@@ -116,10 +130,13 @@ function gestureFor(tool: string | undefined): AgentitoState {
 }
 
 /** What the agent wrote down in its notebook during a turn, as the owner reads
- *  it. The memory plugin logs each one to Activity as «Anoté: …»
- *  (`kit/plugins/memory/core/extraction.py`); the stream only says a note was
- *  taken, never what it says. */
-const NOTE_PREFIX = /^Anoté:\s*/;
+ *  it. The memory plugin logs each one to Activity as «Me anoté: …»
+ *  (`kit/plugins/memory/core/extraction.py`, `LABEL`); the stream only says a
+ *  note was taken, never what it says. */
+const NOTE_PREFIX = /^Me anoté:\s*/;
+
+/** Marks a `sendErr` that is the engine saying it's busy, not a failure. */
+const BUSY = "__ocupada__";
 
 /** Collapsible block with what the agent did before answering. */
 function ToolTrace({ tools, notes = [], live }: { tools: string[]; notes?: string[]; live?: boolean }) {
@@ -380,6 +397,12 @@ export default function ChatPage() {
   // conversación ya no está» about a link they never followed.
   const restoredRef = useRef<string | null>(null);
 
+  // A TURN OUTLIVES THE PAGE THAT STARTED IT: the engine keeps working after
+  // the client leaves (`running` in the thread). Coming back to a message with
+  // no answer under it YET used to look like the message was lost; now the
+  // agent shows it's on it, and the thread is re-read until it's done.
+  const [working, setWorking] = useState(false);
+
   const loadThread = useCallback((c: PortalConfig, id: string) => {
     const seq = ++openSeq.current;
     setMsgs([]);
@@ -390,17 +413,13 @@ export default function ChatPage() {
     setLoadingThread(true);
     setAtBottom(true);
     setThreadTitle(null);
-    getSessionMessages(c, id)
-      .then((r: { title?: string | null; data?: StoredMessage[] }) => ({
-        title: r.title ?? null,
-        turns: (r.data ?? [])
-          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
-          .map((m): Msg => ({ role: m.role as "user" | "assistant", content: m.content as string })),
-      }))
-      .then(({ title, turns }) => {
+    setWorking(false);
+    fetchThread(c, id)
+      .then(({ title, turns, running }) => {
         if (openSeq.current !== seq) return;
         setThreadTitle(title);
         setMsgs(turns);
+        setWorking(running);
       })
       .catch((e) => {
         if (openSeq.current !== seq) return;
@@ -408,15 +427,32 @@ export default function ChatPage() {
         // isn't there anymore (deleted, or from another agent). "Couldn't talk
         // to your agent — 404 on /api/sessions" was a lie, and jargon on top.
         const msg = e instanceof Error ? e.message : "error de red";
-        if (/\b404\b/.test(msg) && restoredRef.current === id) {
+        const gone = (e as HttpError).status === 404 || /\b404\b/.test(msg);
+        if (gone && restoredRef.current === id) {
           rememberConversation(null);
           replaceInRoute({ [PARAM.conversation]: null });
           return;
         }
-        setThreadErr(/\b404\b/.test(msg) ? "__vieja__" : msg);
+        setThreadErr(gone ? "__vieja__" : msg);
       })
       .finally(() => { if (openSeq.current === seq) setLoadingThread(false); });
   }, []);
+
+  useEffect(() => {
+    if (!cfg || !activeId || !working || sending) return;
+    const seq = openSeq.current;
+    const t = setInterval(() => {
+      fetchThread(cfg, activeId)
+        .then(({ turns, running }) => {
+          if (openSeq.current !== seq) return;
+          setMsgs(turns);
+          setWorking(running);
+          if (!running) refreshSessions(cfg);
+        })
+        .catch(() => { /* the next tick asks again */ });
+    }, 3_000);
+    return () => clearInterval(t);
+  }, [cfg, activeId, working, sending, refreshSessions]);
 
   // Which conversation is on screen. Without this, the "a send is in flight"
   // guard swallowed conversation CHANGES: hitting back while the agent was
@@ -477,6 +513,7 @@ export default function ChatPage() {
       // composer.
       openSeq.current++;
       setMsgs([]);
+      setWorking(false);
       setLoadingThread(false);
       setThreadErr(null);
       setSendErr(null);
@@ -640,7 +677,18 @@ export default function ChatPage() {
         // exists -- and on top of that Retry here can never work: it just
         // hits the same session that isn't there.
         const msg = e instanceof Error ? e.message : "error de red";
-        setSendErr(/\b404\b/.test(msg) ? "__vieja__" : msg);
+        const status = (e as HttpError).status;
+        // 409: the conversation is still working on the previous message
+        // (a turn outlives the page). The engine's sentence says so; the
+        // thread gets re-read until it's done, and the message stays in the box.
+        if (status === 409) {
+          setSendErr(`${BUSY}${msg}`);
+          if (activeId) setWorking(true);
+        } else {
+          // A session that isn't there answers 404 on read and 400 on send.
+          setSendErr(status === 404 || (activeId && status === 400) || /\b404\b/.test(msg)
+            ? "__vieja__" : msg);
+        }
       }
     } finally {
       abortRef.current = null;
@@ -724,7 +772,7 @@ export default function ChatPage() {
   if (!cfg) return <Spinner />;
 
   const lastIdx = msgs.length - 1;
-  const canSend = !sending && !loadingThread && input.trim().length > 0;
+  const canSend = !sending && !loadingThread && !working && input.trim().length > 0;
   // An open conversation is never «Nueva conversación»: its name in the list,
   // or the one the engine gave it, or the first thing the client said in it.
   const conversationTitle = !activeId
@@ -899,6 +947,18 @@ export default function ChatPage() {
                     </div>
                   ),
                 )}
+                {working && !sending && (
+                  <div className="flex gap-2.5">
+                    <div className="mt-0.5 h-7 w-7 shrink-0">
+                      <AgentitoAnimated celebrations={0} look={agentLook} state="doing" className="h-full w-full" />
+                    </div>
+                    <p className="flex items-center gap-1.5 px-1.5 py-1 text-[12px] text-ink-soft">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                      {agentName ? `${agentName} sigue trabajando` : "Sigue trabajando"} en tu mensaje. La
+                      respuesta aparece acá sola.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -925,6 +985,10 @@ export default function ChatPage() {
                 <Btn size="sm" kind="secondary" onClick={newConversation} disabled={sending}>
                   Empezar una nueva
                 </Btn>
+              </div>
+            ) : sendErr?.startsWith(BUSY) ? (
+              <div className="mb-2 rounded-lg border border-c-amber bg-c-amber/30 px-3 py-2 text-[13px] font-medium text-c-amber-ink">
+                {sendErr.slice(BUSY.length)}
               </div>
             ) : sendErr ? (
               <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-c-coral bg-c-coral/30 px-3 py-2 text-[13px] text-c-coral-ink">
