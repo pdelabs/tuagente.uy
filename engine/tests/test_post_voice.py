@@ -31,6 +31,13 @@ generation. Free, a second:
   f. THE CREATOR IS HANDED THE BUSINESS — `creator.business()` carries the
      company's name and the draft's text when there is a draft, and says there
      is none when there is not.
+  g. THE CLOSING'S NAME IS THE CREATOR'S TO ADD — on the QA agent (AQUA
+     Bicicletería, 2026-09-23) a text fix of the closing slide ran twice and
+     ended with the owner asked «el sistema exige incluirlo, ¿autorizás?». A
+     closing fix whose brief keeps the name goes through the first time; the
+     refusal of one that drops it carries the text with the name already added
+     and, for a fix, the exact edit call on the new picture, says it is not the
+     client's question, and never talks about a system.
 
 IT CLEANS UP AFTER ITSELF, and it never touches the agent's identity: the
 company is set by replacing `posts.company` inside the throwaway process.
@@ -183,6 +190,11 @@ try:
                            reference=f"posteos/{post_id}/02.png")
     report["closing_edit_unsigned"] = call("replace_slide", post_id, 2, closing_edit,
                                            "otra frase", None, "Texto: «Vení»")
+    report["closing_edit_path"] = closing_edit
+    # The fix QA asked for: one phrase of the closing changes, the name stays.
+    report["closing_edit_signed"] = call("replace_slide", post_id, 2, closing_edit,
+                                         "otra frase", None,
+                                         "Texto: «Vení a buscarlo» y abajo «PANADERIA PRUEBA»")
     report["edit_as_new"] = call("save_post", SLUG + "-nuevo", "Pasá hoy.", ["pan"], "feed",
                                  [picture("voz-l.png", "el cambio", reference="imagenes/x.png")],
                                  "a")
@@ -293,13 +305,25 @@ def main() -> int:
             problems.append(f"the brief filed is {r['edit_after']['prompts'][0]!r}")
         if r["edit_after"]["kept"] != ["anteriores/01-1.png"] or r["edit_after"]["kept_prompt"] != ["Texto: «Pan de hoy»"]:
             problems.append(f"the history is {r['edit_after']}")
-    problems += refused(r["closing_edit_unsigned"], "Panadería Prueba")
     problems += refused(r["edit_as_new"], "edición")
     labels = [e["label"] for e in r["events"]]
     if any("slide" in label or "2026-" in label for label in labels):
         problems.append(f"an event names a slide or an id: {labels}")
     print(f"  events: {labels}")
     failures += judge("e. an edit is filed with its whole brief", problems)
+
+    # g. The closing's name is the creator's to add, not the owner's to allow.
+    problems = refused(r["unsigned"], "«Pasá a buscarlo Panadería Prueba»", "rehacé")
+    problems += refused(r["closing_edit_unsigned"], "«Vení Panadería Prueba»",
+                        "generate_image", f'reference="{r["closing_edit_path"]}"',
+                        "no se le pregunta al cliente")
+    for key in ("unsigned", "closing_edit_unsigned"):
+        if "sistema" in r[key].get("said", "") or "exige" in r[key].get("said", ""):
+            problems.append(f"{key} talks about a system: {r[key]['said']}")
+    if "ok" not in r["closing_edit_signed"]:
+        problems.append(f"a closing fix that keeps the name was refused: {r['closing_edit_signed']}")
+    print(f"  {r['closing_edit_unsigned'].get('said', '')[:220]}")
+    failures += judge("g. the closing's name is added by the creator, first time", problems)
 
     problems = []
     if "Panadería Prueba" not in r["no_draft"] or "Todavía no hay un borrador" not in r["no_draft"]:

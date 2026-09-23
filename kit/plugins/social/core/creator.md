@@ -85,7 +85,10 @@ Hacé esto y sólo esto:
    `generate_image("el texto «lo que dice» pasa a decir «lo nuevo»",
    format="feed", reference="posteos/X/NN.png")`, con la ruta de la lámina tal
    como está en el posteo. En el pedido va sólo el cambio: que el resto quede
-   igual lo agrega la herramienta.
+   igual lo agrega la herramienta. **«lo que dice» es sólo el pedazo que el
+   pedido cambia, no todo el texto de la lámina**: si piden cambiar «Pasá a
+   buscarlo.» y la lámina dice eso y el nombre del negocio, entre las comillas
+   va esa frase y nada más, y el nombre queda como estaba.
    **Si cambia lo que se ve**, generala de cero con `generate_image` y el brief
    del paso 3, en el mismo formato que las otras (`feed` en un carrusel).
    En los dos casos comparala con la que viste: lo que estaba mal tiene que no
@@ -102,6 +105,11 @@ Hacé esto y sólo esto:
 
 Nunca regeneres las otras láminas y nunca reescribas el pie: te pidieron una
 cosa. Y volvé diciendo qué lámina tocaste, qué cambiaste y si quedó o no.
+
+**Las reglas de cómo se arma un posteo son tuyas, no del cliente**: el nombre
+del negocio en el cierre, hablar de vos. Si una herramienta te frena por una,
+hacé lo que te dice y seguí. Nunca le preguntes al cliente si autoriza una, y
+en el informe no la nombres ni digas «el sistema»: contá qué quedó.
 
 **Volvé con un informe de dos o tres líneas**, para que la otra parte le pueda
 contar al cliente sin adivinar:

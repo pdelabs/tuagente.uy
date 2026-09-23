@@ -368,16 +368,38 @@ def signed(brief: str, name: str) -> bool:
     return plain(name) in plain(" ".join(voseo.quoted(brief)))
 
 
+# THE REFUSAL HANDS OVER THE SENTENCE, AND SAYS WHOSE RULE IT IS. The first
+# wording said «tiene que decir de quién es… Rehacé esa lámina», and on the QA
+# agent (AQUA Bicicletería, 2026-09-23) a text fix of the closing slide ran
+# twice and ended with the face asking the owner «el sistema exige incluirlo.
+# ¿Autorizás que quede así?» — a rule of ours put to her as a question she had
+# no way to answer. The name is how a closing is made, like the voice: the
+# creator adds it and moves on, and the refusal says so in as many words, with
+# the text it should end up with already written.
 UNSIGNED = (
-    "la última lámina es el cierre y tiene que decir de quién es el posteo: su "
-    "texto, entre « », lleva el nombre del negocio tal cual, «{name}», junto al "
-    "pedido. Rehacé esa lámina con el nombre en el texto. No guardé nada."
+    "la lámina {number} es el cierre, y el cierre dice de quién es el posteo: "
+    "su texto entre « » lleva el nombre del negocio tal cual, «{name}». "
+    "Agregáselo vos, por ejemplo «{signed}», y seguí: {how} Es cómo se arma un "
+    "cierre, como hablar de vos: no se le pregunta al cliente ni va en tu "
+    "informe. No guardé nada."
+)
+# What to do with the picture, which is the one thing that differs between a
+# new post and a fix: a new post's slide is drawn again with its whole brief
+# (`save_post` refuses an edit as a slide of a new post); a fix's new slide is
+# edited, which keeps everything else the client already saw.
+REDRAW = "rehacé esa lámina con ese texto."
+REEDIT = (
+    "editá la imagen nueva con `generate_image(\"el texto «{text}» pasa a "
+    "decir «{signed}»\", format=\"feed\", reference=\"{image}\")` y pasame en "
+    "`brief` el brief de la lámina con ese texto adentro."
 )
 
 
-def check_slide(number: int, brief: str, closing: bool) -> None:
+def check_slide(number: int, brief: str, closing: bool, image: str | None = None) -> None:
     """The words one slide shows, before anything moves: `vos`, and the
-    business's name if it is the closing slide of a carousel."""
+    business's name if it is the closing slide of a carousel. `image` is the
+    new picture of a fix, which is what the refusal tells the creator to edit;
+    `None` on a new post."""
     words = voseo.slide_words(brief)
     if words:
         raise ModelRetry(
@@ -387,7 +409,11 @@ def check_slide(number: int, brief: str, closing: bool) -> None:
         )
     name = company()
     if closing and name and not signed(brief, name):
-        raise ModelRetry(UNSIGNED.format(name=name))
+        text = " ".join(voseo.quoted(brief)).strip()
+        together = f"{text} {name}".strip()
+        how = (REDRAW if image is None
+               else REEDIT.format(text=text, signed=together, image=image))
+        raise ModelRetry(UNSIGNED.format(number=number, name=name, signed=together, how=how))
 
 
 def clean_tags(hashtags: list[str]) -> list[str]:
@@ -829,7 +855,7 @@ def toolset() -> FunctionToolset:
         else:
             brief = record["prompt"]
         check_slide(number, brief, closing=data["format"] == "carousel"
-                    and number == len(names))
+                    and number == len(names), image=image)
         brief_of(source)
         old = names[number - 1]
         # A POST FROM BEFORE BRIEFS WERE KEPT has no `prompts`: its slides were
