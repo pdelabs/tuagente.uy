@@ -18,7 +18,7 @@ calling, not a second mechanism: it lands here when there is a public URL to
 receive it on, and the poll stays as the net under it.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 
@@ -51,16 +51,17 @@ def register(name: str, fn: Callable[[], str | None], every: int) -> None:
 
 @dataclass(frozen=True)
 class Ticker:
-    # SYNC, in a thread, like a watcher. What it raises is logged, once per
-    # distinct error, and the next call happens on schedule.
-    fn: Callable[[], None]
+    # Sync, in a thread, like a watcher — or ASYNC, on the engine's loop, for
+    # a ticker that runs a model (`kit/plugins/business/`). What it raises is
+    # logged, once per distinct error, and the next call happens on schedule.
+    fn: Callable[[], None] | Callable[[], Awaitable[None]]
     every: int
 
 
 TICKERS: dict[str, Ticker] = {}
 
 
-def register_ticker(name: str, fn: Callable[[], None], every: int) -> None:
+def register_ticker(name: str, fn: Callable, every: int) -> None:
     if name in TICKERS:
         raise ValueError(f"two plugins registered the ticker {name!r}")
     TICKERS[name] = Ticker(fn, every)

@@ -315,9 +315,10 @@ class Engine:
         prompt. `core/watchers.py` is the why."""
         watchers.register(name, fn, every)
 
-    def ticker(self, name: str, fn: Callable[[], None], every: int = 60) -> None:
-        """Code the clock calls every `every` seconds, with no flow and no
-        model behind it. `core/watchers.py` says when that is the right tool."""
+    def ticker(self, name: str, fn: Callable, every: int = 60) -> None:
+        """Code the clock calls every `every` seconds, with no flow behind it:
+        sync in a thread, or a coroutine on the engine's loop.
+        `core/watchers.py` says when that is the right tool."""
         watchers.register_ticker(name, fn, every)
 
     def notifier(self, name: str, send: Callable[[str, str, str, str | None], None]) -> None:

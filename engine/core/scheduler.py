@@ -22,6 +22,7 @@ green with the mail still sitting in Aprobaciones.
 """
 
 import asyncio
+import inspect
 import logging
 import time
 from datetime import datetime
@@ -300,7 +301,10 @@ async def call_ticker(name: str) -> None:
     _ticking.add(name)
     try:
         _ticked[name] = time.time()
-        await asyncio.to_thread(watchers.TICKERS[name].fn)
+        fn = watchers.TICKERS[name].fn
+        # A coroutine runs on this loop — a model run has to, since the model's
+        # HTTP client lives here; anything else is sync work, in a thread.
+        await (fn() if inspect.iscoroutinefunction(fn) else asyncio.to_thread(fn))
         _tick_errors.pop(name, None)
     except Exception as exc:
         reason = session.one_line(exc)
