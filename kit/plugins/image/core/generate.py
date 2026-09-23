@@ -45,6 +45,20 @@ and that stored brief is what a «arreglá la slide 2» starts from — change o
 line of it, keep the rest word for word, and the fixed slide still belongs to
 the same carousel. The model never writes it and never reads it: the file is
 next to the picture, so nothing has to remember a path.
+
+AND A PICTURE CAN BE EDITED INSTEAD OF REDRAWN. `reference` names a picture
+already in the workspace and it travels as the endpoint's `input_references`
+(one `image_url` with a data URL, the shape OpenRouter's own edit script sends;
+`GET /api/v1/images/models` lists `input_references` 0..16 for this model,
+checked 2026-09-23). Measured on the QA agent the same day: asked to change
+only the cover's words, the creator regenerated the slide from its brief and
+the client got a different loaf, a different cloth and the text somewhere
+else — a brief describes a picture, it does not pin one. With the old picture
+as the input, the prompt is the CHANGE and nothing else, and the frame around
+it is this file's (`EDIT`): what has to stay the same is format, so the model
+is not trusted to remember to say it. The sidecar carries the `reference`,
+which is how `replace_slide` knows the picture is an edit and asks for the
+slide's whole brief separately.
 """
 
 import base64
@@ -60,6 +74,7 @@ from pydantic_ai import ModelRetry
 from pydantic_ai.messages import BinaryImage
 
 from core import config
+from core.tools.workspace import under
 
 URL = "https://openrouter.ai/api/v1/images"
 
@@ -101,6 +116,21 @@ TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 # provider's own words inside it — «rejected by the safety system» is the
 # difference between changing the prompt and topping up the account.
 FAILED = "No pude generar la imagen: {reason}. Seguí sin la imagen o cambiá el pedido."
+
+# The frame of an edit, around the change the model asked for. Spanish because
+# the image model reads the rest of every brief in Spanish, and the list of
+# what stays is the list of what the QA fix lost (2026-09-23).
+EDIT = (
+    "Editá la imagen de referencia. Cambiá sólo esto: {change}\n"
+    "Todo lo demás queda exactamente igual que en la referencia: el encuadre,"
+    " los objetos y su lugar, la luz, los colores, la tipografía, el tamaño y la"
+    " posición del texto que no cambia."
+)
+
+# What a reference is sent as, by its suffix: the same four the posts tab
+# serves. A file of another type is not a picture a slide can be.
+TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+         ".webp": "image/webp"}
 
 
 def flat(text) -> str:
@@ -154,7 +184,38 @@ def next_path(suffix: str) -> Path:
     return WHERE / f"{today}-{max(taken, default=0) + 1}{suffix}"
 
 
-def write_brief(path: Path, prompt: str, format: Format, when: datetime) -> Path:
+def reference_of(relative: str) -> dict:
+    """The picture an edit starts from, as one `input_references` item.
+
+    Confined to the workspace like every path the model hands a tool: a name
+    outside it, or one that is not a picture, comes back as words.
+    """
+    try:
+        path = under(config.WORKSPACE, relative)
+    except ValueError:
+        raise ModelRetry(f"{relative} está fuera del espacio de trabajo") from None
+    if not path.is_file() or path.suffix.lower() not in TYPES:
+        raise ModelRetry(
+            f"no encuentro la imagen {relative}: pasame la ruta de una imagen del "
+            "espacio de trabajo, como `posteos/<id>/01.png`"
+        )
+    data = base64.b64encode(path.read_bytes()).decode()
+    return {"type": "image_url",
+            "image_url": {"url": f"data:{TYPES[path.suffix.lower()]};base64,{data}"}}
+
+
+def request(prompt: str, format: Format, reference: str | None) -> dict:
+    """The body of the call. A generation is the prompt and the shape; an edit
+    is the same plus the picture it starts from, with the prompt inside `EDIT`."""
+    body = {"model": MODEL, "prompt": prompt, "aspect_ratio": RATIO[format]}
+    if reference is not None:
+        body["prompt"] = EDIT.format(change=prompt)
+        body["input_references"] = [reference_of(reference)]
+    return body
+
+
+def write_brief(path: Path, prompt: str, format: Format, when: datetime,
+                reference: str | None = None) -> Path:
     """The sidecar beside the picture: what it was made from, as JSON.
 
     `<same stem>.json`, so whoever is holding the image is holding its brief:
@@ -162,14 +223,19 @@ def write_brief(path: Path, prompt: str, format: Format, when: datetime) -> Path
     is what takes the brief with it (`plugins/social/core/posts.py`).
     """
     brief = path.with_suffix(BRIEF)
+    data = {
+        "prompt": prompt,
+        "format": format,
+        "model": MODEL,
+        "created_at": when.isoformat(timespec="seconds"),
+    }
+    # Only on an edit: its `prompt` is the change and not a description of the
+    # picture, and whoever files the picture has to know that.
+    if reference is not None:
+        data["reference"] = reference
     brief.write_text(
         json.dumps(
-            {
-                "prompt": prompt,
-                "format": format,
-                "model": MODEL,
-                "created_at": when.isoformat(timespec="seconds"),
-            },
+            data,
             ensure_ascii=False,
             indent=2,
         )
@@ -178,25 +244,31 @@ def write_brief(path: Path, prompt: str, format: Format, when: datetime) -> Path
     return brief
 
 
-async def generate_image(prompt: str, format: Format = "feed") -> list:
+async def generate_image(
+    prompt: str, format: Format = "feed", reference: str | None = None
+) -> list:
     """Genera una imagen y te la devuelve para que la veas.
+
+    Con `reference` no dibuja de cero: EDITA esa imagen y deja todo lo demás
+    como estaba. Es lo que va cuando hay que cambiar sólo el texto de una
+    imagen que ya está bien.
 
     Args:
         prompt: qué tiene que mostrarse, en detalle: qué se ve, el estilo, los
-            colores y, si lleva texto, el texto exacto.
+            colores y, si lleva texto, el texto exacto. Con `reference`, en
+            cambio, sólo el cambio: el texto «X» pasa a decir «Y».
         format: `feed` para un posteo (vertical 4:5), `square` para una imagen
             cuadrada, `story` para una historia (vertical 9:16).
+        reference: la imagen que querés editar, por su ruta en el espacio de
+            trabajo, como `posteos/<id>/01.png`.
     """
+    body = request(prompt, format, reference)
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             answer = await client.post(
                 URL,
                 headers={"Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}"},
-                json={
-                    "model": MODEL,
-                    "prompt": prompt,
-                    "aspect_ratio": RATIO[format],
-                },
+                json=body,
             )
     except httpx.HTTPError as exc:
         raise ModelRetry(FAILED.format(reason=why(exc)))
@@ -207,7 +279,7 @@ async def generate_image(prompt: str, format: Format = "feed") -> list:
     data = base64.b64decode(image["b64_json"])
     path = next_path(suffix_of(image["media_type"]))
     path.write_bytes(data)
-    write_brief(path, prompt, format, datetime.now(ZoneInfo(config.TIMEZONE)))
+    write_brief(path, prompt, format, datetime.now(ZoneInfo(config.TIMEZONE)), reference)
     # Two things in one return: the line is what the model quotes when it tells
     # the client where the picture is, and the BinaryImage is the picture
     # itself, which Pydantic AI puts in front of the model as an image.
