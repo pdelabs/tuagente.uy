@@ -79,20 +79,43 @@ export const kindLabel = (kind: string): string =>
  *  `entities.tsx`'s `POST_RE`, unanchored. */
 const POST_ID_IN_TEXT = /\b\d{4}-\d{2}-\d{2}-((?=[a-z0-9-]*[a-z])[a-z0-9][a-z0-9-]{0,39})\b/gi;
 
-/** A post's name as the owner reads it: its slug, in words
- *  (`pan-masa-madre` → «Pan masa madre»). A post carries no title of its own;
- *  the slug is the name the agent gave it. */
-export function postTitle(slugOrId: string): string {
+/** A post's name as the owner reads it: the `title` its plugin gave it when
+ *  the post carries one (with its accents), and otherwise its slug, in words
+ *  (`pan-masa-madre` → «Pan masa madre»), which can't invent accents. */
+export function postTitle(slugOrId: string, title?: string | null): string {
+  if (title?.trim()) return title.trim();
   const slug = slugOrId.replace(/^\d{4}-\d{2}-\d{2}-/, "");
   const words = slug.replace(/-+/g, " ").trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/** Post id → title, for the screens that have the posts at hand. */
+export type PostTitles = Record<string, string | undefined>;
+
+export const postTitlesOf = (posts: { id: string; title?: string | null }[]): PostTitles =>
+  Object.fromEntries(posts.filter((p) => p.title?.trim()).map((p) => [p.id, p.title!.trim()]));
+
+/** A workspace path closing a sentence («…te dejé un borrador en Archivos:
+ *  negocio/borrador.md»). The address is the row's LINK, not its words. */
+const PATH_AT_END = /:\s*((?:[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9]{1,8})\s*\.?$/;
+
 /** The engine serves a label as one line of plain text (its markdown already
  *  flattened), but a post still travels in it by its id («Cambié la imagen 1
- *  de «2026-09-23-pan-masa-madre»»): here it reads as the post's name. */
-export function plainLabel(label: string): string {
-  return (label || "").replace(POST_ID_IN_TEXT, (_, slug: string) => postTitle(slug));
+ *  de «2026-09-23-pan-masa-madre»»): here it reads as the post's name. And a
+ *  file it names at the end goes: Inicio read «…en Archivos:
+ *  negocio/borrador.md» (QA, 2026-09-23), and the row opens the file instead
+ *  (`eventHref`). */
+export function plainLabel(label: string, titles: PostTitles = {}): string {
+  return (label || "")
+    .replace(PATH_AT_END, "")
+    .replace(POST_ID_IN_TEXT, (id: string, slug: string) => postTitle(slug, titles[id.toLowerCase()]));
+}
+
+/** Where an engine event's row leads, when its label names a file. */
+export function eventHref(e: { label: string; href?: string }): string | undefined {
+  if (e.href) return e.href;
+  const path = PATH_AT_END.exec(e.label || "")?.[1];
+  return path ? `/app/files?file=${encodeURIComponent(path)}` : undefined;
 }
 
 /* ── What counts as a conversation ────────────────────────────────────────── */

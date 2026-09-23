@@ -41,7 +41,7 @@ import {
   BOARD_COLUMNS, learnUtcOffset, cronCadence, columnForTask, whenItRuns, timeOf,
   momentOf, greetingOfTheDay, type TaskColumn, type Tone,
 } from "../lib/labels";
-import { plainLabel, postTitle } from "../lib/events";
+import { eventHref, plainLabel, postTitle, postTitlesOf } from "../lib/events";
 import { agentDisplayName } from "../lib/onboarding";
 import { AgentitoAnimated, loadAgentLook } from "../lib/agentito";
 import type { AgentitoState } from "../lib/AgentitoRive";
@@ -610,8 +610,9 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
     // day's summary, the last thing that happened to each thing is enough;
     // the full detail, with its status, stays in Activity.
     const seen = new Set<string>();
+    const titles = posts.t === "ready" ? postTitlesOf(posts.data) : {};
     return events.data
-      .map((e) => ({ ...e, label: plainLabel(e.label) }))
+      .map((e) => ({ ...e, href: eventHref(e), label: plainLabel(e.label, titles) }))
       .sort((a, b) => toMs(b.ts) - toMs(a.ts))
       .filter((e) => {
         const k = `${e.kind}|${(e.label || "").trim().toLowerCase()}`;
@@ -620,7 +621,7 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
         return true;
       })
       .slice(0, 5);
-  }, [events]);
+  }, [events, posts]);
 
   // WHAT IT LEFT READY, AS THINGS AND NOT AS LOG LINES. The QA client's agent
   // had made a post and read her website into a draft of her business, and
@@ -633,7 +634,7 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
       for (const p of [...posts.data].sort((a, b) => toMs(b.created_at) - toMs(a.created_at)).slice(0, 2)) {
         items.push({
           key: `post-${p.id}`,
-          label: `Posteo «${postTitle(p.slug || p.id)}»`,
+          label: `Posteo «${postTitle(p.slug || p.id, p.title)}»`,
           hint: p.published ? "publicado" : "para revisar",
           href: `/app/posts?${PARAM.post}=${encodeURIComponent(p.id)}`,
           ms: toMs(p.created_at),
@@ -858,15 +859,32 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
                 <Empty>Todavía no registró actividad.</Empty>
               ) : (
                 <ul className="-my-1">
-                  {latest.map((e, i) => (
-                    <li key={`${e.ts}-${e.status}-${i}`} className="flex items-center gap-2.5 py-1.5">
-                      <span className="shrink-0 whitespace-nowrap text-[12px] tabular-nums text-ink-soft">
-                        {whenLabel(e.ts)}
-                      </span>
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${dotCls(e.kind, e.status)}`} />
-                      <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{e.label}</span>
-                    </li>
-                  ))}
+                  {latest.map((e, i) => {
+                    const row = (
+                      <>
+                        <span className="shrink-0 whitespace-nowrap text-[12px] tabular-nums text-ink-soft">
+                          {whenLabel(e.ts)}
+                        </span>
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${dotCls(e.kind, e.status)}`} />
+                        <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{e.label}</span>
+                      </>
+                    );
+                    return (
+                      <li key={`${e.ts}-${e.status}-${i}`}>
+                        {e.href ? (
+                          <Link
+                            href={e.href}
+                            className="-mx-2 flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition hover:bg-black/[0.03]"
+                          >
+                            {row}
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-soft/50" />
+                          </Link>
+                        ) : (
+                          <div className="flex items-center gap-2.5 py-1.5">{row}</div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </Section>

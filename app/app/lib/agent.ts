@@ -850,6 +850,9 @@ export type Post = {
   created_at: string;
   /** The slug of the flow that produced it, if a flow did. */
   flow: string | null;
+  /** Its name, with accents, as the social plugin gives it. Optional: posts
+   *  saved before the field existed have only the slug (`postTitle`). */
+  title?: string | null;
   /** WHERE IT ENDED UP, once the client approved publishing it. Written by
    *  the social plugin's `publish_instagram` and never by the portal: the tab
    *  reads this, it doesn't publish. Absent on everything that hasn't gone
