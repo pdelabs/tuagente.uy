@@ -70,7 +70,7 @@ def build(engine) -> SubAgent:
 async def run(company: str, url: str) -> str:
     """One research with nobody asking, on the engine's loop (the clock awaits
     it: the model's HTTP client lives there)."""
-    from core import config
+    from core import config, turn_usage
 
     listed = await business_site.pages(url)
     result = await _agent.run(
@@ -79,4 +79,6 @@ async def run(company: str, url: str) -> str:
         deps=_deps(workspace=config.WORKSPACE, session_id=f"business-{NAME}"),
         usage_limits=LIMITS,
     )
+    # Run outside any turn, so its price is recorded here or nowhere (Uso).
+    turn_usage.spend(None, "investigar tu negocio", turn_usage.cost(result))
     return str(result.output)

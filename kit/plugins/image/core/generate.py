@@ -73,7 +73,7 @@ import httpx
 from pydantic_ai import ModelRetry
 from pydantic_ai.messages import BinaryImage
 
-from core import config
+from core import config, turn_usage
 from core.tools.workspace import under
 
 URL = "https://openrouter.ai/api/v1/images"
@@ -274,6 +274,9 @@ async def generate_image(
         raise ModelRetry(FAILED.format(reason=why(exc)))
     if answer.status_code != 200:
         raise ModelRetry(FAILED.format(reason=reason(answer)))
+    # WHAT THE PICTURE COST, into this agent's own spend (Uso): an image is most
+    # of what a post costs, and a total without it read as a tenth of the bill.
+    turn_usage.spend(None, "generar una imagen", answer.json().get("usage", {}).get("cost"))
 
     image = answer.json()["data"][0]
     data = base64.b64decode(image["b64_json"])
