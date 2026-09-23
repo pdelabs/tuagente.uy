@@ -107,6 +107,8 @@ MODULES = {
     # (its FLOW.md is the schedule), so there is no second list of tasks for a
     # Crons tab to draw, and the Flows tab already pauses, resumes and runs each.
     "flows": True,
+    # Habilidades: `GET /portal/inventory` (server/extra.py), read-only.
+    "skills": True,
     "connections": False,
     "capabilities": False,
 }

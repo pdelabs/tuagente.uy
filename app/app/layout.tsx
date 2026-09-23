@@ -448,7 +448,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const enabled = MODULES.filter(
     (m) => !HIDDEN_MODULES.has(m.key)
-      && (m.key === "home" || m.key === "skills" || manifest.modules[m.key]));
+      && (m.key === "home" || manifest.modules[m.key]));
   // Welcome screen per module: shown once, until the client says "Ok".
   const current = currentModule;
   const Intro = current ? INTROS[current.key] : undefined;
