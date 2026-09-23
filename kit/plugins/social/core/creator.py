@@ -26,6 +26,11 @@ WHAT IT IS BUILT FROM, and why each piece:
   procedure is the instructions and there is nothing to decide. That is also
   why the plugin's `SKILLS` is empty: the face no longer has the tools the
   skill talks about, and an index entry it cannot act on is a trap.
+- `business` — the business's name and its draft (`negocio/borrador.md`), a
+  callable read on every delegation. The brand file says how a post LOOKS;
+  this says whose it is and what is true about it, and a fresh client has the
+  second long before anyone writes the first (the comment on `DRAFT` has the
+  measurement).
 - `engine.tools("read_file", "list_files", "web_search", "web_fetch")` — the
   brand and yesterday's posts, and the web. No `write_file`: what this agent
   leaves behind is a post, and `save_post` is the only thing that writes one.
@@ -75,6 +80,8 @@ import stamp
 from pydantic_ai import Agent
 from pydantic_ai_harness.subagents import SubAgent
 
+from core import config
+
 HERE = Path(__file__).resolve().parent
 PROSE = HERE / "creator.md"
 SKILL = HERE.parent / "skills" / "post" / "SKILL.md"
@@ -94,9 +101,9 @@ DESCRIPTION = (
     " lo guarda en Posteos. Pasale la idea o el tema, o «el de hoy», y cualquier"
     " corrección o preferencia que el cliente haya dicho en esta conversación:"
     " el creador no la ve."
-    " También arregla UNA sola slide de un posteo que ya está guardado, sin"
+    " También arregla UNA sola lámina de un posteo que ya está guardado, sin"
     " tocar las otras ni el pie: para eso pasale el id del posteo, qué número"
-    " de slide es y qué está mal, con las palabras del cliente."
+    " de lámina es y qué está mal, con las palabras del cliente."
 )
 
 # Its notebook's scope segment: `memoria/instagram-creator/MEMORY.md`.
@@ -140,6 +147,52 @@ def todays_look() -> str:
     return looks.today(posts.read_all())
 
 
+# THE BUSINESS, IN THE PROMPT AND NOT BEHIND A READ. The blind QA of 2026-09-23
+# got a carousel with no name on it and a caption that could have been any
+# bakery's, from a creator whose skill said «leé marca/brand.md» on an agent
+# that had none: it found nothing, and never opened the draft the `business`
+# plugin had left an hour earlier with the name, the address, the hours, the
+# products and the voice. Whether the creator thinks of opening a second file
+# is a convention; this puts the file in front of it on every delegation.
+# The path is the `business` plugin's (`business_draft.DRAFT`), named here as
+# a workspace convention and not imported: that plugin is not a dependency of
+# this one, and a client without it simply has no draft.
+DRAFT = "negocio/borrador.md"
+
+BUSINESS = "## El negocio"
+
+NAMED = (
+    "El negocio se llama «{name}». Así, escrito igual, va en el texto de la"
+    " última lámina de cada carrusel."
+)
+
+WITH_DRAFT = """\
+Esto es lo que se sabe de él: el borrador que se armó leyendo su web
+(`{path}`). Es información de fondo, no palabra del cliente, y lo que el
+borrador marca como pregunta no está confirmado: no va en un posteo. Lo que el
+cliente te dijo en tu memoria gana sobre esto.
+
+{text}"""
+
+NO_DRAFT = (
+    "Todavía no hay un borrador del negocio: lo que sabés de él es lo que está"
+    " en tu memoria del cliente."
+)
+
+
+def business() -> str:
+    """Who the posts are for: the name the owner gave at onboarding and the
+    draft of the business, read on every delegation because both change."""
+    name = posts.company()
+    path = config.WORKSPACE / DRAFT
+    draft = (
+        WITH_DRAFT.format(path=DRAFT, text=path.read_text().strip())
+        if path.is_file() else NO_DRAFT
+    )
+    parts = [BUSINESS, NAMED.format(name=name) if name else "", draft]
+    return "\n\n".join(part for part in parts if part)
+
+
 def build(engine) -> SubAgent:
     """The delegate, ready for `engine.subagent`.
 
@@ -163,8 +216,10 @@ def build(engine) -> SubAgent:
         # `todays_look` is a CALLABLE, read on every delegation: what the last
         # posts wore and which looks rest today is the state of the client's
         # folder, not something a prompt written at load can know (`looks.py`).
-        instructions=[engine.identity, PROSE.read_text(), procedure(), todays_look,
-                      engine.today],
+        # `business` too: the draft is rewritten when the site is read again
+        # and the name when the owner changes it.
+        instructions=[engine.identity, PROSE.read_text(), procedure(), business,
+                      todays_look, engine.today],
         toolsets=hands,
         capabilities=[
             engine.use("image"),

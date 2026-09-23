@@ -2,22 +2,29 @@
 title: Posteos para Instagram
 client_summary: "Escribe el posteo del día con tu voz, le hace el carrusel con tus colores y te lo deja listo para revisar."
 name: post
-description: "Escribe un posteo de Instagram con la voz de la marca y le genera el carrusel: lee marca/brand.md, arma el pie con la formula (gancho, una idea, un solo pedido, hasta 5 hashtags), genera de 3 a 6 slides con generate_image, MIRA cada una contra una lista de cinco puntos y las guarda con save_post. Usala cada vez que haya que dejar un posteo, un pie de foto o contenido para Instagram."
+description: "Escribe un posteo de Instagram con la voz de la marca y le genera el carrusel: lee el negocio y marca/brand.md, arma el pie con la formula (gancho, una idea, un solo pedido, hasta 5 hashtags), genera de 3 a 6 láminas con generate_image, MIRA cada una contra una lista de cinco puntos y las guarda con save_post. Usala cada vez que haya que dejar un posteo, un pie de foto o contenido para Instagram."
 version: 1.0.0
 license: MIT
 ---
 
 # post — el posteo del día
 
-## 1. Leé la marca antes de escribir nada
+## 1. Leé el negocio y la marca antes de escribir nada
 
-`read_file("marca/brand.md")`. Ahí está de quién es la voz, qué colores y qué
-tipografía usa, qué puede afirmar y qué nunca. Un posteo escrito sin eso suena
-igual al de cualquier otra empresa, que es exactamente lo que el cliente no
-quiere pagar.
+**Qué es el negocio** —cómo se llama, qué vende, dónde está, cuándo abre, cómo
+se le pide, cómo habla— está al final de tus instrucciones, en «El negocio», y
+en lo que el cliente le contó a tu memoria. **Cómo se ven sus posteos** —los
+looks, los colores, la tipografía, qué puede afirmar y qué nunca— está en
+`marca/brand.md`, si existe: `read_file("marca/brand.md")`. Un posteo escrito
+sin las dos cosas suena igual al de cualquier otra empresa, que es exactamente
+lo que el cliente no quiere pagar.
 
-Si el archivo no está, escribí igual y avisale en una línea que va a sonar
-genérico y que con dos o tres datos de su marca deja de sonar así.
+**Si no hay archivo de marca, el look sale del negocio.** Escribí vos UN bloque
+de look, de dos o tres oraciones: el lugar y las cosas reales de ese negocio
+(su mostrador, su producto, su vidriera), la luz, dos o tres colores y una
+tipografía. Ese bloque va palabra por palabra al principio del brief de todas
+las láminas, igual que un bloque de la marca. Y en el informe decí en una línea
+que los colores los elegiste vos porque todavía no hay una marca escrita.
 
 ## 2. Elegí una idea que no repita la de ayer
 
@@ -34,7 +41,7 @@ funcionó y no del lado de lo que te gustó.
 ## 3. Armá la historia. Todavía no escribas nada lindo
 
 **Un carrusel es una historia que se pasa con el dedo, no cinco frases sueltas
-sobre un tema.** Quien lo ve decide en cada slide si pasa a la siguiente, y pasa
+sobre un tema.** Quien lo ve decide en cada lámina si pasa a la siguiente, y pasa
 sólo si la que está mirando le dejó una pregunta abierta. Cinco frases que
 podrían ir en cualquier orden son cinco afiches, y nadie pasa de un afiche.
 
@@ -44,64 +51,82 @@ podrían ir en cualquier orden son cinco afiches, y nadie pasa de un afiche.
 
 **b. Elegí la estructura según lo que la idea ES**, no según cuál te gusta:
 
-| Estructura | Cuándo | El trabajo de cada slide |
+| Estructura | Cuándo | El trabajo de cada lámina |
 |---|---|---|
 | `historia` | Pasó, o pasa todas las semanas: una persona, una hora, una cosa | 1 la escena con la pregunta abierta · 2 lo que salió mal · 3 cuánto costó · 4 el giro · 5 cómo es ahora · cierre |
 | `antes-despues` | El mismo momento, de dos maneras | 1 la promesa · 2 el antes, concreto · 3 lo que cambió · 4 el después, el mismo momento · cierre |
 | `mito` | Algo que casi todos creen y no es así | 1 el mito, dicho como lo dicen · 2 por qué suena cierto · 3 dónde se rompe · 4 lo que sí es · cierre |
-| `pasos` | Cómo se hace UNA cosa | 1 qué vas a poder hacer · un paso por slide, en orden · la anteúltima los junta · cierre |
+| `pasos` | Cómo se hace UNA cosa | 1 qué vas a poder hacer · un paso por lámina, en orden · la anteúltima los junta · cierre |
 | `lista` | Varias cosas del mismo tipo | 1 cuántas y de qué · la más fuerte en la 2, no al final · la anteúltima las junta · cierre |
 | `numero` | Un dato que sorprende | 1 el número solo · 2 de dónde sale · 3 qué significa para quien lee · cierre |
 
 Cuál usaron los últimos carruseles está al final de tus instrucciones, en «La
 estructura de hoy»: las dos últimas descansan.
 
-El número de slides sale de lo que hay para decir, de 3 a 6: **nunca rellenes**.
+El número de láminas sale de lo que hay para decir, de 3 a 6: **nunca rellenes**.
 Si la tapa promete tres cosas, adentro hay tres, ni dos ni cuatro.
 
-**c. Escribí el guion: un renglón por slide, con su trabajo y su oración.**
+**c. Escribí el guion: un renglón por lámina, con su trabajo y su oración.**
 
 - **La 1 promete y deja una pregunta.** Se entiende sola —es la que aparece en
   el feed— y no se cierra sola: «A las 23:40 te preguntaron el precio.» deja
   la pregunta «¿y qué pasó?»; «Contestar rápido es importante» no deja ninguna.
-- **Cada slide contesta la pregunta que dejó la anterior y abre la que sigue.**
+- **Cada lámina contesta la pregunta que dejó la anterior y abre la que sigue.**
   Por eso el orden no se puede cambiar.
-- **Lo más fuerte va en la 2 o la 3.** Cada slide pierde lectores: lo mejor no
+- **Lo más fuerte va en la 2 o la 3.** Cada lámina pierde lectores: lo mejor no
   se guarda para el final.
 - **La anteúltima es la que se guarda**: lo que queda de todo, en una oración
   que sirve sin haber leído el resto.
-- **La última pide una sola cosa**, la que elegiste en (a).
+- **La última es el cierre y tiene un trabajo propio: el pedido y el nombre.**
+  Pide la cosa que elegiste en (a) y dice de quién es el posteo, con el nombre
+  del negocio tal como está en «El negocio»: «¿Con quién lo compartís? Pasá
+  por <el nombre>» o el pedido arriba y el nombre abajo. **No repite ni
+  resume a las anteriores**: si hace falta juntar lo que quedó, eso es la
+  anteúltima. Sin el nombre, `save_post` no guarda el carrusel.
 - **Concreto gana a general, siempre.** Una hora, un rubro, un objeto, una
   cifra que esté en la marca. «Una ferretería, un martes, 23:40» se lee;
   «las empresas chicas, a veces, de noche» no.
-- Una oración corta por slide, hasta unas 12 palabras. Si necesita dos
-  oraciones, son dos slides o sobra una.
+- **Cada posteo lleva al menos un dato de ESTE negocio**, sacado de «El
+  negocio» o de tu memoria: un producto con su nombre, la calle o el barrio, el
+  horario, cómo se pide. «Un buen pan también deja lugar a tus propias
+  combinaciones» podría ser de cualquier panadería; «Los bizcochos salen
+  del horno a las 6:30» es sólo de la que los hace. Lo que el borrador
+  tiene como pregunta no está confirmado y no entra.
+- **Todo el texto va de vos**, en las láminas y en el pie: «¿Con cuál te
+  quedás?», no «¿Cuál va contigo?»; tenés, podés, querés, con vos, escribinos.
+  `save_post` frena una lámina o un pie que hable de tú.
+- Una oración corta por lámina, hasta unas 12 palabras. Si necesita dos
+  oraciones, son dos láminas o sobra una.
 
 **d. La prueba del hilo, antes de seguir.** Leé las oraciones en orden, de
-corrido, como un párrafo. Tiene que pasar las seis:
+corrido, como un párrafo. Tiene que pasar las siete:
 
 1. Se entiende como UN párrafo, con principio y final.
 2. Si sacás cualquiera, se nota que falta.
 3. Si cambiás dos de lugar, se rompe.
 4. Ninguna dice lo mismo que otra con otras palabras.
-5. **Cada slide hace el trabajo que la tabla le da a su lugar.** Un `mito` sin
+5. **Cada lámina hace el trabajo que la tabla le da a su lugar.** Un `mito` sin
    el mito dicho en la 1, como lo dice la gente, no es un mito: es otra
    estructura mal nombrada. Si la idea no entra en la que elegiste, cambiá de
    estructura, no le cambies el nombre.
 6. **El pedido del cierre se puede cumplir con lo que el carrusel dio.** Si
-   pedís que lo guarden, tiene que haber una slide que valga guardar: los
+   pedís que lo guarden, tiene que haber una lámina que valga guardar: los
    pasos, la regla, la frase exacta para contestar, algo que sirva el mes que
    viene sin leer el resto. «Guardá esto» sobre cuatro opiniones es pedir por
    pedir. Si lo que hay es una historia en la que alguien se reconoce, el
    pedido es que te escriba o que se lo mande a alguien.
+7. **La última no dice nada que ya dijo otra.** Tapá la anteúltima y leé la
+   última: tiene que ser el pedido y el nombre del negocio, no la lista otra
+   vez. Si repite, sacale lo repetido; si sin eso no queda nada, sobra una
+   lámina.
 
 Si alguna falla, no es un problema de redacción: es que todavía no hay
 historia. Volvé a (b). **Una imagen cuesta y una oración no: acá es donde se
 corrige.**
 
-**e. Decidí qué MUESTRA cada slide**, en el mismo guion, al lado de su oración.
+**e. Decidí qué MUESTRA cada lámina**, en el mismo guion, al lado de su oración.
 La imagen muestra el momento del que habla ESA oración, no el tema del posteo:
-si la historia avanza, lo que se ve avanza con ella. **Dos slides del mismo
+si la historia avanza, lo que se ve avanza con ella. **Dos láminas del mismo
 carrusel nunca muestran lo mismo.** En un look con fotos u objetos eso quiere
 decir otro momento, otra cosa en primer plano, otra hora o otra distancia en
 cada una —el teléfono que se prende, la persiana a la mañana, una mano
@@ -110,9 +135,9 @@ look de texto solo, lo que cambia es la composición y dónde cae el resaltado.
 
 ## 4. Escribí el pie
 
-El pie acompaña al carrusel, no lo repite: **agrega lo que las slides no
+El pie acompaña al carrusel, no lo repite: **agrega lo que las láminas no
 dicen** —el contexto, el matiz, lo que el agente nunca hace— y termina con el
-mismo pedido que la última slide. La fórmula, en este orden:
+mismo pedido que la última lámina. La fórmula, en este orden:
 
 - **Gancho**: una línea, la frase más fuerte del posteo. Es lo único que se ve
   antes del «más», así que no la gastes saludando ni describiendo la imagen.
@@ -124,7 +149,7 @@ mismo pedido que la última slide. La fórmula, en este orden:
 
 Y cómo suena:
 
-- Hablale de `vos`, con frases cortas y registro hablado.
+- Hablale de `vos`, con frases cortas y registro hablado: rioplatense, nunca de tú.
 - Nombrá el trabajo, no la tecnología: «los turnos que perdés de noche», no el
   nombre de una integración.
 - **Sólo afirmaciones verificables.** Si un dato, un precio o una tendencia no
@@ -136,7 +161,7 @@ Y cómo suena:
 - Cuando muestres lo que el agente hace, mostrá también lo que **nunca** hace.
   Es lo que hace creíble la promesa.
 
-De cada slide vas a escribir también su **texto alternativo**: qué se ve en
+De cada lámina vas a escribir también su **texto alternativo**: qué se ve en
 esa imagen, en una oración, para quien no la ve.
 
 ## 5. Hacé el carrusel
@@ -144,25 +169,28 @@ esa imagen, en una oración, para quien no la ve.
 Las oraciones ya están: son las del guion del paso 3, **tal cual**. No las
 reescribas acá ni las cambies por las líneas del pie.
 
-Se leen como un solo posteo, así que **todas las slides de un carrusel llevan
-el mismo look, y el look es uno de los que están escritos en `marca/brand.md`**:
-su bloque va **palabra por palabra al principio del brief de cada slide**, con
+Se leen como un solo posteo, así que **todas las láminas de un carrusel llevan
+el mismo look, y el look es uno de los que están escritos en `marca/brand.md`**
+—o, si no hay archivo de marca, el bloque que escribiste en el paso 1—:
+su bloque va **palabra por palabra al principio del brief de cada lámina**, con
 lo que el bloque pida completar —un lugar, un objeto— dicho igual en todas, y
-recién después el texto de esa slide y qué frase lleva el resaltado, si alguna.
+recién después el texto de esa lámina y qué frase lleva el resaltado, si alguna.
 Un brief que dice «igual que la anterior» no dice nada: cada pedido empieza de
-cero y el modelo no vio la slide anterior. No inventes un fondo, un color ni un
+cero y el modelo no vio la lámina anterior. No inventes un fondo, un color ni un
 personaje que el bloque no nombre.
 
 **El look cambia de un posteo al otro.** Cuál usar hoy está en «El look de hoy»,
 al final de tus instrucciones: los que usaron los últimos posteos descansan.
 
-Y en cada brief enumerá **palabra por palabra** el único texto que puede
-aparecer en esa pieza: ningún otro, ni fechas, ni dominios, ni logos ni la
-marca en una esquina, ni subtítulos en inglés, ni marcas de agua, ni el número
-de slide, ni códigos de color dibujados. Todo en español, con sus tildes, y con
+Y en cada brief enumerá **palabra por palabra, entre « »**, el único texto
+que puede aparecer en esa pieza —las comillas son cómo `save_post` sabe qué
+dice la lámina—: ningún otro, ni fechas, ni dominios, ni logos ni la marca en
+una esquina, ni subtítulos en inglés, ni marcas de agua, ni el número de
+lámina, ni códigos de color dibujados. El nombre del negocio va sólo en la
+última, adentro de su texto y no como firma en un rincón. Todo en español, con sus tildes, y con
 aire arriba y abajo: Instagram recorta los bordes de una pieza vertical.
 
-`generate_image(prompt, format="feed")`, **una slide por vez y en orden**:
+`generate_image(prompt, format="feed")`, **una lámina por vez y en orden**:
 `feed` es la proporción 4:5 del carrusel y todas las piezas van iguales.
 
 ## 6. Mirá cada una. Siempre
@@ -172,14 +200,14 @@ contra estos cinco puntos:
 
 1. **Se lee**: el texto entra, no se corta y no se pisa con el fondo.
 2. **Es del look que elegiste**: el fondo, los colores y el adorno son los de
-   ese bloque y nada más, igual que las otras slides de este carrusel. Un
+   ese bloque y nada más, igual que las otras láminas de este carrusel. Un
    robot, un personaje o un fondo que el bloque no nombra es una falla aunque
    quede lindo.
 3. **No tiene texto que no pediste.** Es la falla más común y la más fácil de
    pasar por alto, porque el texto de más suele estar bien escrito.
 4. **No hay palabras rotas.** Mirá adentro de los dibujos, no sólo los
    titulares: ahí es donde el modelo escribe mal el español.
-5. **Dice lo suyo**: la línea de esa slide y no la de otra.
+5. **Dice lo suyo**: la línea de esa lámina y no la de otra.
 
 Si una falla, generá **esa sola una vez más** con la corrección adentro del
 prompt, y seguí. Si a la segunda sigue mal, dejala afuera: el carrusel sale con
@@ -195,5 +223,5 @@ structure="…", goal="…")`: las imágenes en el orden en que se ven, un texto
 alternativo por cada una en ese mismo orden, y la estructura y el objetivo que
 elegiste en el paso 3. La herramienta pone la carpeta, los nombres y la fecha; vos
 ponés las palabras. El id es la fecha y el slug: otro tema en el mismo día es
-otro slug. El brief con el que hiciste cada slide queda guardado con ella, así
+otro slug. El brief con el que hiciste cada lámina queda guardado con ella, así
 que después se puede arreglar una sola sin rehacer el posteo.
