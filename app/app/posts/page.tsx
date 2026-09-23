@@ -34,7 +34,7 @@
 //
 // FIXING ONE SLIDE GOES THROUGH THE CHAT, never through a call of this tab's
 // own: the portal talks to the agent by talking to the agent. «Arreglar esta
-// imagen» writes «Arreglá la slide N del posteo «<id>»: <what the client
+// imagen» writes «Arreglá la lámina N del posteo «<id>»: <what the client
 // says>» and opens `/app/chat?p=…`, and that param SENDS the message on
 // arrival (`app/app/chat/page.tsx`) instead of leaving it in the box — which
 // is why the sentence is finished HERE, in one line of input, and not left
@@ -49,7 +49,8 @@
 // look at it, download it, and read the brief it was made from.
 //
 // AND THE BRIEF IS ON THE SCREEN. `prompts` carries what each slide was asked
-// of the model, one per image; «Ver brief» shows it. Everything that was used
+// of the model, one per image; «Ver la idea» shows it («brief» is our word,
+// not the client's). Everything that was used
 // to make the piece is stored with it, and this is the half that makes it
 // visible — the client reads what was asked for, and that is what they are
 // correcting.
@@ -136,6 +137,7 @@ const FORMATS: Record<string, { label: string; tone: Tone }> = {
   feed: { label: "Feed", tone: "violet" },
   square: { label: "Cuadrado", tone: "green" },
   story: { label: "Historia", tone: "amber" },
+  carousel: { label: "Carrusel", tone: "violet" },
 };
 const formatLabel = (f: string) => FORMATS[f] ?? { label: f, tone: "neutral" as const };
 
@@ -318,7 +320,7 @@ function Gallery({ cfg, p, index, onIndex }: {
         className="group relative focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
         tabIndex={n > 1 ? 0 : undefined}
         role={n > 1 ? "group" : undefined}
-        aria-label={n > 1 ? `Imagen ${index + 1} de ${n}` : undefined}
+        aria-label={n > 1 ? `Lámina ${index + 1} de ${n}` : undefined}
         onKeyDown={(e) => {
           if (n < 2) return;
           if (e.key === "ArrowRight") { e.preventDefault(); go(1); }
@@ -469,7 +471,7 @@ const guillemets = (text: string) =>
   text.replace(/"([^"]*)"/g, "«$1»").replace(/"/g, "”");
 
 const fixRequest = (id: string, number: number, what: string) =>
-  `Arreglá la slide ${number} del posteo «${id}»: ${guillemets(what)}`;
+  `Arreglá la lámina ${number} del posteo «${id}»: ${guillemets(what)}`;
 
 // The primary button as a LINK: `Btn` only draws a <button>, and this one has
 // to be an <a> so middle-click and "open in a new tab" keep working — the same
@@ -535,7 +537,7 @@ function Brief({ prompt }: { prompt: string }) {
     <details className="group">
       <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[12px] font-semibold text-ink-soft transition hover:text-ink [&::-webkit-details-marker]:hidden">
         <ChevronRight className="h-3 w-3 transition group-open:rotate-90" />
-        Ver brief
+        Ver la idea
       </summary>
       <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-black/[0.07] bg-black/[0.02] p-2.5 font-mono text-[11.5px] leading-relaxed text-ink-soft">
         {prompt}
@@ -553,7 +555,7 @@ function Brief({ prompt }: { prompt: string }) {
           {copied ? "Copiado" : "Copiar"}
         </Btn>
         <span className="text-[11px] text-ink-soft/80">
-          Es lo que tu agente le pidió al modelo para esta imagen.
+          Es lo que tu agente pidió dibujar para esta lámina.
         </span>
       </div>
     </details>
@@ -583,7 +585,7 @@ function FixSlide({ post, number }: { post: Post; number: number }) {
   return (
     <div className="w-full">
       <label htmlFor={field} className="block text-[12px] font-semibold text-ink">
-        Qué está mal en la imagen {number}
+        Qué está mal en la lámina {number}
       </label>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <input
@@ -636,7 +638,7 @@ function VersionModal({ cfg, post, number, version, onClose }: {
     <Modal onClose={onClose} wide>
       <div className="flex items-center gap-2 border-b border-black/[0.07] px-4 py-3">
         <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
-          La imagen {number}, antes de arreglarla
+          La lámina {number}, antes de arreglarla
         </p>
         <IconBtn label="Cerrar" onClick={onClose}>
           <X className="h-4 w-4" />
@@ -967,13 +969,15 @@ function PostCard({ cfg, p, look, handle, flowName, onOpen, wide = false }: {
   );
 }
 
-/** One image of the detail: its own shape, its own «Descargar», the name the
- *  file has so the client recognizes it once it lands — and the two things
- *  that are about THIS slide and no other: the brief it was made from and
- *  «Arreglar esta imagen».
+/** One image of the detail: its own shape, its own «Descargar», which slide it
+ *  is — and the two things that are about THIS slide and no other: the brief
+ *  it was made from and «Arreglar esta imagen».
  *
  *  The number is the one the client counts and the one the request quotes: the
- *  first slide is 1, and the file is called `01.png` for the same reason. */
+ *  first slide is 1. It is said as «Lámina 2 de 6» and not as the file's name:
+ *  `02.png` next to a picture read as a folder, not as a post (QA, 2026-09-23).
+ *  The download still lands with the file's name, which is where a name
+ *  belongs. */
 function StackedImage({ cfg, p, name, index }: {
   cfg: PortalConfig | null; p: Post; name: string; index: number;
 }) {
@@ -988,7 +992,7 @@ function StackedImage({ cfg, p, name, index }: {
         <DownloadImage cfg={cfg} id={p.id} name={name} />
         <FixSlide post={p} number={index + 1} />
         <span className="text-[11px] text-ink-soft">
-          {p.images.length > 1 ? `Imagen ${index + 1} · ${name}` : name}
+          {`Lámina ${index + 1} de ${p.images.length}`}
         </span>
       </div>
       {/* A post saved before the brief travelled with the slide has none, and
@@ -1076,7 +1080,7 @@ export default function PostsPage() {
   const header = (
     <PageHeader
       title="Posteos"
-      subtitle="Lo que tu agente armó para tus redes. Sale cuando vos le decís que sí"
+      subtitle="Lo que tu agente armó para tus redes. Sale cuando vos le decís que sí."
       actions={
         <IconBtn label="Actualizar" disabled={loading} onClick={() => load()}>
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
