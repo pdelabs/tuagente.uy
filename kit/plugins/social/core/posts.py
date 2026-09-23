@@ -444,7 +444,10 @@ def check_slide(number: int, brief: str, closing: bool, image: str | None = None
     name = company()
     if closing and name and not signed(brief, name):
         text = " ".join(voseo.quoted(brief)).strip()
-        together = f"{text} {name}".strip()
+        # The name as a sentence of its own: joined with a bare space the wt4
+        # fix came out «…al 091 444 550 AQUA Bicicletería» (2026-09-23).
+        together = (f"{text} {name}" if not text or text[-1] in ".!?…»"
+                    else f"{text}. {name}")
         how = (REDRAW if image is None
                else REEDIT.format(text=text, signed=together, image=image))
         raise ModelRetry(UNSIGNED.format(number=number, name=name, signed=together, how=how))

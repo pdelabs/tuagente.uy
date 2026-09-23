@@ -89,7 +89,11 @@ sólo esto:
    igual lo agrega la herramienta. **«lo que dice» es sólo el pedazo que el
    pedido cambia, no todo el texto de la lámina**: si piden cambiar «Pasá a
    buscarlo.» y la lámina dice eso y el nombre del negocio, entre las comillas
-   va esa frase y nada más, y el nombre queda como estaba.
+   va esa frase y nada más, y el nombre queda como estaba. **Si es la última
+   lámina, «lo nuevo» termina con el nombre del negocio**: si el texto que
+   pidió el cliente no lo trae, sumáselo vos al final antes de generar, como
+   una frase aparte. El cierre siempre lo lleva, y dibujarlo dos veces es una
+   espera que el cliente no pidió.
    **Si cambia lo que se ve**, generala de cero con `generate_image` y el brief
    del paso 3, en el mismo formato que las otras (`feed` en un carrusel).
    En los dos casos comparala con la que viste: lo que estaba mal tiene que no

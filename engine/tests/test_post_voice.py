@@ -315,8 +315,8 @@ def main() -> int:
     failures += judge("e. an edit is filed with its whole brief", problems)
 
     # g. The closing's name is the creator's to add, not the owner's to allow.
-    problems = refused(r["unsigned"], "«Pasá a buscarlo Panadería Prueba»", "rehacé")
-    problems += refused(r["closing_edit_unsigned"], "«Vení Panadería Prueba»",
+    problems = refused(r["unsigned"], "«Pasá a buscarlo. Panadería Prueba»", "rehacé")
+    problems += refused(r["closing_edit_unsigned"], "«Vení. Panadería Prueba»",
                         "generate_image", f'reference="{r["closing_edit_path"]}"',
                         "no se le pregunta al cliente")
     for key in ("unsigned", "closing_edit_unsigned"):
