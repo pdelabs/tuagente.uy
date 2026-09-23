@@ -10,9 +10,12 @@ so they cannot.
 The shapes are `app/app/lib/agent.ts`'s `Flow`, `FlowDetail` and `CronJob`,
 kept to the letter: the tab is not changed for this engine.
 
-`results` and `results_total` travel empty. Where a flow's output lands is the
-business of the plugin that produces it, and that plugin brings its own view
-(`docs/own-agent-plan.md`); the two fields stay because the type has them.
+`results` is what the flow produced, asked of every plugin that writes
+something a flow can leave behind (`plugins.flow_results`): the deliverables in
+`entregables/<slug>/`, the posts whose `flow` is this one. It travelled empty
+until 2026-09-23, and every flow's page said «Todavía no hay resultados» over
+a week of daily posts. The listing carries the newest `RESULTS_LISTED`, the
+flow's own page `RESULTS_SHOWN`, and `results_total` counts them all.
 
 A MANUAL RUN OF AN INCOMPLETE FLOW STILL RUNS. The scheduler does not wake the
 agent up for one, but «Probarlo ahora» is the client asking, and what she gets
@@ -25,7 +28,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException
 
-from core import config, db, flows, scheduler
+from core import config, db, flows, plugins, scheduler
 
 router = APIRouter()
 
@@ -48,7 +51,13 @@ def job_id(slug: str) -> str:
     return f"{JOB_PREFIX}{slug}"
 
 
-def card(flow: flows.Flow) -> dict:
+# How many results travel: on each card of the listing, which shows five and
+# a count, and on the flow's own page, which lists them.
+RESULTS_LISTED = 20
+RESULTS_SHOWN = 200
+
+
+def card(flow: flows.Flow, results_shown: int = RESULTS_LISTED) -> dict:
     """One flow, the `Flow` shape of `lib/agent.ts`.
 
     `incomplete` IS DERIVED, NEVER STORED: an `active` flow that names a
@@ -61,6 +70,7 @@ def card(flow: flows.Flow) -> dict:
     """
     last = db.last_finished_flow_run(flow.slug)
     missing = scheduler.missing(flow)
+    results = plugins.flow_results(flow.slug)
     return {
         "slug": flow.slug,
         "name": flow.name,
@@ -77,8 +87,11 @@ def card(flow: flows.Flow) -> dict:
         # a flow that runs on its own — on the clock, or when something
         # arrives — has a task, one that waits to be asked has none.
         "trigger_job": job_id(flow.slug) if flow.trigger in ON_ITS_OWN else None,
-        "results": [],
-        "results_total": 0,
+        # `{path, mtime}` as the type has it, `mtime` in epoch seconds, plus a
+        # `label` when the path alone does not say what it is — a post's
+        # first slide is `01.png`.
+        "results": [item | {"mtime": int(item["mtime"])} for item in results[:results_shown]],
+        "results_total": len(results),
     }
 
 
@@ -191,7 +204,9 @@ def detail(slug: str):
     # `how` is the half of the body above `## Notas técnicas`: what the client
     # reads as "cómo lo trabaja tu agente". The notes are the run's, and they
     # never leave the engine.
-    return card(flow) | {"how": flow.how, "runs": [past(r) for r in db.flow_runs(slug, RUNS_SHOWN)]}
+    return card(flow, RESULTS_SHOWN) | {
+        "how": flow.how, "runs": [past(r) for r in db.flow_runs(slug, RUNS_SHOWN)],
+    }
 
 
 # ── the scheduled tasks the tab crosses it against ──────────────────────────

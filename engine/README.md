@@ -1493,9 +1493,22 @@ the prompt (`core/agent.py`).
 `last_status` is the last FINISHED run and never the one in flight: the portal
 reads a status it does not know as "uncertain", and a client reading "we are not
 sure how it went" about a run that is still going is worse than reading nothing.
-What says a run is happening now is `state`. `results` and `results_total`
-travel empty — where a flow's output lands is the business of the plugin that
-produces it, and that plugin brings its own view.
+What says a run is happening now is `state`.
+
+**`results` is what the flow produced**, and where that lands is the business
+of the plugin that produces it: each one provides a reader,
+`engine.provide("flow.results.<what>", fn)`, and `fn(slug)` answers
+`[{path, mtime, label?}]` (`core/plugins.py`'s `flow_results`). `deliverable`
+lists `entregables/<slug>/`, where its script puts what a flow delivers
+(`--flow`); `social` lists the posts whose `post.json` says `flow: <slug>` —
+written from the run's own row, never by the model — as the first slide, with
+the caption's first line as `label`. Newest first, `mtime` in epoch seconds,
+20 on each card of the listing and 200 on the flow's own page; `results_total`
+counts them all. It travelled empty until 2026-09-23.
+
+```bash
+python3 engine/tests/test_flow_results.py   # free, a few seconds
+```
 
 ```bash
 bash engine/tests/test_flows.sh     # ~9 min, ~US$0.005

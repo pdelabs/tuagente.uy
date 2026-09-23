@@ -66,6 +66,8 @@ A CONNECTION IS ANSWERED FOR BY NAME. A plugin that uses one provides
 `connection.<id>`, a callable that says whether it is set up right now, and
 that is what makes a flow that names it `incomplete` or not (`connected()`
 below). No new verb: it is `provide`, read by the engine instead of by a plugin.
+What a flow PRODUCED is answered the same way, `flow.results.<what>`, by every
+plugin that writes something a flow can leave behind (`flow_results()`).
 
 CURATED FLOWS ARE `surfaces.flows`, and the loader copies them into
 `workspace/flows/` itself (`install_flows` below): no plugin writes its own
@@ -534,6 +536,30 @@ def connected(connection_id: str) -> bool:
 def missing(connections: list[str]) -> list[str]:
     """Of what a flow declares, what is not set up, in the order declared."""
     return [c for c in connections if not connected(c)]
+
+
+RESULTS = "flow.results."
+
+
+def flow_results(slug: str) -> list[dict]:
+    """What a flow produced, newest first: `{path, mtime}` and maybe `label`.
+
+    WHAT A FLOW LEAVES BEHIND IS THE BUSINESS OF THE PLUGIN THAT MAKES IT — a
+    deliverable in `entregables/<slug>/`, a post whose `flow` is this slug — so
+    each one provides a reader by name, `engine.provide("flow.results.<what>",
+    fn)`, and `fn(slug)` answers with the workspace paths it knows came out of
+    that flow. Every provider is asked, the same way the board asks every
+    `tickets.detail.*` it finds. The engine keeps no list of its own: a result
+    is a file on disk, and a file deleted is a result gone.
+    """
+    found = [
+        item
+        for name, reader in _engine.shared.items()
+        if name.startswith(RESULTS)
+        for item in reader(slug)
+    ]
+    found.sort(key=lambda item: item["mtime"], reverse=True)
+    return found
 
 
 def modules() -> dict[str, bool]:

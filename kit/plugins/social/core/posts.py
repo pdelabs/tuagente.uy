@@ -786,6 +786,34 @@ def listing():
     return {"available": True, "posts": read_all()}
 
 
+# How long the label of a post is, on a flow's page: the hook, cut.
+LABEL = 80
+
+
+def results(slug: str) -> list[dict]:
+    """The posts a flow's runs saved, as a flow's results
+    (`flow.results.posts`, `engine/core/plugins.py`'s `flow_results`).
+
+    `flow` is on `post.json` because `save_post` wrote it from the run's own
+    row (`flow_of`), so this is what the flow MADE, not a guess from a name.
+    The path is the first slide — what the Files viewer opens as the post —
+    or the caption when a post has no picture, and the label is the caption's
+    first line, because `01.png` says nothing about which post it is.
+    """
+    found = []
+    for data in read_all():
+        if data.get("flow") != slug:
+            continue
+        piece = data["images"][0]["name"] if data["images"] else CAPTION
+        hook = data["caption"].strip().splitlines()[0] if data["caption"].strip() else data["id"]
+        found.append({
+            "path": f"{WHERE}/{data['id']}/{piece}",
+            "mtime": (folder(data["id"]) / POST).stat().st_mtime,
+            "label": hook if len(hook) <= LABEL else hook[: LABEL - 1].rstrip() + "…",
+        })
+    return found
+
+
 @router.get("/portal/posts/{post_id}")
 def detail(post_id: str):
     found = read(post_id)
@@ -798,10 +826,10 @@ def detail(post_id: str):
 def piece(post_id: str, name: str):
     """The bytes of one image, with the type that makes it open.
 
-    NOT `/portal/files/<path>`, which answers `text/plain` for everything it
-    has — a PNG through that route arrives as mojibake. The portal fetches this
-    with the bearer header and makes an object URL out of the answer, so the
-    client's key never travels in a query string.
+    Here and not through `/portal/files/<path>` because the allowlist is the
+    post's own listing: a name that is not in `images` or `versions` is a 404.
+    The portal fetches this with the bearer header and makes an object URL out
+    of the answer, so the client's key never travels in a query string.
     """
     path = image_path(post_id, name)
     if path is None:

@@ -71,4 +71,7 @@ def register(engine) -> None:
     engine.provide(f"approval.render.{publishing.TOOL}", publishing.card)
     engine.router(posts.router)
     engine.router(instagram.router)
+    # WHAT A FLOW'S RUNS SAVED: the daily-post flow's page lists its posts
+    # (`core/plugins.py`'s `flow_results`).
+    engine.provide("flow.results.posts", posts.results)
     engine.module("posts", True)
