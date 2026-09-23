@@ -1,39 +1,34 @@
 "use client";
 
-// Approvals: tasks the agent stopped, waiting for the client's ok.
-// PRINCIPIO CERO: domain-free — the body is shown as-is (could be an email,
-// a payment, a post...); the portal never assumes what it is.
-// Adapter contract (docs/specs/03-approvals.md):
+// Approvals: gated tool calls the agent stopped at, waiting for the client's
+// ok. PRINCIPLE ZERO: domain-free — the body is shown as-is (could be an
+// email, a payment, a post...); the portal never assumes what it is.
+// Served by the approval plugin (`kit/plugins/approval/core/routes.py`):
 //   GET  /portal/approvals → { approvals: [{ id, title, summary, body, created_at }] }
-//   POST /portal/approvals/{id}/approve { correction? } · POST .../reject { reason }
-// Honest semantics: approving ONLY comments and unblocks the ticket; what
-// happens after is decided by the agent's own rules. The copy never
-// promises "it's already been sent".
+//   POST /portal/approvals/{id}/approve { correction? } · POST .../reject { reason, final? }
+// Honest semantics: approving lets the stopped call go ahead; what happens
+// after is decided by the agent's own rules. The copy never promises "it's
+// already been sent".
 //
-// Approving with corrections: the adapter (0.6.0) accepts `{correction}` on
-// approve and, before unblocking, leaves a comment signed `cliente` with the
-// exact text the agent has to use. It does NOT edit the ticket's body (the
-// Hermes CLI doesn't allow that on a blocked ticket), so the copy says
-// exactly that: your version gets recorded as a comment.
+// Approving with corrections: `{correction}` on approve is recorded as the
+// client's own comment, with the exact text the agent has to use; the
+// original request isn't edited, so the copy says exactly that.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowRight, Ban, CheckCircle2, ChevronDown, Clock, Hand, PencilLine, MessageSquareReply,
-  Plug, RotateCcw,
+  ArrowRight, Ban, CheckCircle2, ChevronDown, Hand, PencilLine, MessageSquareReply,
 } from "lucide-react";
 import { loadAgentName } from "../lib/onboarding";
 import {
-  loadConfig, getApprovals, getConnections, getManifest, getTicketDetail, approve, reject,
-  notifyApprovalsChanged, missingConnections, isTheClient, isConnectionBlock,
-  isClientRequest, isClientRejection, connectionLabel, readComment,
+  loadConfig, getApprovals, getManifest, getTicketDetail, approve, reject,
+  notifyApprovalsChanged, isTheClient, isClientRejection, readComment,
   rejectionReason, looksLikeProposal, authorLabel,
-  type Connection, type Manifest, type PortalConfig, type TicketComment,
-  type TicketDetail,
+  type Manifest, type PortalConfig, type TicketComment, type TicketDetail,
 } from "../lib/agent";
-import { COLUMN_LABEL, timeOf } from "../lib/labels";
+import { timeOf } from "../lib/labels";
 import {
-  StaleLinkNotice, Btn, Card, Chip, EmptyState, ErrorState, PageHeader, Spinner, inputCls,
+  StaleLinkNotice, Btn, Card, EmptyState, ErrorState, PageHeader, Spinner, inputCls,
 } from "../lib/ui";
 import {
   CopyLink, PARAM, openInRoute, closeInRoute, bringIntoView, useRouteParam,
@@ -47,7 +42,7 @@ type Approval = {
   title: string;
   summary: string;
   body: string;
-  created_at: string | number; // Hermes may emit epoch in seconds
+  created_at: string | number;
 };
 
 // Tolerant: epoch in seconds (number or numeric string), epoch in ms, or ISO.
@@ -101,11 +96,6 @@ const isMarker = (s: string) => /^\s*(BLOCKED|UNBLOCKED|BLOQUEADO)\s*:/i.test(s)
 // function that uses it to decide what shows and what doesn't. Two copies
 // of that rule is one too many.
 const isFromClient = isTheClient;
-
-// `looksLikeProposal` —the markdown box from the `approval` skill— used to
-// live here. It's now from `lib/agent.ts`: besides choosing which comment to
-// show, it's half of the definition of what an approval IS, and that can't
-// have two versions (see `isConnectionBlock`).
 
 /** What we're asking them to approve. The `approval` skill leaves the
  *  request formatted AS A TICKET COMMENT, not in its description — that's
@@ -234,7 +224,7 @@ function splitProposal(md: string): { brief: string; text: string } {
 type Resolved = {
   id: string;
   title: string;
-  action: "approved" | "corrected" | "closed" | "retry";
+  action: "approved" | "corrected" | "closed";
   when: Date;
 };
 
@@ -278,7 +268,6 @@ function ResolvedCard(
   const title = closed
     ? "Cerraste el pedido"
     : r.action === "approved" ? "Lo aprobaste"
-    : r.action === "retry" ? "Le dijiste que lo vuelva a intentar"
     : "Lo aprobaste con tu corrección";
   const where = board
     ? "Lo ves avanzar en el Tablero."
@@ -288,9 +277,6 @@ function ResolvedCard(
       ? `${agentName} ya lo sabe y está siguiendo con eso. ${where}`
       : r.action === "corrected"
       ? `${agentName} tiene que usar tu versión, no la original. ${where}`
-      : r.action === "retry"
-      ? `${agentName} retoma esta tarea con la conexión ya puesta. Si algo sigue faltando, `
-        + `te lo va a decir ahí mismo. ${where}`
       : `${agentName} no lo va a volver a proponer. Quedó anotado por qué. `
         + "Si algún día cambiás de idea, pediselo por el chat.";
   const Icon = closed ? Ban : CheckCircle2;
@@ -354,174 +340,6 @@ function RejectedNotice({ r, agentName }: { r: Rejected; agentName: string }) {
   );
 }
 
-/** A BLOCK IS NOT AN APPROVAL, AND THIS IS ITS CARD.
- *
- *  The agent stopped because it's missing a connection. The blind test on
- *  8/13 saw this request with the usual three buttons: "Approve what? It
- *  didn't do anything, it got stuck. That's not a permission I have to
- *  give, it's a problem you have to solve for me." And "got stuck" is
- *  literal: approving is `unblock`, the cause is still there, the agent
- *  blocks it again, and the second time the engine sends it to `triage`,
- *  where the request can never be approved again.
- *
- *  THE THREE WAYS OUT, and none of them is "Approve":
- *   · Connect what's missing — the only thing that truly unblocks this.
- *   · Have it try again — the same unblock, but offered ONLY when the
- *     catalog says the connection is already in place: only then does it
- *     actually move things forward, and it's the only moment where spending
- *     the unblock doesn't throw it away.
- *   · I don't need it anymore — really closes the request (a final
- *     `reject`, the same write already used by "no, and don't propose it to
- *     me again"). It's the alternative to Archive, which only hides it from
- *     the kanban and leaves the agent thinking the task is still alive.
- *
- *  "Ask how it's going" was ruled out: we're the ones who can solve it, not
- *  the agent, so it would be a message into the void — another button that
- *  does nothing, which is exactly what the test complained about. */
-function BlockedCard({
-  a, connections, agentName, waited, expanded, onToggle,
-  askingReason, reason, setReason, rejecting, error,
-  onOpenReason, onCancelReason, onConfirmClose, onRetry,
-}: {
-  a: Approval;
-  connections: Connection[] | null;
-  agentName: string;
-  waited: string;
-  expanded: boolean;
-  onToggle: () => void;
-  askingReason: boolean;
-  reason: string;
-  setReason: (s: string) => void;
-  rejecting: boolean;
-  error?: string;
-  onOpenReason: () => void;
-  onCancelReason: () => void;
-  onConfirmClose: () => void;
-  onRetry: () => void;
-}) {
-  const ids = missingConnections(a.body);
-  const names = ids.map((id) => connectionLabel(id, connections));
-  const states = ids.map((id) => connections?.find((c) => c.id === id) ?? null);
-  // With no catalog, we don't claim it's connected: we offer to connect it,
-  // which is the thing that can't go wrong.
-  const connected = connections !== null && states.every((c) => c?.status === "connected");
-  const isOurFault = states.some((c) => c?.status === "blocked");
-  const firstMissing = ids.find((id, i) => states[i]?.status !== "connected") ?? ids[0];
-  const multiple = names.length > 1;
-  const list = multiple
-    ? `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`
-    : names[0] ?? "una conexión";
-
-  return (
-    <Card className={expanded ? "request-open scroll-mt-6" : ""}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-ink">{a.title}</h3>
-          {a.summary && (
-            <p className="mt-0.5 text-sm text-ink-soft line-clamp-2">{stripMarks(a.summary)}</p>
-          )}
-        </div>
-        {waited && (
-          <span className="shrink-0 whitespace-nowrap pt-0.5 text-[12px] text-ink-soft">
-            frenado {waited}
-          </span>
-        )}
-      </div>
-
-      <p className="mt-2 text-[13px] leading-snug text-ink">
-        {connected
-          ? `${list} ${multiple ? "ya están conectados" : "ya está conectado"}: `
-            + `${agentName} puede retomarlo.`
-          : isOurFault
-            ? `Para conectar ${list} falta un paso nuestro. Lo estamos viendo y te escribimos cuando esté.`
-            : `${agentName} no puede seguir con esto hasta que ${list} `
-              + `${multiple ? "estén conectados" : "esté conectado"}.`}
-      </p>
-
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={onToggle}
-        className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-semibold text-primary"
-      >
-        {expanded ? "Ocultar el detalle" : "Ver qué le falta"}
-        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
-      </button>
-
-      {/* The body carries the `connection:<id>` mention that the portal turns
-          into the connection's card, with its real status and its own
-          button: it's the same one seen in the chat, not a copy. */}
-      {expanded && a.body && (
-        <div className="mt-3 max-h-96 overflow-auto overscroll-contain rounded-lg bg-black/[0.03] p-3 [&>div]:text-[13px]">
-          <Markdown>{a.body}</Markdown>
-        </div>
-      )}
-
-      {error && (
-        <p className="mt-3 rounded-lg border border-c-coral bg-c-coral/40 px-3 py-2 text-[13px] text-c-coral-ink">
-          {error}
-        </p>
-      )}
-
-      {askingReason ? (
-        <div className="mt-3">
-          <p className="mb-1.5 text-[12.5px] leading-snug text-ink-soft">
-            Se cierra la tarea y {agentName} deja de intentarla. Contale por qué, para que
-            quede anotado: si más adelante lo necesitás, se lo pedís por el chat.
-          </p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              autoFocus
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && onConfirmClose()}
-              placeholder="Ya no me hace falta porque…"
-              className={inputCls + " flex-1"}
-            />
-            <div className="flex shrink-0 justify-end gap-2">
-              <Btn kind="ghost" size="sm" disabled={rejecting} onClick={onCancelReason}>
-                Cancelar
-              </Btn>
-              <Btn
-                kind="danger"
-                size="sm"
-                disabled={!reason.trim() || rejecting}
-                onClick={onConfirmClose}
-              >
-                {rejecting ? "Cerrando…" : "Cerrar la tarea"}
-              </Btn>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-          <span className="mr-auto">
-            <CopyLink label="Copiar el link de este pedido" />
-          </span>
-          <Btn kind="ghost" size="sm" onClick={onOpenReason}>
-            Ya no lo necesito
-          </Btn>
-          {connected ? (
-            <Btn kind="primary" size="sm" onClick={onRetry}>
-              <RotateCcw className="h-3.5 w-3.5" />
-              Que lo vuelva a intentar
-            </Btn>
-          ) : (
-            <Link
-              href={`/app/connections?connection=${encodeURIComponent(firstMissing ?? "")}`}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[13px] font-semibold text-white transition hover:bg-primary-dark"
-            >
-              <Plug className="h-3.5 w-3.5" />
-              {isOurFault ? "Ver cómo va" : `Conectar ${names[0] ?? "lo que falta"}`}
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          )}
-        </div>
-      )}
-    </Card>
-  );
-}
-
 export default function ApprovalsPage() {
   const [cfg, setCfg] = useState<PortalConfig | null>(null);
   const [approvals, setApprovals] = useState<Approval[] | null>(null);
@@ -550,11 +368,6 @@ export default function ApprovalsPage() {
   // Ticket detail by id: this is where what needs approving actually lives
   // (the skill leaves it as a comment). Fetched on expand, once only.
   const [details, setDetails] = useState<Record<string, TicketDetail | "loading" | "failed">>({});
-  // The connections catalog: only for blocks, which need to know whether
-  // what's missing is already in place (and what it's called in plain
-  // terms). If it doesn't arrive, the card doesn't claim to be connected
-  // and offers to connect it, which is the safe thing to do.
-  const [connections, setConnections] = useState<Connection[] | null>(null);
   // Which modules this agent has. Only one answer is read here: whether there
   // is a board to send the client to once she said yes. Until it arrives there
   // is none, which is the half that cannot point anywhere that does not exist.
@@ -590,18 +403,6 @@ export default function ApprovalsPage() {
     return () => clearInterval(t);
   }, [cfg, load]);
 
-  // Connections get re-read at the same frequency: the client goes off to
-  // connect Google and comes back, and the card has to find out on its own.
-  useEffect(() => {
-    if (!cfg) return;
-    const fetchConnections = () => getConnections(cfg)
-      .then((r) => setConnections(r?.connections ?? []))
-      .catch(() => { /* with no catalog the card still offers to connect */ });
-    fetchConnections();
-    const t = setInterval(fetchConnections, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [cfg]);
-
   useEffect(() => {
     if (!cfg) return;
     getManifest(cfg).then(setManifest).catch(() => { /* no board until it says so */ });
@@ -634,22 +435,15 @@ export default function ApprovalsPage() {
   const forgetResolved = (id: string) =>
     setResolved((prev) => prev.filter((x) => x.id !== id));
 
-  /** Approving and "have it try again" are the SAME write (`unblock`) and
-   *  two different things for the client: one authorizes something, the
-   *  other just resumes work that was stopped by a connection that's now in
-   *  place. What changes is the confirmation, which is what they read
-   *  afterward. */
-  const doApprove = (a: Approval, action: "approved" | "retry" = "approved") => {
+  const doApprove = (a: Approval) => {
     if (!cfg) return;
     setCardError(a.id, null);
     hide(a.id); // leaves the list right away; the refresh confirms it
-    markResolved({ id: a.id, title: a.title, action, when: new Date() });
+    markResolved({ id: a.id, title: a.title, action: "approved", when: new Date() });
     approve(cfg, a.id).catch((e) => {
       unhide(a.id);
       forgetResolved(a.id);
-      setCardError(a.id, action === "retry"
-        ? `No se pudo retomar: ${describeError(e)}`
-        : `No se pudo aprobar: ${describeError(e)}`);
+      setCardError(a.id, `No se pudo aprobar: ${describeError(e)}`);
     });
   };
 
@@ -681,30 +475,16 @@ export default function ApprovalsPage() {
 
   /** REJECTING IS ANSWERING, NOT CLOSING. One call, and the request stays.
    *
-   *  What used to be here made three non-atomic writes —comment, comment,
-   *  and moving the ticket to `ready`— and hid the card. Both things were
-   *  wrong, and the second was the serious one: `ready` SPENDS the ticket's
-   *  one and only unblock before the engine declares it a loop. The agent
-   *  would re-propose, get blocked again, hit the limit, and the request
-   *  would die — either in `triage` (where Approve answers "it got stuck")
-   *  or split by the auto-decomposer with the old body, which is how the
-   *  client ended up with an 8-hinge task in her queue after having
-   *  corrected it down to a 20.
-   *
-   *  Now: a `POST /reject` and nothing else. The adapter writes ONE comment
-   *  signed `cliente` and wakes the agent up; the ticket isn't touched and
-   *  stays `blocked`, meaning it stays in this list. The card keeps the
-   *  notice inside it and the agent's answer is going to show up right
-   *  there. The unblock is spent only once in the whole negotiation: on
-   *  approving. */
+   *  A `POST /reject` and nothing else: the engine records ONE comment signed
+   *  `cliente`, hands the "no" back to the agent, and the agent proposes again
+   *  on the same request, which stays in this list. The card keeps the notice
+   *  inside it and the agent's answer shows up right there. Only `final`
+   *  closes it, and only the client decides that. */
   const doReject = async (a: Approval) => {
     if (!cfg) return;
     const trimmedReason = reason.trim();
     if (!trimmedReason) return;
-    // On a block, the "no" is always final: there's no other version to ask
-    // for —what's missing is a connection, not a proposal—, so "I don't
-    // need it anymore" closes the task in the same write.
-    const final = closeRequest || isConnectionBlock(a.body);
+    const final = closeRequest;
     setCardError(a.id, null);
     setRejectingNow(a.id);
     try {
@@ -712,9 +492,9 @@ export default function ApprovalsPage() {
       setRejectingId(null);
       setReason("");
       setCloseRequest(false);
-      // With `final`, the adapter comments AND closes the ticket in the same
-      // write: the request leaves the list, and like anything else that
-      // gets resolved, it's confirmed on screen instead of vanishing.
+      // With `final` the request is closed in the same call: it leaves the
+      // list, and like anything else that gets resolved, it's confirmed on
+      // screen instead of vanishing.
       if (res?.closed || res?.in_approvals === false) {
         hide(a.id);
         markResolved({ id: a.id, title: a.title, action: "closed", when: new Date() });
@@ -730,10 +510,6 @@ export default function ApprovalsPage() {
       // Its own answer has to show up in "Lo que hablaron" right away, not
       // in 30 seconds: it's the proof the message got through.
       fetchDetail(a.id, true);
-      // If the adapter unblocked it anyway (an old one, or one that changes
-      // its mind), the request will leave the list on the next refresh
-      // alone. We don't guess it here.
-      if (res?.unblocked) load(cfg);
     } catch (e) {
       setCardError(a.id, `No se pudo rechazar: ${describeError(e)}`);
     } finally {
@@ -784,16 +560,6 @@ export default function ApprovalsPage() {
   };
 
   const visible = approvals ? approvals.filter((a) => !hidden.has(a.id)) : null;
-  // THREE different lists, not two. What the agent is asking your
-  // permission to do; what it can't do until something gets connected; and
-  // what you yourself requested, which is on our court. Mixing them put the
-  // same buttons under "send this email to a stranger", "missing Google
-  // access", and "connect my email", which for the client are three very
-  // different things — and on the middle one, Approve also breaks the request.
-  const blocked = visible?.filter((a) => isConnectionBlock(a.body)) ?? null;
-  const pending = visible?.filter(
-    (a) => !isClientRequest(a.body) && !isConnectionBlock(a.body)) ?? null;
-  const requested = visible?.filter((a) => isClientRequest(a.body)) ?? null;
 
   const agentName = loadAgentName() || "Tu agente";
   const board = Boolean(manifest?.modules?.kanban);
@@ -804,7 +570,7 @@ export default function ApprovalsPage() {
      `scrollY` at 0 and the card starting at 1055px with an 862 window,
      meaning the client landed looking at SOMEONE ELSE's request, with its
      own Approve/Reject pair up front. The helper already existed and Skills
-     and Connections use it: here it was one call.
+     uses it: here it was one call.
 
      The deps are the id and two booleans, never the list: it refreshes on
      its own every 30 seconds and with `approvals` here the page would jump
@@ -876,12 +642,7 @@ export default function ApprovalsPage() {
         )
       ) : (
         <div className="flex flex-col gap-3">
-          {pending !== null && pending.length === 0 && (
-            <p className="text-sm text-ink-soft">
-              Tu agente no te está pidiendo permiso para nada ahora mismo.
-            </p>
-          )}
-          {(pending ?? []).map((a) => {
+          {visible.map((a) => {
             const waited = timeAgo(a.created_at);
             const expanded = expandedId === a.id;
             const rejecting = rejectingId === a.id;
@@ -1280,66 +1041,6 @@ export default function ApprovalsPage() {
             );
           })}
 
-          {/* Blocked on something missing. Carries no Approve: there's
-              nothing to approve, and tapping it spends the request's only
-              unblock without moving anything. See `BlockedCard`. */}
-          {blocked !== null && blocked.length > 0 && (
-            <section className="mt-4">
-              <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
-                Frenado hasta que se conecte algo
-              </h2>
-              <div className="flex flex-col gap-2">
-                {blocked.map((f) => (
-                  <BlockedCard
-                    key={f.id}
-                    a={f}
-                    connections={connections}
-                    agentName={agentName}
-                    waited={timeAgo(f.created_at)}
-                    expanded={expandedId === f.id}
-                    onToggle={() => toggle(f.id)}
-                    askingReason={rejectingId === f.id}
-                    reason={reason}
-                    setReason={setReason}
-                    rejecting={rejectingNow === f.id}
-                    error={cardErrors[f.id]}
-                    onOpenReason={() => { setRejectingId(f.id); setReason(""); }}
-                    onCancelReason={() => { setRejectingId(null); setReason(""); }}
-                    onConfirmClose={() => doReject(f)}
-                    onRetry={() => doApprove(f, "retry")}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* What you yourself requested. Carries no Approve/Reject: you
-              don't have to authorize yourself — it's waiting on us. */}
-          {requested !== null && requested.length > 0 && (
-            <section className="mt-4">
-              <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
-                Lo que pediste
-              </h2>
-              <div className="flex flex-col gap-2">
-                {requested.map((p) => (
-                  <Card key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                    <span className="min-w-0 flex-1 text-sm font-semibold text-ink">{p.title}</span>
-                    {/* The word comes from the dictionary, not from here:
-                        it's the same one the kanban puts on the column for
-                        these same tickets. Handwritten on both screens, it
-                        had already drifted apart once. */}
-                    <Chip tone={COLUMN_LABEL.ours.tone}>
-                      <Clock className="h-3 w-3" /> {COLUMN_LABEL.ours.label}
-                    </Chip>
-                    <span className="w-full text-[12px] text-ink-soft">
-                      Lo pediste {timeAgo(p.created_at)}. Te escribimos cuando esté; no tenés
-                      que hacer nada.
-                    </span>
-                  </Card>
-                ))}
-              </div>
-            </section>
-          )}
         </div>
       )}
     </div>

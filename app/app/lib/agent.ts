@@ -389,72 +389,11 @@ export function requestedConnections(tickets: Ticket[] | null | undefined): Set<
   );
 }
 
-/* ── A block is NOT an approval ──────────────────────────────────────────────
-   A THIRD THING IN THE SAME QUEUE, AND IT'S THE OPPOSITE OF AN APPROVAL. In
-   `blocked` there aren't two kinds but three. The two known ones: the agent
-   asking for permission (yours) and the client having asked for something
-   (ours, `isClientRequest`). The third one was found by the blind test on
-   8/13: the agent blocked because it's MISSING something we have to connect.
-   Verbatim:
-
-     "I got 'Weekly contract review -- missing access to Google' with buttons
-      Reject / Correct and approve / Approve. Approve what? It didn't do
-      anything, it just got stuck. That's not a permission I have to grant,
-      it's a problem THEY have to fix for me."
-
-   And "got stuck" is literal, not an impression: approving IS `unblock`, and
-   a ticket has ONE useful unblock before the engine calls it a loop
-   (BLOCK_RECURRENCE_LIMIT = 2 -> `triage`, where it can't be approved anymore).
-   Since the cause is still there, the agent blocks it again right away:
-   pressing Approve on one of these doesn't move anything forward and spends
-   the request's only unblock.
-
-   THE ENGINE DOESN'T TELL THEM APART: verified in both labs, permission
-   requests and this kind of block share the same `block_kind = needs_input`
-   (and `/portal/approvals` doesn't even publish it). What DOES tell them
-   apart is what the agent WRITES: the SOUL tells it to put `connection:<id>`
-   alone on its own line when it's missing a connection
-   (`soul/04-language.md`), which is the mark the portal already turns into a
-   card. Measured over Tero's and Zaguán's 13 blocked requests: the mark shows
-   up in 1 -- exactly that one -- and in none of the 10 real permission
-   requests.
-   ─────────────────────────────────────────────────────────────────────────── */
-
-// Same expression as the chip in `lib/entities.tsx`, without the line anchor:
-// here it searches INSIDE the body.
-const CONNECTION_IN_TEXT = /\bconnection:([a-z0-9][a-z0-9-]*)/gi;
-
 /** The shape the `approval` skill gives a request: a markdown box ("if you
  *  approve / if you reject / why"). It's what tells a PROPOSAL apart from any
  *  other text from the agent. */
 export const looksLikeProposal = (s: string | null | undefined) =>
   /^\s*\|.*\|\s*$/m.test(s || "");
-
-/** The connections the ticket names as missing, by catalog id. */
-export function missingConnections(text: string | null | undefined): string[] {
-  const seen = new Set<string>();
-  // `exec` in a loop and not `matchAll`: this project's target is ES5 and the
-  // iterator doesn't compile. The regex is global, so `lastIndex` advances on
-  // its own -- and it's reset here so two calls in a row don't step on each
-  // other.
-  CONNECTION_IN_TEXT.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = CONNECTION_IN_TEXT.exec(text ?? "")) !== null) seen.add(m[1].toLowerCase());
-  return Array.from(seen);
-}
-
-/** Is this blocked request waiting for something to get CONNECTED, rather
- *  than a decision from the client? There's nothing to approve there.
- *
- *  WHEN IN DOUBT, IT'S AN APPROVAL. If the body carries the skill's box, the
- *  proposal wins even if it mentions a connection: stripping the buttons off
- *  a real permission request is worse than leaving them on a connection
- *  block -- the client ends up unable to authorize what they actually want. */
-export function isConnectionBlock(body: string | null | undefined): boolean {
-  if (isClientRequest(body)) return false;
-  if (looksLikeProposal(body)) return false;
-  return missingConnections(body).length > 0;
-}
 
 /* ── What the client "said", according to the machine ────────────────────────
    Approve-with-correction and reject leave a comment on the ticket signed

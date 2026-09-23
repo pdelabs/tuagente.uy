@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Download, File as FileIcon, X } from "lucide-react";
 import {
-  isClientRequest, getTicketDetail, getFileBytes, getFileText, getArtifact, authorLabel,
+  getTicketDetail, getFileBytes, getFileText, getArtifact, authorLabel,
   type ArtifactMeta, type PortalConfig, type TicketDetail,
 } from "./agent";
 import { EntityContext, isImage, type Entity } from "./entities";
@@ -30,8 +30,7 @@ const viewerAuthorLabel = (author: string) =>
 
 /** The same banner the Board puts on this task, in one line, so the two
  *  screens can't say different things about the same ticket. */
-const ticketStatus = (t: { status: string; body?: string | null }) =>
-  taskStatus(t.status, isClientRequest(t.body));
+const ticketStatus = (t: { status: string }) => taskStatus(t.status);
 import Artifact from "./Artifact";
 
 export function EntityProvider({ cfg, children }: { cfg: PortalConfig; children: ReactNode }) {
@@ -232,11 +231,7 @@ function EntityViewer({ cfg, entity, onClose }: {
                 {/* THE CHIP SAID `done`. In English and raw, one click away from
                     Activity. Now it says the same thing as the Board --
                     "Completado", "Esperando aprobación" -- because it comes
-                    from the same dictionary. AND WITH THE BODY: without it,
-                    the client's own request (blocked, as it's born) showed up
-                    here as "Esperando aprobación" -- its own -- while the
-                    Board, on that same ticket, said "Lo estamos viendo". The
-                    discriminant is `isClientRequest`. */}
+                    from the same dictionary. */}
                 {ticket && (
                   <Chip tone={ticketStatus(ticket.ticket).tone}>
                     {ticketStatus(ticket.ticket).label}

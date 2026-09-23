@@ -26,7 +26,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  isClientRequest,
   getActivity, getApprovals, getArtifacts, getConnections, getFiles, getFlows, getJobs,
   getManifest, getSessions, getTickets, loadConfig,
   type ArtifactMeta, type Connection, type CronJob, type Flow, type HttpError,
@@ -164,17 +163,11 @@ function dotCls(kind: string, status: string): string {
   return kind === "ticket" ? "bg-c-violet-ink" : "bg-ink-soft/50";
 }
 
-// THE SPLIT AND THE NAMES ARE THE KANBAN'S, read from `lib/labels.ts`. A copy
-// used to live here with FOUR columns against the kanban's five: the two
-// kinds of block —the one waiting for your ok and the request you yourself
-// made, which is waiting on us— fell together into one metric called
-// "Frenadas" ("Blocked"), a word that didn't exist on any other screen. The
-// blind test noted it like this: "On Home the column is called 'Frenadas',
-// on the kanban 'Lo estamos viendo', inside the card 'Frenada — espera tu
-// respuesta'." Same split, same words, so the numbers on the two screens can
-// be checked against each other.
-const columnOf = (t: Ticket): TaskColumn =>
-  columnForTask(t.status, isClientRequest(t.body));
+// THE SPLIT AND THE NAMES ARE THE KANBAN'S, read from `lib/labels.ts`: a
+// copy used to live here with its own word ("Frenadas") that no other screen
+// used. Same split, same words, so the numbers on the two screens can be
+// checked against each other.
+const columnOf = (t: Ticket): TaskColumn => columnForTask(t.status);
 
 // The kit's tone → the metric's background. It's paint, not a word.
 const BACKGROUND: Record<Tone, string> = {
@@ -561,17 +554,9 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
           // Only worth requesting if the adapter says there's something pending.
           request(on("connections") && (m?.pending_connections ?? 0) > 0, "las conexiones",
             () => getConnections(cfg).then((r) => arr<Connection>(r?.connections)), setConnections),
-          // WHAT'S WAITING FOR YOUR OK, not everything in the queue. The
-          // requests the client herself made ("connect my email") live in
-          // the same list and are waiting on US: their card says "you don't
-          // have to do anything". The filter got added to the sidebar
-          // badge and not here, and the home screen was left saying "3
-          // things waiting for your ok" with the menu showing 2, on the
-          // same screen. It's the same filter, in one single place, in
-          // `lib/agent.ts`.
           request(on("approvals"), "las aprobaciones",
             () => getApprovals(cfg)
-              .then((r) => arr<Approval>(r?.approvals).filter((a) => !isClientRequest(a.body))),
+              .then((r) => arr<Approval>(r?.approvals)),
             setApprovals),
           request(on("kanban"), "el tablero",
             // `work`, because this card is the TABLERO's summary and links to
@@ -634,13 +619,9 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const board = useMemo(() => {
     if (tickets.t !== "ready") return null;
     const counts: Record<TaskColumn, number> =
-      { todo: 0, inProgress: 0, waiting: 0, ours: 0, done: 0 };
+      { todo: 0, inProgress: 0, waiting: 0, done: 0 };
     for (const t of tickets.data) counts[columnOf(t)]++;
-    // The requests column only shows up if the client has ever asked for
-    // something, same as on the kanban: on a freshly installed agent it
-    // would be a fifth metric stuck at zero forever.
-    const columns = BOARD_COLUMNS.filter((c) => c.key !== "ours" || counts.ours > 0);
-    return { counts, columns, total: tickets.data.length };
+    return { counts, columns: BOARD_COLUMNS, total: tickets.data.length };
   }, [tickets]);
 
   const latest = useMemo(() => {

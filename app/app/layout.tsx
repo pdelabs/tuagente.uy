@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest, getApprovals, APPROVALS_EVENT,
-  isClientRequest, learnAgentUtcOffset, CONFIG_KEY, savedConfig,
+  learnAgentUtcOffset, CONFIG_KEY, savedConfig,
   credentialInUrl, sameSession,
   type PortalConfig, type Manifest,
 } from "./lib/agent";
@@ -363,15 +363,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       getManifest(cfg).then((m) => { setManifest(m); setOnline(true); })
         .catch(() => setOnline(false));
       getApprovals(cfg)
-        // The badge counts what's WAITING ON YOUR OK. Requests the client
-        // themselves made ("connect my email") are on the same list but are
-        // ours: their card says "you don't have to do anything" while the
-        // menu, at the same time, marked it as pending. Counting that is
-        // asking them to do something that isn't theirs to do. The SAME
-        // filter as Home and Approvals: one single one, in `lib/agent.ts`.
-        .then((r) => setPending(
-          (r.approvals ?? []).filter((a: { body?: string }) => !isClientRequest(a?.body)).length,
-        ))
+        // The badge counts what's WAITING ON YOUR OK.
+        .then((r) => setPending((r.approvals ?? []).length))
         .catch(() => setPending(0));
     };
     tick();

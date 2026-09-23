@@ -37,8 +37,6 @@ import {
   getTicketDetail,
   isTheClient,
   isTheSystem,
-  isConnectionBlock,
-  isClientRequest,
   isChannelTicket,
   readComment,
   authorLabel,
@@ -139,38 +137,24 @@ const DOT: Record<Tone, string> = {
 // the five was specific to the Board ("Lo estamos viendo"): Home had its own
 // split and its own name ("Frenadas", both classes lumped together), and the
 // blind test read three different names for the same status on three
-// screens. Now all five come from `BOARD_COLUMNS` and the split from
+// screens. Now they all come from `BOARD_COLUMNS` and the split from
 // `columnForTask`, so Home, the Board, the detail chip and the entity viewer
 // can't drift apart.
 const COLUMNS: { key: ColKey; label: string; dot: string }[] =
   BOARD_COLUMNS.map((c) => ({ key: c.key, label: c.label, dot: DOT[c.tone] }));
 
-// The request marker only redirects blocked ones: a request in progress or
-// finished is already in the column it belongs to, and there no word lies.
-const columnOf = (t: { status: string; body?: string | null }): ColKey =>
-  columnForTask(t.status, isClientRequest(t.body));
+const columnOf = (t: { status: string }): ColKey => columnForTask(t.status);
 
-/** A ticket's banner: the status, except when we're the ones it's waiting
- *  on. It's what the column and the detail chip show, so the link to the
- *  task never says something different from the board. */
-const statusOf = (t: { status: string; body?: string | null }) =>
-  taskStatus(t.status, isClientRequest(t.body));
+/** A ticket's banner. It's what the column and the detail chip show, so the
+ *  link to the task never says something different from the board. */
+const statusOf = (t: { status: string }) => taskStatus(t.status);
 
 // Transitions that make sense from the current status. Archiving is
 // separate: it's always offered, with confirmation.
 type Transition = { status: TargetStatus; label: string; inProgress: string; icon: LucideIcon };
 
-// THERE IS NOTHING TO MOVE ON THESE TWO, so they're offered no transition and
-// a line saying where they actually get resolved. A request the client made
-// themselves ("Conectar WhatsApp") is ours to answer, not hers to release; a
-// block from a missing connection has its cause still sitting there, and the
-// agent blocks it again right away. See `isConnectionBlock`.
-const noApproval = (t: { status: string; body?: string | null }) =>
-  t.status === "blocked" && (isClientRequest(t.body) || isConnectionBlock(t.body));
-
-function transitionsFor(t: { status: string; body?: string | null }): Transition[] {
+function transitionsFor(t: { status: string }): Transition[] {
   if (t.status === "blocked") {
-    if (noApproval(t)) return [];
     // "Destrabar" and not "Aprobar", because this button does NOT approve
     // anything: what it does is put the ticket back in "Por hacer". The
     // approval is its own object with its own `apr_` id and its own page, and
@@ -500,23 +484,13 @@ export default function PipelinePage() {
   }, [tickets, tenant, search]);
 
   const byColumn = useMemo(() => {
-    const m: Record<ColKey, Ticket[]> = { todo: [], inProgress: [], waiting: [], ours: [], done: [] };
+    const m: Record<ColKey, Ticket[]> = { todo: [], inProgress: [], waiting: [], done: [] };
     for (const t of visible) m[columnOf(t)].push(t);
     for (const k of Object.keys(m) as ColKey[]) {
       m[k].sort((a, b) => msOf(b.created_at) - msOf(a.created_at));
     }
     return m;
   }, [visible]);
-
-  // The requests column only exists if the client has ever asked for
-  // something: on a freshly installed agent it would be a fifth column,
-  // empty forever. It looks at the FULL list, not the filtered one -- if it
-  // depended on the search, the board would change shape while the client
-  // types.
-  const hasRequests = useMemo(
-    () => (tickets ?? []).some((t) => columnOf(t) === "ours"),
-    [tickets],
-  );
 
   // The detail wins (it brings the just-changed status); if it hasn't
   // arrived yet, the board's card is used to paint the modal without
@@ -628,7 +602,6 @@ export default function PipelinePage() {
     ...pending,
   ];
   const freeTenants = tenants.filter((t) => t !== NO_TENANT);
-  const columns = COLUMNS.filter((c) => c.key !== "ours" || hasRequests);
 
   return (
     <div className={wrap}>
@@ -705,11 +678,9 @@ export default function PipelinePage() {
             />
           ) : (
             <div
-              className={`grid items-start gap-4 md:grid-cols-2 ${
-                columns.length === 5 ? "xl:grid-cols-5" : "xl:grid-cols-4"
-              }`}
+              className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4"
             >
-              {columns.map((col) => (
+              {COLUMNS.map((col) => (
                 <section key={col.key} className="rounded-xl bg-black/[0.02] p-2">
                   {/* ONE LINE, ALWAYS THE SAME HEIGHT. With five columns and
                       the window between ~1280 and ~1378 px, "Esperando
@@ -1092,25 +1063,6 @@ export default function PipelinePage() {
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  {/* With no transition at all, the task can't be left with no
-                      way out: it says who unblocks it and -- when there's
-                      something to do -- where the button that actually works
-                      is. */}
-                  {noApproval(openTicket) && (
-                    <p className="mr-auto max-w-[26rem] text-[12px] leading-snug text-ink-soft">
-                      {isClientRequest(openTicket.body)
-                        ? "Esto lo pediste vos y lo estamos viendo nosotros: no hay nada que aprobar acá. Te escribimos cuando esté."
-                        : "Está frenada hasta que se conecte lo que le falta. "}
-                      {!isClientRequest(openTicket.body) && (
-                        <Link
-                          href={`/app/approvals?request=${encodeURIComponent(openTicket.id)}`}
-                          className="font-semibold text-primary transition hover:text-primary-dark"
-                        >
-                          Verlo en Aprobaciones
-                        </Link>
-                      )}
-                    </p>
-                  )}
                   <Btn
                     kind="ghost"
                     size="sm"
