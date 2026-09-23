@@ -35,32 +35,18 @@ client can buy the posts without the comments, and then publishing reads the env
 and the creator writes without the numbers. That is a real optional dependency
 and the only thing the default is for (`core/plugins.py`).
 
-AND A FLOW THIS PLUGIN NO LONGER SHIPS IS RETIRED FIRST, by slug and only if
-the installed copy is byte for byte the one we shipped (`SUPERSEDED` below).
-Renaming a curated flow is otherwise how a client ends up with two of them
-reading the same feed every fifteen minutes.
-
-THE CURATED FLOW IS COPIED INTO THE WORKSPACE AT LOAD, if it is not already
-there. `workspace/flows/<slug>/FLOW.md` is the only source of truth the engine
-has for what runs on its own (`core/flows.py`), and a flow that ships with a
-capability has to land there for the client to ever see it. NEVER OVERWRITTEN:
+THE CURATED FLOW IS COPIED INTO THE WORKSPACE BY THE ENGINE'S LOADER
+(`surfaces.flows`, `engine/core/plugins.py`), never over a file that is there:
 the file is the client's from the moment it exists — she pauses it, the agent
-edits it — and a restart that put our copy back would undo her.
+edits it. What this plugin keeps is its flow's HISTORY, as the two constants
+the loader reads: `SUPERSEDED`, a slug it no longer ships, and `UPGRADED`,
+earlier versions of one it still does. Renaming a curated flow is otherwise how
+a client ends up with two of them reading the same feed.
 """
-
-import hashlib
-from pathlib import Path
 
 import ig_graph
 import ig_store  # noqa: F401 — imported for the tables it creates on load
 import ig_tools
-
-from core import flows
-
-# The plugin's own root, two levels up from this file: `core/plugin.py` lives
-# inside `instagram/`, and the flow it ships is `instagram/flows/<slug>/FLOW.md`.
-ROOT = Path(__file__).resolve().parent.parent
-CURATED = "flows"
 
 # A FLOW THIS PLUGIN USED TO SHIP AND DOES NOT ANY MORE, by slug, with the
 # sha256 of the EXACT bytes it shipped. `comentarios-instagram` became `instagram`
@@ -76,27 +62,6 @@ SUPERSEDED = {
     "comentarios-instagram":
         "bebb5682fbde76b57b7e400c113498e0d2f32669373a14a787b0c88a3db5368a",
 }
-
-
-def retire_flows() -> None:
-    """The flows this plugin used to ship, taken out if nobody touched them."""
-    for slug, digest in SUPERSEDED.items():
-        installed = flows.file_of(slug)
-        if not installed.is_file():
-            continue
-        if hashlib.sha256(installed.read_bytes()).hexdigest() != digest:
-            print(f"instagram: workspace/flows/{slug}/ was edited, so it stays — it is "
-                  f"superseded by `instagram` and both will run until somebody picks one",
-                  flush=True)
-            continue
-        installed.unlink()
-        if not any(installed.parent.iterdir()):
-            installed.parent.rmdir()
-        # `flush`: a line that is block-buffered behind a container's pipe is a
-        # line nobody reads until the next hundred arrive.
-        print(f"instagram: retired workspace/flows/{slug}/, superseded by `instagram`",
-              flush=True)
-
 
 # A FLOW THIS PLUGIN STILL SHIPS, IN A VERSION IT NO LONGER SHIPS: slug, and the
 # sha256 of every copy we ever shipped under it. On 20/9/2026 `instagram` stopped
@@ -115,49 +80,7 @@ UPGRADED = {
 }
 
 
-def upgrade_flows() -> None:
-    """Our own untouched copies of a flow, brought up to the one we ship now."""
-    for slug, shipped in UPGRADED.items():
-        installed = flows.file_of(slug)
-        if not installed.is_file():
-            continue
-        current = (ROOT / CURATED / slug / flows.FLOW_FILE).read_bytes()
-        had = installed.read_bytes()
-        if had == current:
-            continue
-        if hashlib.sha256(had).hexdigest() not in shipped:
-            print(f"instagram: workspace/flows/{slug}/ was edited, so it stays as it is "
-                  f"— the version we ship now is a different one", flush=True)
-            continue
-        installed.write_bytes(current)
-        print(f"instagram: brought workspace/flows/{slug}/ up to the version we ship",
-              flush=True)
-
-
-def install_flows() -> None:
-    """The flows this plugin ships, into the workspace, if they are not there.
-
-    The smallest thing that is true, and the `mail` plugin does the same: the
-    kit is a read-only bind mount, the workspace is the client's, and there is
-    no install step between them on this engine. A file that is already there is
-    never touched — what the client edited is hers, and a flow turned off is
-    `status: paused`, which is still a file, so it is not copied back either.
-    It happens before the scheduler starts (`server/app.py` loads the plugins
-    first), so the first tick already sees it. If the engine grows a shared
-    helper for this, both plugins use it and this function goes.
-    """
-    for source in sorted((ROOT / CURATED).glob(f"*/{flows.FLOW_FILE}")):
-        target = flows.file_of(source.parent.name)
-        if target.exists():
-            continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(source.read_text())
-
-
 def register(engine) -> None:
-    retire_flows()
-    upgrade_flows()
-    install_flows()
     # WHAT FIRES THE FLOW: code that looks at the account with no model in it
     # (`ig_tools.watch`). The flow names it in its frontmatter, `event:`.
     engine.watcher(ig_tools.WATCHER, ig_tools.watch, every=ig_tools.WATCH_EVERY)

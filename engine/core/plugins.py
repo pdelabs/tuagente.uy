@@ -62,12 +62,17 @@ it is in the prompt only where that mechanism is installed — which is what a
 plugin is. The approval gate, the deliverable folders and the promises guard
 are three plugins of the kit, not three modules of the engine.
 
+CURATED FLOWS ARE `surfaces.flows`, and the loader copies them into
+`workspace/flows/` itself (`install_flows` below): no plugin writes its own
+FLOW.md into the client's workspace.
+
 SKILLS ARE STILL `surfaces.skills`, unless the plugin's module defines
 `SKILLS`: a list that overrides the manifest for this engine, and `[]` means it
 brings none here. The approval plugin's SKILL.md is Hermes-kanban prose and the
 flow plugin's drives a runner this engine does not have.
 """
 
+import hashlib
 import importlib.util
 import json
 import sys
@@ -84,7 +89,7 @@ from pydantic_ai.toolsets import (
 )
 from pydantic_ai_harness.subagents import SubAgent, SubAgents
 
-from . import config, delegation, watchers
+from . import config, delegation, flows, watchers
 
 ENTRY = "plugin.py"
 PROSE = "instructions.md"
@@ -352,6 +357,76 @@ _engine = Engine()
 _loaded: list[Plugin] = []
 
 
+# ── the curated flows a plugin ships ────────────────────────────────────────
+#
+# `surfaces.flows` names folders of the plugin (`flows/<slug>/`), each with a
+# FLOW.md, and on this engine a flow is a file in `workspace/flows/`
+# (`core/flows.py`). There is no install step between the kit and the
+# container — the kit is a read-only bind mount and the workspace is the
+# client's — so the loader copies each one in when the plugin loads, before the
+# scheduler's first tick, and NEVER over a file that already exists: from the
+# moment it is there it is hers to pause and the agent's to edit, and a paused
+# flow is `status: paused`, which is still a file.
+#
+# TWO KINDS OF HISTORY, both keyed on the sha256 of the EXACT bytes we shipped,
+# because the installed file has two owners and a hash is the only honest way
+# to tell whether the other one touched it. A plugin's `core/plugin.py` may
+# declare either, as a module constant:
+#
+#   SUPERSEDED = {slug: digest}       a flow it no longer ships at all. An
+#                                     untouched copy is deleted; an edited one
+#                                     stays, and the log says both now run
+#   UPGRADED = {slug: {digest, ...}}  earlier versions of a flow it still
+#                                     ships. An untouched copy is replaced by
+#                                     today's; an edited one stays as it is
+#
+# `print(..., flush=True)`: a line block-buffered behind a container's pipe is
+# a line nobody reads until the next hundred arrive.
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def retire_flows(plugin: Plugin) -> None:
+    for slug, shipped in getattr(plugin.module, "SUPERSEDED", {}).items():
+        installed = flows.file_of(slug)
+        if not installed.is_file():
+            continue
+        if digest(installed) != shipped:
+            print(f"{plugin.id}: workspace/flows/{slug}/ was edited, so it stays — the "
+                  f"plugin no longer ships it, and it runs until somebody removes it",
+                  flush=True)
+            continue
+        installed.unlink()
+        if not any(installed.parent.iterdir()):
+            installed.parent.rmdir()
+        print(f"{plugin.id}: retired workspace/flows/{slug}/, which it no longer ships",
+              flush=True)
+
+
+def install_flows(plugin: Plugin) -> None:
+    upgraded = getattr(plugin.module, "UPGRADED", {})
+    for folder in plugin.manifest["surfaces"].get("flows") or []:
+        source = plugin.root / folder / flows.FLOW_FILE
+        target = flows.file_of(source.parent.name)
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+            continue
+        current = source.read_bytes()
+        had = target.read_bytes()
+        if had == current or target.parent.name not in upgraded:
+            continue
+        if digest(target) not in upgraded[target.parent.name]:
+            print(f"{plugin.id}: workspace/flows/{target.parent.name}/ was edited, so it "
+                  f"stays as it is — the version we ship now is a different one", flush=True)
+            continue
+        target.write_bytes(current)
+        print(f"{plugin.id}: brought workspace/flows/{target.parent.name}/ up to the "
+              f"version we ship", flush=True)
+
+
 def import_surface(plugin_id: str, directory: Path):
     """`plugin.py`, with the folder it is in importable.
 
@@ -375,7 +450,9 @@ def load() -> list:
 
     A plugin's `instructions.md` goes into the prompt before anything its
     `register()` adds, so the file is the plugin's voice and the code's is the
-    exception.
+    exception. Its `surfaces.flows` land in the workspace right after, and all
+    of this happens before `server/app.py` starts the scheduler, so the first
+    tick already sees a curated flow.
 
     THE DELEGATES ARE COLLECTED AND MOUNTED ONCE, AT THE END. One `SubAgents`
     capability means one `delegate_task` tool and one listing in the prompt,
@@ -395,6 +472,8 @@ def load() -> list:
             if prose.is_file():
                 _engine.instructions(prose.read_text())
             plugin.module.register(_engine)
+        retire_flows(plugin)
+        install_flows(plugin)
         _loaded.append(plugin)
     if _engine.delegates:
         _engine.capability(

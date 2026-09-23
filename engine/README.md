@@ -580,17 +580,19 @@ chat. It was a `*/15` cron until 2026-09-20; `UPGRADED` in `plugin.py` is what
 moves an installed copy that nobody edited over to the new file, by hash, the
 same way `SUPERSEDED` retires a renamed one.
 
-The plugin COPIES THE FLOW INTO `workspace/flows/` WHEN IT LOADS, if it is
-not already there and never over what is. The kit is a read-only bind mount and the workspace is the client's, so
-there is no install step between them on this engine; a flow turned off is
+THE ENGINE COPIES THE FLOW INTO `workspace/flows/` WHEN THE PLUGIN LOADS, if it
+is not already there and never over what is: every plugin's `surfaces.flows`
+goes through one loader (`core/plugins.py`'s `install_flows`), `mail`'s too.
+The kit is a read-only bind mount and the workspace is the client's, so there
+is no install step between them on this engine; a flow turned off is
 `status: paused`, which is still a file, so a restart does not switch it back
-on. The `mail` plugin does the same thing in the same shape, and the day the
-engine grows one helper for it both plugins will use that instead.
+on.
 
 **AND A CURATED FLOW THAT GETS RENAMED IS RETIRED, NOT ORPHANED.** That flow was
-`comentarios-instagram` until the messages joined it, and a plugin that only ever
+`comentarios-instagram` until the messages joined it, and a loader that only ever
 copies would have left the client with two flows reading one account every
-fifteen minutes. So the plugin also carries `SUPERSEDED`: a slug it used to ship
+fifteen minutes. So the plugin also carries `SUPERSEDED`, which the loader
+reads (`retire_flows`), the same way as `UPGRADED`: a slug it used to ship
 with the **sha256 of the exact bytes it shipped**. An installed copy that still
 hashes to that is deleted; anything else — she paused it, the agent edited it —
 is left alone and says so in the log, because a file two people have a claim on
@@ -1135,7 +1137,8 @@ inbox flow; nothing else changes.
 (`CORE_FLOWS_MIN_MINUTES`) — and its run is one tool call away from doing
 nothing: with an empty mailbox `fetch_mail()` answers «Sin mails nuevos.» and
 the turn ends there, for about US$0.001. The FLOW.md is copied into
-`workspace/flows/` when the plugin loads and NEVER over a file that is already
+`workspace/flows/` by the engine's loader (`surfaces.flows`) when the plugin
+loads, and NEVER over a file that is already
 there: there is no install step between a read-only kit and the client's
 workspace, and what she edited is hers. Turning it off is `status: paused`,
 which is still a file, so a paused flow is not copied back either.

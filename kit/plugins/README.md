@@ -118,9 +118,10 @@ craft and a `flows/` surface — `instagram`, every fifteen minutes —
 and no page at all, because what it produces lands on pages that already exist:
 a ticket on the board, a request in Aprobaciones. On this engine a curated flow
 has no install step to travel through (the kit is a read-only mount and the
-workspace is the client's), so the plugin copies its own FLOW.md into
-`workspace/flows/` when it loads and never over one that is there — and when a
-flow of its own is RENAMED, it retires the old slug only if the installed copy
+workspace is the client's), so the engine's loader copies every plugin's
+`surfaces.flows` into `workspace/flows/` when the plugin loads and never over
+one that is there — and when a flow of a plugin is RENAMED, the loader retires
+the old slug (the plugin's `SUPERSEDED`) only if the installed copy
 is byte for byte the one it shipped, which is the only honest way to take back a
 file the client also has a claim on. It is also
 the first plugin that is HALF of a connection: `social` publishes to the

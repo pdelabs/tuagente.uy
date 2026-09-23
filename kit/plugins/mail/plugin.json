@@ -34,12 +34,12 @@
     "board's.",
     "",
     "THE CURATED FLOW IS COPIED INTO THE WORKSPACE AT LOAD, if it is not there.",
-    "On Hermes `install.sh` delivered a plugin's `surfaces.flows` to",
-    "`data/flows/<slug>/`; on this engine a flow is a file in",
-    "`workspace/flows/` and there is no install step between the kit and the",
-    "container -- the kit is a read-only bind mount. So the plugin copies its",
-    "own, once, and never over a file that exists: what the client edited is",
-    "hers, and turning it off is `status: paused`, which is still a file."
+    "On this engine a flow is a file in `workspace/flows/` and there is no",
+    "install step between the kit and the container -- the kit is a read-only",
+    "bind mount. So the engine's loader copies every plugin's `surfaces.flows`,",
+    "once, and never over a file that exists (engine/core/plugins.py): what the",
+    "client edited is hers, and turning it off is `status: paused`, which is",
+    "still a file."
   ],
   "requires": {
     "plugins": [
