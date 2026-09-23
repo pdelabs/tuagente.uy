@@ -376,10 +376,13 @@ export function FlowActions({ cfg, e, name, trigger, triggerType, onChange }: {
       </div>
 
       {/* A GREYED BUTTON SAYS WHY. It went grey with no reason given: the
-          owner tapped it, nothing happened, and she read it as broken. */}
+          owner tapped it, nothing happened, and she read it as broken. The
+          connection itself is named in `MissingConnection`, next to this on
+          both screens; here, only what it means for the button (and the
+          name again on hover). */}
       {blockedBy && !retryAbove && (
         <p className="text-[12.5px] leading-snug text-ink-soft">
-          Falta conectar {blockedBy} para probarlo.
+          Lo podés probar cuando esté hecha la conexión.
         </p>
       )}
 
