@@ -46,6 +46,7 @@ import {
 import { EntityProvider } from "../lib/EntityViewer";
 import { useOpenEntity } from "../lib/entities";
 import { loadAgentName } from "../lib/onboarding";
+import { readableFileName } from "../lib/names";
 import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, SUPPORT, Spinner, inputCls,
 } from "../lib/ui";
@@ -187,14 +188,20 @@ const is404 = (msg: string) => /^404\b/.test(msg);
 const SCRIPT_EXT = /\.(py|sh|bash|zsh|rb|pl|js|mjs|cjs|ts|tsx|jsx|ipynb)$/i;
 const INBOX_PREFIX = "entrada/";
 
-/** The file's name, with no date up front and no folder trailing behind. */
-const fileName = (path: string) => {
-  const base = (path || "").split("/").pop() || path;
-  return base.replace(/^\d{4}-\d{2}-\d{2}[-_ ]/, "").replace(/\.[a-z0-9]+$/i, "") || base;
-};
 
-/** What the agent wrote, as events. The scaffolding (its own scripts,
- *  `interno/`) stays out: what goes here is what the client recognizes as work. */
+// FOLDERS WHOSE FILES ALREADY HAVE THEIR OWN LINE. A post is `post.saved`
+// and its slides, a note is `memoria`: listing their files too put «Escribió
+// «post»», «Escribió «01»» and «Escribió «MEMORY»» in the owner's log -- the
+// storage, read aloud, next to the event that already said what happened.
+const COVERED_BY_EVENTS = ["interno/", "posteos/", "memoria/"];
+
+/** The flow a `flows/<slug>/FLOW.md` is: that file IS the flow, set up. */
+const FLOW_FILE = /^flows\/([^/]+)\/FLOW\.md$/;
+const BUSINESS_DRAFT = "negocio/borrador.md";
+
+/** What the agent wrote, as events. The scaffolding (its own scripts, what
+ *  another event already tells) stays out: what goes here is what the client
+ *  recognizes as work, named the way she'd name it. */
 function eventsFromFiles(
   files: { path: string; mtime: number }[] | null, utcOffset: number,
 ): ActivityEvent[] {
@@ -202,18 +209,30 @@ function eventsFromFiles(
   return files
     .filter((f) => {
       const p = f.path || "";
-      return p && !p.startsWith("interno/") && !SCRIPT_EXT.test(p);
+      return p && !COVERED_BY_EVENTS.some((d) => p.startsWith(d)) && !SCRIPT_EXT.test(p)
+        && !p.split("/").some((part) => part.startsWith("."))
+        && (!p.startsWith("flows/") || FLOW_FILE.test(p));
     })
     .slice(0, 60)
-    .map((f) => ({
-      ts: isoWithOffset(f.mtime * 1000, utcOffset),
-      kind: "archivo",
-      // Who put it there matters: `entrada/` is what the client uploads, and
-      // saying "your agent wrote" about the CSV she uploaded would be a cheap lie.
-      label: (f.path.startsWith(INBOX_PREFIX) ? "Recibió " : "Escribió ") + `«${fileName(f.path)}»`,
-      status: "",
-      href: `/app/files?file=${encodeURIComponent(f.path)}`,
-    }));
+    .map((f) => {
+      const flow = FLOW_FILE.exec(f.path)?.[1];
+      return {
+        ts: isoWithOffset(f.mtime * 1000, utcOffset),
+        kind: "archivo",
+        label: flow
+          ? `Armó el flujo «${readableFileName(flow)}»`
+          : f.path === BUSINESS_DRAFT
+            ? "Escribió el borrador de tu negocio"
+            // Who put it there matters: `entrada/` is what the client uploads,
+            // and saying "your agent wrote" about the CSV she uploaded would
+            // be a cheap lie.
+            : (f.path.startsWith(INBOX_PREFIX) ? "Recibió " : "Escribió ") + `«${readableFileName(f.path)}»`,
+        status: "",
+        href: flow
+          ? `/app/flows/${encodeURIComponent(flow)}`
+          : `/app/files?file=${encodeURIComponent(f.path)}`,
+      };
+    });
 }
 
 type RawSession = {

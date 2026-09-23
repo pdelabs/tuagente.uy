@@ -19,6 +19,7 @@ import { Chip, IconBtn, Modal, Spinner } from "./ui";
 import { CopyUrl, PARAM, urlFor } from "./routes";
 import Markdown from "./Markdown";
 import CodeBlock from "./CodeBlock";
+import { readableFileName } from "./names";
 
 // The third copy of "who wrote this" used to live here, and it was the one
 // that drifted the most: `portal` -- the audit-trail entry for a client
@@ -194,7 +195,9 @@ function EntityViewer({ cfg, entity, onClose }: {
   if (entity.kind === "post") return null; // its chip is a link to Posteos
 
   const title =
-    entity.kind === "ticket" ? ticket?.ticket.title ?? entity.id : entity.path;
+    // The file by its name, not its address: `negocio/borrador.md` on top of
+    // the modal was the folder and the extension, read aloud.
+    entity.kind === "ticket" ? ticket?.ticket.title ?? entity.id : readableFileName(entity.path);
   const loading = !err && (
     entity.kind === "ticket" ? !ticket
       : isPhoto || downloadOnly ? false
