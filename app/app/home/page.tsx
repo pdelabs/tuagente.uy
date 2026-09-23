@@ -414,7 +414,7 @@ function WhatItDoes({ flows, jobs }: { flows: Flow[]; jobs: CronJob[] | null }) 
                   <span className="font-semibold text-ink">{f.name}</span>
                   {" — "}
                   {f.missing_connection_labels.length > 0
-                    ? `Todavía no: espera que conectes ${enumerate(f.missing_connection_labels)}.`
+                    ? `Todavía no: falta conectar ${enumerate(f.missing_connection_labels)}. Nos lo pedís y lo conectamos.`
                     : "Todavía no: le falta una conexión."}
                 </p>
               </li>

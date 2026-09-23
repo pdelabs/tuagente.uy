@@ -67,7 +67,7 @@ export default function InboxIntro({ onOk }: IntroProps) {
             />
             <Row
               icon={Instagram}
-              who="@panaderia.rivas"
+              who="@tu.cliente"
               chip="Esperando tu ok"
               tone="bg-c-amber text-c-amber-ink"
             />
