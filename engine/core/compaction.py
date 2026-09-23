@@ -188,6 +188,12 @@ async def compact(ctx: RunContext, messages: list[ModelMessage]) -> list[ModelMe
         summary = await summarizer().run(transcript(head))
         text = summary.output
     compacted = [ModelRequest(parts=[UserPromptPart(content=SUMMARY_PREFIX + text)]), *tail]
+    # Its own run, so its tokens are not in the turn's `turn_usage`. Imported
+    # here and not at the top: importing it registers its capability, and the
+    # order `server/app.py` registers them in is compaction first.
+    from . import turn_usage
+
+    turn_usage.spend(ctx.deps.session_id, "resumir la conversación", turn_usage.cost(summary))
     db.append_event(
         "compaction",
         f"Resumí la conversación: {len(messages)} mensajes quedaron en {len(compacted)}",

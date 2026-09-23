@@ -9,6 +9,12 @@ to the provider's own delta so the two can be compared instead of trusted.
 
 A capability rather than a line in `core/session.py`: `after_run` is where the
 result and its usage exist, and the seam belongs to whoever wants the number.
+
+WHAT A TURN'S USAGE DOES NOT HOLD is a `spend` event (`spend()` below): a
+separate model call inside a capability — the memory extraction, the
+compaction summary — or a provider call a tool pays for, like an image. The
+two kinds together are this agent's money, and `GET /portal/usage` adds them
+up (`server/extra.py`). Neither is shown in Activity (`db.INTERNAL_KINDS`).
 """
 
 from dataclasses import dataclass
@@ -55,3 +61,20 @@ class TurnUsage(AbstractCapability):
 
 
 CAPABILITIES.append(TurnUsage())
+
+SPEND = "spend"
+
+
+def spend(session_id: str | None, what: str, cost_usd: float | None) -> None:
+    """Money this agent spent outside a turn's own usage. `what` says on what,
+    in the owner's words; `None` is a call nobody could price, which Uso counts
+    apart and never adds as zero."""
+    db.append_event(
+        SPEND, f"Gasto: {what}", "completed", session_id,
+        {"what": what, "cost_usd": cost_usd},
+    )
+
+
+def cost(result) -> float | None:
+    """A run's price, as `spend` takes it."""
+    return float(result.usage.cost) if result.usage.cost is not None else None

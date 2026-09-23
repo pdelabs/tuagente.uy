@@ -45,7 +45,7 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import RunContext
 from pydantic_ai_harness.memory import MemoryStore
 
-from core import config, db
+from core import config, db, turn_usage
 
 # Under this many characters a client turn is an acknowledgement, not a fact.
 MIN_CHARS = 30
@@ -159,6 +159,8 @@ class Extraction(AbstractCapability):
         current = await self.store.read(self.path, max_chars=MAX_NOTEBOOK)
         notebook = current.content if current else ""
         entries = await extractor().run(turn(prompt, answer, notebook))
+        # Its own run, so its tokens are not in the turn's `turn_usage`.
+        turn_usage.spend(ctx.deps.session_id, "anotar en la memoria", turn_usage.cost(entries))
 
         known = plain(notebook)
         fresh = [e for e in entries.output if e.text.strip() and plain(e.text) not in known]

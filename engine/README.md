@@ -1769,7 +1769,12 @@ still landing.
 | with tools | 4 | 8 | 0.000859 | 0.000859 | 0.0247 |
 
 The engine's own number is `usage.cost` (genai-prices), written per turn as a
-`turn_usage` event by `core/turn_usage.py`. It matched the provider's meter to
+`turn_usage` event by `core/turn_usage.py`, and it is what Uso shows:
+`GET /portal/usage` adds this agent's `turn_usage` and `spend` events by the
+business's day and month (`tests/test_usage.py`). The OpenRouter key's cap and
+charge travel apart, under `key`: the key is shared in the lab and can outlive
+an agent, and the QA agent, created that morning, showed «lleva gastados US$
+12,03» of a key others had used for weeks. It matched the provider's meter to
 the last decimal on both rows, which is §2's finding reproduced on another
 engine: the estimate IS the charge, and the polling harness is not needed
 again.
@@ -1806,8 +1811,8 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
   `core/turn_usage.py` writes `usage` off the main run's result, and the
   summary is a separate `Agent.run()` inside the `ProcessHistory` capability.
   Its tokens are on the `compaction` event instead, so a turn that compacted
-  cost more than its `turn_usage` row says. The provider's own meter, which is
-  what `GET /portal/usage` shows, has both.
+  cost more than its `turn_usage` row says. Its price is a `spend` event of its
+  own, which `GET /portal/usage` adds.
 - **A delegation that dies uncontained leaves a `delegation.started` with no
   end.** The harness emits the end event from inside the delegate tool, so an
   exception that propagates out of it (a shared usage limit, a cancellation, a
@@ -1818,8 +1823,14 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
 - **The extraction's tokens are not in the turn's usage either.** Same shape as
   the compaction summarizer above and for the same reason: it is a separate
   `Agent.run()` inside a capability, so a turn that noted something down cost
-  more than its `turn_usage` row says. The provider's meter — what
-  `GET /portal/usage` shows — has both.
+  more than its `turn_usage` row says. Its price is a `spend` event of its own,
+  which `GET /portal/usage` adds.
+- **An image is not in `GET /portal/usage` yet.** `generate_image` (the `image`
+  plugin) calls OpenRouter's images endpoint directly, and nothing writes what
+  it cost: the endpoint answers `usage.cost`, and the plugin has to hand it to
+  `turn_usage.spend(...)`. The same for the `business` researcher's run. Until
+  then the agent's total is low by every image — the direction the Uso screen
+  was once switched off for (`app/app/usage/page.tsx`).
 - **Two turns finishing at the same instant can collide on the notebook.** The
   memory store writes compare-and-swap, and the notebook is one file shared by
   every session: the second write of a tie reads a version that moved and

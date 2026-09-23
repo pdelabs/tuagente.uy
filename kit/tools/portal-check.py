@@ -213,8 +213,8 @@ def main():
         if not d.get("available"):
             raise AssertionError("declared but the provider is not answering: " + str(d.get("reason")))
         total = d.get("total_usd")
-        return ("USD — (the provider did not report the total)" if total is None
-                else f"USD {total:.4f} charged to this key")
+        return ("USD — (the agent did not report the total)" if total is None
+                else f"USD {total:.4f} spent by this agent")
     modcheck("usage", f"{A}/portal/usage", _usage_ok)
     modcheck("crons", f"{E}/api/jobs?include_disabled=true",
              lambda d, h: f"{len(d['jobs'])} jobs (includes paused)")

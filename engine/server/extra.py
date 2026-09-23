@@ -1,10 +1,11 @@
-"""The two tabs Wave 3 adds: Usage (what the key has spent) and Skills.
+"""The two tabs Wave 3 adds: Usage (what this agent has spent) and Skills.
 
 Both are read-only projections of something that already exists — the
-provider's own accounting and the kit's mounted plugins — so neither keeps
-state of its own.
+engine's own events and the kit's mounted plugins — so neither keeps state of
+its own.
 """
 
+import json
 import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -12,7 +13,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from fastapi import APIRouter
 
-from core import config, plugins
+from core import config, db, plugins, turn_usage
 from core.tools import skills
 
 router = APIRouter()
@@ -28,38 +29,76 @@ def usd(value) -> float | None:
     return float(value) if isinstance(value, (int, float)) else None
 
 
-@router.get("/portal/usage")
-def usage():
-    """What OpenRouter says this key has spent. No cache.
+# The events that carry what this agent spent: one per turn, and one per call
+# the turn's usage does not hold (`core/turn_usage.py`).
+SPENDING = ("turn_usage", turn_usage.SPEND)
 
-    `available: false` with a 200 when there is no key or the provider does not
-    answer: the portal hides the tab, and a money screen that errors reads far
-    worse to a client than a money screen that is not there. The reason travels
-    in Spanish because `app/app/usage/page.tsx` shows it to the client.
 
-    No cache on purpose. The adapter caches for five minutes; here the number
-    is also what `tests/cost.py` prices a turn against, and a cached total
-    turns a measurement into a guess.
+def spent(since: float) -> tuple[float, int]:
+    """What this agent spent since a moment, and how many calls had no price."""
+    total, unpriced = 0.0, 0
+    for kind in SPENDING:
+        for row in db.events_of(kind, since):
+            cost = json.loads(row["payload"] or "{}").get("cost_usd")
+            if cost is None:
+                unpriced += 1
+            else:
+                total += cost
+    return total, unpriced
+
+
+def key_figures() -> dict | None:
+    """What OpenRouter says about the KEY: its cap and what it has been charged.
+
+    A separate number on purpose. The key is shared in the lab and may outlive
+    an agent anywhere, so what it has been charged is not what THIS agent
+    spent: the QA agent, created that morning, showed «lleva gastados US$ 12,03»
+    of a key other agents had been using for weeks. `None` when there is no key
+    or the provider does not answer; the agent's own numbers do not depend on it.
     """
     key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not key:
-        return {"available": False, "reason": "este agente no tiene clave del proveedor"}
+        return None
     try:
         response = httpx.get(
             OPENROUTER_KEY_URL, headers={"Authorization": f"Bearer {key}"}, timeout=10
         )
         response.raise_for_status()
         data = response.json().get("data") or {}
-    except (httpx.HTTPError, ValueError) as exc:
-        return {"available": False, "reason": f"no pude preguntarle al proveedor: {exc}"}
+    except (httpx.HTTPError, ValueError):
+        return None
+    # A null limit is "no cap", which is not a cap of zero.
+    return {"limit_usd": usd(data.get("limit")), "usage_usd": usd(data.get("usage"))}
+
+
+@router.get("/portal/usage")
+def usage():
+    """What THIS agent has spent: today, this month and since it exists.
+
+    FROM ITS OWN EVENTS, NOT FROM THE KEY. Each turn writes what it cost
+    (`turn_usage`, genai-prices' number, which matched OpenRouter's meter to
+    the last decimal — `kit/notes/cost-and-engine-findings.md` §2), and every
+    call outside a turn's usage writes a `spend`. The days are the business's
+    (`config.TIMEZONE`). `unpriced` counts the calls nobody could price, so the
+    screen can say the total is a floor instead of calling them zero.
+
+    THE KEY'S FIGURES TRAVEL APART, under `key`, and `limit_usd` is no longer
+    at the top: next to this agent's total it read as «tu clave tiene un tope
+    de X y lleva gastados Y» with Y the agent's and X the key's.
+    """
+    now = datetime.now(ZoneInfo(config.TIMEZONE))
+    day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today, _ = spent(day.timestamp())
+    month, _ = spent(day.replace(day=1).timestamp())
+    total, unpriced = spent(0.0)
     return {
         "available": True,
-        "today_usd": usd(data.get("usage_daily")),
-        "month_usd": usd(data.get("usage_monthly")),
-        "total_usd": usd(data.get("usage")),
-        # A null limit is "no cap", which is not a cap of zero.
-        "limit_usd": usd(data.get("limit")),
-        "updated_at": datetime.now(ZoneInfo(config.TIMEZONE)).isoformat(),
+        "today_usd": round(today, 6),
+        "month_usd": round(month, 6),
+        "total_usd": round(total, 6),
+        "unpriced": unpriced,
+        "key": key_figures(),
+        "updated_at": now.isoformat(),
     }
 
 
