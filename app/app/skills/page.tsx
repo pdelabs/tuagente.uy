@@ -11,6 +11,7 @@
 //   (it also returns the plugins and `mcp`; this page draws neither)
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ChevronDown, Puzzle, RefreshCw } from "lucide-react";
 import {
   getInventory, loadConfig,
@@ -66,6 +67,15 @@ function humanize(raw: string): string {
   const words = parts.map((p) => (ACRONYMS.has(p) ? p.toUpperCase() : p));
   words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1);
   return words.join(" ");
+}
+
+/** «a, b y c», or «a, b, c y más» past three: what the collapsed row says it
+ *  holds, BUILT FROM WHAT IT HOLDS. It was a fixed «aprobaciones, planillas,
+ *  PDFs y más» over two skills that were neither (QA, 2026-09-23). */
+function listPreview(names: string[]): string {
+  const lower = names.map((n) => n.charAt(0).toLowerCase() + n.slice(1));
+  if (lower.length > 3) return `${lower.slice(0, 3).join(", ")} y más`;
+  return lower.length > 1 ? `${lower.slice(0, -1).join(", ")} y ${lower[lower.length - 1]}` : lower[0] ?? "";
 }
 
 /** Summaries broken or cut off by the engine: with no useful text, nothing is shown. */
@@ -191,7 +201,7 @@ export default function SkillsPage() {
       groups.push({
         key: "__tuagente",
         label: "De tuagente",
-        hint: "Sostienen las pantallas de tu portal (aprobaciones, archivos, posteos). Las mantenemos nosotros.",
+        hint: "Vienen con tu portal y las mantenemos nosotros.",
         items: kit,
       });
     }
@@ -261,10 +271,18 @@ export default function SkillsPage() {
             </p>
           </div>
 
+          {/* WHAT COUNTS HERE IS WHAT THE ENGINE CALLS CUSTOM (`source`), and a
+              flow is not a skill: «todavía no armamos nada» over a flow the
+              owner had just built with her agent read as the portal not
+              knowing her (QA, 2026-09-23). The line says what is empty and
+              where her flows are. */}
           {own.length === 0 ? (
             <p className="px-1 text-[13px] leading-snug text-ink-soft">
-              Todavía no armamos habilidades a medida para tu operación. La primera que
-              instalemos va a aparecer acá.
+              Todavía no hay habilidades hechas a medida para tu operación. Los trabajos
+              que armaste con tu agente están en{" "}
+              <Link href="/app/flows" className="font-semibold text-primary hover:text-primary-dark">
+                Flujos
+              </Link>.
             </p>
           ) : (
             <div className="flex flex-col gap-2">
@@ -312,11 +330,11 @@ export default function SkillsPage() {
                 Comunes del sistema
               </span>
               <span className="text-[12px] tabular-nums text-ink-soft">
-                {system.length} habilidades
+                {system.length === 1 ? "1 habilidad" : `${system.length} habilidades`}
               </span>
               {!showSystem && (
                 <span className="min-w-0 truncate text-[12px] text-ink-soft/80">
-                  · aprobaciones, planillas, PDFs y más
+                  · {listPreview(system.map((s) => s.displayName))}
                 </span>
               )}
             </button>
