@@ -108,7 +108,7 @@ function isFetchable(src: string): boolean {
 
 /* ── Pictures the ADAPTER serves ─────────────────────────────────────────── */
 
-/** A route of the adapter's, written into the markdown by the agent's own
+/** A `/portal/*` route, written into the markdown by the agent's own
  *  side: `/portal/posts/<id>/01.png`, which is how the approval card for
  *  `publish_instagram` shows the slides about to go out. Not a workspace path
  *  and not a URL the browser can fetch by itself — every byte needs the
@@ -182,9 +182,8 @@ function AdapterImage({ path, alt, title }: {
 
 /** Does the portal know how to open this?
  *
- *  The adapter only serves what's INSIDE the agent's workspace
- *  (`GET /portal/files/{path}`, relative to it). Measured against the lab's
- *  adapter (0.36):
+ *  The agent only serves what's INSIDE its workspace
+ *  (`GET /portal/files/{path}`, relative to it). Measured against the lab:
  *    /portal/files/entregables%2F…-2026.md          -> 200
  *    /portal/files/workspace%2Fentregables%2F…      -> 404  (the prefix gets stripped here)
  *    /portal/files/..%2FSOUL.md                     -> 404
@@ -491,7 +490,7 @@ function makeComponents(streaming: boolean): Components {
       const url = typeof src === "string" ? src : "";
       if (!url) return null;
 
-      // A route of the adapter's: the bytes need the bearer, so they are
+      // A `/portal/*` route: the bytes need the bearer, so they are
       // fetched and drawn from a Blob instead of going into an `<img src>`.
       if (isAdapterPath(url)) {
         return <AdapterImage path={url} alt={alt ?? ""} title={title} />;
@@ -499,7 +498,7 @@ function makeComponents(streaming: boolean): Components {
 
       // The agent writes paths from its own workspace (./out/plot.png):
       // requesting that from the portal gives a 404 and a broken-image icon.
-      // The image CAN be opened -- the viewer shows it by asking the adapter
+      // The image CAN be opened -- the viewer shows it by asking the agent
       // for the bytes -- so it gets the same chip as everything else: before,
       // it was a dead little box with the path inside, i.e. the banner the
       // agent had just made, in plain sight and with no way to look at it.

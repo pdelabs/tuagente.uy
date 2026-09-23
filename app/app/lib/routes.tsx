@@ -211,7 +211,7 @@ export function replaceInRoute(changes: Changes) {
  *     link doesn't have to be an animation: the client came to see one thing,
  *     it has to be there.
  *  2. A FIXED 150ms `setTimeout` IS A BET. The element appears once the
- *     adapter answers, and against a client's agent over the internet that
+ *     agent answers, and against a client's agent over the internet that
  *     takes longer than against the lab; at 150ms it might not exist yet and
  *     the effect got silently lost. Here it waits until it exists, with a cap.
  *

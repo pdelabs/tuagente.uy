@@ -66,7 +66,7 @@ const IS_TEXT_TABLE = /\.(csv|tsv)$/i;
  *
  *  Goes through `getFileBytes` and NOT through the already-loaded text:
  *  `res.text()` decodes as UTF-8 and on a binary every invalid byte turns
- *  into U+FFFD -- the file comes down broken even though the adapter sent it
+ *  into U+FFFD -- the file comes down broken even though the agent sent it
  *  intact. */
 async function downloadFile(cfg: PortalConfig, path: string) {
   const bytes = await getFileBytes(cfg, path);

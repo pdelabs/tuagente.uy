@@ -166,7 +166,7 @@ function transitionsFor(t: { status: string }): Transition[] {
   return [{ status: "done", label: "Marcar completado", inProgress: "Completando…", icon: Check }];
 }
 
-// `created_at` arrives from the adapter as epoch in SECONDS (int), though the
+// `created_at` arrives from the agent as epoch in SECONDS (int), though the
 // lib sometimes types it as a string. Whoever reads it is `momentOf`, the
 // portal's single gate: it accepts both forms and returns the instant (`ms`,
 // for sorting) already read on the business's clock.
@@ -199,8 +199,8 @@ function normalize(s: string): string {
 
 /** How the ticket ended (or why it got blocked), with what it left in writing.
  *
- *  Hermes stores the summary and the deliverables in the closing event; the
- *  adapter exposes them as `outcome`. Showing it up here is what avoids the
+ *  The summary and the deliverables travel in the ticket's `outcome`. Showing
+ *  it up here is what avoids the
  *  ugly case: a ticket that goes from "created" to "done" with no way for the
  *  client to know what was done or where it ended up. */
 function Outcome({ outcome, cfg, status }: {
@@ -592,7 +592,7 @@ export default function PipelinePage() {
     return <div className={wrap}><ErrorState message={error} onRetry={load} /></div>;
   if (tickets === null) return <div className={wrap}><Spinner /></div>;
 
-  // Most recent history first, however the adapter sends it.
+  // Most recent history first, however the agent sends it.
   const events = detail
     ? [...detail.events].sort((a, b) => msOf(b.created_at) - msOf(a.created_at))
     : [];

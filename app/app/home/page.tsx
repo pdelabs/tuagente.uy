@@ -3,8 +3,8 @@
 // Home: the first thing the client sees every day. Answers "what happened
 // and what needs my attention?" without forcing them through the eight tabs.
 //
-// PRINCIPIO CERO: serves any Hermes agent for any client. No specific
-// cases: it talks about "your agent", "tasks", "files".
+// PRINCIPLE ZERO: serves any agent of any client. No specific cases: it
+// talks about "your agent", "tasks", "files".
 //
 // Honesty, which is the rule in charge here:
 //   · Each block depends on its module in the manifest. Module off or

@@ -2,8 +2,9 @@
 
 // Chat module — thread centered like Open WebUI, with streaming, rich markdown,
 // a collapsible tool block, regenerate/edit, export and live scroll.
-// New conversation → /v1/chat/completions; resuming a session → Hermes'
-// native SSE (assistant.delta / tool.progress / run.completed).
+// New conversation → /portal/chat/stream (the OpenAI dialect); resuming a
+// session → /portal/sessions/{id}/chat/stream (assistant.delta / tool.started
+// / run.completed). Both dialects: `engine/server/sse.py`.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -52,8 +53,8 @@ const THINKING = "_thinking";
 
 /** Which face the agentito wears based on what it's doing RIGHT NOW.
  *
- *  The gesture tells the truth: it comes from the tool name Hermes reports
- *  via `tool.progress`, not a random rotation. Whatever doesn't fall into any
+ *  The gesture tells the truth: it comes from the tool name the stream
+ *  reports, not a random rotation. Whatever doesn't fall into any
  *  family goes to "doing", the generic gesture for being at work
  *  (terminal, execute_code, process, cronjob, send_message, delegate_task…). */
 function gestureFor(tool: string | undefined): AgentitoState {

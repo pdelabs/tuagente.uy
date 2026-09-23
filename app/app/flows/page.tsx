@@ -253,8 +253,8 @@ export default function FlowsPage() {
   const [flows, setFlows] = useState<Flow[] | null>(null);
   // The engine's scheduled tasks: they are the ones that know when the next
   // one runs, why the last one failed and whether it is paused. If the
-  // gateway does not answer, `jobs` stays null and the card falls back to the
-  // adapter's `last_run`: it says less, but still does not lie.
+  // jobs listing does not answer, `jobs` stays null and the card falls back to the
+  // flow's `last_run`: it says less, but still does not lie.
   const [jobs, setJobs] = useState<CronJob[] | null>(null);
   const [error, setError] = useState<Failure | null>(null);
   const [loading, setLoading] = useState(false);

@@ -171,7 +171,7 @@ function conversation(d: TicketDetail | undefined, proposal: string) {
   return (d?.comments ?? []).filter((c) => {
     const b = (c.body ?? "").trim();
     if (!b || b === proposal || isMarker(b)) return false;
-    // The adapter sometimes returns the same comment twice under different
+    // The agent sometimes returns the same comment twice under different
     // authors (`worker` and the agent's name): to the client it looks like
     // it spoke twice. We keep the first one.
     if (seen.has(b)) return false;
@@ -385,7 +385,7 @@ export default function ApprovalsPage() {
       list.sort((a, b) => toMs(a.created_at) - toMs(b.created_at));
       setApprovals(list);
       setLoadError(null);
-      // Clean up hidden ids the adapter no longer returns (action confirmed).
+      // Clean up hidden ids the agent no longer returns (action confirmed).
       setHidden((h) => {
         const alive = new Set(list.map((a) => a.id));
         const next = new Set(Array.from(h).filter((id) => alive.has(id)));
