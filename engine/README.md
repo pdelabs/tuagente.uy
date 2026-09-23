@@ -418,8 +418,9 @@ in `versions` is a 404, `..` included.
 Its three routes are the Posts tab: `GET /portal/posts` (newest first, each
 image expanded to `{name, bytes, url}`), `GET /portal/posts/{id}` and
 `GET /portal/posts/{id}/{file}`, which answers the bytes with a real
-`Content-Type` and an inline `Content-Disposition`. The bytes are served here
-and not by `/portal/files`, which answers `text/plain` for everything it has.
+`Content-Type` and an inline `Content-Disposition`. The Posts tab reads them
+here, where the allowlist is the post's own listing, rather than through
+`/portal/files`.
 `engine.module("posts", True)` is what makes the portal draw the tab.
 
 ```bash
@@ -922,6 +923,22 @@ message both arrive that way. **A turn that breaks says so**: one assistant
 line, `No pude responder: <reason>`, persisted, written to Activity as an
 `error` event and streamed in both dialects; then the exception goes on to the
 log with its stack.
+
+## Files
+
+`GET /portal/files` lists the workspace (`path`, `size`, `mtime`) and
+`GET /portal/files/{path}` answers the file's BYTES — the Files tab's preview,
+its download and the chat's file chips all go through it. It was `read_text()`
+until 2026-09-23, and every PNG, PDF and spreadsheet was a 500. Pictures, PDFs,
+audio, video, zip and the Office types go out as what they are; everything
+else as `text/plain; charset=utf-8` with `nosniff`, including html and svg,
+because a file the agent wrote is not a page of ours. The portal names the type
+from the extension and never from the header. Outside the workspace or not
+there is a 404, in Spanish.
+
+```bash
+python3 engine/tests/test_files.py      # free, a second
+```
 
 ## Gates
 

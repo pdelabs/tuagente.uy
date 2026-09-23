@@ -15,12 +15,13 @@ its manifest already said.
 
 import base64
 import binascii
+import mimetypes
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from core import config, db, identity, notify, plugins, session
 from core.tools.workspace import under
@@ -127,9 +128,37 @@ def files():
     return {"files": listed}
 
 
+# What is served as what it is. Everything else goes out as `text/plain`,
+# including every type a browser would RUN — html, svg, xml, js — because this
+# route is on the agent's origin and a file the agent wrote is not a page of
+# ours. The portal never reads the header to decide how to draw a file: it
+# names the type from the extension and builds its own Blob out of the bytes
+# (`lib/agent.ts`'s `getFileBytes`), so the header is for curl and for a
+# browser's sniffing, and `portal-check` asserts the text half of it.
+AS_ITSELF = (
+    "image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp",
+    "application/pdf", "audio/", "video/", "application/zip",
+    "application/vnd.openxmlformats-officedocument.", "application/vnd.ms-excel",
+    "application/msword", "application/vnd.ms-powerpoint",
+)
+TEXT = "text/plain; charset=utf-8"
+
+
+def media_type(path: Path) -> str:
+    guessed = mimetypes.guess_type(path.name)[0] or ""
+    return guessed if guessed.startswith(AS_ITSELF) else TEXT
+
+
 @router.get("/portal/files/{path:path}")
-def file_text(path: str):
-    """A path that is not a file inside the workspace is a 404 — a name that is
+def file_bytes(path: str):
+    """The file's BYTES, never its decoded text.
+
+    It was `read_text()`, and every PNG, PDF and spreadsheet in the workspace
+    was a 500 — on the one route the Files tab's preview, its download and the
+    chat's file chips all go through. A text file is the same bytes it always
+    was, as `text/plain`.
+
+    A path that is not a file inside the workspace is a 404 — a name that is
     not there and a `../` that tries to leave read the same from outside, which
     is the point. The portal reads a 404 as "not here" and a 500 as an outage.
     """
@@ -140,7 +169,11 @@ def file_text(path: str):
         found = False
     if not found:
         raise HTTPException(404, NO_FILE.format(path=path))
-    return PlainTextResponse(target.read_text(), media_type="text/plain; charset=utf-8")
+    # `nosniff`: a `text/plain` the browser decides is html after all is the
+    # one thing the fallback above exists to stop.
+    return FileResponse(
+        target, media_type=media_type(target), headers={"X-Content-Type-Options": "nosniff"}
+    )
 
 
 @router.post("/portal/upload")
