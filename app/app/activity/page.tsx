@@ -37,6 +37,7 @@ import {
   getActivity,
   getFiles,
   getJobs,
+  getPosts,
   getSessions,
   getTickets,
   loadConfig,
@@ -55,7 +56,8 @@ import {
   momentOf, channelLabel, eventLabel,
 } from "../lib/labels";
 import {
-  isHumanConversation, kindLabel, plainLabel, type AgentEvent,
+  eventHref, isHumanConversation, kindLabel, plainLabel, postTitlesOf,
+  type AgentEvent, type PostTitles,
 } from "../lib/events";
 
 type ActivityEvent = AgentEvent;
@@ -193,7 +195,14 @@ const INBOX_PREFIX = "entrada/";
 // their files too put «Escribió «post»», «Escribió «01»» and «Escribió
 // «MEMORY»» in the owner's log -- the storage, read aloud, next to the event
 // that already said what happened.
-const COVERED_BY_EVENTS = ["interno/", "posteos/", "memoria/", "flows/"];
+//
+// `imagenes/` is where `generate_image` leaves each picture and its sidecar:
+// raw material for a post's slides, which already have their own line. Listed,
+// they read «Escribió «2»» and «Escribió «2026-09-23-2.json»» (QA,
+// 2026-09-23). The engine is also taking `flows/`, the sub-agents' notebooks
+// and the sidecars out of `/portal/files`; this list stays the portal's own
+// word on it.
+const COVERED_BY_EVENTS = ["interno/", "posteos/", "memoria/", "flows/", "imagenes/"];
 
 const BUSINESS_DRAFT = "negocio/borrador.md";
 
@@ -298,8 +307,8 @@ function Caption({ children }: { children: ReactNode }) {
 }
 
 /** One line of the history. With a ticketId or an href, the whole row opens something. */
-function Row({ ev, ticketId, times = 1, agentName }: {
-  ev: ActivityEvent; ticketId?: string; times?: number; agentName: string;
+function Row({ ev, ticketId, times = 1, agentName, titles }: {
+  ev: ActivityEvent; ticketId?: string; times?: number; agentName: string; titles: PostTitles;
 }) {
   const open = useOpenEntity();
   const body = (
@@ -309,7 +318,7 @@ function Row({ ev, ticketId, times = 1, agentName }: {
       </span>
       <span className={`mt-1.5 h-2 w-2 shrink-0 self-start rounded-full ${dotCls(ev.kind, ev.status)}`} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm text-ink">{plainLabel(ev.label)}</span>
+        <span className="block truncate text-sm text-ink">{plainLabel(ev.label, titles)}</span>
       </span>
       <span className="flex shrink-0 items-center gap-2 self-start pt-0.5">
         <Chip>{kindLabel(ev.kind)}</Chip>
@@ -381,6 +390,8 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
   const [files, setFiles] = useState<{ path: string; mtime: number }[] | null>(null);
   const [sessions, setSessions] = useState<RawSession[] | null>(null);
   const [jobs, setJobs] = useState<CronJob[] | null>(null);
+  // A post's name with its accents, where the plugin gives one.
+  const [titles, setTitles] = useState<PostTitles>({});
   const hasData = useRef(false);
 
   const [kind, setKind] = useState<string | null>(null);
@@ -435,6 +446,7 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
       .then((r) => setSessions(Array.isArray(r?.data) ? r.data : []))
       .catch(() => {});
     getJobs(cfg).then((r) => setJobs(Array.isArray(r?.jobs) ? r.jobs : [])).catch(() => {});
+    getPosts(cfg).then((r) => setTitles(postTitlesOf(r.posts ?? []))).catch(() => {});
   }, [cfg]);
 
   useEffect(() => { load(); }, [load]);
@@ -473,7 +485,7 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
 
   const all = useMemo(
     () => [
-      ...(events ?? []),
+      ...(events ?? []).map((e) => ({ ...e, href: eventHref(e) })),
       ...eventsFromFiles(files, utcOffset),
       ...eventsFromSessions(sessions, utcOffset),
     ].sort((a, b) => msOf(b.ts) - msOf(a.ts)),
@@ -504,10 +516,10 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
     const q = norm(search);
     return sortedEvents.filter((e) => {
       if (!inRange(e.ts, range)) return false;
-      if (q && !norm(plainLabel(e.label)).includes(q)) return false;
+      if (q && !norm(plainLabel(e.label, titles)).includes(q)) return false;
       return true;
     });
-  }, [sortedEvents, range, search]);
+  }, [sortedEvents, range, search, titles]);
 
   // WHAT EACH NUMBER COUNTS. Each chip says how many events you'd see IF YOU
   // TAPPED IT: that's why the "Type" row is counted over whatever the status
@@ -772,6 +784,7 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
                             times={times}
                             ticketId={idFor(ev)}
                             agentName={agentName}
+                            titles={titles}
                           />
                         ))}
                       </ul>

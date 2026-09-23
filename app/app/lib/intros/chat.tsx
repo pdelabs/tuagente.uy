@@ -86,7 +86,7 @@ export default function ChatIntro({ onOk }: IntroProps) {
       <div className="mt-7 grid gap-4 md:grid-cols-2">
         <Point icon={Plug} title="Usa lo que le conectaste">
           Mira tus sistemas conectados mientras te responde, y vas viendo qué está
-          haciendo. Las conexiones las dejamos andando nosotros.
+          haciendo. Si le falta conectar algo, nos lo pedís y lo conectamos nosotros.
         </Point>
         <Point icon={History} title="Las conversaciones quedan">
           Se guardan y las retomás cuando quieras: están listadas al costado.

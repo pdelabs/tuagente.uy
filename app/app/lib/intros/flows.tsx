@@ -27,7 +27,9 @@ export default function FlowsIntro({ onOk }: IntroProps) {
       <Title>Los trabajos que tu agente hace por vos</Title>
       <Lead>
         Un flujo es un trabajo con nombre: pasa solo, siempre de la misma
-        manera, y sus resultados quedan juntos acá. Sin configurar nada.
+        manera, y sus resultados quedan juntos acá. Lo armás hablando con tu
+        agente, sin pantallas de configuración; si necesita una conexión, nos
+        la pedís y la conectamos nosotros.
       </Lead>
 
       {/* Left-aligned with the title: with no white box, centering the block

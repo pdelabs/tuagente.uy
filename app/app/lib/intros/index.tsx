@@ -34,20 +34,36 @@ export const INTROS: Record<string, ComponentType<IntroProps>> = {
   posts: PostsIntro,
 };
 
+function stored(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+/** Marks a welcome screen seen from outside the shell. Onboarding's chat uses
+ *  it: that conversation IS the Chat tab's first use, and its closing line
+ *  promises «Esta charla te espera en el chat» — not a welcome screen over it. */
+export function markIntroSeen(key: string) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ ...stored(), [key]: true }));
+  } catch {
+    /* private mode */
+  }
+}
+
 export function useIntroGate() {
   const [seen, setSeen] = useState<Record<string, boolean> | null>(null);
 
-  useEffect(() => {
-    try {
-      setSeen(JSON.parse(localStorage.getItem(KEY) || "{}"));
-    } catch {
-      setSeen({});
-    }
-  }, []);
+  useEffect(() => { setSeen(stored()); }, []);
 
+  // MERGED WITH WHAT IS STORED, not written from this hook's own copy: that
+  // copy was read once, at mount, and writing it back erased whatever
+  // `markIntroSeen` had added since.
   const dismiss = (key: string) => {
     setSeen((prev) => {
-      const next = { ...(prev ?? {}), [key]: true };
+      const next = { ...stored(), ...(prev ?? {}), [key]: true };
       try {
         localStorage.setItem(KEY, JSON.stringify(next));
       } catch {

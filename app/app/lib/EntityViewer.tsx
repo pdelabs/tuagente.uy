@@ -7,10 +7,11 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Download, File as FileIcon, X } from "lucide-react";
 import {
-  getTicketDetail, getFileBytes, getFileText, authorLabel,
+  getTicketDetail, getFileBytes, getFileText, getPosts, authorLabel,
   type PortalConfig, type TicketDetail,
 } from "./agent";
-import { EntityContext, isImage, type Entity } from "./entities";
+import { EntityContext, PostTitlesContext, isImage, type Entity } from "./entities";
+import { postTitlesOf, type PostTitles } from "./events";
 import { taskStatus, dateTime } from "./labels";
 import Spreadsheet, { CsvPreview } from "./Spreadsheet";
 import { Btn } from "./ui";
@@ -35,10 +36,22 @@ const ticketStatus = (t: { status: string }) => taskStatus(t.status);
 
 export function EntityProvider({ cfg, children }: { cfg: PortalConfig; children: ReactNode }) {
   const [open, setOpen] = useState<Entity | null>(null);
+  // The posts' names, for the chips: once per screen, and an agent without
+  // the social plugin simply has none (the chip falls back to the slug).
+  const [titles, setTitles] = useState<PostTitles>({});
+  useEffect(() => {
+    let alive = true;
+    getPosts(cfg)
+      .then((r) => { if (alive) setTitles(postTitlesOf(r.posts ?? [])); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [cfg]);
   return (
     <EntityContext.Provider value={setOpen}>
-      {children}
-      {open && <EntityViewer cfg={cfg} entity={open} onClose={() => setOpen(null)} />}
+      <PostTitlesContext.Provider value={titles}>
+        {children}
+        {open && <EntityViewer cfg={cfg} entity={open} onClose={() => setOpen(null)} />}
+      </PostTitlesContext.Provider>
     </EntityContext.Provider>
   );
 }

@@ -18,10 +18,10 @@
 // client tapped it and waited for posts that were never scheduled. Each one
 // says «Te propongo armarlo», and no card promises a count or a cadence.
 //
-// Each one says whether it needs a connection. Promising something the agent
-// can't do yet is the worst way to start a relationship where they're about
-// to trust you with the work -- and it nudges them toward Connections, which
-// is where we want the client to go anyway.
+// EVERY CARD WHOSE JOB NEEDS A CONNECTION SAYS SO. Promising something the
+// agent can't do yet is the worst way to start a relationship where they're
+// about to trust you with the work. A card with no `missing` is one the agent
+// can do with what every agent has (the web, its files, the chat).
 
 import Link from "next/link";
 
@@ -52,6 +52,10 @@ export const FLOW_EXAMPLES: FlowExample[] = [
     title: "Reseñas de tu negocio",
     description: "Te propongo armarlo: miro las que aparecen y te aviso solo cuando hay una mala.",
     prompt: "Quiero que mires las reseñas nuevas de mi negocio y me avises solo cuando haya una mala. Preguntame lo que te falte para armarlo.",
+    // The reviews live on the business's Google profile, and reading them
+    // takes that connection: the card said nothing while Mercado Pago's and
+    // WhatsApp's did, and the flow it built waited on it (QA, 2026-09-23).
+    missing: "tu ficha de Google",
   },
   {
     title: "Precios de proveedores",

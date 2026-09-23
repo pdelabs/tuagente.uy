@@ -20,10 +20,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp } from "lucide-react";
-import { chatStream, type ChatMessage, type PortalConfig } from "./agent";
+import {
+  chatStream, newSessionOf, sessionIds, type ChatMessage, type PortalConfig,
+} from "./agent";
 import { actionFor } from "./labels";
 import Markdown from "./Markdown";
 import { Btn, inputCls } from "./ui";
+import { rememberConversation } from "./routes";
+import { markIntroSeen } from "./intros";
 
 export default function ChatOnboarding({ cfg, request, agentName, onDone, returningTo }: {
   cfg: PortalConfig;
@@ -50,6 +54,36 @@ export default function ChatOnboarding({ cfg, request, agentName, onDone, return
   const [seconds, setSeconds] = useState(0);
   const inFlight = useRef(false);
   const box = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
+  // Which conversation this is on the agent's side, once known.
+  const conversation = useRef<string | null>(null);
+
+  // THE CURSOR GOES AFTER THE REQUEST, NOT BEFORE IT. `autoFocus` left it at
+  // the start of the prefilled text, and the first thing the owner typed —
+  // «solo Instagram» — landed in front of «Quiero que…».
+  useEffect(() => {
+    const el = field.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+
+  /** «ESTA CHARLA TE ESPERA EN EL CHAT» IS A PROMISE, and it used to be half
+   *  true: the conversation was on the agent, but the Chat tab opened on its
+   *  welcome screen and then on an empty «Nueva conversación». Now Chat
+   *  reopens it (`rememberConversation`) and its welcome screen is spent. */
+  const keepForChat = async (before: Set<string>, first: string) => {
+    for (let i = 0; i < 8 && !conversation.current; i++) {
+      const id = await newSessionOf(cfg, before, first).catch(() => null);
+      if (id) {
+        conversation.current = id;
+        rememberConversation(id);
+        markIntroSeen("chat");
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 1_000));
+    }
+  };
 
   const run = async (text: string, base: ChatMessage[]) => {
     if (inFlight.current || !text.trim()) return;
@@ -59,6 +93,7 @@ export default function ChatOnboarding({ cfg, request, agentName, onDone, return
     setDoing(null);
     setSeconds(0);
     const history: ChatMessage[] = [...base, { role: "user", content: text }];
+    const first = history.find((m) => m.role === "user")?.content ?? text;
     setMsgs([...history, { role: "assistant", content: "" }]);
 
     // Deltas are painted grouped per frame: the markdown gets fully
@@ -78,7 +113,10 @@ export default function ChatOnboarding({ cfg, request, agentName, onDone, return
     };
 
     try {
-      const final = await chatStream(cfg, history, paint, (tool) => setDoing(tool));
+      const before = conversation.current ? null : await sessionIds(cfg);
+      const final = await chatStream(
+        cfg, history, paint, (tool) => setDoing(tool), undefined,
+        () => { if (before) keepForChat(before, first); });
       if (frame) cancelAnimationFrame(frame);
       setMsgs([...history, { role: "assistant", content: final }]);
     } catch (e) {
@@ -180,12 +218,12 @@ export default function ChatOnboarding({ cfg, request, agentName, onDone, return
       )}
       <div className={`flex items-end gap-2 ${msgs.length > 0 ? "mt-3" : ""}`}>
         <textarea
+          ref={field}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendInput(); }
           }}
-          autoFocus={msgs.length === 0}
           disabled={sending}
           rows={msgs.length === 0 ? 4 : 1}
           placeholder="Contestale…"

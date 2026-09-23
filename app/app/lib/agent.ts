@@ -850,6 +850,9 @@ export type Post = {
   created_at: string;
   /** The slug of the flow that produced it, if a flow did. */
   flow: string | null;
+  /** Its name, with accents, as the social plugin gives it. Optional: posts
+   *  saved before the field existed have only the slug (`postTitle`). */
+  title?: string | null;
   /** WHERE IT ENDED UP, once the client approved publishing it. Written by
    *  the social plugin's `publish_instagram` and never by the portal: the tab
    *  reads this, it doesn't publish. Absent on everything that hasn't gone
@@ -921,6 +924,37 @@ export const getJobs = (c: PortalConfig) =>
 export const jobAction = (c: PortalConfig, id: string, action: "pause" | "resume" | "run") =>
   post<{ job?: CronJob }>(c.endpoint, `/api/jobs/${encodeURIComponent(id)}/${action}`, c);
 export const getSessions = (c: PortalConfig) => get<any>(c.endpoint, "/api/sessions", c);
+
+/** The ids of the conversations the agent has right now: what a new one is
+ *  told apart from (`newSessionOf`). */
+export const sessionIds = async (c: PortalConfig): Promise<Set<string>> =>
+  new Set(((await getSessions(c)).data ?? []).map((s: { id: string }) => s.id));
+
+/** Which session a NEW conversation's first turn opened.
+ *
+ *  `/portal/chat/stream` (the OpenAI dialect) carries no session id back. The
+ *  engine opens the session and writes the client's message as its preview
+ *  the moment it accepts the turn (`core/session.py`, `run_turn`), so the new
+ *  conversation is the one that was NOT there before the send (`before`) and
+ *  whose preview is this message. Matching on the preview alone can pick an
+ *  older one: Posteos' «Arreglar esta imagen» writes the same sentence every
+ *  time for the same slide.
+ *
+ *  `null` while it is not listed yet: the caller asks again.
+ *
+ *  PENDING: the engine should send the session id in that dialect; then this
+ *  goes. */
+export async function newSessionOf(
+  c: PortalConfig, before: Set<string>, firstMessage: string,
+): Promise<string | null> {
+  const preview = firstMessage.trim().slice(0, 200);
+  const list: { id: string; preview?: string | null; last_active: number }[] =
+    (await getSessions(c)).data ?? [];
+  const match = list
+    .filter((s) => !before.has(s.id) && (s.preview ?? "").trim() === preview)
+    .sort((a, b) => b.last_active - a.last_active)[0];
+  return match?.id ?? null;
+}
 export const getSessionMessages = (c: PortalConfig, id: string) =>
   get<any>(c.endpoint, `/api/sessions/${id}/messages`, c);
 export const deleteSession = async (c: PortalConfig, id: string) => {
@@ -944,6 +978,9 @@ export type ChatMessage = { role: "user" | "assistant" | "system"; content: stri
 export type RunMessage = { role: string; content: string | null };
 
 export type SessionStreamHandlers = {
+  /** The engine accepted the turn: it runs to the end whether this stream is
+   *  read or not. */
+  onOpen?: () => void;
   onMessageStart?: () => void;
   /** Raw delta (NOT accumulated, unlike chatStream). */
   onDelta?: (delta: string) => void;
@@ -978,6 +1015,7 @@ export async function sessionChatStream(
     },
   );
   if (!res.ok || !res.body) throw await failure(res, "session chat");
+  h.onOpen?.();
 
   const reader = res.body.getReader();
   const dec = new TextDecoder();
@@ -1045,6 +1083,9 @@ export async function chatStream(
    *  expression. */
   onTool?: (tool: string) => void,
   signal?: AbortSignal,
+  /** The engine accepted the turn: from here on it runs whether this stream
+   *  is read or not, and its session already holds the client's message. */
+  onOpen?: () => void,
 ): Promise<string> {
   const res = await fetch(cfg.adapter + "/portal/chat/stream", {
     method: "POST",
@@ -1055,6 +1096,7 @@ export async function chatStream(
   // A 409 is the conversation still working on the previous message: its
   // sentence is what the client reads.
   if (!res.ok || !res.body) throw await failure(res, "chat");
+  onOpen?.();
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let acc = "", buf = "", eventName = "";

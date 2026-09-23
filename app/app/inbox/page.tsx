@@ -24,7 +24,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  getApprovals, getTicketDetail, getTickets, isTheAgent, loadConfig, readComment, authorLabel,
+  getApprovals, getFlows, getTicketDetail, getTickets, isTheAgent, loadConfig, readComment,
+  authorLabel,
   type PortalConfig, type Ticket, type TicketComment, type TicketDetail,
 } from "../lib/agent";
 import { buildChatLink } from "../lib/flowExamples";
@@ -34,6 +35,7 @@ import { AgentitoAvatar, loadAgentLook } from "../lib/agentito";
 import { CopyLink, PARAM, closeInRoute, openInRoute, useRouteParam } from "../lib/routes";
 import {
   Btn, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner, StaleLinkNotice, inputCls,
+  connectRequest, enumerateEs, supportWhatsApp,
 } from "../lib/ui";
 import Markdown from "../lib/Markdown";
 import { EntityProvider } from "../lib/EntityViewer";
@@ -49,6 +51,11 @@ const CHANNEL: Record<string, { icon: LucideIcon; label: string }> = {
   instagram: { icon: Instagram, label: "Comentario de Instagram" },
   "instagram-dm": { icon: MessageCircle, label: "Mensaje de Instagram" },
 };
+/** The connections (catalog ids) whose messages land in this tab — the ones
+ *  behind `CHANNEL`. A flow waiting on another one (a Google profile's
+ *  reviews) is not why the Bandeja is empty. */
+const INBOX_CONNECTIONS = new Set(["email", "instagram"]);
+
 const channelOf = (t: Ticket) =>
   CHANNEL[(t.source ?? "").trim().toLowerCase()] ?? { icon: Inbox, label: "Mensaje" };
 
@@ -217,6 +224,21 @@ export default function InboxPage() {
   // have one waiting? See `approvalFor`.
   const [approvals, setApprovals] = useState<{ id: string; body?: string }[]>([]);
 
+  // What the channels that fill this tab are still waiting on: the flows'
+  // own labels (`missing_connection_labels`). An empty Bandeja on an agent
+  // with no mailbox connected is not «nothing came in», and saying where to
+  // ask for it is the only useful thing that screen can do.
+  const [missing, setMissing] = useState<string[]>([]);
+  useEffect(() => {
+    if (!cfg) return;
+    getFlows(cfg)
+      .then((r) => setMissing(Array.from(new Set(
+        (r.flows ?? []).filter((f) => f.status === "incomplete")
+          .flatMap((f) => f.missing_connection_labels
+            .filter((_, i) => INBOX_CONNECTIONS.has(f.missing_connections[i])))))))
+      .catch(() => {});
+  }, [cfg]);
+
   const inFlight = useRef(false);
   const load = useCallback(async () => {
     if (!cfg || inFlight.current) return;
@@ -323,11 +345,27 @@ export default function InboxPage() {
         </StaleLinkNotice>
       )}
       {conversations.length === 0 && !openId ? (
-        <EmptyState
-          icon={Inbox}
-          title="Todavía no entró ningún mensaje"
-          hint="Cuando alguien escriba al mail de la empresa o comente un posteo, tu agente lo deja acá con la respuesta lista para que la mires."
-        />
+        <>
+          <EmptyState
+            icon={Inbox}
+            title="Todavía no entró ningún mensaje"
+            hint={missing.length > 0
+              ? `Cuando alguien escriba o comente, tu agente lo deja acá con la respuesta lista para que la mires. Para eso falta conectar ${enumerateEs(missing)}: nos lo pedís y lo conectamos nosotros.`
+              : "Cuando alguien escriba al mail de la empresa o comente un posteo, tu agente lo deja acá con la respuesta lista para que la mires."}
+          />
+          {missing.length > 0 && (
+            <div className="-mt-10 flex justify-center pb-10">
+              <a
+                href={supportWhatsApp(connectRequest(missing))}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[13px] font-semibold text-primary underline underline-offset-2 transition hover:text-primary-dark"
+              >
+                Pedírnoslo por WhatsApp
+              </a>
+            </div>
+          )}
+        </>
       ) : (
         <div className="grid gap-4 md:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] md:items-start">
           {/* On a phone the two panes are one screen at a time: the list, or

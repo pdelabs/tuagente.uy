@@ -9,7 +9,7 @@ import { createContext, useContext } from "react";
 import Link from "next/link";
 import { FileText, Image as ImageIcon, Images, Sheet, Ticket as TicketIcon } from "lucide-react";
 import { PARAM } from "./routes";
-import { postTitle } from "./events";
+import { postTitle, type PostTitles } from "./events";
 
 export type Entity =
   | { kind: "ticket"; id: string }
@@ -85,6 +85,8 @@ export function detectEntity(raw: string): Entity | null {
 }
 
 const EntityCtx = createContext<((e: Entity) => void) | null>(null);
+/** Post id → its title, filled by `EntityProvider` from `/portal/posts`. */
+export const PostTitlesContext = createContext<PostTitles>({});
 export const useOpenEntity = () => useContext(EntityCtx);
 export const EntityContext = EntityCtx;
 
@@ -107,7 +109,8 @@ function PostLink({ id, label }: { id: string; label?: string }) {
   // BY ITS NAME, NOT ITS ID. The chip read `2026-09-23-pan-masa-madre` in
   // monospace, which is an address: the owner reads «Pan masa madre». A label
   // the agent wrote for the link (`[el de masa madre](…)`) wins.
-  const text = label && label.trim().toLowerCase() !== id ? label.trim() : postTitle(id);
+  const titles = useContext(PostTitlesContext);
+  const text = label && label.trim().toLowerCase() !== id ? label.trim() : postTitle(id, titles[id]);
   return (
     <Link
       href={`/app/posts?${PARAM.post}=${encodeURIComponent(id)}`}
