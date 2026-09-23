@@ -61,7 +61,7 @@ from pydantic_ai.toolsets import FunctionToolset
 import board_store as board
 import ig_graph
 import ig_store
-from core import config, db
+from core import config, db, scheduler
 
 # The three tool names the approval plugin looks a card up by.
 REPLY = "reply_comment"
@@ -686,6 +686,7 @@ def toolset() -> FunctionToolset:
         try:
             return new_comments() or NOTHING_NEW
         except ig_graph.NotConnected as exc:
+            scheduler.could_not(ctx.deps.session_id, str(exc))
             return str(exc)
 
     @ts.tool
@@ -710,6 +711,7 @@ def toolset() -> FunctionToolset:
         try:
             return new_messages(ctx.deps.session_id) or NO_MESSAGES
         except ig_graph.NotConnected as exc:
+            scheduler.could_not(ctx.deps.session_id, str(exc))
             return str(exc)
 
     @ts.tool

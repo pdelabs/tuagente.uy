@@ -152,6 +152,7 @@ async def run(
         {"slug": flow.slug, "manual": manual},
     )
     paused = False
+    _could_not.pop(session_id, None)
     try:
         async for event in session.run_turn(
             session_id, prompt(flow, arrived), display(flow, scheduled_at, arrived)
@@ -165,6 +166,7 @@ async def run(
         # reaches nobody, and a row that says `'instagram-creator'` with no
         # trace behind it was a whole afternoon once.
         log.exception("flow %s: the run broke", flow.slug)
+        _could_not.pop(session_id, None)
         reason = session.one_line(exc)
         db.finish_flow_run(flow.slug, stamp, "error", reason)
         db.append_event(
@@ -183,11 +185,45 @@ async def run(
             "pendiente", session_id, {"slug": flow.slug},
         )
         return
+    blocked = _could_not.pop(session_id, None)
+    if blocked:
+        # THE TURN ENDED, THE WORK DID NOT HAPPEN. Measured on the QA agent
+        # (2026-09-23): a run of the mail flow with no mailbox answered «No
+        # pude revisar la casilla» and Activity read «Terminé el flujo». What
+        # decides is the tool that could not work, never the model's wording.
+        db.finish_flow_run(flow.slug, stamp, "error", blocked)
+        db.append_event(
+            "flow.failed", COULD_NOT.format(name=flow.name, reason=blocked),
+            "error", session_id, {"slug": flow.slug},
+        )
+        return
     db.finish_flow_run(flow.slug, stamp, "ok")
     db.append_event(
         "flow.finished", f"Terminé el flujo «{flow.name}»", "completed", session_id,
         {"slug": flow.slug},
     )
+
+
+# Read by the client in Activity: a run whose tool said it could not work.
+COULD_NOT = "El flujo «{name}» no pudo hacer su trabajo: {reason}"
+
+# The runs in flight that a tool already said could not do their work, by
+# session: why. Read once, when the run ends.
+_could_not: dict[str, str] = {}
+
+
+def could_not(session_id: str, reason: str) -> None:
+    """A tool of a flow's run could not do the work the run is for.
+
+    Called by the plugin's tool, which is the one that KNOWS — the mailbox is
+    not there, the account is not connected — and the run then ends `error`
+    with `reason`, which the client reads, instead of `ok`. From a chat turn it
+    does nothing: a conversation has no outcome to record, and the answer
+    already says it.
+    """
+    run = db.flow_run_of_session(session_id)
+    if run is not None and run["status"] == "running":
+        _could_not[session_id] = reason
 
 
 def resumed(session_id: str) -> None:
@@ -318,6 +354,12 @@ async def call_ticker(name: str) -> None:
 # Read by the client in Activity, once per flow and not once per tick.
 INCOMPLETE = "No voy a correr el flujo «{name}» hasta que conectes {missing}."
 
+# And by the client on the flow's card, when she asks for a run of one.
+NOT_CONNECTED = (
+    "Todavía no puedo correr «{name}»: falta conectar {missing}."
+    " En cuanto esa conexión esté lista, corre solo."
+)
+
 # The flows already said to be waiting, so the line above is written once. In
 # memory on purpose: a restart says it again, which is one line per boot, and a
 # flow that gets its connection leaves the set and is told about again if it
@@ -338,7 +380,9 @@ def waiting_for_a_connection(flow: Flow) -> bool:
     conectar el correo» to nobody (`docs/PENDING.md`). The client already reads
     it where it belongs — the card says «Le falta una conexión»
     (`server/flows.py`) — so the clock does not spend a turn to say it again.
-    Only the clock: «Probarlo ahora» is the client asking, and it still runs.
+    Nor does «Probarlo ahora»: it is refused with `NOT_CONNECTED`
+    (`server/flows.py`), because a run that cannot do the work only produces a
+    turn that says so and a «Terminé» that is not true.
     """
     gaps = missing(flow)
     if not gaps:
@@ -347,7 +391,8 @@ def waiting_for_a_connection(flow: Flow) -> bool:
     if flow.slug not in _incomplete:
         _incomplete.add(flow.slug)
         db.append_event(
-            "flow.incomplete", INCOMPLETE.format(name=flow.name, missing=" y ".join(gaps)),
+            "flow.incomplete",
+            INCOMPLETE.format(name=flow.name, missing=plugins.missing_labels(flow.connections)),
             "skipped", None, {"slug": flow.slug, "missing": gaps},
         )
     return True

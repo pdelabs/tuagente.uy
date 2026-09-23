@@ -47,15 +47,19 @@ THE TWO COLUMNS THAT ARE NOT SPELLED THE WAY THE HEADERS ARE: `to_address` and
 column that has to be quoted forever is a column named wrong once.
 """
 
+import logging
 import os
 import time
 
 from core import db
 
-# What the client reads when the mailbox is not connected. One line, and it
-# names the variable: whoever sets it up needs the name, and the client needs
-# to know why nothing was read.
-MISSING = "Falta conectar el correo: no está {name}."
+log = logging.getLogger(__name__)
+
+# What the client reads when the mailbox is not connected — the model repeats
+# it to her. It used to name the variable (`EMAIL_ADDRESS`), and the QA client
+# read «falta conectar el correo (EMAIL_ADDRESS)» in Activity. The name is for
+# whoever sets it up, and it goes to the log.
+MISSING = "El correo de la empresa todavía no está conectado."
 
 # Where a mail's ticket says it came from (`board_store`'s `source`). The pair
 # `(mail, <Message-ID>)` is the board's UNIQUE index, so finding the same
@@ -105,7 +109,8 @@ class NotConnected(RuntimeError):
 def env(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
-        raise NotConnected(MISSING.format(name=name))
+        log.warning("mail: %s is not set", name)
+        raise NotConnected(MISSING)
     return value
 
 

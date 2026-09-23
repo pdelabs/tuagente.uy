@@ -11,7 +11,7 @@
 # network at all (`tests/test_instagram_comments.py`).
 #
 #   a. with nothing connected, the tick ANSWERS: one turn asking for the
-#      comments comes back with «Falta conectar Instagram…» and ends normally,
+#      comments comes back with «Tu cuenta de Instagram todavía no está conectada…»,
 #      with nothing waiting for the client
 #   b. a comment the agent has seen, and one turn asking for an answer to it:
 #      the turn STOPS and nothing was sent

@@ -84,6 +84,8 @@ def register(engine) -> None:
     # WHETHER THE ACCOUNT IS SET UP, for a flow that names `instagram`. Without
     # it the flow reads «Le falta una conexión» and its watcher is not called.
     engine.provide("connection.instagram", ig_graph.connected)
+    # And what the client calls it, in «falta conectar …» (`core/plugins.py`).
+    engine.provide("connection.instagram.label", "tu cuenta de Instagram")
     # WHAT FIRES THE FLOW: code that looks at the account with no model in it
     # (`ig_tools.watch`). The flow names it in its frontmatter, `event:`.
     engine.watcher(ig_tools.WATCHER, ig_tools.watch, every=ig_tools.WATCH_EVERY)

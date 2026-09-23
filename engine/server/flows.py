@@ -17,9 +17,11 @@ until 2026-09-23, and every flow's page said «Todavía no hay resultados» over
 a week of daily posts. The listing carries the newest `RESULTS_LISTED`, the
 flow's own page `RESULTS_SHOWN`, and `results_total` counts them all.
 
-A MANUAL RUN OF AN INCOMPLETE FLOW STILL RUNS. The scheduler does not wake the
-agent up for one, but «Probarlo ahora» is the client asking, and what she gets
-is the run telling her, in its own words, what is missing.
+A MANUAL RUN OF AN INCOMPLETE FLOW IS REFUSED, with a 409 that says what is
+missing. It used to run: on the QA agent (2026-09-23) «Probarlo ahora» on the
+mail flow with no mailbox spent a turn to answer «No pude revisar la casilla»
+and Activity read «Terminé el flujo «Bandeja de entrada»». The card already
+says what is missing; a run cannot add anything to it.
 """
 
 import asyncio
@@ -241,6 +243,9 @@ async def act(job_id_: str, action: str):
     """
     flow = by_job(job_id_)
     if action == "run":
+        if scheduler.missing(flow):
+            raise HTTPException(409, scheduler.NOT_CONNECTED.format(
+                name=flow.name, missing=plugins.missing_labels(flow.connections)))
         now = datetime.now(flows.zone(flow)).replace(microsecond=0)
         asyncio.create_task(run_now(flow, now))
         return {"job": job(flow)}

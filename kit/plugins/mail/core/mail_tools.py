@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 
-from core import db
+from core import db, scheduler
 
 TOOL = "send_email"
 
@@ -245,6 +245,9 @@ def reading() -> FunctionToolset:
                     else:
                         new.append((ticket_id, mail, kind))
         except store.NotConnected as exc:
+            # A run of the inbox flow that cannot read the inbox did not do its
+            # work, whatever the model answers after this.
+            scheduler.could_not(ctx.deps.session_id, str(exc))
             return NOT_CONNECTED_LISTING.format(reason=exc)
         return listing(new, discarded)
 

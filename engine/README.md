@@ -1575,7 +1575,10 @@ provides a callable by name, `engine.provide("connection.<id>", fn)`: `mail`
 answers `email` from its four `EMAIL_*` variables, `instagram` answers
 `instagram` from the token in force and `IG_USER_ID` (and `social` answers the
 same id when `instagram` is not installed). `plugins.connected(id)` asks it,
-now, every time; an id no plugin provides is not connected.
+now, every time; an id no plugin provides is not connected. The same plugin
+names it the way the client says it, `connection.<id>.label` («el correo de la
+empresa», «tu cuenta de Instagram»), and that name — never the id — is what
+every sentence about a missing connection uses.
 
 What it changes, and where:
 
@@ -1590,13 +1593,22 @@ What it changes, and where:
   writes ONE Activity line per flow per boot (`flow.incomplete`, status
   `skipped`: «No voy a correr el flujo «…» hasta que conectes …»), and the
   task's `next_run_at` is `null`, so the tab never reads the skipped run as
-  «No arrancó cuando le tocaba». «Probarlo ahora» still runs: that is the
-  client asking.
+  «No arrancó cuando le tocaba».
+- **«Probarlo ahora».** Refused: `POST /api/jobs/{id}/run` answers 409,
+  `{error: {message}}`, «Todavía no puedo correr «…»: falta conectar …». It
+  used to run, and on the QA agent (2026-09-23) that was a turn answering «No
+  pude revisar la casilla» and an Activity line reading «Terminé el flujo».
+- **A run whose tool finds the connection gone** (a secret that vanished
+  mid-life) ends `error`, not `ok`: the tool calls
+  `scheduler.could_not(session_id, reason)` — `fetch_mail`, `fetch_comments`
+  and `fetch_messages` do —, and the run's row and Activity carry that reason
+  instead of «Terminé». From a chat turn the call does nothing.
 - **`create_flow`** returns the missing ones and no `next_run` when there are
   any, and its description tells the agent to say so in the same answer.
 
 ```bash
 python3 engine/tests/test_flow_connections.py   # free, a few seconds
+python3 engine/tests/test_flow_could_not.py     # free, a few seconds
 ```
 
 ### A flow that runs when something arrives (`trigger: event`)

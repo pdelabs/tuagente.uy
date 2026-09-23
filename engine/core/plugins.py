@@ -552,6 +552,22 @@ def missing(connections: list[str]) -> list[str]:
     return [c for c in connections if not connected(c)]
 
 
+def connection_label(connection_id: str) -> str:
+    """What the client calls a connection: «el correo de la empresa», not `email`.
+
+    The plugin that answers for the connection names it too,
+    `engine.provide("connection.<id>.label", "…")`. An id nobody names is read
+    as itself — it is also one nobody answers for, and the line that shows it is
+    already saying something is wrong.
+    """
+    return _engine.shared.get(f"connection.{connection_id}.label", connection_id)
+
+
+def missing_labels(connections: list[str]) -> str:
+    """What a flow is missing, as the tail of a Spanish sentence: «X y Y»."""
+    return " y ".join(connection_label(c) for c in missing(connections))
+
+
 RESULTS = "flow.results."
 
 

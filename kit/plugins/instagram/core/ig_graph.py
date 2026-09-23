@@ -73,6 +73,7 @@ is on the approval card, because a request the client sits on until tomorrow is
 a request that cannot be carried out.
 """
 
+import logging
 import os
 import time
 from datetime import datetime
@@ -80,16 +81,18 @@ from datetime import datetime
 import httpx
 import ig_store
 
+log = logging.getLogger(__name__)
+
 GRAPH = "https://graph.instagram.com/v21.0"
 # Unversioned on purpose: this is the endpoint Meta documents for the refresh,
 # and it is the one that answers.
 REFRESH = "https://graph.instagram.com/refresh_access_token"
 
-# What the client reads when the connection is not there. One line, Spanish,
-# and it names the variable: whoever sets it up needs the name, and the client
-# needs to know why nothing came back.
+# What the client reads when the connection is not there — the model repeats
+# it to her. One line, Spanish. The variable's name is for whoever sets it up,
+# and it goes to the log: in the client's Activity it read as a code.
 MISSING = (
-    "Falta conectar Instagram: no está {name}. Sin eso no puedo leer ni "
+    "Tu cuenta de Instagram todavía no está conectada. Sin eso no puedo leer ni "
     "contestar los comentarios de tus posteos."
 )
 
@@ -147,7 +150,8 @@ def flat(text) -> str:
 def env(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
-        raise NotConnected(MISSING.format(name=name))
+        log.warning("instagram: %s is not set", name)
+        raise NotConnected(MISSING)
     return value
 
 

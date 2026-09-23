@@ -25,6 +25,8 @@ def register(engine) -> None:
     # four variables the inbox flow is `incomplete` and the scheduler does not
     # wake the agent up every five minutes to read «Falta conectar el correo».
     engine.provide("connection.email", mail_store.connected)
+    # And what the client calls it, in «falta conectar …» (`core/plugins.py`).
+    engine.provide("connection.email.label", "el correo de la empresa")
     engine.toolset(mail_tools.reading())
     # THE WHOLE SENDING TOOLSET IS GATED, the same way the approval plugin and
     # the social plugin gate theirs: `approval_required()` with no predicate,
