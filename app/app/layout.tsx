@@ -8,12 +8,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home, Images,
-  Inbox, LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Plug, Puzzle, Workflow,
+  Inbox, LifeBuoy, LogOut, MessageSquare, Puzzle, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
   loadConfig, clearConfig, getManifest, getApprovals, APPROVALS_EVENT,
-  isClientRequest, learnAgentUtcOffset, CONFIG_KEY, savedConfig,
+  learnAgentUtcOffset, CONFIG_KEY, savedConfig,
   credentialInUrl, sameSession,
   type PortalConfig, type Manifest,
 } from "./lib/agent";
@@ -34,8 +34,7 @@ import {
 // (except "home", which is ours and doesn't depend on what the agent
 // exposes). `sec` = lives under "Más": the workshop views (files, usage,
 // skills…). The main nav is what the client uses daily: their flows, their
-// chat, their in-progress work. "Tareas" (crons) left the nav: it was the
-// machine-facing view that Flujos replaces (the route is still alive for us).
+// chat, their in-progress work.
 // Modules the agent declares but the portal does NOT show yet. It's a switch,
 // not a deletion: the screen, its route and its welcome screen stay whole,
 // and removing the key from here brings them back to the nav.
@@ -68,16 +67,6 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   // another.
   { key: "posts", path: "/app/posts", label: "Posteos", icon: Images },
   { key: "approvals", path: "/app/approvals", label: "Aprobaciones", icon: Hand },
-  // Primary by Luis's decision (8/7): the showcase of what's been produced --
-  // flow deliverables + visualizations, on a single tab.
-  { key: "artifacts", path: "/app/artifacts", label: "Entregas", icon: LayoutDashboard },
-  // Conexiones left "Más" (8/8): it's the FIRST thing a new client needs --
-  // without their email and their spreadsheets the agent can't do anything --
-  // and it was hidden at the very bottom. A test client hunted for it across
-  // five tabs and her line was "it's like putting the light switch inside the
-  // closet". Half a dozen screens promise "the systems you connected to it":
-  // the place where you connect them can't be folded away.
-  { key: "connections", path: "/app/connections", label: "Conexiones", icon: Plug },
   // ACTIVIDAD WENT BACK UNDER "Más" (9/16, Luis). It came out of there on 8/13
   // with a good reason -- two blind-QA clients went hunting for it and one of
   // them found out THERE that her flows had failed -- and that reason is
@@ -363,15 +352,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       getManifest(cfg).then((m) => { setManifest(m); setOnline(true); })
         .catch(() => setOnline(false));
       getApprovals(cfg)
-        // The badge counts what's WAITING ON YOUR OK. Requests the client
-        // themselves made ("connect my email") are on the same list but are
-        // ours: their card says "you don't have to do anything" while the
-        // menu, at the same time, marked it as pending. Counting that is
-        // asking them to do something that isn't theirs to do. The SAME
-        // filter as Home and Approvals: one single one, in `lib/agent.ts`.
-        .then((r) => setPending(
-          (r.approvals ?? []).filter((a: { body?: string }) => !isClientRequest(a?.body)).length,
-        ))
+        // The badge counts what's WAITING ON YOUR OK.
+        .then((r) => setPending((r.approvals ?? []).length))
         .catch(() => setPending(0));
     };
     tick();
@@ -512,10 +494,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {pending}
           </span>
         )}
-        {/* Connections the flow needs and is missing: an amber dot. */}
-        {m.key === "connections" && (manifest.pending_connections ?? 0) > 0 && (
-          <span className="h-2 w-2 shrink-0 rounded-full bg-c-amber-ink max-md:absolute max-md:right-1 max-md:top-1" />
-        )}
       </Link>
     );
   };
@@ -538,9 +516,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav className="flex flex-col gap-0.5">
           {enabled.filter((m) => !m.sec).map(item)}
 
-          {/* "Más": the workshop views. If something inside asks the client
-              for something (a pending connection), the dot rises to "Más"
-              itself so it never hides anything important while collapsed. */}
+          {/* "Más": the workshop views. */}
           {enabled.some((m) => m.sec) && (
             <>
               <button
@@ -551,9 +527,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               >
                 <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${showMore ? "" : "-rotate-90"}`} />
                 <span className="hidden flex-1 text-left md:inline">Más</span>
-                {!showMore && (manifest.pending_connections ?? 0) > 0 && (
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-c-amber-ink max-md:absolute max-md:right-1 max-md:top-1" />
-                )}
               </button>
               {showMore && enabled.filter((m) => m.sec).map(item)}
             </>

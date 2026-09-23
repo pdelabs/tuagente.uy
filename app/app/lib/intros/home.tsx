@@ -48,8 +48,8 @@ export default function HomeIntro({ onOk }: IntroProps) {
 
       {/* The whole cycle, which is what nobody gets right away.
           WITH NO CARD: four white bordered blocks in a grid are, on this
-          portal, things you touch -- that's what the flow examples and the
-          connections look like. A test client tapped this same set on
+          portal, things you touch -- that's what the flow examples look
+          like. A test client tapped this same set on
           onboarding and wrote that "they don't do anything". These are four
           steps drawn as an icon, a title and text, with no box. */}
       <div className="mt-8 grid gap-x-3 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">

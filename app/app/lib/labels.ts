@@ -242,7 +242,7 @@ export type Tone = "violet" | "amber" | "green" | "coral" | "neutral";
 
 /** The Board's columns. It's also the mapping Home uses to count: with two
  *  different mappings, the two screens' numbers never added up. */
-export type TaskColumn = "todo" | "inProgress" | "waiting" | "ours" | "done";
+export type TaskColumn = "todo" | "inProgress" | "waiting" | "done";
 
 const TODO = { label: "Por hacer", tone: "neutral" as const };
 const IN_PROGRESS = { label: "En curso", tone: "amber" as const };
@@ -250,30 +250,17 @@ const IN_PROGRESS = { label: "En curso", tone: "amber" as const };
  *  court. It's the word the Board's and Approvals' welcome screens already
  *  teach. */
 const WAITING_ON_YOU = { label: "Esperando aprobación", tone: "violet" as const };
-/** WHAT'S WAITING ON THE CLIENT AND WHAT'S WAITING ON US ARE TWO DIFFERENT
- *  THINGS.
- *
- *  Both fall into `blocked`: the agent asking for permission, and the request
- *  the client themselves made from the portal ("Connect WhatsApp"), which is
- *  ALSO born blocked. With a single name, their own request told them
- *  "Esperando aprobación" -- waiting on their own approval. The discriminant
- *  isn't in `status` (both are `blocked`) but in whose request it is: that's
- *  answered by `isClientRequest` in `lib/agent.ts` and comes in as a
- *  parameter, because `agent.ts` imports this module and there can't be a
- *  cycle. */
-const OURS = { label: "Lo estamos viendo", tone: "amber" as const };
 const DONE = { label: "Completado", tone: "green" as const };
 
 /** What each column is called. Read by the Board, Home, Approvals and the
  *  entity viewer: it's THE list of names, not one of several. */
 export const COLUMN_LABEL: Record<TaskColumn, { label: string; tone: Tone }> = {
-  todo: TODO, inProgress: IN_PROGRESS, waiting: WAITING_ON_YOU,
-  ours: OURS, done: DONE,
+  todo: TODO, inProgress: IN_PROGRESS, waiting: WAITING_ON_YOU, done: DONE,
 };
 
-/** The five columns, in the order they're read. */
+/** The four columns, in the order they're read. */
 export const BOARD_COLUMNS: { key: TaskColumn; label: string; tone: Tone }[] =
-  (["todo", "inProgress", "waiting", "ours", "done"] as TaskColumn[])
+  (["todo", "inProgress", "waiting", "done"] as TaskColumn[])
     .map((key) => ({ key, ...COLUMN_LABEL[key] }));
 
 /** Which Board column a task goes to.
@@ -283,12 +270,10 @@ export const BOARD_COLUMNS: { key: TaskColumn; label: string; tone: Tone }[] =
  *  new tasks fell into "En curso" and the "Por hacer" column was always
  *  empty. Measured against the lab agent on 8/13: 3 of its 28 tasks are in
  *  `todo` and all three showed as if the agent were already working them. */
-export function columnForTask(
-  status: string | null | undefined, isClientRequest = false,
-): TaskColumn {
+export function columnForTask(status: string | null | undefined): TaskColumn {
   const s = (status || "").trim().toLowerCase();
   if (s === "ready" || s === "todo") return "todo";
-  if (s === "blocked") return isClientRequest ? "ours" : "waiting";
+  if (s === "blocked") return "waiting";
   if (s === "done") return "done";
   return "inProgress";
 }
@@ -297,63 +282,11 @@ export function columnForTask(
 // opens the detail, and there "En curso" would be a lie.
 const ARCHIVED = { label: "Archivada", tone: "neutral" as const };
 
-/** What state a task is in, with the Board's words. `isClientRequest` (from
- *  `lib/agent.ts`) is the only thing that tells apart "waiting on you" from
- *  "we're waiting on it": without it, the client's own request says it's
- *  waiting on its own approval. */
-export function taskStatus(
-  status: string | null | undefined, isClientRequest = false,
-): { label: string; tone: Tone } {
+/** What state a task is in, with the Board's words. */
+export function taskStatus(status: string | null | undefined): { label: string; tone: Tone } {
   const s = (status || "").trim().toLowerCase();
   if (s === "archived") return ARCHIVED;
-  return COLUMN_LABEL[columnForTask(s, isClientRequest)];
-}
-
-/** How a SCHEDULED task (a cron) is doing, as a single banner.
- *
- *  "ACTIVE" IN GREEN ISN'T THE TRUTH IF THE LAST RUN FAILED. It's the worst
- *  bug the blind QA pass found -- the vet clinic had two jobs with the green
- *  banner and both had failed -- and on /app/tasks it was still alive with
- *  both halves stuck together: the green "Activa" chip next to the coral
- *  "falló" chip, on the same task, each one saying something different.
- *  Same criterion as a flow's banner (`flows/runs.ts`): running -> paused ->
- *  failed -> active. */
-export function scheduledStatus(
-  { running, paused, failed }: { running: boolean; paused: boolean; failed: boolean },
-): { label: string; tone: Tone; countsAsFailure: boolean } {
-  // `countsAsFailure` is what avoids the two halves: when the banner ALREADY
-  // says it failed, the screen doesn't repeat the coral chip next to it; when
-  // it says something else (paused, running), the failure still gets shown
-  // separately and isn't lost.
-  if (running) return { label: "Corriendo", tone: "violet", countsAsFailure: false };
-  // Paused wins over the failure: it's the first thing that explains why it
-  // isn't running. That the last run failed still gets said alongside it.
-  if (paused) return { label: "Pausada", tone: "amber", countsAsFailure: false };
-  if (failed) return { label: "La última vez falló", tone: "coral", countsAsFailure: true };
-  return { label: "Activa", tone: "green", countsAsFailure: false };
-}
-
-/* ── What the agent produced ──────────────────────────────────────────────── */
-
-// Three screens had their own little table for this and didn't agree: an
-// `other` artifact was "Otro" in Artifacts, "Artefacto" in the modal, and came
-// out raw -- "other" -- in Home.
-const ARTIFACT_LABEL: Record<string, { label: string; tone: Tone }> = {
-  chart: { label: "Gráfico", tone: "violet" },
-  table: { label: "Tabla", tone: "green" },
-  report: { label: "Informe", tone: "amber" },
-  dashboard: { label: "Panel", tone: "coral" },
-  diagram: { label: "Diagrama", tone: "violet" },
-  other: { label: "Otro", tone: "neutral" },
-};
-
-/** What kind of deliverable this is, in one word. A new kind from the agent
- *  isn't hidden: it's shown humanized, same as an unknown event. */
-export function artifactLabel(kind: string | null | undefined): { label: string; tone: Tone } {
-  const k = (kind || "").trim().toLowerCase();
-  if (ARTIFACT_LABEL[k]) return ARTIFACT_LABEL[k];
-  const cleaned = k.replace(/[_-]+/g, " ").trim();
-  return { label: cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : "Entrega", tone: "neutral" };
+  return COLUMN_LABEL[columnForTask(s)];
 }
 
 /* ── Why it couldn't ─────────────────────────────────────────────────────── */
@@ -399,7 +332,7 @@ const FAILURES: { re: RegExp; what: string; canDo: string; ours: boolean }[] = [
   {
     re: /401|403|unauthorized|forbidden|invalid.?(api.?)?key|authentication|credential|token expired|invalid_grant/i,
     what: "Una clave de las que usa tu agente dejó de servir, y sin eso no pudo entrar a buscar los datos.",
-    canDo: "Fijate en Conexiones si alguna quedó desconectada: reconectarla lo destraba.",
+    canDo: "Escribinos y la reconectamos: con eso se destraba.",
     ours: true,
   },
   {
@@ -804,10 +737,6 @@ export function greetingOfTheDay(ms = Date.now()): string {
 // screens of the same program tell me two different days. Which one do I
 // believe?" The one that runs. This function is the one that puts it into
 // words.
-//
-// (There's an older, private copy in `app/app/tasks/page.tsx::readableCron`,
-// owned by someone else today. TODO: have that one graduate to this one so
-// there's just the one.)
 
 const WEEKDAY_PLURALS = ["domingos", "lunes", "martes", "miércoles", "jueves", "viernes", "sábados"];
 const pad2 = (n: number) => String(n).padStart(2, "0");

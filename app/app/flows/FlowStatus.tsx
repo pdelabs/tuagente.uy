@@ -12,12 +12,27 @@ import Link from "next/link";
 import {
   AlertTriangle, CalendarClock, CheckCircle2, HelpCircle, Loader2, Pause, Play, Zap,
 } from "lucide-react";
-import { jobAction, type PortalConfig } from "../lib/agent";
+import { connectionLabel, jobAction, type PortalConfig } from "../lib/agent";
 import { Chip, SUPPORT } from "../lib/ui";
 import { buildChatLink } from "../lib/flowExamples";
 import {
   runOnce, inFlight, useRuns, runOf, type RealStatus, type Note,
 } from "./runs";
+
+/** What this flow is missing, by name. NO LINK: connecting it is ours to do,
+ *  not a screen the client can finish on their own, so the notice says what
+ *  is missing and who sets it up. */
+export function MissingConnection({ ids, className = "" }: { ids: string[]; className?: string }) {
+  const names = ids.map((id) => connectionLabel(id));
+  const list = names.length > 1
+    ? `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`
+    : names[0];
+  return (
+    <p className={`rounded-lg border border-c-amber bg-c-amber/25 p-3 text-[13px] font-semibold text-c-amber-ink ${className}`}>
+      Falta conectar {list}: escribinos y lo dejamos andando.
+    </p>
+  );
+}
 
 export function StatusBanner({ e }: { e: RealStatus }) {
   return <Chip tone={e.tone}>{e.banner}</Chip>;

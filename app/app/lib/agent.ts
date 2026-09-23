@@ -2,40 +2,37 @@
 
 // The portal's only network entry point. Magic-link config:
 //   /app#endpoint=https://...&adapter=https://...&key=...
-// Local defaults for developing against the fixture agent.
+// Local defaults for developing against the lab agent.
 
 import { setUtcOffset, hasLearnedOffset, utcOffsetOf, utcOffsetForZone } from "./labels";
 
+/** Two base URLs for one agent. The engine serves both shapes from the same
+ *  process (`engine/server/app.py`): `endpoint` carries the `/api/*` routes
+ *  (sessions, jobs) and `adapter` the `/portal/*` ones. They stay two because
+ *  every magic link already issued carries both. */
 export type PortalConfig = {
-  endpoint: string; // the agent's api server (:8642)
-  adapter: string;  // adapter sidecar (:8643)
+  endpoint: string;
+  adapter: string;
   key: string;
 };
 
 export type Manifest = {
   agent: string;
-  /** Which adapter is answering, as `adapter-<semver>`. Called
-   *  `portal_plugin` up to adapter 0.40.0, from when this sidecar was going
-   *  to be a Hermes plugin and never became one; the word now means the
-   *  kit's plugins (`/portal/plugins`), so the field says what it holds. */
+  /** Which engine build is answering (`core-<semver>`). */
   adapter_version: string;
   modules: Record<string, boolean>;
-  /** Connections the client's flow needs and is missing (adapter >=0.24).
-   *  Feeds the home notice and the sidebar's dot. */
-  pending_connections?: number;
-  /** Look the client chose for it, saved on the agent (adapter 0.26+).
-   *  Absent on older adapters: the portal falls back to whatever the browser has. */
+  /** Look the client chose for it, saved on the agent. Null until they pick
+   *  one: the portal falls back to whatever the browser has. */
   look?: Record<string, number> | null;
   /** true if the client has ever named it from the portal. */
   named?: boolean;
-  /** What the client's BUSINESS is called, as they wrote it at onboarding
-   *  (adapter 0.32+). The agent has always sent it; the portal only started
-   *  reading it when Posts needed an account name to sign the feed with. */
+  /** What the client's BUSINESS is called, as they wrote it at onboarding.
+   *  Posts signs the feed with it. */
   company?: string | null;
   /** Where the agent notifies: `email` or `none` -- whatever the
-   *  client answered at onboarding. Absent on older adapters and on anyone who
-   *  never got around to answering; `"none"` is an explicit answer ("not right
-   *  now") and it's the one that makes the portal offer it again. */
+   *  client answered at onboarding. Null on anyone who never got around to
+   *  answering; `"none"` is an explicit answer ("not right now") and it's the
+   *  one that makes the portal offer it again. */
   notify_channel?: string | null;
   /** The channels this agent can actually notify through, today `[]` or
    *  `["email"]`. It's what onboarding offers: a channel the agent can't send
@@ -43,26 +40,16 @@ export type Manifest = {
    *  our domain, so it only needs the client's address -- not the company's
    *  inbox connected. Absent reads as empty. */
   notify_channels?: string[];
-  /** WHAT CLOCK THE BUSINESS LIVES ON. DOES NOT EXIST YET: it's item 4 of
-   *  `docs/PENDING.md` ("The agent's declared timezone"), declared here so
-   *  that the day the adapter publishes it the portal can use it without
-   *  touching anything else. Either shape is accepted: the IANA zone
-   *  (`"America/Montevideo"` -- the good datum, it knows about daylight
-   *  saving) or the offset in minutes. Until it arrives, the portal infers it
-   *  from whichever dates DO carry an offset -- see `learnAgentUtcOffset`. */
+  /** WHAT CLOCK THE BUSINESS LIVES ON, as the IANA zone the engine runs in
+   *  (`"America/Montevideo"` -- it knows about daylight saving). It beats
+   *  anything the portal could infer; see `learnAgentUtcOffset`. */
   timezone?: string | null;
-  utc_offset?: number | null;
 };
 
-/** The offset the manifest declares, if it declares one. It beats the
- *  inferred value: it's the agent saying where it lives, not us guessing. */
+/** The offset the manifest's zone means today. It beats the inferred value:
+ *  it's the agent saying where it lives, not us guessing. */
 export function utcOffsetFromManifest(m: Manifest | null | undefined): number | null {
-  if (!m) return null;
-  const byZone = utcOffsetForZone(m.timezone);
-  if (byZone !== null) return byZone;
-  const raw = m.utc_offset;
-  const n = typeof raw === "number" ? raw : Number(raw);
-  return Number.isFinite(n) && Math.abs(n) <= 900 ? n : null;
+  return m ? utcOffsetForZone(m.timezone) : null;
 }
 
 export type Ticket = {
@@ -73,10 +60,10 @@ export type Ticket = {
   tenant: string | null;
   /** Who holds this task, as the kanban records it. NOTHING IN THE PORTAL
    *  DRAWS IT TODAY: the chip that did belonged to the team tab. The field is
-   *  described here because the adapter still sends it, not because it is
+   *  described here because the engine still sends it, not because it is
    *  read — whoever removes it there removes this line too. */
   assignee: string | null;
-  created_at: string | number; // Hermes emits it as an epoch in seconds
+  created_at: string | number; // an epoch in seconds
   /** When something last happened on it. The Board sorts by `created_at` — a
    *  task is what it was opened for — and the Inbox by this one: a
    *  conversation is read by when the last thing was said on it. */
@@ -110,7 +97,7 @@ export const CONFIG_KEY = "tuagente_portal_config";
 const KEY = CONFIG_KEY;
 // Everything the portal stores about ONE agent goes under this prefix: the
 // credential, the name the client gave it, its look, which welcome screens
-// were seen, the chat pins, the capabilities requested. NOTHING under here can
+// were seen, the chat pins. NOTHING under here can
 // survive a change of agent.
 const PREFIX = "tuagente_";
 
@@ -221,7 +208,7 @@ function httpError(status: number, path: string, detail?: string): HttpError {
   return e;
 }
 
-/** The adapter explains its 400s/409s in `{error}`: that text is worth more
+/** The engine explains its 400s/409s in `{error}`: that text is worth more
  *  than the number. */
 async function failure(res: Response, path: string): Promise<HttpError> {
   let detail = "";
@@ -253,9 +240,9 @@ async function failure(res: Response, path: string): Promise<HttpError> {
 // anything that looks like a date, but then the portal's clock could be set
 // by the TEXT of a ticket (bodies are markdown the model writes, and a date
 // with an offset inside a table doesn't say where the business lives). These
-// are the ones the engine and the adapter write: `ts` in /portal/activity,
-// `next_run_at` and `last_run_at` in /api/jobs, `claimed_at`/`started_at`/
-// `finished_at` in a cron's runs, `at` in a flow's last run.
+// are the ones the engine writes: `ts` in /portal/activity, `next_run_at`
+// and `last_run_at` in /api/jobs, `started_at`/`finished_at` in a flow's
+// runs, `at` in a flow's last run.
 const OFFSET_KEYS = new Set([
   "ts", "next_run_at", "last_run_at", "paused_at", "claimed_at",
   "started_at", "finished_at", "created_at", "updated_at", "at",
@@ -277,7 +264,7 @@ function utcOffsetInResponse(value: unknown, budget = { nodes: 3000 }): number |
     if (typeof v === "string" && OFFSET_KEYS.has(k)) {
       // A date in `Z` teaches NOTHING. It says the instant, not where the
       // business lives: it's what comes out of serializing in UTC. Today
-      // neither the engine nor the adapter send any like that -- verified
+      // the engine sends none like that -- verified
       // endpoint by endpoint against the lab on 8/13: they all come `-03:00`
       // -- but the day one shows up, learning "the agent lives in UTC" would
       // shift the whole portal's clock. With no offset to infer, it falls
@@ -303,9 +290,8 @@ function learnFromResponse(data: unknown) {
  *  the first screen, no matter which door the client came in through. Called
  *  by the layout's startup.
  *
- *  Order: what the agent declares about itself (the manifest, once the kit
- *  publishes it) beats what the portal infers. And if it already knows, it
- *  asks nothing. The two inferred sources are the only ones that carry dates
+ *  Order: what the agent declares about itself (the manifest's `timezone`)
+ *  beats what the portal infers. And if it already knows, it asks nothing. The two inferred sources are the only ones that carry dates
  *  WITH an offset; if the agent has neither activity nor tasks -- a client's
  *  first day -- there's nothing to learn and it falls back to the browser's
  *  clock, same as before. */
@@ -340,121 +326,11 @@ async function post<T>(base: string, path: string, cfg: PortalConfig, body?: unk
   return res.json();
 }
 
-async function del<T>(base: string, path: string, cfg: PortalConfig): Promise<T> {
-  const res = await fetch(base + path, { method: "DELETE", headers: headers(cfg) });
-  if (!res.ok) throw await failure(res, path);
-  return res.json();
-}
-
-// The mark the portal puts on a ticket it creates itself when requesting a
-// connection. Without it, that request comes back through Approvals and the
-// portal sends the client to approve their own request -- a test client
-// described it as "asking for a quote and getting sent to sign it yourself".
-// It travels as an HTML comment: the markdown sanitizer never shows it.
-export const REQUEST_MARKER = "<!-- portal:request -->";
-// Tickets created before the rename still carry the old marker -- they live
-// in kanban.db, which nothing here ever rewrites -- so the reader keeps
-// accepting it too.
-const LEGACY_REQUEST_MARKER = "<!-- portal:pedido -->";
-/** Requests older than the marker are recognized by how the body starts. */
-export const REQUEST_PREFIX = "Pedido desde el portal.";
-
-/** Did the CLIENT request this ticket (and it's in our own queue), or is it
- *  the agent asking for permission? They're two different things: the
- *  client's own don't get approved and don't count toward the menu badge.
- *
- *  Lives here and not in every screen because it used to be copied in four
- *  places and they'd already drifted apart: the sidebar badge applied the new
- *  filter and Home didn't, so the menu said 2 and the home page said "3
- *  things waiting on your ok" on the very same screen. */
-export function isClientRequest(body: string | null | undefined): boolean {
-  const b = body ?? "";
-  return b.includes(REQUEST_MARKER) || b.includes(LEGACY_REQUEST_MARKER) || b.trimStart().startsWith(REQUEST_PREFIX);
-}
-
-/** Which connections the client has already requested and are still pending,
- *  by the catalog label the title was built with (`Conectar {label}`).
- *
- *  THE TITLE IS THE ONLY LINK: the ticket doesn't store the connection's id,
- *  so anyone answering "did I already ask for this?" has to read it from
- *  there. Lives here -- not in Connections -- because ever since Team also
- *  leaves the request, two screens read the same convention, and if they
- *  drift apart one of the two offers the client something they're already
- *  waiting on. */
-export function requestedConnections(tickets: Ticket[] | null | undefined): Set<string> {
-  return new Set(
-    (tickets ?? [])
-      .filter((t) => isClientRequest(t.body) && t.status !== "done" && t.status !== "archived")
-      .map((t) => (t.title ?? "").replace(/^Conectar\s+/i, "").trim().toLowerCase()),
-  );
-}
-
-/* ── A block is NOT an approval ──────────────────────────────────────────────
-   A THIRD THING IN THE SAME QUEUE, AND IT'S THE OPPOSITE OF AN APPROVAL. In
-   `blocked` there aren't two kinds but three. The two known ones: the agent
-   asking for permission (yours) and the client having asked for something
-   (ours, `isClientRequest`). The third one was found by the blind test on
-   8/13: the agent blocked because it's MISSING something we have to connect.
-   Verbatim:
-
-     "I got 'Weekly contract review -- missing access to Google' with buttons
-      Reject / Correct and approve / Approve. Approve what? It didn't do
-      anything, it just got stuck. That's not a permission I have to grant,
-      it's a problem THEY have to fix for me."
-
-   And "got stuck" is literal, not an impression: approving IS `unblock`, and
-   a ticket has ONE useful unblock before the engine calls it a loop
-   (BLOCK_RECURRENCE_LIMIT = 2 -> `triage`, where it can't be approved anymore).
-   Since the cause is still there, the agent blocks it again right away:
-   pressing Approve on one of these doesn't move anything forward and spends
-   the request's only unblock.
-
-   THE ENGINE DOESN'T TELL THEM APART: verified in both labs, permission
-   requests and this kind of block share the same `block_kind = needs_input`
-   (and `/portal/approvals` doesn't even publish it). What DOES tell them
-   apart is what the agent WRITES: the SOUL tells it to put `connection:<id>`
-   alone on its own line when it's missing a connection
-   (`soul/04-language.md`), which is the mark the portal already turns into a
-   card. Measured over Tero's and Zaguán's 13 blocked requests: the mark shows
-   up in 1 -- exactly that one -- and in none of the 10 real permission
-   requests.
-   ─────────────────────────────────────────────────────────────────────────── */
-
-// Same expression as the chip in `lib/entities.tsx`, without the line anchor:
-// here it searches INSIDE the body.
-const CONNECTION_IN_TEXT = /\bconnection:([a-z0-9][a-z0-9-]*)/gi;
-
 /** The shape the `approval` skill gives a request: a markdown box ("if you
  *  approve / if you reject / why"). It's what tells a PROPOSAL apart from any
  *  other text from the agent. */
 export const looksLikeProposal = (s: string | null | undefined) =>
   /^\s*\|.*\|\s*$/m.test(s || "");
-
-/** The connections the ticket names as missing, by catalog id. */
-export function missingConnections(text: string | null | undefined): string[] {
-  const seen = new Set<string>();
-  // `exec` in a loop and not `matchAll`: this project's target is ES5 and the
-  // iterator doesn't compile. The regex is global, so `lastIndex` advances on
-  // its own -- and it's reset here so two calls in a row don't step on each
-  // other.
-  CONNECTION_IN_TEXT.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = CONNECTION_IN_TEXT.exec(text ?? "")) !== null) seen.add(m[1].toLowerCase());
-  return Array.from(seen);
-}
-
-/** Is this blocked request waiting for something to get CONNECTED, rather
- *  than a decision from the client? There's nothing to approve there.
- *
- *  WHEN IN DOUBT, IT'S AN APPROVAL. If the body carries the skill's box, the
- *  proposal wins even if it mentions a connection: stripping the buttons off
- *  a real permission request is worse than leaving them on a connection
- *  block -- the client ends up unable to authorize what they actually want. */
-export function isConnectionBlock(body: string | null | undefined): boolean {
-  if (isClientRequest(body)) return false;
-  if (looksLikeProposal(body)) return false;
-  return missingConnections(body).length > 0;
-}
 
 /* ── What the client "said", according to the machine ────────────────────────
    Approve-with-correction and reject leave a comment on the ticket signed
@@ -480,7 +356,7 @@ const REJECTION_RE = /^\s*RECHAZADO POR (?:TU|EL) CLIENTE\b/i;
  *  `user`, the Board showed "**user** · You rejected it": the label said the
  *  client had rejected it and the name said something else, on the same line.
  *
- *  And `user`/`usuario` LEFT THE SET. The adapter doesn't sign that way --
+ *  And `user`/`usuario` LEFT THE SET. The engine doesn't sign that way --
  *  only `cliente` and `portal` -- so they weren't matching anything real;
  *  what they DID do was hand out surface area right in the function that
  *  decides which content gets hidden (see `readComment`: whatever the client
@@ -560,20 +436,20 @@ export function authorLabel(author: string | null | undefined, agentName = "Tu a
   if (isTheSystem(a)) return "El sistema";
   return AGENT_SIGNATURES.has(a.toLowerCase()) ? agentName : a;
 }
-// The adapter writes "Reason, in their own words: '…'". The "Te dijo" variant
+// The engine writes "Reason, in their own words: '…'". The "Te dijo" variant
 // is from the version the portal used to build: it's left over on old
 // tickets.
 const REASON_HEADER_RE = /(?:Motivo|Te dijo),? con sus palabras:[ \t]*/i;
-/** The quote marks the adapter wraps the reason in. */
+/** The quote marks the engine wraps the reason in. */
 const QUOTE_PAIRS: [string, string][] = [["«", "»"], ["“", "”"], ['"', '"']];
 
-/** The client's own words, pulled from the block the adapter builds.
+/** The client's own words, pulled from the block the engine builds.
  *
  *  UP TO THE LAST QUOTE MARK, not the first. With a lazy capture (`[\s\S]*?`)
  *  the reason used to cut off at the first inner quote mark, so a client who
  *  wrote "I don't like the word 'discount', change it to 'markdown'" read on
  *  screen "I don't like the word 'discount'" -- their own words, half-said and
- *  meaning something else. The closing mark the adapter appends after the
+ *  meaning something else. The closing mark the engine appends after the
  *  reason carries no quotes, so the last closed one is theirs. Without quotes
  *  (the old format), up to the blank line. */
 function extractRejectionReason(b: string): string {
@@ -589,7 +465,7 @@ function extractRejectionReason(b: string): string {
 }
 
 // The correction's header, with its preamble up to the colon. The `\n+` this
-// used to require coupled the filter to the adapter always putting the
+// used to require coupled the filter to the engine always putting the
 // corrected version on its own line: a one-line correction didn't match and
 // the whole machine prompt came out raw, signed "You".
 const CORRECTION_RE = /^\s*Aprobado CON CORRECCIONES\.[ \t]*(?:[^\n:]*:)?\s*/i;
@@ -625,7 +501,7 @@ export function readComment(body: string, author?: string): ReadableComment {
   if (fromClient && REJECTION_RE.test(b)) {
     const reason = extractRejectionReason(b);
     // WITH NO REASON BLOCK, SHOW THE RAW TEXT -- NEVER NOTHING. Today the
-    // adapter always writes it, but tying "hide the whole comment" to "the
+    // engine always writes it, but tying "hide the whole comment" to "the
     // other side didn't change format" is the same coupling that has bitten
     // us before: the day it changes, the client stops seeing what they said.
     return reason ? { label: "Lo rechazaste", text: reason } : { label: "Lo rechazaste", text: b };
@@ -662,7 +538,7 @@ export function readComment(body: string, author?: string): ReadableComment {
  *  not just the text (see `docs/PENDING.md`: what's open is read from the
  *  data, not from a `useState` that dies on F5). */
 /** The reason the client wrote when rejecting, or "" if the comment doesn't
- *  carry the block the adapter builds. Screens use it to quote it in quote
+ *  carry the block the engine builds. Screens use it to quote it in quote
  *  marks: with no block, nothing gets quoted (quoting the machine prompt would
  *  put words in their mouth they never said). */
 export const rejectionReason = (body: string) => extractRejectionReason((body ?? "").trim());
@@ -679,7 +555,7 @@ export type TicketEvent = {
   files?: string[];
   blocked_kind?: string;
 };
-/** Why the ticket ended up the way it did. Built by the adapter from the
+/** Why the ticket ended up the way it did. Built by the engine from the
  *  closing (or blocking) event, doesn't depend on the agent remembering to
  *  comment. */
 export type TicketOutcome = {
@@ -695,7 +571,7 @@ export type TicketDetail = {
   events: TicketEvent[];
 };
 
-// ── Adapter (:8643) ──
+// ── `/portal/*` (the `adapter` base) ──
 export const getManifest = (c: PortalConfig) => get<Manifest>(c.adapter, "/portal/manifest", c);
 /** The board. `source` picks the screen: `channels` is the Inbox's list,
  *  `work` the Board's, and with nothing it is everything, which is what the
@@ -707,32 +583,16 @@ export const getTicketDetail = (c: PortalConfig, id: string) =>
   get<TicketDetail>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}`, c);
 export const getApprovals = (c: PortalConfig) => get<{ approvals: any[] }>(c.adapter, "/portal/approvals", c);
 /** `correction` (optional): your corrected version gets recorded as your own
- *  comment before unblocking -- the original ticket isn't touched. */
+ *  comment before the stopped call goes ahead -- the original request isn't
+ *  touched. */
 export const approve = (c: PortalConfig, id: string, correction?: string) =>
   post<{ ok: boolean }>(c.adapter, `/portal/approvals/${id}/approve`, c,
      correction ? { correction } : undefined);
-export const getGoogleAuthUrl = (c: PortalConfig) =>
-  post<{ auth_url: string }>(c.adapter, "/portal/connections/google/auth-url", c);
-export const exchangeGoogleAuthCode = (c: PortalConfig, code: string) =>
-  post<{ ok: boolean }>(c.adapter, "/portal/connections/google/auth-code", c, { code });
-export const getWhatsAppPairStatus = (c: PortalConfig) =>
-  get<{ paired: boolean; pairing: boolean; has_qr: boolean }>(c.adapter, "/portal/connections/whatsapp/pair", c);
-export const startWhatsAppPairing = (c: PortalConfig) =>
-  post<{ ok?: boolean }>(c.adapter, "/portal/connections/whatsapp/pair/start", c);
-export const getWhatsAppPairQr = async (c: PortalConfig) => {
-  const res = await fetch(`${c.adapter}/portal/connections/whatsapp/pair/qr.png?t=${Date.now()}`, {
-    headers: headers(c),
-  });
-  if (!res.ok) throw await failure(res, "WhatsApp QR");
-  return res.blob();
-};
 export type Rejection = {
   ok: boolean;
-  /** What state the ticket ended up in: `blocked` with an ordinary "no" (same
-   *  as before rejecting), `done` when the client closed it. */
+  /** What state the request ended up in: `blocked` with an ordinary "no" (the
+   *  agent proposed again), `done` when the client closed it. */
   status?: string;
-  /** Always false: rejecting does NOT spend the unblock (see below). */
-  unblocked?: boolean;
   /** true only with `final`: the ticket is now finished and the request
    *  leaves the tab. */
   closed?: boolean;
@@ -740,42 +600,20 @@ export type Rejection = {
   in_approvals?: boolean;
   /** The comment was written safely; notifying the agent is best-effort. */
   notified?: boolean;
-  /** How many times it re-blocked for the same reason. The engine counts from
-   *  1: the FIRST block already leaves it at 1, and it stays there for the
-   *  whole negotiation as long as the ticket doesn't unblock. What matters is
-   *  that it never reaches 2, which is where the engine sends it to triage and
-   *  the request dies. Measured in the lab with two rejections and one
-   *  approval-with-correction: it never went past 1. */
-  block_recurrences?: number | null;
 };
 
-/** REJECTING IS A COMMENT SIGNED BY THE CLIENT, AND NOTHING MORE.
+/** REJECTING IS ANSWERING, NOT CLOSING.
  *
- *  ONE call, one write. The portal used to make three -- comment, comment
- *  again, and move the ticket to `ready` -- and none of them were atomic: if
- *  the last one failed, the comment was already in, the screen said "could
- *  not save" and retrying commented twice.
- *
- *  And above all: THE TICKET'S STATE IS NEVER TOUCHED. A ticket has only one
- *  useful `unblock` before the engine calls it a loop (two re-blocks for the
- *  same cause and it goes to `triage`, where Approve answers "it's stuck" and
- *  no verb brings it back). If rejecting unblocked, the normal shape of a
- *  negotiation -- ask, get told no, correct it, ask again -- would spend that
- *  one unblock on the first "no", and the second block would kill the
- *  request: either triage, or the auto-decomposer splitting the task with the
- *  OLD BODY (the client corrected it to 20 hinges and was left with a card in
- *  the queue that said 8).
- *
- *  With the ticket sitting still in `blocked`: the comment wakes the agent up
- *  just the same (`notify_agent_of_comment`), the agent proposes again on the
- *  same ticket, the request never disappears from the tab while it's being
- *  negotiated, and the unblock gets spent ONCE, on approval, which is the end.
+ *  ONE call: the engine records the "no" as a comment signed by the client,
+ *  hands it back to the agent as the stopped call's denial, and the agent
+ *  proposes again on the same request -- which never disappears from the tab
+ *  while it's being negotiated (`kit/plugins/approval/core/store.py`).
  *
  *  `final` IS THE OTHER HALF, AND THE CLIENT DECIDES IT. There are two
  *  different "no"s and only they know which one they mean: "not like this,
  *  bring me another version" (the one above) and "this isn't happening, don't
- *  propose it to me again". The second closes the ticket (`done`) in the SAME
- *  write as the comment, on the adapter's side. Without it, a definitively
+ *  propose it to me again". The second closes the request (`done`) in the SAME
+ *  call as the comment, on the engine's side. Without it, a definitively
  *  rejected request used to sit forever in Approvals with a live Approve
  *  button that no longer approved anything. And it's never inferred from the
  *  reason's text: having the model guess whether a "no" was final is exactly
@@ -790,14 +628,13 @@ export const APPROVALS_EVENT = "tuagente:approvals";
 export function notifyApprovalsChanged() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(APPROVALS_EVENT));
 }
-/** Naming and look, saved ON THE AGENT so they follow it to any machine. On an
- *  older adapter this 404s and the portal keeps using the browser's copy. */
+/** Naming and look, saved ON THE AGENT so they follow it to any machine. */
 export const saveIdentity = (
   c: PortalConfig,
   identity: {
     name?: string;
     look?: Record<string, number>;
-    /** Who the CLIENT is (adapter 0.32+). The company name is used to talk
+    /** Who the CLIENT is. The company name is used to talk
      *  about their own business by name; the url triggers the brief (the
      *  agent researches its own company and delivers a draft). */
     company?: string;
@@ -806,11 +643,6 @@ export const saveIdentity = (
     contact?: { channel: "email" | "none"; value?: string };
   },
 ) => post<{ ok: boolean }>(c.adapter, "/portal/identity", c, identity);
-/** Change what the agent can do with a connection. Client only. */
-export const savePermissions = (
-  c: PortalConfig, id: string, permissions: { read?: boolean; act?: boolean },
-) => post<{ ok: boolean; permissions: { read: boolean; act: boolean } }>(
-  c.adapter, `/portal/connections/${encodeURIComponent(id)}/permissions`, c, permissions);
 export const getActivity = (c: PortalConfig) => get<{ events: any[] }>(c.adapter, "/portal/activity", c);
 export const getFiles = (c: PortalConfig) => get<{ files: any[] }>(c.adapter, "/portal/files", c);
 export const getFileText = async (c: PortalConfig, path: string) => {
@@ -822,7 +654,7 @@ export const getFileText = async (c: PortalConfig, path: string) => {
  *
  *  Downloads must ALWAYS use this. `res.text()` decodes as UTF-8, and on a
  *  binary (.xlsx, .pdf, an image) every invalid byte gets replaced with
- *  U+FFFD: the file that comes down ends up broken even though the adapter
+ *  U+FFFD: the file that comes down ends up broken even though the engine
  *  sent it intact. Verified with a 9316-byte .xlsx that traveled perfectly
  *  and only got corrupted in the browser. */
 export const getFileBytes = async (c: PortalConfig, path: string) => {
@@ -830,13 +662,12 @@ export const getFileBytes = async (c: PortalConfig, path: string) => {
   if (!res.ok) throw httpError(res.status, path);
   return res.arrayBuffer();
 };
-/** What the agent has spent, per whoever bills for it (adapter 0.39+).
+/** What the agent has spent, per whoever bills for it.
  *
- *  Replaces `getUsage` (`/portal/usage`) from before this rename, which added
- *  up what we saw pass through the proxy and missed it 9x LOW -- image
- *  generation hits the provider directly and never entered the count. The
- *  number now comes from OpenRouter for THIS agent's key. The key never
- *  reaches the browser: the adapter makes the call.
+ *  The number comes from OpenRouter for THIS agent's key -- adding up what
+ *  passed through a proxy once missed it 9x LOW, because image generation
+ *  hits the provider directly. The key never reaches the browser: the engine
+ *  makes the call.
  *
  *  `available: false` (no key, or the provider isn't answering) comes back
  *  with 200: the screen says so and no number gets drawn. */
@@ -890,9 +721,9 @@ export type Inventory = {
 export const getInventory = (c: PortalConfig) =>
   get<Inventory>(c.adapter, "/portal/inventory", c);
 
-/** A flow: the client's work, with a name, a trigger and results (adapter
- *  >=0.29). The `incomplete` status is derived by the adapter from missing
- *  connections -- it's never stored. */
+/** A flow: the client's work, with a name, a trigger and results
+ *  (`engine/server/flows.py`). The `incomplete` status is derived from
+ *  missing connections -- it's never stored. */
 export type Flow = {
   slug: string;
   name: string;
@@ -902,19 +733,17 @@ export type Flow = {
   status: "active" | "paused" | "incomplete" | string;
   missing_connections: string[];
   last_run?: { at?: string | null; status?: string } | null;
-  /** Id of the scheduled task that fires the flow. The adapter HAS IT (reads
-   *  it from the frontmatter to compute `last_run`) but doesn't publish it
-   *  yet; see `docs/PENDING.md`. Until then, the portal ties the flow to its
-   *  task by the name `flujo-<slug>`, which is what the kit gives it (that
-   *  cron-name prefix stays Spanish on purpose -- it's a compatibility key on
-   *  jobs already created inside deployed agents). */
+  /** Id of the scheduled task that fires the flow; null on a flow that only
+   *  runs when asked. Without it, the portal ties the flow to its task by the
+   *  name `flujo-<slug>` (that cron-name prefix stays Spanish on purpose --
+   *  it's a compatibility key on jobs already created inside deployed
+   *  agents). See `flows/runs.ts`. */
   trigger_job?: string | null;
   results: { path: string; mtime: number }[];
   results_total: number;
 };
 export const getFlows = (c: PortalConfig) =>
   get<{ available: boolean; flows: Flow[] }>(c.adapter, "/portal/flows", c);
-/** Detail: full results + the "how I work" from FLOW.md (>=0.30). */
 /** One past run of a flow. `session_id` is the conversation it happened in —
  *  a run's conversation is NOT in the chat's list, this is how it is opened —
  *  and it is null once the engine has cleaned up an old run that went well. */
@@ -927,110 +756,10 @@ export type FlowRun = {
   manual: boolean;
   session_id: string | null;
 };
+/** Detail: full results + the "how I work" from FLOW.md. */
 export type FlowDetail = Flow & { how: string; runs?: FlowRun[] };
 export const getFlowDetail = (c: PortalConfig, slug: string) =>
   get<FlowDetail>(c.adapter, `/portal/flows/${encodeURIComponent(slug)}`, c);
-
-/** The full SKILL.md of one of our skills (adapter >=0.21). */
-export const getSkillContent = (c: PortalConfig, name: string) =>
-  get<{ name: string; content: string }>(c.adapter, `/portal/skills/${encodeURIComponent(name)}`, c);
-/** Editing the skill IS editing how the agent works: the engine reindexes it
- *  on its own within a few minutes, nothing needs restarting. */
-export const saveSkill = (c: PortalConfig, name: string, content: string) =>
-  post<{ ok: boolean }>(c.adapter, `/portal/skills/${encodeURIComponent(name)}`, c, { content });
-
-/** Which of the client's systems the agent is plugged into.
- *  The adapter reports PRESENCE, never values: no credential travels here. */
-export type Connection = {
-  id: string;
-  label: string;
-  group: "channel" | "system" | string;
-  purpose: string;
-  how: string;
-  effort?: "minutes" | "hours" | "days" | string;
-  who?: "client_only" | "assisted" | "us" | string;
-  warning?: string | null;
-  recommended?: boolean;
-  status: "connected" | "disconnected" | "blocked" | "ready" | string;
-  missing: { type: string; name: string }[];
-  missing_prerequisite: { type: string; name: string }[];
-  /** true if THIS client's flow needs it (adapter >=0.24). */
-  required?: boolean;
-  /** What the agent can do with this connection (adapter >=0.33). The client
-   *  decides it and it's enforced by the guard, not the prompt: the agent
-   *  can't change it (the file is mounted read-only on its side). */
-  permissions?: { read: boolean; act: boolean };
-  /** "google-oauth" = the portal connects it on its own with its dialog
-   *  (adapter >=0.25); with no setup flow, the button falls back to "Ask them
-   *  to connect it". */
-  setup_flow?: string | null;
-  /** "ready" status (adapter >=0.27): our half is there (the bot exists) but
-   *  the client never chatted. `link` is the t.me/… for their first message. */
-  link?: string | null;
-};
-export const getConnections = (c: PortalConfig) =>
-  get<{ available: boolean; connections: Connection[] }>(c.adapter, "/portal/connections", c);
-
-/** What the agent CAN'T do yet and could be turned on. The adapter computes it
- *  by PRESENCE (`active`), same as connections, and hides our own internals
- *  (`installs`, `verifies`): only what the client reads makes it here. */
-export type Capability = {
-  id: string;
-  label: string;
-  group?: string;
-  purpose: string;
-  how?: string;
-  cost?: string;
-  effort?: string;
-  who?: string;
-  /** `base` ships on EVERY agent: drawn as included and NEVER with a request
-   *  button (asking for something you already have is the worst possible
-   *  screen). `menu` is what can be added. An older adapter doesn't send it:
-   *  with the field absent, `menu` is assumed, which is how the portal used
-   *  to behave. */
-  level?: "base" | "menu" | string;
-  /** null = can't be asserted (the engine doesn't expose the tool index). */
-  active: boolean | null;
-};
-export const getCapabilities = (c: PortalConfig) =>
-  get<{ available: boolean; capabilities: Capability[] }>(c.adapter, "/portal/capabilities", c);
-
-/** What the client wrote that they need, translated into catalog ids.
- *
- *  The agent resolves it with ONE short call to the model -- not a whole
- *  run -- and answers with ids validated against the catalog: whatever the
- *  model makes up never reaches this far.
- *
- *  `no_match` is the honest answer to "couldn't ask" (the agent has nothing
- *  to call the model with): the screen shows the whole menu unmarked instead
- *  of cutting the flow short. An empty list WITHOUT that field says something
- *  else: it did ask, and nothing in the menu was what the client requested. */
-export const suggestCapabilities = (c: PortalConfig, text: string) =>
-  post<{ suggested: string[]; no_match?: boolean }>(
-    c.adapter, "/portal/capabilities/suggest", c, { text });
-
-/** The client requests a capability. It gets recorded on the agent's side (one
- *  line per request) and WE look at it: nothing turns on by itself. */
-export const requestCapability = async (c: PortalConfig, id: string | null, text: string) => {
-  const r = await post<{ ok?: boolean; error?: string; duplicate?: boolean }>(
-    c.adapter, "/portal/capabilities/request", c, { id, text });
-  // The adapter can answer 200 with `{ok:false}`: without this check the
-  // portal would tell the client "requested" for something that never got
-  // recorded anywhere, which is the worst possible version of this button.
-  if (r?.ok === false) throw new Error(r.error || "el pedido no quedó registrado");
-  return r;
-};
-
-export type ArtifactMeta = {
-  id: string; title: string; kind: string; summary: string;
-  created_at: number; bytes: number;
-};
-export const getArtifacts = (c: PortalConfig) =>
-  get<{ artifacts: ArtifactMeta[] }>(c.adapter, "/portal/artifacts", c);
-export const getArtifact = (c: PortalConfig, id: string) =>
-  get<ArtifactMeta & { html: string }>(c.adapter, `/portal/artifacts/${encodeURIComponent(id)}`, c);
-export const deleteArtifact = (c: PortalConfig, id: string) =>
-  del<{ ok: boolean }>(c.adapter, `/portal/artifacts/${encodeURIComponent(id)}`, c);
 
 /** A post the agent left READY TO PUBLISH: the image, the text and the
  *  hashtags. Served by the social plugin's own router, and only present when
@@ -1084,7 +813,7 @@ export type Post = {
   versions?: Record<string, PostVersion[]>;
   /** Without the "#": the portal writes it when it copies them. */
   hashtags: string[];
-  /** `url` is relative to the adapter (`/portal/posts/<id>/01.png`) and the
+  /** `url` is relative to the `adapter` base (`/portal/posts/<id>/01.png`) and the
    *  bytes need the bearer, so it never goes into an `<img src>`. */
   images: { name: string; bytes: number; url: string }[];
   created_at: string;
@@ -1106,7 +835,7 @@ export const getPost = (c: PortalConfig, id: string) =>
 export const getPostImage = (c: PortalConfig, id: string, name: string) =>
   getAdapterBytes(c, `/portal/posts/${encodeURIComponent(id)}/${encodeURIComponent(name)}`);
 
-/** The raw bytes of one of the ADAPTER'S OWN paths, with the bearer.
+/** The raw bytes of one of the agent's own `/portal/*` paths, with the bearer.
  *
  *  For a path the agent WROTE rather than one the portal built: the approval
  *  card for `publish_instagram` carries the post's slides as
@@ -1119,7 +848,7 @@ export const getAdapterBytes = async (c: PortalConfig, path: string) => {
   return res.arrayBuffer();
 };
 
-// ── Writing to the board (the adapter does it via CLI, never via SQL) ──
+// ── Writing to the board ──
 export const createTicket = (c: PortalConfig, t: { title: string; body?: string; tenant?: string }) =>
   post<{ ok: boolean; id: string | null }>(c.adapter, "/portal/tickets", c, t);
 export const commentTicket = (c: PortalConfig, id: string, body: string, author?: string) =>
@@ -1129,63 +858,13 @@ export type TicketStatus = "done" | "blocked" | "ready" | "archived";
 export const setTicketStatus = (c: PortalConfig, id: string, status: TicketStatus) =>
   post<{ ok: boolean }>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}/status`, c, { status });
 
-/** ONLY ONE PLACE CREATES CONNECTION REQUESTS. Connections and the hiring flow
- *  used to build them separately, with different bodies and a stray fetch on
- *  one side.
- *
- *  AND THEY'RE BORN BLOCKED, which is the part that matters. `POST
- *  /portal/tickets` creates them `ready` and already assigned, so the
- *  dispatcher picks them up within seconds even though the body says "don't
- *  do anything on your own": the agent finishes its run saying it's waiting
- *  on something, the engine reads that as `dependency_wait` -- which is not a
- *  sticky block -- returns it to `ready` and picks it up again. Measured on
- *  8/13 against a lab agent: 8 runs on t_dd0c0fa1 and 10 on another, ~US$0.007
- *  each, until the model happened to use the typed block. With the ticket
- *  blocked from the start (`hermes kanban block`, which does emit the sticky
- *  event) the worker leaves it alone: verified on t_276ddb2b, zero `claimed`
- *  in 4 minutes against an unblocked control that took off running at 6
- *  seconds.
- *
- *  Blocking is also where the client expects to see it: the approvals queue
- *  is the blocked tickets, and it shows up there under "What you asked for". */
-export async function createConnectionRequest(
-  c: PortalConfig, request: { title: string; body: string },
-) {
-  const r = await createTicket(c, {
-    title: request.title,
-    body: `${REQUEST_PREFIX} ${REQUEST_MARKER}\n\n${request.body}`,
-  });
-  // If it couldn't be blocked, the request still got recorded: the worst that
-  // happens is the agent picks it up, which is exactly what used to happen
-  // before.
-  if (r?.id) await setTicketStatus(c, r.id, "blocked").catch(() => {});
-  return r;
-}
+// ── `/api/*` (the `endpoint` base) ──
 
-export type CronRun = {
-  id: string; status: string; claimed_at: string;
-  started_at: string | null; finished_at: string | null; error: string | null;
-};
-export type CronDetail = {
-  job: {
-    id: string; name: string; prompt: string; script: string;
-    schedule_display: string; enabled: boolean; state: string; model: string;
-    deliver: string; last_status: string | null; last_error: string | null;
-    next_run_at: string | null;
-  };
-  runs: CronRun[];
-};
-export const getCronDetail = (c: PortalConfig, id: string) =>
-  get<CronDetail>(c.adapter, `/portal/crons/${encodeURIComponent(id)}`, c);
-
-// ── Agent (:8642) ──
-
-/** A scheduled task, exactly as the gateway publishes it in `/api/jobs`.
+/** A scheduled task, exactly as the engine publishes it in `/api/jobs`.
  *
- *  IT'S THE ONLY SOURCE THAT KNOWS WHEN IT WILL RUN AND WHY IT FAILED. The
- *  adapter publishes a `last_run` in `/portal/flows` with the date and a
- *  `"failed"`, and nothing else: no next schedule, no error, no whether it's
- *  paused. Flows merges the two. */
+ *  IT'S THE SOURCE THAT KNOWS WHEN IT WILL RUN AND WHY IT FAILED: a flow's
+ *  `last_run` in `/portal/flows` carries the date and a status, and nothing
+ *  else. Flows merges the two. */
 export type CronJob = {
   id: string;
   name: string;
@@ -1205,12 +884,9 @@ export type CronJob = {
 // include_disabled: the bare listing excludes paused jobs.
 export const getJobs = (c: PortalConfig) =>
   get<{ jobs: CronJob[] }>(c.endpoint, "/api/jobs?include_disabled=true", c);
-/** Pause, resume and run now. THESE ARE NATIVE TO THE ENGINE (`POST
- *  /api/jobs/{id}/{pause|resume|run}`) and the gateway lets them through CORS:
- *  nothing from the adapter is needed for the client to touch their flow.
- *  Changing the day and time does NOT go through here: it's `PATCH
- *  /api/jobs/{id}` and the gateway doesn't publish PATCH in
- *  `Access-Control-Allow-Methods` (see `docs/PENDING.md`). */
+/** Pause, resume and run now: `POST /api/jobs/{id}/{pause|resume|run}`
+ *  (`engine/server/flows.py`). Changing the day and time is not a verb the
+ *  engine has. */
 export const jobAction = (c: PortalConfig, id: string, action: "pause" | "resume" | "run") =>
   post<{ job?: CronJob }>(c.endpoint, `/api/jobs/${encodeURIComponent(id)}/${action}`, c);
 export const getSessions = (c: PortalConfig) => get<any>(c.endpoint, "/api/sessions", c);
@@ -1248,16 +924,12 @@ export type SessionStreamHandlers = {
   onRunComplete?: (messages: RunMessage[]) => void;
 };
 
-// Hermes's NATIVE SSE streaming to continue an existing session.
-// Events: run.started / message.started / assistant.delta {delta} /
-// tool.progress {tool_name} / assistant.completed {content} /
-// run.completed {messages} / done. Incompatible with chatStream()'s OpenAI
-// format in both request and response (sending {messages} gives a 400).
-//
-// Goes through the adapter, NOT the gateway: the gateway answers
-// /api/sessions/{id}/chat/stream with no Access-Control-Allow-Origin (it only
-// sends it on the preflight), so the browser discards the response with
-// "Failed to fetch". The sidecar proxies it and adds CORS.
+// The SESSION dialect of the chat's SSE, to continue an existing session
+// (`engine/server/sse.py::session_dialect`). Events: message.started /
+// assistant.delta {delta} / tool.started {tool_name} / assistant.completed
+// {content} / run.completed {messages} / done. Incompatible with
+// chatStream()'s OpenAI dialect in both request and response (sending
+// {messages} gives a 400).
 export async function sessionChatStream(
   cfg: PortalConfig,
   sessionId: string,
@@ -1315,14 +987,9 @@ export async function sessionChatStream(
         case "assistant.delta":
           if (typeof data.delta === "string" && data.delta) h.onDelta?.(data.delta);
           break;
-        // HEADS UP: in the session stream, `tool.progress` is NOT the
-        // notice that a tool is starting -- it's the thinking channel
-        // (`tool_name: "_thinking"`). The real name comes in `tool.started`.
-        // Listening only to progress, a RESUMED conversation stayed on
-        // "Thinking" from start to finish even while the agent was browsing
-        // and running commands: 38 tools and the client watching a dot.
-        // (This didn't happen on a new conversation: that path is the
-        // OpenAI one, which does send `hermes.tool.progress` with the name.)
+        // The tool's name comes in `tool.started`. `tool.progress` is the
+        // Hermes gateway's thinking channel (`tool_name: "_thinking"`), kept
+        // while its agents still run.
         case "tool.started":
         case "tool.progress":
           if (typeof data.tool_name === "string") h.onToolProgress?.(data.tool_name);
@@ -1346,21 +1013,15 @@ export async function chatStream(
   messages: ChatMessage[],
   onDelta: (text: string) => void,
   /** Tool that's starting. HEADS UP: here the event is NOT named the same as
-   *  in the session stream. The gateway sends `event: hermes.tool.progress`
-   *  with `{tool, label, status}` (verified in
-   *  gateway/platforms/api_server.py), while the session one sends
-   *  `tool.progress` with `{tool_name}`. Without this, a NEW conversation
-   *  reports no tool at all: the trail stays on "Thinking" forever and the
-   *  mascot never changes expression. `_internal` ones (like `_thinking`) the
-   *  gateway doesn't even send through here. */
+   *  in the session stream: `event: hermes.tool.progress` with `{tool,
+   *  status}` (`engine/server/sse.py::openai_dialect`, the name kept from the
+   *  gateway it replaced), while the session one sends `tool.started` with
+   *  `{tool_name}`. Without this, a NEW conversation reports no tool at all:
+   *  the trail stays on "Thinking" forever and the mascot never changes
+   *  expression. */
   onTool?: (tool: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
-  // THROUGH THE ADAPTER, NOT THE GATEWAY, and it stays that way now that there
-  // are no roles: the adapter proxies `/v1/chat/completions` on the agent
-  // itself, with the client's own key and no prefix. Going straight to the
-  // gateway would work too and it is not worth the churn -- one door for the
-  // chat is one place to add CORS, a timeout or a log to.
   const res = await fetch(cfg.adapter + "/portal/chat/stream", {
     method: "POST",
     headers: { ...headers(cfg), "Content-Type": "application/json" },
@@ -1383,8 +1044,7 @@ export async function chatStream(
       // stick forever and EVERY text chunk that came after it (which are
       // unnamed events) got discarded in the `continue` below: on a NEW
       // conversation, the moment the agent used a tool, the whole reply
-      // vanished and the client saw silence. Verified on 8/8 against the
-      // gateway's raw stream.
+      // vanished and the client saw silence.
       if (line.trim() === "") { eventName = ""; continue; }
       if (line.startsWith("event: ")) { eventName = line.slice(7).trim(); continue; }
       if (!line.startsWith("data: ") || line.includes("[DONE]")) continue;
@@ -1406,13 +1066,11 @@ export async function chatStream(
   return acc;
 }
 
-/** A connection's label by its id, to name it wherever the client needs it.
- *  Catalog ids (`email`, `google-workspace`) are ours; the client should never
- *  have to read them. If the catalog isn't at hand, it falls back to
- *  something readable instead of spitting out the id. */
-export function connectionLabel(id: string, connections?: Connection[] | null): string {
-  const c = connections?.find((x) => x.id === id);
-  if (c?.label) return c.label;
+/** A connection's label by its id, to name it wherever the client needs it
+ *  (a flow's `missing_connections`). Catalog ids (`email`, `google-workspace`)
+ *  are ours; the client should never have to read them, so an unknown one
+ *  falls back to something readable instead of the raw id. */
+export function connectionLabel(id: string): string {
   const KNOWN: Record<string, string> = {
     email: "el correo de la empresa",
     whatsapp: "WhatsApp",

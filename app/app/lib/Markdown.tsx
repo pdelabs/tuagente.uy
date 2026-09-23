@@ -20,7 +20,7 @@ import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import {
-  FileText, Image as ImageIcon, LayoutDashboard, Sheet, Ticket as TicketIcon,
+  FileText, Image as ImageIcon, Sheet, Ticket as TicketIcon,
 } from "lucide-react";
 import {
   detectEntity, EntityChip, imageMime, isImage, isSpreadsheet, useOpenEntity,
@@ -108,7 +108,7 @@ function isFetchable(src: string): boolean {
 
 /* ── Pictures the ADAPTER serves ─────────────────────────────────────────── */
 
-/** A route of the adapter's, written into the markdown by the agent's own
+/** A `/portal/*` route, written into the markdown by the agent's own
  *  side: `/portal/posts/<id>/01.png`, which is how the approval card for
  *  `publish_instagram` shows the slides about to go out. Not a workspace path
  *  and not a URL the browser can fetch by itself — every byte needs the
@@ -182,9 +182,8 @@ function AdapterImage({ path, alt, title }: {
 
 /** Does the portal know how to open this?
  *
- *  The adapter only serves what's INSIDE the agent's workspace
- *  (`GET /portal/files/{path}`, relative to it). Measured against the lab's
- *  adapter (0.36):
+ *  The agent only serves what's INSIDE its workspace
+ *  (`GET /portal/files/{path}`, relative to it). Measured against the lab:
  *    /portal/files/entregables%2F…-2026.md          -> 200
  *    /portal/files/workspace%2Fentregables%2F…      -> 404  (the prefix gets stripped here)
  *    /portal/files/..%2FSOUL.md                     -> 404
@@ -206,11 +205,8 @@ const enc = (s: string) => encodeURIComponent(s).replace(/%2F/gi, "/");
  *  and in the browser, and that's a hydration mismatch on a static page. */
 function urlOfThing(entity: Entity): string {
   if (entity.kind === "ticket") return `/app/pipeline?${PARAM.task}=${enc(entity.id)}`;
-  if (entity.kind === "artifact") {
-    return `/app/artifacts?${PARAM.artifact}=${enc(entity.id)}`;
-  }
   if (entity.kind === "file") return `/app/files?${PARAM.file}=${enc(entity.path)}`;
-  return `/app/connections?${PARAM.connection}=${enc(entity.id)}`;
+  return `/app/posts?${PARAM.post}=${enc(entity.id)}`;
 }
 
 const THING_CLASS =
@@ -243,15 +239,12 @@ function Thing({ entity, text }: { entity: Entity; text?: string }) {
 
   const Icon =
     entity.kind === "ticket" ? TicketIcon
-      : entity.kind === "artifact" ? LayoutDashboard
-        : entity.kind === "file" && isImage(entity.path) ? ImageIcon
-          : entity.kind === "file" && isSpreadsheet(entity.path) ? Sheet
-            : FileText;
+      : entity.kind === "file" && isImage(entity.path) ? ImageIcon
+        : entity.kind === "file" && isSpreadsheet(entity.path) ? Sheet
+          : FileText;
 
   const title =
-    entity.kind === "ticket" ? "Ver la tarea"
-      : entity.kind === "artifact" ? "Ver la visualización"
-        : "Abrir el archivo";
+    entity.kind === "ticket" ? "Ver la tarea" : "Abrir el archivo";
 
   const inner = (
     <>
@@ -282,13 +275,11 @@ function Thing({ entity, text }: { entity: Entity; text?: string }) {
   );
 }
 
-/** The chip for an entity, whatever kind it is. Connections, permissions,
- *  capabilities and posts have their own chip (`entities.tsx`) — the first
- *  three are cards and the post is a link to its tab, where it is drawn at the
- *  size it is going out at; everything else opens in the viewer. */
+/** The chip for an entity, whatever kind it is. A post has its own chip
+ *  (`entities.tsx`), a link to its tab, where it is drawn at the size it is
+ *  going out at; everything else opens in the viewer. */
 function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
-  if (entity.kind === "post"
-    || entity.kind === "connection" || entity.kind === "permissions" || entity.kind === "capability") {
+  if (entity.kind === "post") {
     return <EntityChip entity={entity} label={text?.trim() || entity.id} />;
   }
   return <Thing entity={entity} text={text} />;
@@ -296,12 +287,10 @@ function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
 
 /* ── Components ───────────────────────────────────────────────────────────── */
 
-// The agent also names tickets, files and connections in prose, with no
+// The agent also names tickets and files in prose, with no
 // backticks. The \b sits INSIDE each alternative: if it were before the
 // optional /opt/data/ prefix, it would never match (`/` isn't a word
 // character) and the prefix would be left dangling as text next to the chip.
-// `capability:` goes here too: the SOUL teaches the agent to write it alone on
-// its own line, but it writes it in prose about half the time.
 //
 // The workspace's top-level folders also go with no prefix: the kit teaches it
 // to cite `workspace/entregables/…` (the deliverable plugin's SKILL.md), but
@@ -319,8 +308,6 @@ function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
 // letter and whose dot ends the match before the extension.
 const INLINE_ENTITY_RE = new RegExp(
   "(\\bt_[0-9a-f]{6,16}\\b" +
-  "|\\bconnection:[a-z0-9][a-z0-9-]*\\b" +
-  "|\\bcapability:[a-z0-9][a-z0-9-]*\\b" +
   "|\\b\\d{4}-\\d{2}-\\d{2}-(?=[a-z0-9-]*[a-z])[a-z0-9][a-z0-9-]{0,39}\\b" +
   `|(?:/opt/data/)?\\b(?:workspace|entregables|entrada|interno)/[\\w./-]+\\.(?:${FILE_EXTENSIONS})\\b)`,
   "gi");
@@ -503,7 +490,7 @@ function makeComponents(streaming: boolean): Components {
       const url = typeof src === "string" ? src : "";
       if (!url) return null;
 
-      // A route of the adapter's: the bytes need the bearer, so they are
+      // A `/portal/*` route: the bytes need the bearer, so they are
       // fetched and drawn from a Blob instead of going into an `<img src>`.
       if (isAdapterPath(url)) {
         return <AdapterImage path={url} alt={alt ?? ""} title={title} />;
@@ -511,7 +498,7 @@ function makeComponents(streaming: boolean): Components {
 
       // The agent writes paths from its own workspace (./out/plot.png):
       // requesting that from the portal gives a 404 and a broken-image icon.
-      // The image CAN be opened -- the viewer shows it by asking the adapter
+      // The image CAN be opened -- the viewer shows it by asking the agent
       // for the bytes -- so it gets the same chip as everything else: before,
       // it was a dead little box with the path inside, i.e. the banner the
       // agent had just made, in plain sight and with no way to look at it.
@@ -587,38 +574,15 @@ const rehypePlugins: Options["rehypePlugins"] = [
 
 /* ── What the portal writes TO THE AGENT ──────────────────────────────────── */
 
-/** The order the portal puts inside a ticket's body when the client requests a
- *  connection. IT CANNOT BE DELETED: it's the only thing keeping the agent
- *  from going off and connecting WhatsApp on its own (the ticket is born
- *  blocked, but the body is what gets read when someone unblocks it). And the
- *  client can't read it: it's written as an imperative in the second person,
- *  so the test client read it as an order AIMED AT HER -- "I was left not
- *  knowing if I was allowed to touch anything".
- *
- *  Exported so only one side writes it. Today `connections/page.tsx` and
- *  hiring each build it on their own; the real fix is having
- *  `createConnectionRequest` put it inside an HTML comment -- the same
- *  mechanism `REQUEST_MARKER` already uses, which the sanitizer hides -- and
- *  then this whole block goes away. Until then it's recognized by its first
- *  sentence, which is ugly and tied to a literal string: that's why it lives
- *  here instead of being spread around. */
-export const AGENT_INSTRUCTION =
-  "No hagas nada por tu cuenta con esto: avisale al equipo de tuagente " +
-  "que hay que conectarlo y dejá el ticket esperando.";
-
 /** Convention going forward: whatever sits between these marks is for the
  *  agent and the client never sees it. They go as an HTML comment so the
  *  agent -- which reads the raw body -- still gets them. */
 const AGENT_ONLY_BLOCK_RE = /<!--\s*para-el-agente\s*-->[\s\S]*?<!--\s*\/para-el-agente\s*-->/gi;
 
-// The whole paragraph, from the sentence that opens it to the blank line.
-const INSTRUCTION_PARAGRAPH_RE = /(?:^|\n)[ \t]*No hagas nada por tu cuenta con esto:[\s\S]*?(?=\n[ \t]*\n|$)/gi;
-
 function stripAgentOnlyContent(md: string): string {
-  if (!md.includes("<!--") && !md.includes("No hagas nada por tu cuenta")) return md;
+  if (!md.includes("<!--")) return md;
   return md
     .replace(AGENT_ONLY_BLOCK_RE, "")
-    .replace(INSTRUCTION_PARAGRAPH_RE, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

@@ -5,22 +5,17 @@
 // it. Step 2: the agent, now named, tells in three lines what's going to
 // happen in here.
 //
-// Name and look are saved ON THE AGENT (POST /portal/identity, adapter 0.26+)
-// and stay cached in localStorage. That way the agent is still theirs from any
-// machine; the browser is just the fast copy. Having the agent also INTRODUCE
-// itself with that name (writing it into the SOUL) is still pending.
+// Name and look are saved ON THE AGENT (POST /portal/identity) and stay cached
+// in localStorage. That way the agent is still theirs from any machine; the
+// browser is just the fast copy.
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { ArrowRight, BellOff, Columns3, Dices, Hand, MessageSquare, X } from "lucide-react";
 import { Btn, inputCls } from "./ui";
 import { ExampleCarousel } from "./flowExamples";
 import ChatOnboarding from "./ChatOnboarding";
 import { urlPointsToDetail } from "./routes";
-import {
-  createConnectionRequest, getConnections, saveIdentity,
-  type Connection, type Manifest, type PortalConfig,
-} from "./agent";
+import { saveIdentity, type Manifest, type PortalConfig } from "./agent";
 import {
   AgentitoAnimated, RIVE_AXES, LOOK_DEFAULT, hasSavedLook, loadAgentLook,
   lookFromAgent, saveAgentLook, type AgentitoLook,
@@ -95,11 +90,10 @@ export function agentDisplayName(manifest: Manifest | null): string {
  *    `NoChannelNotice` offer it again inside the portal: it isn't the same as
  *    never having answered.
  *
- *  Absent (`null`/`undefined`) means "hasn't answered yet" -- and it's also
- *  what an old adapter sends when it doesn't publish the field. In both
- *  cases we'd rather ask: the price of asking too much is one screen; the
- *  price of not asking is a client with no notification channel, which is
- *  exactly what this flow exists to fix. */
+ *  Absent (`null`/`undefined`) means "hasn't answered yet", and then we'd
+ *  rather ask: the price of asking too much is one screen; the price of not
+ *  asking is a client with no notification channel, which is exactly what
+ *  this flow exists to fix. */
 export function onboardingAlreadyAnswered(manifest: Manifest | null | undefined): boolean {
   return Boolean(manifest?.named) && (manifest?.notify_channel ?? "").trim() !== "";
 }
@@ -171,12 +165,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   // for not using Telegram" and "nobody in my neighborhood uses Telegram" --
   // and both ended up giving a piece of data just so the screen would let
   // them through.
-  const [channel, setChannel] = useState<"whatsapp" | "email" | "none" | "">("");
+  const [channel, setChannel] = useState<"email" | "none" | "">("");
   const [mail, setMail] = useState("");
-  const [phone, setPhone] = useState("");
-  // The catalog, for what each connection is called: a WhatsApp request
-  // gets titled the way Connections expects (see `requestConnection`).
-  const [connections, setConnections] = useState<Connection[] | null>(null);
   // What the client picked from the carousel: starts the chat without leaving here.
   const [prompt, setPrompt] = useState("");
   // WHERE TO GO BACK TO ON FINISHING. Onboarding puts itself in front of ANY
@@ -192,15 +182,6 @@ export default function Onboarding({ manifest, cfg, onDone }: {
       ? window.location.pathname + window.location.search
       : null;
   });
-  useEffect(() => {
-    if (step !== "overview" && step !== "notify") return;
-    getConnections(cfg)
-      .then((r) => setConnections(r.connections ?? []))
-      .catch(() => { /* no catalog: the request falls back to its own label */ });
-  }, [step, cfg]);
-
-  const connectionOf = (id: string) => connections?.find((c) => c.id === id) ?? null;
-
   // What THIS agent can send through, as the manifest says -- not what the
   // portal knows how to draw. PRINCIPLE ZERO: an agent with no channel gets no
   // options, only the truth that everything waits for them here. Email goes
@@ -224,11 +205,6 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   }, [readingWeb]);
 
   const mailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail.trim());
-  // A Uruguayan phone number is eight or nine digits; with or without 598,
-  // with or without spaces. Nothing more gets validated: what arrives is for
-  // US to call, and bouncing the format back at someone who typed their
-  // number correctly is the same toll, just smaller.
-  const phoneOk = (phone.match(/\d/g)?.length ?? 0) >= 8;
   // THERE'S NO GATE ANYMORE. It used to be "either Telegram activated, or an
   // email": without that the button stayed off and you couldn't enter the
   // portal. The product decision (8/13) is that the channel can be left for
@@ -239,13 +215,10 @@ export default function Onboarding({ manifest, cfg, onDone }: {
   // With nothing to pick there's nothing to answer: continuing IS the answer.
   const answeredSomething = channel !== "" || !canEmail;
   // ONE SINGLE CRITERION: can the agent write to them THROUGH HERE, TODAY?
-  // Email with a valid address can; WhatsApp never does yet. Everything else
-  // is "no channel", and that gets SAVED (see `continueFromNotify`): a channel
-  // that doesn't exist and a client who never answered can't be the same datum.
+  // Email with a valid address can. Everything else is "no channel", and that
+  // gets SAVED (see `continueFromNotify`): a channel that doesn't exist and a
+  // client who never answered can't be the same datum.
   const realChannel = channel === "email" && mailOk ? "email" : null;
-  // What gets handled by hand: there's nothing here the client can plug in
-  // themselves, so it becomes a request of ours with their info attached.
-  const connectionRequest = channel === "whatsapp" && phoneOk ? "whatsapp" : null;
   // Celebration counter: every naming fires the character's trigger.
   const [celebrations, setCelebrations] = useState(0);
   const [look, setLook] = useState<AgentitoLook>(
@@ -273,7 +246,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     // through the whole channel step without knowing its own name, and if the
     // client abandoned the flow there the name was lost.
     saveIdentity(cfg, { name: n, look })
-      .catch(() => { /* old or down adapter: the browser's copy stays */ });
+      .catch(() => { /* agent down: the browser's copy stays */ });
   };
 
   /** Step 2 -> overview. The site gets sent HERE and not at the end: while the
@@ -284,34 +257,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
     saveIdentity(cfg, {
       company: e,
       ...(url.trim() ? { url: url.trim() } : {}),
-    }).catch(() => { /* old or down adapter: the portal carries on */ });
+    }).catch(() => { /* agent down: the portal carries on */ });
     setStep("overview");
-  };
-
-  /** The same request the Connections tab leaves -- same helper, same ticket
-   *  blocked from the start -- with the info the client just gave.
-   *
-   *  THE TITLE COMES FROM THE CATALOG, same as there (`Conectar ${label}`),
-   *  not from a constant written here. It's the only thing Connections uses
-   *  to recognize you already requested it: it used to compare its own label
-   *  against the ticket's title, and since onboarding wrote "Conectar el
-   *  correo de la empresa" while the catalog says "Correo de la empresa", it
-   *  never matched -- the client who requested it in onboarding went to
-   *  Connections, saw "Sin conectar", and requested it again. */
-  const requestConnection = (id: "whatsapp") => {
-    const label = connectionOf(id)?.label ?? "WhatsApp";
-    const detail =
-      `Número: ${phone.trim()}\n\n` +
-      `Vía oficial (Cloud API): pide verificación de la empresa ante Meta y ` +
-      `la tramitamos nosotros.`;
-    createConnectionRequest(cfg, {
-      title: `Conectar ${label}`,
-      body:
-        `Lo pidió en el alta del portal, cuando eligió por dónde quiere que le avise.\n` +
-        detail +
-        `\n\nNo hagas nada por tu cuenta con esto: avisale al equipo de tuagente ` +
-        `que hay que conectarlo y dejá el ticket esperando.`,
-    }).catch(() => { /* if it couldn't be recorded, onboarding doesn't get stuck over it */ });
   };
 
   /** The notify step, resolved where it's decided and not at the end of onboarding.
@@ -321,18 +268,10 @@ export default function Onboarding({ manifest, cfg, onDone }: {
    *  they'd gone through naming, so whoever entered from another machine into
    *  an ALREADY-named agent picked a channel that never got saved.
    *
-   *  What does NOT get sent: `whatsapp` as a notify channel. The adapter only
-   *  accepts email/none, and sending anything else fails the whole
-   *  call. Until the kit adds it, WhatsApp lives as a request -- a ticket,
-   *  same as in Connections -- and not as a channel.
-   *
-   *  AND SOMETHING ALWAYS GETS SAVED. It used to only record "none" for two of
-   *  the four answers: picking WhatsApp, or email with an invalid address,
-   *  wrote nothing, so the manifest stayed at `notify_channel: null` --
+   *  AND SOMETHING ALWAYS GETS SAVED. Email with an invalid address used to
+   *  write nothing, so the manifest stayed at `notify_channel: null` --
    *  indistinguishable from a client who never got to answer -- and the
-   *  banner reminding them they're missing a channel never showed up. Right
-   *  for the one who picked WhatsApp, who's the one who'll go longest with no
-   *  channel. */
+   *  banner reminding them they're missing a channel never showed up. */
   const continueFromNotify = () => {
     const contact = realChannel === "email"
       ? { channel: "email" as const, value: mail.trim() }
@@ -343,13 +282,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
       : { channel: "none" as const };
     if (answeredSomething) {
       saveIdentity(cfg, { contact })
-        .catch(() => { /* old or down adapter: the portal carries on */ });
+        .catch(() => { /* agent down: the portal carries on */ });
     }
-    // What stayed in progress, so the inside banner doesn't talk to them as
-    // if they'd said nothing. It's just the TEXT: who shows the banner is
-    // decided by the manifest, which is where the truth comes from.
-    rememberChannelInProgress(connectionRequest);
-    if (connectionRequest) requestConnection(connectionRequest);
     setStep("automations");
   };
 
@@ -454,9 +388,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
             step === "naming" ? "h-40 w-40" : step === "chat" ? "h-16 w-16" : "h-28 w-28"
           }`}
         >
-          {/* If it was handed the site, the agentito isn't idle: it's really
-              reading it -- the adapter already created the brief's ticket.
-              The gesture isn't decorative, it shows what's actually happening. */}
+          {/* If it was handed the site, the agentito isn't idle: it plays
+              reading it. */}
           <AgentitoAnimated
             celebrations={celebrations}
             look={look}
@@ -608,17 +541,14 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                   </p>
                 </>
               )}
-              {/* THREE ANSWERS, ALL NAMED. The last is "not now" and sits next
-                  to the others on purpose: it's an answer, not an escape hatch
-                  hidden at the bottom. WhatsApp is listed because it's what
-                  half the country uses -- and it's listed telling the truth
-                  about what it takes, instead of being missing and leaving the
-                  client thinking the product doesn't get her. */}
+              {/* BOTH ANSWERS NAMED. "Not now" sits next to email on purpose:
+                  it's an answer, not an escape hatch hidden at the bottom. Only
+                  channels the agent can send through are offered: one it can't
+                  is a promise nobody keeps. */}
               {canEmail ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {([
                     ["email", "Correo"],
-                    ["whatsapp", "WhatsApp"],
                     ["none", "Ahora no"],
                   ] as const).map(([k, label]) => (
                     <button
@@ -640,35 +570,6 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                   va a estar esperando en el portal y lo ves cuando entres.
                   Trabajo igual — lo que cambia es que te enterás cuando venís.
                 </p>
-              )}
-
-              {/* WHATSAPP SAYS WHAT IT COSTS AND ISN'T OFFERED AS IF IT WERE A
-                  BUTTON. What the kit has today are two paths: the official
-                  one (Cloud API), which needs Meta to verify the business and
-                  takes days, and a QR bridge that only exists if we install it
-                  on the agent and that can get the number blocked. Neither one
-                  is "press Connect": offering it that way is what threw a
-                  Python error in a vet clinic's face. */}
-              {channel === "whatsapp" && (
-                <div className="mt-3">
-                  <p className="text-[12.5px] leading-relaxed text-ink-soft">
-                    Por WhatsApp todavía no te puedo escribir solo. La vía que sirve
-                    para un número de empresa pide que Meta verifique el negocio, y
-                    ese trámite lo hacemos nosotros: suele llevar unos días. Dejanos
-                    el número y lo arrancamos hoy. Mientras tanto, si querés que te
-                    avise desde hoy, elegí Correo.
-                  </p>
-                  <input
-                    autoFocus
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="099 123 456"
-                    inputMode="tel"
-                    maxLength={30}
-                    aria-label="Tu número de WhatsApp"
-                    className={`${inputCls} mt-2`}
-                  />
-                </div>
               )}
 
               {/* Just the address: the mail goes out from our side, so
@@ -714,15 +615,11 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                     ? "Elegí una, o tocá «Ahora no» si preferís verlo más adelante."
                     : realChannel === "email"
                       ? "Listo: te escribo a esa dirección."
-                      : channel === "whatsapp"
-                        ? phoneOk
-                          ? "Queda pedido: te escribimos para conectarlo. Mientras tanto entrás sin avisos."
-                          : "Dejanos el número, o seguí y lo vemos más adelante."
-                        : channel === "email"
-                          ? "Escribí tu dirección, o seguí y lo vemos más adelante."
-                          : "Seguís sin avisos."}
+                      : channel === "email"
+                        ? "Escribí tu dirección, o seguí y lo vemos más adelante."
+                        : "Seguís sin avisos."}
                 {url.trim() && (
-                  <> Mientras tanto sigo leyendo tu web: lo que saque queda en Entregas.</>
+                  <> Mientras tanto sigo leyendo tu web: lo que saque queda en Archivos.</>
                 )}
               </span>
             </div>
@@ -770,23 +667,6 @@ export default function Onboarding({ manifest, cfg, onDone }: {
 /* ── The other half of letting the channel step be skipped ───────────────── */
 
 const CHANNEL_POSTPONED_KEY = "tuagente_channel_postponed";
-// Which channel is IN PROGRESS on our side, so the banner doesn't talk to
-// them as if they'd answered nothing. It's just the text: who sees the banner
-// is decided by the manifest. Lives under the `tuagente_` prefix, so it gets
-// wiped on an agent change like everything else.
-const CHANNEL_IN_PROGRESS_KEY = "tuagente_channel_in_progress";
-
-/** What we asked them to connect, if they asked for anything. */
-export function rememberChannelInProgress(channel: "whatsapp" | null) {
-  try {
-    if (channel) localStorage.setItem(CHANNEL_IN_PROGRESS_KEY, channel);
-    else localStorage.removeItem(CHANNEL_IN_PROGRESS_KEY);
-  } catch { /* private mode: the banner falls back to the generic text, which is still correct */ }
-}
-
-const IN_PROGRESS_MESSAGE: Record<string, string> = {
-  whatsapp: "Estamos conectando tu WhatsApp; hasta que esté, lo que haga te espera acá.",
-};
 
 /** The reminder that there's still no channel to notify through.
  *
@@ -795,17 +675,14 @@ const IN_PROGRESS_MESSAGE: Record<string, string> = {
  *  agent that works and never tells them -- which is exactly what both test
  *  clients said would keep them from paying.
  *
- *  Shows up when NO CHANNEL THAT ACTUALLY WORKS came out of onboarding, which
- *  it saves as `notify_channel: "none"` no matter which one the client
- *  picked. With old adapters the field doesn't arrive and nothing shows: it's
- *  better to remind nobody than to remind someone who already has their
- *  channel set. It can be dismissed, and dismissing it lasts: the path isn't
- *  lost because Connections is still there. */
+ *  Shows up when NO CHANNEL THAT ACTUALLY WORKS came out of onboarding (saved
+ *  as `notify_channel: "none"`) and the agent can send email: the address is
+ *  the one thing the banner can offer, and it asks for it inline. It can be
+ *  dismissed, and dismissing it lasts. */
 export function NoChannelNotice({ cfg, manifest, onSaved }: {
   cfg: PortalConfig; manifest: Manifest; onSaved: () => void;
 }) {
   const [closed, setClosed] = useState(true);
-  const [inProgress, setInProgress] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const [mail, setMail] = useState("");
   const [saving, setSaving] = useState(false);
@@ -813,18 +690,14 @@ export function NoChannelNotice({ cfg, manifest, onSaved }: {
   useEffect(() => {
     try {
       setClosed(localStorage.getItem(CHANNEL_POSTPONED_KEY) === "1");
-      setInProgress(localStorage.getItem(CHANNEL_IN_PROGRESS_KEY));
     } catch {
       setClosed(false);
     }
   }, []);
-  const requested = inProgress ? IN_PROGRESS_MESSAGE[inProgress] : undefined;
   const canEmail = (manifest.notify_channels ?? []).includes("email");
-  // NOTHING TO OFFER, NOTHING TO SAY. It used to link to Conexiones, a Hermes
-  // module this engine doesn't have: the client clicked "Decime por dónde te
-  // aviso" and landed on a 404. With no channel the agent can send through
-  // and nothing requested, there is nothing the client can do from here.
-  if (manifest.notify_channel !== "none" || closed || (!requested && !canEmail)) return null;
+  // NOTHING TO OFFER, NOTHING TO SAY: with no channel the agent can send
+  // through, there is nothing the client can do from here.
+  if (manifest.notify_channel !== "none" || closed || !canEmail) return null;
   const close = () => {
     setClosed(true);
     try {
@@ -839,7 +712,6 @@ export function NoChannelNotice({ cfg, manifest, onSaved }: {
     setFailed(false);
     try {
       await saveIdentity(cfg, { contact: { channel: "email", value: mail.trim() } });
-      rememberChannelInProgress(null);
       onSaved();
     } catch {
       setFailed(true);
@@ -852,13 +724,8 @@ export function NoChannelNotice({ cfg, manifest, onSaved }: {
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3">
         <BellOff className="h-4 w-4 shrink-0 text-c-amber-ink" />
         <p className="min-w-0 flex-1 text-[13px] leading-snug text-c-amber-ink">
-          {requested || "Todavía no tengo por dónde avisarte: lo que haga te espera acá hasta que entres."}{" "}
-          {requested ? (
-            // The request is a ticket on the board: that's where it moves.
-            <Link href="/app/pipeline" className="font-semibold underline underline-offset-2">
-              Ver cómo va
-            </Link>
-          ) : !asking && (
+          Todavía no tengo por dónde avisarte: lo que haga te espera acá hasta que entres.{" "}
+          {!asking && (
             <button
               onClick={() => setAsking(true)}
               className="font-semibold underline underline-offset-2"
@@ -867,7 +734,7 @@ export function NoChannelNotice({ cfg, manifest, onSaved }: {
             </button>
           )}
         </p>
-        {asking && !requested && (
+        {asking && (
           <form
             onSubmit={(e) => { e.preventDefault(); if (mailOk && !saving) save(); }}
             className="flex w-full items-center gap-2 sm:w-auto"

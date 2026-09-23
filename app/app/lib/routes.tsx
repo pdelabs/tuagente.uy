@@ -38,8 +38,6 @@ export const PARAM = {
   thread: "thread",
   /** /app/approvals?request=<blocked ticket id> */
   request: "request",
-  /** /app/artifacts?artifact=<artifact id> */
-  artifact: "artifact",
   /** /app/posts?post=<post id, `<YYYY-MM-DD>-<slug>`> */
   post: "post",
   /** /app/files?folder=<path> */
@@ -48,10 +46,6 @@ export const PARAM = {
   file: "file",
   /** /app/skills?skill=<name> */
   skill: "skill",
-  /** /app/connections?connection=<catalog id> */
-  connection: "connection",
-  /** /app/tasks?scheduled=<cron id> */
-  scheduled: "scheduled",
 } as const;
 
 /** `?p=` (the request the chat starts with) also counts as arriving with an
@@ -217,7 +211,7 @@ export function replaceInRoute(changes: Changes) {
  *     link doesn't have to be an animation: the client came to see one thing,
  *     it has to be there.
  *  2. A FIXED 150ms `setTimeout` IS A BET. The element appears once the
- *     adapter answers, and against a client's agent over the internet that
+ *     agent answers, and against a client's agent over the internet that
  *     takes longer than against the lab; at 150ms it might not exist yet and
  *     the effect got silently lost. Here it waits until it exists, with a cap.
  *

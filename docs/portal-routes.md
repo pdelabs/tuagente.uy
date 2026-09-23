@@ -32,14 +32,11 @@ in their portal and that we'll take them there as soon as they enter).
 | Flows | `/app/flows` |
 | Board | `/app/pipeline` |
 | Approvals | `/app/approvals` |
-| Artifacts | `/app/artifacts` |
 | Posts | `/app/posts` |
-| Connections | `/app/connections` |
 | Activity | `/app/activity` |
 | Files | `/app/files` |
 | Usage | `/app/usage` |
 | Skills | `/app/skills` |
-| Scheduled tasks — URL-only, not in the nav on purpose: Flows replaced it as the machine-facing view, the route stays alive for us (`app/app/layout.tsx`) | `/app/tasks` |
 
 Bare `/app` redirects to `/app/home`.
 
@@ -82,22 +79,16 @@ one.
 | A board task | `/app/pipeline?task=<ticket id>` | `/app/pipeline?task=t_b1fb02ad` | opens |
 | A conversation in the Inbox | `/app/inbox?thread=<ticket id>` | `/app/inbox?thread=t_b1fb02ad` | opens · stale id (9/16, lab) |
 | An approval request | `/app/approvals?request=<ticket id>` | `/app/approvals?request=t_36dbdd23` | opens · stale id |
-| An artifact | `/app/artifacts?artifact=<id>` | `/app/artifacts?artifact=art_1786584384_sales-by-branch` | opens |
 | A post | `/app/posts?post=<post id>` | `/app/posts?post=2026-09-15-agente-que-contesta` | opens · stale id (9/14, against a mock adapter) |
 | A folder | `/app/files?folder=<path>` | `/app/files?folder=interno` | opens |
 | A file | `/app/files?file=<path>` | `/app/files?file=workspace/entregables/2026-08-12-instagram-post-trash-bags-20-off.md` | opens (with the `workspace/` prefix) |
 | A flow | `/app/flows/<slug>` | `/app/flows/revision-precios-proveedores` | opens · stale id |
-| A connection | `/app/connections?connection=<catalog id>` | `/app/connections?connection=whatsapp` | opens · stale id |
 | A system skill | `/app/skills?skill=<name>` | `/app/skills?skill=approval` | opens · stale id |
-| A scheduled task | `/app/tasks?scheduled=<cron id>` | `/app/tasks?scheduled=bb8485784d90` | opens |
 What's left **UNVERIFIED** inside rows that were otherwise tested:
 
 - `?folder=entregables` (`interno` was tested, which is the hard case, not
   this one).
 - `?file=` **without** the `workspace/` prefix.
-- `?skill=<one of ours>` opening the editor (it was tested that the Edit
-  button only shows up where the adapter can actually edit it; the direct
-  link into the editor wasn't).
 - `?p=` from chat, which isn't a detail but counts as arriving with intent.
 
 Rules for file routes:
@@ -119,26 +110,19 @@ Rules for file routes:
   folder is empty" with eight files inside, because the filter was eating
   exactly what the link came to show.
 
-`?skill=` works for **every** skill, but they don't all do the same thing,
-and that matters when writing the message that goes with the link:
-
-- **One of ours** (the ones we built for that client) opens its text,
-  editable.
-- **A system one** (the kit's and the engine's) expands the "Common to the
-  system" drawer, brings it into view and highlights it with its name and
-  summary. It doesn't open an editor because there's nothing to edit: the
-  adapter only serves the content of the editable ones. A link to one of
-  these is "look at which one it is", not "edit it".
-- A name that doesn't exist shows a notice and leaves the full list in view,
-  instead of doing nothing.
+`?skill=` works for **every** skill and does the same thing for all of them:
+it brings the skill into view and highlights it with its name and summary,
+expanding the "Common to the system" drawer if that's where it lives. There is
+no editor — the engine serves no skill's text — so a link to one is "look at
+which one it is", not "edit it". A name that doesn't exist shows a notice and
+leaves the full list in view, instead of doing nothing.
 
 **"Brings it into view" has only been true since 8/12 (second pass).**
 Before that, this table's promise was false for the single most common
 case: with `?skill=approval` the highlighted row sat at 823px, the window
 measured 813, and `scrollY` stayed at **0** — the client landed at the very
 top and saw nothing highlighted. Three causes, all three fixed in
-`bringIntoView()` (`lib/routes.tsx`), which Connections and Approvals now
-use too:
+`bringIntoView()` (`lib/routes.tsx`), which Approvals now uses too:
 
 - **the smooth scroll never finished** (with `behavior: "instant"` the same
   `scrollIntoView` moves the page to 442): the portal carries
@@ -159,22 +143,6 @@ use too:
   the rare one. Timers there still run at ~1 per second, which is enough for
   this. The why is also in `bringIntoView()`'s own comment: if someone
   "fixes" it back to rAF, it breaks exactly the common case.
-
-`?connection=` says **three different things** depending on what it finds,
-and none of them overclaims. It used to always say the same thing — "You're
-here to connect X. It's the one missing for one of your flows" — and with
-that it invented two things: the product (with `?connection=doesnt-exist-xyz`
-it announced "You're here to connect doesnt exist xyz") and the need (with
-any real id, even when the one actually missing was a different one).
-
-- **It exists and isn't connected** → "You're here to connect X", and only
-  if the catalog marks it `required` does it add that one of the client's
-  flows needs it.
-- **It exists and is already connected** → it says so, in green, and marks
-  it below.
-- **It's not in the catalog** → a stale-link notice with the id in quotes
-  and the full list below. The raw id is NEVER humanized to pass it off as
-  a product name.
 
 A `/app/flows/<slug>` that doesn't exist does the same thing: a plain-spoken
 notice and the list of flows the agent actually has. It used to answer
@@ -198,7 +166,7 @@ afternoon of 8/12. Before that it didn't: measured in the lab, `scrollY` at
 would open the link to the request waiting on their own approval and land
 looking at someone else's request, with its own Approve/Reject pair in
 front. The other details don't need this because they open in a modal
-(`?task=`, `?scheduled=`, `?artifact=`, `?file=`), which appears centered
+(`?task=`, `?file=`), which appears centered
 with the background locked.
 
 ## `?thread=` — and why `?task=` still works for a mail
@@ -281,7 +249,7 @@ a new request, over chat.
 ## What the client sees
 
 Ids are never shown: the screen always puts up the **human name** (the
-ticket's title, the artifact's title, the deliverable's frontmatter
+ticket's title, the deliverable's frontmatter
 `title`, the conversation's name). An id in the URL is the price of being
 able to link to it; it has no reason to reach the client's eyes.
 
@@ -291,13 +259,13 @@ to close). It copies the address of the thing, without the hash.
 ## When a link is worth it and when it isn't
 
 - **Inside the portal's own chat it isn't needed.** The agent's markdown
-  already turns `t_80ff7609`, `art_…` and file paths into chips that open
+  already turns `t_80ff7609` and file paths into chips that open
   the thing right there. A raw link there is worse.
 - **Outside the portal, yes** — an email, a comment read from a
   phone: there the link is the only way for "I left you the report" to be
   something you can open with one tap.
 - **One link per notice**, the one for the actual thing. Sending the tab
-  (`/app/artifacts`) instead of the deliverable makes them go hunting.
+  (`/app/files`) instead of the deliverable makes them go hunting.
 
 ## Why query params and not path segments
 
@@ -339,6 +307,33 @@ never an error number, never a screen that says nothing.
 - A link to a specific thing **skips that tab's welcome screen**: whoever
   arrives via a link came to see one thing, not to be introduced to the
   module.
+
+## Retired: `/app/tasks` and `?scheduled=`
+
+**Removed 23/9/2026.** The operator console over Hermes' cron store: its
+detail came from `/portal/crons/{id}`, which the engine does not serve (its
+manifest says `crons: false`). It was never in the nav; Flows is where a
+scheduled job is seen and touched.
+
+## Retired: `/app/artifacts` and `?artifact=`
+
+**Removed 23/9/2026.** Entregas listed the `artifact` plugin's HTML
+visualizations through `/portal/artifacts*`, a Hermes-adapter surface: the
+plugin has no `core/` half, the engine serves nothing under that path and its
+manifest says `artifacts: false`. What the agent delivers on the engine is a
+file under `entregables/` (the deliverable plugin), and that lives in Files
+(`?file=`) and on its flow's card. An `art_…` id in the chat is plain text now.
+
+## Retired: `/app/connections` and `?connection=`
+
+**Removed 23/9/2026.** Conexiones was a Hermes-adapter module: the catalog,
+Google's OAuth dialog, WhatsApp pairing and the per-connection permissions
+were all adapter endpoints, and the engine serves none of them (its manifest
+says `connections: false`). A flow that is missing a connection says which one
+on its own card, and that setting it up is ours; there is no screen to send the
+client to. The agent's `connection:<id>` and `permissions:<id>` marks no longer
+turn into cards either. A `/app/connections` link now lands on a route the
+portal does not have.
 
 ## Retired: `/app/team`, `?role=` and `?hire=`
 

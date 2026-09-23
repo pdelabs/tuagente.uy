@@ -3,8 +3,8 @@
 // Home: the first thing the client sees every day. Answers "what happened
 // and what needs my attention?" without forcing them through the eight tabs.
 //
-// PRINCIPIO CERO: serves any Hermes agent for any client. No specific
-// cases: it talks about "your agent", "tasks", "files".
+// PRINCIPLE ZERO: serves any agent of any client. No specific cases: it
+// talks about "your agent", "tasks", "files".
 //
 // Honesty, which is the rule in charge here:
 //   · Each block depends on its module in the manifest. Module off or
@@ -22,24 +22,23 @@ import {
 import Link from "next/link";
 import {
   Activity, ArrowRight, CheckCircle2, ChevronRight, Clock, Columns3,
-  FolderOpen, Hand, LayoutDashboard, MessageSquare, Plug, Plus, RefreshCw, Workflow,
+  FolderOpen, Hand, MessageSquare, Plus, RefreshCw, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
-  isClientRequest,
-  getActivity, getApprovals, getArtifacts, getConnections, getFiles, getFlows, getJobs,
+  getActivity, getApprovals, getFiles, getFlows, getJobs,
   getManifest, getSessions, getTickets, loadConfig,
-  type ArtifactMeta, type Connection, type CronJob, type Flow, type HttpError,
+  type CronJob, type Flow, type HttpError,
   type Manifest, type PortalConfig, type Ticket,
 } from "../lib/agent";
 // The SAME flow ↔ scheduled-task match that Flows uses: if each screen
 // picked its own, we'd be back to two answers for "when does it run?".
 import { crossTask } from "../flows/runs";
 import { HIDDEN_MODULES } from "../layout";
-import { Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
+import { Card, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
 import {
   BOARD_COLUMNS, learnUtcOffset, cronCadence, columnForTask, whenItRuns, timeOf,
-  momentOf, artifactLabel, greetingOfTheDay, type TaskColumn, type Tone,
+  momentOf, greetingOfTheDay, type TaskColumn, type Tone,
 } from "../lib/labels";
 import { humanizeRuns } from "../lib/events";
 import { agentDisplayName } from "../lib/onboarding";
@@ -140,14 +139,6 @@ function enumerate(xs: string[]): string {
   return `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`;
 }
 
-// Artifact kind → client label. This little table used to live here, another
-// in Artifacts, and another in the modal, and all three said different
-// things about the same thing: an `other` was "Otro" over there, "Artefacto"
-// in the modal, and here it came out raw, in English. Now there's just one,
-// in `lib/labels.ts`.
-const kindLabel = (k: string) => artifactLabel(k).label;
-const kindTone = (k: string) => artifactLabel(k).tone;
-
 /** Deliverable name with no folder and no date, which it usually comes with. */
 function deliverableName(path: string): string {
   const base = (path || "").split("/").pop() || path;
@@ -164,17 +155,11 @@ function dotCls(kind: string, status: string): string {
   return kind === "ticket" ? "bg-c-violet-ink" : "bg-ink-soft/50";
 }
 
-// THE SPLIT AND THE NAMES ARE THE KANBAN'S, read from `lib/labels.ts`. A copy
-// used to live here with FOUR columns against the kanban's five: the two
-// kinds of block —the one waiting for your ok and the request you yourself
-// made, which is waiting on us— fell together into one metric called
-// "Frenadas" ("Blocked"), a word that didn't exist on any other screen. The
-// blind test noted it like this: "On Home the column is called 'Frenadas',
-// on the kanban 'Lo estamos viendo', inside the card 'Frenada — espera tu
-// respuesta'." Same split, same words, so the numbers on the two screens can
-// be checked against each other.
-const columnOf = (t: Ticket): TaskColumn =>
-  columnForTask(t.status, isClientRequest(t.body));
+// THE SPLIT AND THE NAMES ARE THE KANBAN'S, read from `lib/labels.ts`: a
+// copy used to live here with its own word ("Frenadas") that no other screen
+// used. Same split, same words, so the numbers on the two screens can be
+// checked against each other.
+const columnOf = (t: Ticket): TaskColumn => columnForTask(t.status);
 
 // The kit's tone → the metric's background. It's paint, not a word.
 const BACKGROUND: Record<Tone, string> = {
@@ -263,42 +248,6 @@ function Stat({ value, label, tone }: { value: number; label: string; tone: Tone
       <p className="text-2xl font-bold leading-none tabular-nums text-ink">{nf.format(value)}</p>
       <p className="mt-1.5 text-[11px] font-medium leading-tight text-ink-soft">{label}</p>
     </div>
-  );
-}
-
-/** Connections the client's flow needs and is missing: the agent is
- *  installed but its flow can't start — that's said BEFORE anything else,
- *  with the button that solves it. With nothing missing, the block doesn't
- *  exist. */
-function StartBlockers({ agentName, missing }: { agentName: string; missing: Connection[] }) {
-  if (missing.length === 0) return null;
-  const n = missing.length;
-  return (
-    <Card tone="amber">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white">
-            <Plug className="h-4 w-4 text-c-amber-ink" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-ink">
-              {n === 1
-                ? `A ${agentName} le falta 1 conexión para arrancar tu flujo`
-                : `A ${agentName} le faltan ${n} conexiones para arrancar tu flujo`}
-            </p>
-            <p className="mt-0.5 text-[13px] text-ink-soft">
-              {enumerate(missing.map((c) => c.label))}
-              {" — "}
-              {n === 1 ? missing[0].purpose : "sin eso, esa parte del trabajo queda esperando."}
-            </p>
-          </div>
-        </div>
-        <LinkBtn href="/app/connections">
-          {n === 1 ? "Conectarla" : "Conectarlas"}
-          <ArrowRight className="h-4 w-4" />
-        </LinkBtn>
-      </div>
-    </Card>
   );
 }
 
@@ -496,11 +445,9 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const hadManifest = useRef(false);
 
-  const [connections, setConnections] = useState<Slot<Connection[]>>({ t: "loading" });
   const [approvals, setApprovals] = useState<Slot<Approval[]>>({ t: "loading" });
   const [tickets, setTickets] = useState<Slot<Ticket[]>>({ t: "loading" });
   const [events, setEvents] = useState<Slot<Event[]>>({ t: "loading" });
-  const [artifacts, setArtifacts] = useState<Slot<ArtifactMeta[]>>({ t: "loading" });
   const [files, setFiles] = useState<Slot<FileEntry[]>>({ t: "loading" });
   const [flows, setFlows] = useState<Slot<Flow[]>>({ t: "loading" });
   // The engine's scheduled tasks: the only ones that know when each job
@@ -513,11 +460,9 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const load = useCallback((silent = false) => {
     if (!silent) {
       setFatal(null);
-      setConnections({ t: "loading" });
       setApprovals({ t: "loading" });
       setTickets({ t: "loading" });
       setEvents({ t: "loading" });
-      setArtifacts({ t: "loading" });
       setFiles({ t: "loading" });
       setFlows({ t: "loading" });
       setJobs({ t: "loading" });
@@ -558,20 +503,9 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
         // nobody went looking for.
         const on = (k: string) => !HIDDEN_MODULES.has(k) && Boolean(m?.modules?.[k]);
         return Promise.allSettled([
-          // Only worth requesting if the adapter says there's something pending.
-          request(on("connections") && (m?.pending_connections ?? 0) > 0, "las conexiones",
-            () => getConnections(cfg).then((r) => arr<Connection>(r?.connections)), setConnections),
-          // WHAT'S WAITING FOR YOUR OK, not everything in the queue. The
-          // requests the client herself made ("connect my email") live in
-          // the same list and are waiting on US: their card says "you don't
-          // have to do anything". The filter got added to the sidebar
-          // badge and not here, and the home screen was left saying "3
-          // things waiting for your ok" with the menu showing 2, on the
-          // same screen. It's the same filter, in one single place, in
-          // `lib/agent.ts`.
           request(on("approvals"), "las aprobaciones",
             () => getApprovals(cfg)
-              .then((r) => arr<Approval>(r?.approvals).filter((a) => !isClientRequest(a.body))),
+              .then((r) => arr<Approval>(r?.approvals)),
             setApprovals),
           request(on("kanban"), "el tablero",
             // `work`, because this card is the TABLERO's summary and links to
@@ -588,8 +522,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
               learnUtcOffset(...evs.map((e) => e.ts));
               return evs;
             }), setEvents),
-          request(on("artifacts"), "los artefactos",
-            () => getArtifacts(cfg).then((r) => arr<ArtifactMeta>(r?.artifacts)), setArtifacts),
           request(on("files"), "los archivos",
             () => getFiles(cfg).then((r) => arr<FileEntry>(r?.files)), setFiles),
           request(on("flows"), "tus trabajos",
@@ -634,13 +566,9 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const board = useMemo(() => {
     if (tickets.t !== "ready") return null;
     const counts: Record<TaskColumn, number> =
-      { todo: 0, inProgress: 0, waiting: 0, ours: 0, done: 0 };
+      { todo: 0, inProgress: 0, waiting: 0, done: 0 };
     for (const t of tickets.data) counts[columnOf(t)]++;
-    // The requests column only shows up if the client has ever asked for
-    // something, same as on the kanban: on a freshly installed agent it
-    // would be a fifth metric stuck at zero forever.
-    const columns = BOARD_COLUMNS.filter((c) => c.key !== "ours" || counts.ours > 0);
-    return { counts, columns, total: tickets.data.length };
+    return { counts, columns: BOARD_COLUMNS, total: tickets.data.length };
   }, [tickets]);
 
   const latest = useMemo(() => {
@@ -669,13 +597,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
       })
       .slice(0, 5);
   }, [events, flows]);
-
-  const recent = useMemo(() => {
-    if (artifacts.t !== "ready") return null;
-    return [...artifacts.data]
-      .sort((a, b) => toMs(b.created_at) - toMs(a.created_at))
-      .slice(0, 3);
-  }, [artifacts]);
 
   const deliverables = useMemo(() => {
     if (files.t !== "ready") return null;
@@ -714,15 +635,13 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const agentState: AgentitoState =
     pendingCount === null ? "normal" : pendingCount > 0 ? "waiting" : "calm";
 
-  // Celebrates when something new it produced shows up (an artifact or a
-  // deliverable). The first load doesn't count: there it hasn't done
-  // anything yet, we're just finding out.
+  // Celebrates when a new deliverable shows up. The first load doesn't count:
+  // there it hasn't done anything yet, we're just finding out.
   const produced = useMemo(() => {
-    if (artifacts.t !== "ready" || files.t !== "ready") return null;
-    const delivered = files.data.filter(
+    if (files.t !== "ready") return null;
+    return files.data.filter(
       (f) => (f.path || "").replace(/^\/+/, "").startsWith(DELIVERABLES)).length;
-    return artifacts.data.length + delivered;
-  }, [artifacts, files]);
+  }, [files]);
   const [celebrations, setCelebrations] = useState(0);
   const producedPrev = useRef<number | null>(null);
   useEffect(() => {
@@ -744,7 +663,7 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
 
   if (!manifest) return <div className={WRAP}><Spinner /></div>;
 
-  const slots = [approvals, tickets, events, artifacts, files, flows];
+  const slots = [approvals, tickets, events, files, flows];
   // Chats don't build their own block, but the life signal waits for them:
   // without this the line stays mute for an instant instead of saying it's looking.
   const waitingForData = slots.some((s) => s.t === "loading") || chats.t === "loading";
@@ -757,11 +676,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const statusLine = [`${agentDisplayName(manifest)}, tu agente`];
   if (lastSignal) statusLine.push(`última actividad ${lastSignal}`);
   else if (waitingForData) statusLine.push("buscando novedades…");
-
-  const producedBlocks = [
-    recent && recent.length > 0 ? "artefactos" : null,
-    deliverables && deliverables.length > 0 ? "entregables" : null,
-  ].filter(Boolean);
 
   return (
     <div className={WRAP}>
@@ -807,14 +721,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
         />
       ) : (
         <div className="flex flex-col gap-3">
-          {/* 0 · If the flow can't start, that goes before everything else */}
-          {connections.t === "ready" && (
-            <StartBlockers
-              agentName={manifest.agent}
-              missing={connections.data.filter((c) => c.required && c.status !== "connected")}
-            />
-          )}
-
           {/* 1 · What needs your attention, above everything */}
           {approvals.t === "loading" && <Skeleton rows={2} />}
           {approvals.t === "ready" && <NeedsAttention pending={approvals.data} />}
@@ -876,43 +782,24 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
           )}
 
           {/* 4 · The last thing it produced */}
-          {(artifacts.t === "loading" || files.t === "loading") && <Skeleton rows={3} />}
-          {producedBlocks.length > 0 && (
-            <div className={`grid gap-3 ${producedBlocks.length > 1 ? "md:grid-cols-2" : ""}`}>
-              {recent && recent.length > 0 && (
-                <Section title="Lo último que produjo" icon={LayoutDashboard} href="/app/artifacts" viewLabel="Ver entregas">
-                  <ul className="-my-1">
-                    {recent.map((a) => (
-                      <li key={a.id} className="flex items-center gap-2 py-1.5">
-                        <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{a.title}</span>
-                        <span className="shrink-0">
-                          <Chip tone={kindTone(a.kind)}>{kindLabel(a.kind)}</Chip>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </Section>
-              )}
-
-              {deliverables && deliverables.length > 0 && (
-                <Section title="Archivos nuevos para vos" icon={FolderOpen} href="/app/files" viewLabel="Ver archivos">
-                  <ul className="-my-1">
-                    {deliverables.map((f) => (
-                      <li key={f.path} className="flex items-center gap-2 py-1.5">
-                        <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
-                          {deliverableName(f.path)}
-                        </span>
-                        {ago(f.mtime) && (
-                          <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-soft">
-                            {ago(f.mtime)}
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </Section>
-              )}
-            </div>
+          {files.t === "loading" && <Skeleton rows={3} />}
+          {deliverables && deliverables.length > 0 && (
+            <Section title="Archivos nuevos para vos" icon={FolderOpen} href="/app/files" viewLabel="Ver archivos">
+              <ul className="-my-1">
+                {deliverables.map((f) => (
+                  <li key={f.path} className="flex items-center gap-2 py-1.5">
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
+                      {deliverableName(f.path)}
+                    </span>
+                    {ago(f.mtime) && (
+                      <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-soft">
+                        {ago(f.mtime)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Section>
           )}
 
           {/* "Consumo" ("Usage") used to live here. It left on 8/16/2026:

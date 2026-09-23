@@ -7,22 +7,15 @@
 
 import { createContext, useContext } from "react";
 import Link from "next/link";
-import { FileText, Image as ImageIcon, Images, LayoutDashboard, Sheet, Ticket as TicketIcon } from "lucide-react";
-import { ConnectionCardInline, PermissionsInline } from "./ConnectionChip";
-import { CapabilityInline } from "./CapabilityChip";
+import { FileText, Image as ImageIcon, Images, Sheet, Ticket as TicketIcon } from "lucide-react";
 import { PARAM } from "./routes";
 
 export type Entity =
   | { kind: "ticket"; id: string }
   | { kind: "file"; path: string }
-  | { kind: "artifact"; id: string }
-  | { kind: "post"; id: string }
-  | { kind: "connection"; id: string }
-  | { kind: "permissions"; id: string }
-  | { kind: "capability"; id: string };
+  | { kind: "post"; id: string };
 
 const TICKET_RE = /^t_[0-9a-f]{6,16}$/i;
-const ARTIFACT_RE = /^art_\d{10}_[\w-]+$/i;
 /** A post's id is its folder in `posteos/`: the date it is FOR and the slug
  *  (`save_post`, `kit/plugins/social/core/posts.py`). It is the one id in the
  *  product that reads like a sentence, which is why the agent quotes it in
@@ -34,19 +27,6 @@ const ARTIFACT_RE = /^art_\d{10}_[\w-]+$/i;
  *  has to carry a letter, and a dot is not part of an id). The source of the
  *  shape is the tool's own `SLUG`: lowercase, digits and hyphens, 40 max. */
 const POST_RE = /^\d{4}-\d{2}-\d{2}-(?=[a-z0-9-]*[a-z])[a-z0-9][a-z0-9-]{0,39}$/i;
-// The agent mentions a catalog connection as `connection:google-workspace`
-// (its SOUL teaches it to): the chat draws it as a card with status and a
-// button.
-const CONNECTION_RE = /^connection:([a-z0-9][a-z0-9-]*)$/i;
-// `permissions:whatsapp` -- the agent CAN'T change the policy, but it can
-// point at where it gets changed: instead of a flat "I can't send WhatsApps",
-// it puts the control right there and the client decides on the spot.
-const PERMISSIONS_RE = /^permissions:([a-z0-9][a-z0-9-]*)$/i;
-// `capability:image-editing` -- what the agent CAN'T do yet and could be
-// turned on. The SOUL teaches it to write this alone on its own line and
-// promises "the portal turns it into a card": until now the portal didn't,
-// and the token sat raw in the middle of the reply.
-const CAPABILITY_RE = /^capability:([a-z0-9][a-z0-9-]*)$/i;
 
 /** Extensions the agent produces that the client has to be able to open.
  *
@@ -97,14 +77,7 @@ export function detectEntity(raw: string): Entity | null {
   const text = raw.trim();
   if (!text || /\s/.test(text)) return null;
   if (TICKET_RE.test(text)) return { kind: "ticket", id: text };
-  if (ARTIFACT_RE.test(text)) return { kind: "artifact", id: text };
   if (POST_RE.test(text)) return { kind: "post", id: text.toLowerCase() };
-  const cx = CONNECTION_RE.exec(text);
-  if (cx) return { kind: "connection", id: cx[1].toLowerCase() };
-  const pm = PERMISSIONS_RE.exec(text);
-  if (pm) return { kind: "permissions", id: pm[1].toLowerCase() };
-  const cap = CAPABILITY_RE.exec(text);
-  if (cap) return { kind: "capability", id: cap[1].toLowerCase() };
   const m = FILE_RE.exec(text);
   if (m && m[1].includes(".")) return { kind: "file", path: m[1] };
   return null;
@@ -117,7 +90,6 @@ export const EntityContext = EntityCtx;
 const ENTITY_HINT = {
   ticket: "Ver la tarea",
   file: "Abrir el archivo",
-  artifact: "Ver la visualización",
   post: "Ver el posteo",
 };
 
@@ -145,20 +117,15 @@ function PostLink({ id }: { id: string }) {
 
 export function EntityChip({ entity, label }: { entity: Entity; label: string }) {
   const open = useOpenEntity();
-  // A connection doesn't open a modal: it IS the card, with status and a button.
-  if (entity.kind === "connection") return <ConnectionCardInline id={entity.id} />;
-  if (entity.kind === "permissions") return <PermissionsInline id={entity.id} />;
-  if (entity.kind === "capability") return <CapabilityInline id={entity.id} />;
   // A post opens in its own tab, where it is drawn the size it is going out at.
   if (entity.kind === "post") return <PostLink id={entity.id} />;
   // The icon says what it is before you touch it: a photo opens to look at,
   // a spreadsheet opens to download.
   const Icon =
     entity.kind === "ticket" ? TicketIcon
-      : entity.kind === "artifact" ? LayoutDashboard
-        : isImage(entity.path) ? ImageIcon
-          : isSpreadsheet(entity.path) ? Sheet
-            : FileText;
+      : isImage(entity.path) ? ImageIcon
+        : isSpreadsheet(entity.path) ? Sheet
+          : FileText;
   // With no provider (outside the chat) there's nowhere to open it: it stays
   // as code.
   if (!open) {
