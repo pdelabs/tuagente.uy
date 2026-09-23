@@ -13,15 +13,28 @@ both engines any more. Rules from that day on:
 - **No conditionals to keep both engines working.** The seams added
   to coexist with Hermes are the first things to remove, not to extend:
   `SKILLS = []` overrides in `approval/core/plugin.py` and
-  `flow/core/plugin.py` (they exist to hide Hermes-only `SKILL.md`s),
-  `CORE_ONLY` in `kit/tools/check-plugins.py`, and the `flow` plugin's
-  "no scheduled flows on this engine" prose.
+  `social/core/plugin.py` (they exist to hide Hermes-only `SKILL.md`s;
+  `kanban` needs none — `engine/core/plugins.py` says why each of the two
+  remaining ones is still there), `CORE_ONLY` in
+  `kit/tools/test_check_plugins.py` (the check itself, `check-plugins.py`,
+  carries no such list — it was misfiled here). **Closed 2026-09-23**: the
+  `flow` plugin's "no scheduled flows on this engine" prose is gone —
+  since 14/9 that plugin is only the catalog of curated flows
+  (`kit/plugins/flow/plugin.json`); the mechanism moved whole into
+  `engine/core/flows.py` and `engine/core/scheduler.py`.
 - The Hermes agents in `kit/fleet.md` (the local demo, the VPS
-  `tuagente`) stay up until the new engine has what they use — flows and
-  cron — then they get rebuilt on it and the Hermes half of the kit
-  (`adapter/`, `compose/`, `mcp-guard/`, `install.sh`, `new-agent.sh`,
-  `deploy-remote.sh`, `notes/` on engine knobs, `engine/` and `mcp` plugin
-  surfaces) is deleted, not archived.
+  `tuagente`, and `east-v2`, the kit's own validation agent — not a
+  client, but still on Hermes) stay up until they get rebuilt on the new
+  engine, then the Hermes half of the kit (`adapter/`, `compose/`,
+  `mcp-guard/`, `install.sh`, `new-agent.sh`, `deploy-remote.sh`, `notes/`
+  on engine knobs, `engine/` and `mcp` plugin surfaces) is deleted, not
+  archived. **"Flows and cron" is no longer what they're waiting on — both
+  are built**, and so is the board: `engine/core/flows.py`,
+  `engine/core/scheduler.py`, `kit/plugins/kanban/core/board_store.py`
+  (`docs/inbox-plan.md`). What is left is the rebuild itself, plus
+  whatever each live agent's own connections still need (WhatsApp,
+  Mercado Pago, Instagram's curated MCP — see "Only while the Hermes
+  fleet runs" near the end), not a missing engine capability.
 
 The record of why: `docs/engine-plan.md`, `docs/engine-verdict.md`.
 
@@ -98,14 +111,15 @@ after it, and whose:
   and `mail` is already in the instance's `CORE_PLUGINS` — it inherits
   `instance.yml`'s default list, which `instance.env` does not override.
 
-  **The flow arrives `active`, so the order matters**: with the six lines in
-  place the agent is reading from the restart on, and WITHOUT them it wakes up
-  every five minutes to answer «Falta conectar el correo: no está
-  EMAIL_IMAP_HOST» — a turn and a conversation each time. If the mailbox is not
-  ready the same day, pause «Bandeja de entrada» from Flujos, which is one
-  click, and resume it when it is. The lab's own copy is PAUSED for exactly
-  that reason (`engine/workspace/flows/bandeja-de-entrada/FLOW.md`), so the lab
-  does not spend a turn every five minutes on a stub mailbox.
+  **Done 2026-09-23: the order no longer matters.** The flow can arrive
+  `active` with the six lines still missing — the scheduler now skips an
+  active flow that names a connection nobody set up
+  (`waiting_for_a_connection` in `engine/core/scheduler.py`), logs
+  `flow.incomplete` once, and stays quiet instead of spending a turn every
+  five minutes to answer «Falta conectar el correo». The lab's own copy is
+  still PAUSED (`engine/workspace/flows/bandeja-de-entrada/FLOW.md`), but
+  that is a preference now, not a defense against the every-five-minutes
+  bug.
 
 ## Migration to English (2026-08-23)
 
@@ -125,9 +139,6 @@ after it, and whose:
   `google-workspace` skill's `scripts/setup.py` once (it opens OAuth in the
   browser). The task is **paused** until then; without this it runs and fails
   every 10 min.
-- **"Revisar leads e informe Uruguay" reminder**: paused. If you want it, it
-  needs reactivating **by switching delivery to `telegram`** — with `origin`
-  it points at a portal session, which can't receive messages.
 - **Vercel variables** for pdelabs-landing: `EMAIL_USER` / `EMAIL_APP_PASSWORD`
   (the contact form has been fixed in code since 8/3).
 - **Luna vs Sonnet verdict.** Evidence so far: Luna completes everything, ~1
@@ -152,16 +163,6 @@ in `docs/east-requirements.md` §5; what is left is here.
   would POST a path and never see a credential. That is an adapter surface and a
   statement about where credentials live, so it is Luis's call, not a patch.
   Until then the key is on the agent and this line is the record of it.
-
-- **A scheduled run that dies BELOW the model still leaves nothing** (dossier
-  §4.4, and it is not closed). The flow prompt now orders a visible ticket when
-  the agent cannot work — verified: the Drive run with no token left a blocked
-  ticket naming what was missing. But 23 of the last 50 runs of the old
-  comparison cron died on `TimeoutError: Cron job idle for 922s` and
-  `RuntimeError: Connection error`, where there is no turn left in which to obey
-  a prompt. **The format has to supply it**: an engine-level failure should mark
-  the board without the agent's cooperation. Nobody has looked at whether
-  `hermes cron runs` exposes enough to build that from the adapter.
 
 - **`transcription`'s `detects` answers the wrong question.**
   `connections/catalog.json` detects `auxiliary-models` by the presence of
@@ -224,56 +225,6 @@ in `docs/east-requirements.md` §5; what is left is here.
   answered `t_db70d562` and the board stayed at five cards. US$0.0225 +
   US$0.0252 (sessions `api-36d062a2`, `api-40d6c71b`).
 
-- ~~**A TICKET COMPLETED IN THE SAME BREATH AS THE APPROVAL KILLS IT.**~~ —
-  **CLOSED 30/8/2026: it is family 4 of the gate.** Found by the run above: on
-  the first of the two notes (`t_f36ecad6`) the turn left the approval as a
-  comment, blocked the card `needs_input` — and then called `kanban_complete`
-  on it. A finished ticket is out of `/portal/approvals`: the sí it was waiting
-  for can no longer be given, and the client sees a closed job for something
-  nobody authorised. The instinct being obeyed is the engine's kanban lifecycle
-  («complete the task you worked»), which knows nothing about a card that is
-  deliberately parked. The second note did not do it, after the SKILL.md
-  started saying the ticket is left BLOCKED — but that is prose with one
-  observation behind it, which is exactly what this file has learned not to
-  trust, and the live proof below is why: told a second time, with the client
-  claiming to have authorised it by phone, the agent called `kanban_complete`
-  TWICE and the hook is what stopped it.
-
-  **The rule**, in `policy/hooks/gate.py` beside the one that already refuses
-  `kanban unblock` for the same reason (the agent must not resolve the
-  permission it is asking for): it may not END a card that is sitting in the
-  client's approvals queue. The verbs are the ones the image actually has, read
-  off `hermes_cli/kanban.py` and `tools/kanban_tools.py` and not guessed —
-  `kanban complete` and `kanban archive` (`archive --rm` deletes the row) on
-  the CLI, and the `kanban_complete` tool, which is the only one in the kanban
-  tool surface that ends anything and whose `task_id` DEFAULTS to the served
-  ticket. With no id, the target is `HERMES_KANBAN_TASK`: that was the shape of
-  the incident. "Waiting for the client" is the adapter's own predicate
-  (`adapter/kanban.py`, `PENDING_WHERE`) verbatim, because what is being
-  protected is exactly that queue not emptying out behind the client's back.
-  The refusal names the ticket and says what to do instead — leave it blocked,
-  the client's Aprobar/Rechazar unblocks it — and closes the retry the way the
-  other three messages do: *«No hay verbo que lo haga bien —completarlo,
-  archivarlo o borrarlo son lo mismo que desbloquearte solo—.»*
-
-  Two things it needed beyond the hook. `config.base.yaml` had to declare a
-  `kanban_complete` matcher: a hook only runs for the tools its matcher names,
-  and that is how this got through with `kanban_unblock` already hooked.
-  And `agent-check.py` now FAILS if any of the four tools is unmatched — the
-  same lesson as always, a rule nobody checks is not a rule — on top of 21 new
-  cases in the gate battery (90 total: every terminating verb, both id routes,
-  the normal lifecycle still closing cards, and the comment that merely
-  *describes* the command not being blocked).
-
-  Measured on `east-v2`: `hermes hooks test` fires the engine's own registered
-  hook and gets the refusal for the tool and for `archive --rm`, lets a card
-  nobody is waiting on through, and leaves `unblock` exactly as it was; and the
-  live turn above is in the gateway log as
-  `WARNING agent.tool_executor: Tool kanban_complete returned error` twice,
-  with the ticket still `blocked` and the agent telling the client *«No: no me
-  dejó cerrarlo porque el ticket está esperando tu aprobación en el portal.»*
-  US$0.0077 for both turns.
-
 ## Open product decisions
 
 - **A way for a plugin or a sub-agent to FAIL OUT LOUD instead of delivering
@@ -306,28 +257,18 @@ in `docs/east-requirements.md` §5; what is left is here.
   one.
 - **The client has no way to customize their agent from the portal.** Today
   all customization (business rules, tone, what needs approval) happens by
-  editing `SOUL.md` by hand in the agent's repo — meaning, we do it. Luis's
+  editing the SOUL by hand in the agent's repo — meaning, we do it. Luis's
   rule (8/4): anything client-specific gets requested **as the client,
   through the portal**; if the portal can't do it, that's a product gap.
   Still need to decide the shape: probably an "Instructions" tab that writes
-  a bounded block of the SOUL, versioned and reversible, without letting the
-  client override the hard rules (the approval gate is non-negotiable).
-  **Naming is already solved end-to-end (8/7)** and serves as the template
-  for what's missing: the client gives it a name and a look during
-  onboarding, the portal does `POST /portal/identity`, the adapter (0.26)
-  saves it to the volume, reports it in the manifest, **writes it into the
-  SOUL inside a block bounded by markers** (without touching the onboarding
-  prose) and hits the Telegram bot with a `setMyName`. That delimited,
-  rewritable block is exactly the shape we were looking for for the
-  "Instructions" tab: copy it.
-  What's still missing on this front:
-  - The **bot's photo** on the channels: there's no method for it in the Bot
-    API, it goes by hand through `@BotFather` (`/setuserpic`). The SVG in
-    `lib/agentito.tsx` can generate the PNG, but the export step is still
-    missing.
-  - The client **can't change the look afterward**, once onboarding is done:
-    there's nowhere to do it. Once the customization tab exists, it goes
-    there.
+  a bounded, versioned block, without letting the client override the hard
+  rules (the approval gate is non-negotiable). Naming already shows the
+  shape on the engine: `POST /portal/identity` → `identity.save()`
+  (`engine/core/identity.py`) merges whatever the client sent into
+  `identity.json`, no SOUL markers, no bot to rename — there is no channel
+  bot any more since Telegram came out. The **look**, same story: the
+  client picks it once at onboarding and there's nowhere to change it
+  afterward; once the customization tab exists, it goes there.
 
 ## Technical, prioritized
 
@@ -399,220 +340,61 @@ in `docs/east-requirements.md` §5; what is left is here.
 
 - **Railway / getting the agent off the Mac**: deliberately postponed until
   we're done iterating on the interface.
-- **Worker orchestration** (assign, claim, dispatch, swarm): Hermes's native
-  tools don't expose it outside a dispatcher worker, and we don't need it.
 
-## Artifacts → "Entregas" merge (decided 8/7, pending)
+## Entregas — decided removed, not merged (2026-09-23)
 
-A single main tab with EVERYTHING the agent produces — deliverables
+**Superseded.** The merge below assumed an `artifact` (HTML) skill that no
+longer exists: since 2026-09-23 `deliverable` is the only one, it uses
+engine paths (`/opt/kit/plugins/deliverable/skills/deliverable/deliver.py`,
+`/workspace`), and the extra mount that put a copy at `/opt/kit/skills/` is
+gone from both composes (`engine/README.md`, gate G3). The portal dropped
+the Entregas/artifacts tab the same day — nothing produces an HTML artifact
+today. Open: whether a deliverables view (what `deliverable` writes to
+`workspace/entregables/`, today only reachable through Files) is wanted as
+its own tab later. Nobody has asked for it since the removal.
+
+~~A single main tab with EVERYTHING the agent produces — deliverables
 (md/xlsx/files) + artifacts (HTML) — grouped by flow. Today Artifacts (HTML
 only) got promoted to a main tab as an interim step; the `artifact` skill
 needs to gain `--flow` the way `deliverable` already has it. Once merged,
-Files stays under "Más" as a raw view of the workspace.
+Files stays under "Más" as a raw view of the workspace.~~
 
-## Connections — open after 8/9
+Email being the only connection prospecting waited on (from the 8/9
+Connections work, below) is moot — `mail` is a native engine plugin now.
 
-- **Mercado Pago: written and audited, NOT TESTED against a real account.**
-  No endpoint has touched Mercado Pago yet. It needs to run against
-  **sandbox** credentials (not production) and get verified end to end: the
-  four read ones, the payment link, the refund (with its idempotency and its
-  pre-check) and a **genuinely signed** webhook. Until that happens, no
-  client gets promised this. The code is in
-  `kit/connections/mercadopago/`, with three bugs already fixed that
-  came out of reading the currently popular reference integration — the two
-  most popular unofficial MCPs still have them.
+## Open from today's audit (2026-09-23)
 
-- **The guard isn't registered in Hermes.** It's built and tested (against a
-  fake MCP and against Mercado Pago), but the `hermes mcp add` that puts it
-  in the agent's path is still missing. Confirmed on 8/9 with
-  `hermes mcp list`: *No MCP servers configured*. Until then the agent sees
-  NONE of the **41** curated tools (12 WhatsApp + 6 Mercado Pago +
-  23 Instagram).
-  - **Where `guard.py` lives matters**: it has to go in `/opt/policy/`
-    (mounted `:ro`), not in `/opt/data/`. If the agent can edit the guard,
-    there is no guard.
+- **Onboarding promises to keep reading the client's site; the engine
+  doesn't.** The overview/notify step says *"Mientras tanto sigo leyendo tu
+  web: lo que saque queda en Archivos"* (`app/app/lib/onboarding.tsx:622`)
+  whenever a URL was typed, and the identity payload does carry `url`
+  (`identity.save()` merges whatever the portal sends,
+  `engine/core/identity.py`). But nothing on the engine ever reads it back —
+  no scraper, no flow, no plugin. Decision pending with Luis: build the read
+  (so the promise is true), or drop the line (so the portal stops promising
+  it).
+- **`portal-check.py` caught up — done 2026-09-23.** The docstring no longer says Hermes, and the files check asserts that nothing is served as html/svg/js and that `nosniff` is set, instead of `text/plain` for everything.
+- **The seams kept on purpose, until the Hermes fleet dies** (`CLAUDE.md`'s
+  rule against NEW ones — these are old, and none is being extended):
+  two base URLs (`endpoint` + `adapter`) in `app/app/lib/agent.ts`, which the
+  engine plays along with on purpose (`engine/server/app.py`: one process,
+  two ports, so the portal needs no engine-specific branch); `chatStream`'s
+  OpenAI dialect, in both the request and the SSE response shape
+  (`lib/agent.ts`); `/api/jobs` tying a flow to its cron by the name
+  `flujo-<slug>` instead of a real id (closed on the engine itself —
+  `trigger_job` publishes a real one, `engine/server/flows.py:89` — but the
+  portal's matching code hasn't been simplified to use it yet); parsing the
+  Hermes gateway's OpenAI-style `{error: {message}}` alongside the engine's
+  flat `{error: "…"}` (`lib/agent.ts:211-219,954-959`); and `SKILLS = []` in
+  `approval/core/plugin.py` and `social/core/plugin.py` (see "The engine:
+  Pydantic AI, decided" at the top).
 
-- ~~**A third path around the policy is still open, unclosed.**~~ **CLOSED —
-  see «Privilege», below.** The adapter used to **run**
-  `/opt/data/scripts/portal_adapter.py` — which lives on the
-  agent's volume — with `./policy` mounted read-write, so the
-  agent could overwrite that file and have the adapter execute it on the next
-  restart. The code moved to `kit-adapter/`, mounted `:ro`, and the adapter
-  runs as uid 10000. An agent whose compose still points at the old path is a
-  migration, and `install.sh` detects it and prints the lines to paste. The
-  reasoning below is kept because it is what found the hop.
-  - On the Mac the agent can overwrite it, **but that's a Docker Desktop
-    artifact**: bind mounts ignore ownership (the file got created as
-    `hermes` inside a `root` directory with no write permission). On Linux
-    it should be denied.
-  - **This has to be confirmed on the VPS, not assumed.** If Linux doesn't
-    block it either, the fix is to mount the script from a separate
-    directory `:ro`, the same as the policy.
+## Skills of its own the adapter can't edit — REMOVED
 
-- **WhatsApp: pairing pending.** The bridge is running and the QR shows up
-  in the portal, but nobody has scanned it. When it happens, it has to be
-  with a **disposable number**: the QR path uses whatsmeow and Meta can
-  block the number.
-
-- **Email still isn't connected**, and it's the only connection a flow
-  requests today (prospecting is sitting amber waiting on it).
-
-- **Instagram: curated, NOT CONNECTED and CODE NOT AUDITED.** 23 tools from
-  the official MCP (`mcpware/instagram-mcp`, Graph API) classified as
-  15 read / 8 act.
-  - **The classification came from reading the repo's README, not the
-    code.** With Mercado Pago we learned that's not enough: the three bugs
-    (the missing `X-Idempotency-Key` among them) only surfaced once we read
-    the implementation. **Still need to pull down mcpware and give it the
-    same pass**: verify each function does what its name says, and that the
-    read/act class matches what it actually touches.
-  - Still need to connect a real account and run the read ones end to end.
-  - Prerequisites on the client's side: a **Business professional** and
-    **public** account, and a linked **Facebook page** (the chosen MCP uses
-    Facebook Login; the lighter path, *Instagram API with Instagram Login*,
-    doesn't need a page but leaves out DMs).
-  - **Reading is the reason for the connection**, not posting: without
-    `get_media_posts` the weekly flow writes blind, repeats topics and steps
-    on what's already gone out.
-  - **For our own account there's NO app review** — Standard Access is
-    auto-approved and covers reading *and* posting. (An earlier note said
-    2-4 weeks; that was wrong.) The 2-4 weeks are for Advanced Access, for
-    operating **other people's** accounts: that's the day this gets sold as
-    a product, and it's worth starting that process early since it's
-    waiting, not work.
-  - **DMs are not going to work**: `instagram_manage_messages` requires
-    Advanced Access even on our own account. The 3 tools are declared but
-    dead.
-  - **The token lasts 60 days and dies silently.** Needs refreshing before
-    it expires; without that the connection kills itself every two months.
-  - The `instagrapi`-based MCPs were ruled out: detection within hours and
-    escalation to a **permanent ban**. With WhatsApp the risk is acceptable
-    because the number is disposable; a brand account isn't.
-
-  The full reasoning is in `kit/connections/instagram/README.md`.
-
-## Rejecting an approval — CLOSED on 8/12, and why the detail matters
-
-**Status: done on both sides.** It stays written here because the shortcut —
-the one that looks obvious — kills requests, and someone is going to propose
-it again.
-
-The contract: **rejecting is ONE comment signed `cliente` and the ticket's
-status does NOT get touched.** The ticket stays `blocked`, stays in the tab,
-and the unblock gets spent exactly once across the whole negotiation: on
-approval.
-
-**Why it doesn't unblock, which is the opposite of what looks obvious.** A
-ticket only has one useful `unblock`: `block_recurrences` climbs every time
-it re-blocks for the same cause after an unblock, and at two
-(`BLOCK_RECURRENCE_LIMIT`, hardcoded in `kanban_db.py`) the ticket goes to
-`triage`, where Approve returns 409 and no CLI verb brings it back.
-Rejecting-while-unblocking spent that single unblock on the first "no": the
-agent would re-propose, re-block, hit the limit, and the request died. With
-the auto-decomposer on it was worse: it split the ticket using the **old
-body**, leaving the client a task in the queue that said "use the prepared
-order for 8 hinges" when she had already corrected it to 20. It's in the
-lab, in `t_b1fb02ad`: `blocked → unblocked → blocked → unblocked →
-block_loop_detected → decomposed`.
-
-- **Kit** (`portal_adapter.py`, `_reject`): `POST /portal/approvals/{id}/reject`
-  does a single write — the `cliente`-signed comment that starts with
-  "RECHAZADO POR TU CLIENTE" —, notifies the agent via
-  `notify_agent_of_comment`, and returns `{ok, status, unblocked:false,
-  in_approvals, notified, block_recurrences}`.
-- **Portal** (`app/app/approvals/page.tsx`, `doReject`): a single call to
-  that endpoint, nothing else. Before it was three calls, not atomic: if the
-  last one failed, the comment was already posted and the screen said "no se
-  pudo" — and retrying commented twice. The card **doesn't disappear**: it
-  stays with the "Le dijiste que no" notice inside, and the agent's answer
-  shows up right there.
-
-Verified in the browser against the lab agent (8/12): status stays
-`blocked`, one new comment per rejection, no `unblocked` or `decomposed`
-event, and the agent answered on the same ticket.
-
-**What NOT to do again:** neither `setTicketStatus(ready)` nor
-`hermes kanban unblock` in the rejection path, not here and not in the kit.
-And the text the adapter writes is for the machine: the portal shows it
-filtered (`readComment` in `lib/agent.ts`) because it's signed `cliente`, and
-without that the client reads "RECHAZADO POR TU CLIENTE. No hagas lo que
-pediste aprobar…" above a "Vos" — a prompt she never wrote.
-
-## Skills of its own that the adapter can't edit
-
-**Who unblocks it:** whoever touches `portal_adapter.py`.
-
-`GET /portal/inventory` lists, as `source: "own"`, skills that live inside a
-category folder (e.g. `skills/content/social-content/`) but **doesn't set
-`editable`** on them, and `GET /portal/skills/{name}` only resolves
-top-level ones: it answers 404 «esa habilidad no existe o no es editable».
-
-The portal no longer over-promises (the Edit button only shows up with
-`editable === true`, and they still get grouped as the client's own, which
-is accurate). But the client has skills built for them that they can't
-touch, and nothing explains why. The real fix is on the adapter: either
-`_skill_editable` should also resolve one category level, or the list should
-send an explicit `editable: false` so it's at least a decision and not an
-oversight.
-
-
-## Privilege: the agent's paths to something that runs with more permission (8/12)
-
-Two were open and **both got closed**; one defense-in-depth item remains.
-It's written up in full because the wrong reasoning cost us a day: we
-thought getting the adapter's code out of `data/` closed "both hops", and it
-didn't: they were still two hops, just with a different key.
-
-**CLOSED — the adapter's code.** It lived in `data/scripts/`, which belongs
-to the agent, and the container ran it as root with `policy/` mounted rw.
-Now it lives in `kit-adapter/`, mounted `:ro`, and the adapter runs as
-uid 10000.
-
-**CLOSED — `data/.env` as the `env_file` for both services.** This wasn't
-"can redirect directories": it was **arbitrary code execution inside the
-adapter**. The chain, measured against the real image, the adapter as uid
-10000 with its code mounted `:ro`:
-
-```
-the agent owns data/ (and inside its container it runs as root)
-  → writes data/.env with PYTHONPATH=/opt/data/evil
-  → docker injects that variable when starting the adapter
-  → /opt/data/evil/json.py shadows a stdlib module
-  → "AGENT CODE RUNNING INSIDE THE ADAPTER"
-  → that process has policy/ in RW:
-      · rewrites hooks/gate.py               (the gate, so it lets
-        everything through)
-      · rewrites cont-init-patches.sh        (which hermes mounts as
-        /etc/cont-init.d/03-patches and s6 runs AS ROOT on every startup)
-```
-
-Closed by moving the secrets out to `<agent>/secrets.env`, root:root 600, at
-the agent's root, which no container mounts. The PoC repeated after the
-change no longer executes anything. And if someone recreates `data/.env` by
-hand, the compose doesn't reference it: it stays inert (verified with
-`docker compose config`).
-
-**CLOSED — `data/config.yaml`, the second consumer.** It was `:ro` for
-hermes but **rw for the adapter**, which had it through the `./data` mount.
-The adapter only READS it (default model, disabled skills, preamble), so now
-it's mounted `:ro` for it too.
-
-**OPEN (defense in depth) — the adapter can rewrite the guardrails sitting
-next to it.** It writes `policy/policy.json` and
-`policy/capabilities/requests.jsonl`, and to replace the first one
-atomically (tmp + rename) it needs write permission **on the directory**
-`policy/` — the same one holding `guard.py`, `hooks/`, `tools/`, `mcp/` and
-`capabilities/catalog.json`. Whoever can write the directory can delete
-anything inside it; tested. **The sticky bit isn't enough**: it protects
-against deleting other people's files except for the directory's owner, and
-the owner here is exactly this process. Today there's no path from the
-agent to that process (its code is `:ro` and no variables leave `data/`), so
-it's defense in depth, not an open hole. It closes by moving the two files
-the adapter writes into a folder of its own — `state/`, mounted rw only for
-it — and making `policy/` `:ro` for the adapter too. Touches:
-`PORTAL_POLICY_DIR` in the adapter, the path `mcp-guard/guard.py` reads,
-both composes, `install.sh`, and a migration.
-
+The whole question is moot: the portal's Habilidades tab is read-only by
+design now (`app/app/skills/page.tsx`: "a change to how the agent works is
+asked for over the chat"), so there is no Edit button to gate on
+`editable` any more, on either engine.
 
 ## Approvals and comments — what was left open after the 8/12 batch
 
@@ -656,113 +438,28 @@ read from the thread. What's still open:
   was left this way on purpose — because interpolated it shows up
   capitalized mid-sentence ("y Tu agente no lo vuelve a traer"). The real
   fix is for the name to come from the manifest everywhere.
-- **`block_loop_detected` doesn't say what to do.** `labels.ts` translates
-  it, but unlike `triage` it doesn't carry the "now what" line: it's exactly
-  the event that shows up when the request has died, and that's when the
-  client needs to know they have to ask again.
 
-### G-4 (the "doesn't exist" notice in Connections) — DOES NOT REPRODUCE, measured
+**REMOVED — G-4, the "doesn't exist" notice in Connections.** Measured as
+not reproducing on 8/12, over a route (`/portal/connections`) that no
+longer exists: the portal dropped the Conexiones tab 2026-09-23. Moot on
+both counts now.
 
-It was noted that `?connection=<something>` showed "No tengo ninguna
-conexión que se llame «correo»" on the first frame against a slow agent.
-**It doesn't happen.** Measured in the browser on 8/12 by manually delaying
-the `/portal/connections` response 5 seconds: at a second and a half the
-screen shows the spinner, the notice doesn't appear, and once the response
-arrives the correct message shows up ("Venís a conectar…"). The guard
-exists and is the early `return` `if (connections === null) return
-<Spinner/>`, which does the same thing as the explicit `X !== null` guard in
-Files, Tasks, and Entregas. Nothing to fix here; it's written up so nobody
-goes hunting for it again.
+## Kit installers — Hermes-only (8/12)
 
-## Kit installers — two gaps the audit left open (8/12)
-
-(This section was already written once and got lost in a concurrent write to
-the file; here it is again.)
-
-Context: `deploy-remote.sh` no longer has its own file list and runs
-`install.sh` against a staging copy, with a manifest (`.kit-installed`, path
-+ sha256) that's the only thing that authorizes deleting anything. Two
-things were left open on purpose:
-
-- **The "keeping it" notice fires only once.** When the kit stops shipping a
-  file and the client had edited it, it doesn't get deleted and a notice
-  fires — good. But the new manifest no longer names it, so from the next
-  run on that orphan never shows up again: not in `install.sh`, not in
-  `--diff`, not in the deploy. A skill we removed from the kit that the
-  client had touched can stay indexed forever without a trace (and a skill
-  in `data/skills/` shadows the one in `kit-skills/`, a bug that already
-  cost us a batch). Need to move orphans to a separate list —
-  `.kit-orphans`, or have `agent-check.py` watch them — so the notice keeps
-  repeating until someone decides.
-
-- **Nobody compares the two composes.** `tools/compare-installers.sh`
-  proves that a local agent and a remote one get the same files, but
-  `docker-compose.example.yml` and `docker-compose.remote.yml` are still two
-  hand-maintained templates. The audit dropped `HERMES_DASHBOARD=0` from the
-  remote one — the 27x/min crash-loop bug — and the check still came back
-  green. Still need to compare the keys that must match between the two
-  (`HERMES_DASHBOARD`, `HERMES_ACCEPT_HOOKS`, the adapter's `user:`, the
-  `policy/`, `kit-skills/`, `kit-adapter/` mounts and the `env_file`, the
-  engine tag) and list the ones that differ on purpose.
-
-Detail from the same family: the checks walk the tree with `find -type f`,
-which **doesn't see symlinks**, so a symlink the agent leaves at a kit path
-doesn't show up in any comparison.
-
-## 8/12 audit — three things it found and got fixed, and one still missing
-
-Writing these up because none of them were documented and all three are the
-same family: data the agent writes ends up consumed by something running
-with more privilege.
-
-- **P1 — command injection as root on the VPS (CLOSED).**
-  `tools/observability.sh` read the `default:` from `data/config.yaml` —
-  which the agent writes — and interpolated it **unquoted** into the string
-  that goes to `ssh`. With a `default: modelo'; touch
-  /tmp/ROOT-ON-THE-VPS; echo 'x`, the injected command ran. Chain: the agent
-  writes its config → the operator runs a documented kit tool → arbitrary
-  command in the server's root shell. **It's the first path that got out of
-  the container and reached the host.** Closed with shape validation
-  (`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,80}$`) plus passing the value through
-  `printf %q` into a script that comes in over stdin, no `sed`. Swept the
-  rest: it's the only interpolation of that kind in the kit (everything else
-  read from an agent gets used in a local `echo`).
-
-- **P2 — the deployer reopened `data/config.yaml` on every run (CLOSED).**
-  A `sed` commented out the two `:ro` lines "for the first boot", so the
-  agent could write its own config until someone ran `close-config.sh` by
-  hand. The compose says what that enables ("could turn back into a
-  cronjob and register an MCP around the guard; it just had to wait for a
-  restart") and it was also what fed P1. The precaution was left over from
-  an old engine: with v2026.7.30 it boots fine with the file `:ro` from the
-  first boot, verified. `close-config.sh` is only left for old agents.
-
-- **P3 — the secrets migration destroyed client configuration (CLOSED).**
-  The first version only moved variables from an allowlist and deleted
-  `data/.env`: it dropped `TELEGRAM_ALLOWED_USERS` — which the kit itself
-  creates and is the bot's allowlist — and the value ended up nowhere.
-  Without that variable the bot either answers nobody or answers anybody.
-  It's now a **denylist** (only `PYTHONPATH`, `LD_PRELOAD` and family stay
-  out), the file is moved **whole and unrewritten** when nothing dangerous
-  is in it — so a multiline value, like a PEM key, doesn't get split — and
-  when filtering is needed, the original stays at `data/.env.unmigrated`
-  instead of getting deleted.
-
-- **CLOSED (23/8) — the remote guard for the adapter migration failed OPEN,
-  and the guard is gone.** In `deploy-remote.sh`, to avoid deleting
-  `data/scripts/portal_adapter.py` while the container was still running it,
-  it asked over ssh `docker inspect … | grep /opt/data/scripts`; any error —
-  docker not responding, a container named differently, ssh dropping — read as
-  "already migrated". It was never fixed, it was REMOVED, because it had
-  stopped being able to do its job: since the adapter split into
-  workspace/kanban/flows/rooms/plugins, that branch uploaded the big file
-  alone, and the big file imports the other five. What it "preserved" was an
-  adapter that raises ImportError on the next restart — the same crash it
-  existed to prevent. The local installer's twin was worse: its destinations
-  are outside `ALLOWED_PREFIXES`, so it aborted the whole install with
-  "Installed nothing" every time it fired. Both are gone; the old path is
-  simply obsolete now, so the cleaner removes it with the sha check, and
-  `install.sh` prints the entrypoint/user/mount to change in the same run.
+`install.sh`/`deploy-remote.sh` gaps and closures — none of it runs on an
+engine instance, which is stood up by hand under `engine/instances/`, not
+installed: the "keeping it" orphan notice fires once and never again (needs
+`.kit-orphans`), the two composes (`docker-compose.example.yml`,
+`docker-compose.remote.yml`) are hand-maintained and can silently drift (the
+audit dropped `HERMES_DASHBOARD=0` and the check stayed green), `find -type f`
+doesn't see symlinks. Three privilege-escalation bugs found and closed the
+same day (P1 command injection through `data/config.yaml` into a root
+`ssh`, P2 the deployer reopening `data/config.yaml` on every run, P3 the
+secrets migration dropping `TELEGRAM_ALLOWED_USERS`), plus the
+adapter-migration guard that failed open and was removed outright (23/8).
+The adapter's own privilege model (`data/scripts/`, `data/.env`, `policy/`
+write access) is under "Only while the Hermes fleet runs" near the end —
+none of these paths exist in the engine's shape.
 
 ## The pattern behind the last three rounds, and what to build (8/12)
 
@@ -879,12 +576,12 @@ What's **still open** after this batch:
   where it also repeats what the "POR QUÉ SE FRENÓ" banner already says
   three lines up. `isMarker()` lives in `approvals/page.tsx`: it needs to
   move up to the lib and get used in the Pipeline too.
-- **In Tasks the same line shows two different times** ("Los lunes a las
-  09:00" and "Próxima lun 17 ago a las 06:00"): the cron comes in the
-  agent's timezone and the time gets formatted with the browser's. Until
-  both come from the same zone, the line contradicts itself.
+- ~~**In Tasks the same line shows two different times**~~ — **Done
+  2026-09-23**: the manifest now publishes `timezone`
+  (`engine/server/portal.py:54`, see "Flows that tell the truth" below,
+  item 4), which is the fix this bullet was asking for.
 
-## Flows that tell the truth — closed on 8/13, and what's left for the kit
+## Flows that tell the truth — closed on 8/13, updated 2026-09-23
 
 The blind QA session on 8/12 turned up the portal's worst finding: **the
 screen was lying in green.** The vet clinic had two flows showing the
@@ -901,83 +598,37 @@ in plain language, with the raw error collapsed underneath. Pause, resume
 and "probarlo ahora" are real buttons now. Activity comes out from under
 "Más" and gains the sources it was missing.
 
-What **the kit needs** (none of this can be done from the portal):
+What was needed next, in Hermes-kit terms back then — restated for the
+engine, where a flow is a file and there is no separate job store
+(`engine/core/flows.py`):
 
-1. **PATCH in the gateway's CORS — it's what blocks changing the day and
-   time.** Both clients asked for it separately, and it's the only one of
-   the four actions that couldn't get implemented. The verb exists and
-   works (`PATCH /api/jobs/{id}` with `{"schedule": {...}}`), but the
-   preflight answers `Access-Control-Allow-Methods: GET, POST, DELETE,
-   OPTIONS` — no PATCH — so the browser cuts it off before it goes out.
-   Verified on 8/13 against the lab:
-
-   ```
-   curl -i -X OPTIONS http://127.0.0.1:8942/api/jobs/<id> \
-     -H "Origin: http://localhost:8090" \
-     -H "Access-Control-Request-Method: PATCH"
-   → Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS
-   ```
-
-   Adding `PATCH` to that list is enough for the portal to stop sending the
-   client to chat to ask for a schedule change. **In the meantime**, the
-   "Cambiar día u hora" button leads to chat with the request already
-   written out: it doesn't lie, but it's five minutes of waiting to move
-   one hour.
-
-2. **`trigger_job` in `/portal/flows`.** The adapter ALREADY reads it from
-   the frontmatter (it uses it to compute `last_run`) but doesn't publish
-   it. Without it, the portal ties each flow to its task **by the name
-   `flujo-<slug>`**, which is what the kit gives the cron when it creates
-   it. It works, and with duplicates it picks the live, most recent one —
-   but that's a naming convention doing the job of a foreign key: the day
-   someone renames a cron by hand, that flow silently loses its next run,
-   its failure reason, and its buttons. Publishing the id closes this.
-
-3. **Delete a flow.** The vet clinic also asked to be able to remove one.
-   `DELETE /api/jobs/{id}` does pass CORS, but deleting the cron leaves the
-   `FLOW.md` orphaned and the flow keeps showing up in the portal with no
-   task: a half-deletion is worse than none. The adapter needs to expose a
-   removal that takes out both halves (and is reversible, or at least warns
-   that it isn't).
-
-4. **The agent's declared timezone.** The portal no longer formats with the
-   browser's clock: it uses the offset carried by the engine's own dates
-   (`2026-08-17T08:30:00-03:00`). But the `mtime`s from `/portal/files` and
-   the `started_at`s from `/api/sessions` are bare epoch, with no timezone,
-   so Activity borrows the offset it found on another date from the same
-   batch. It works, and it breaks exactly in the case that matters most:
-   **an agent with no scheduled task yet** has nowhere to pull it from and
-   falls back to the viewer's own clock. A `timezone` (or the offset) in
-   `/portal/manifest` settles it once and for all and serves the whole
-   portal.
-
-5. **`/portal/activity` sees almost nothing the agent does.** The
-   accountant read *"Todavía no hay actividad"* right after setting up
-   three flows and having the agent write her three documents, and her
-   conclusion was worse than the bug: *"si la bitácora me miente cuando
-   estoy mirando, no la voy a creer cuando no estoy"*. The cause: the
-   endpoint has **two sources, and only two** — `executions` (cron runs)
-   and `task_events` (pipeline). She had neither: her crons hadn't run yet
-   and her pipeline was empty. Everything her agent did, it did by
-   conversing, and **writing files or setting up flows leaves no row in
-   either of those two tables**. Measured on 8/13 against the lab:
-   `/portal/activity` returned **1** event while `/portal/files` had **4**
-   files and the session **128** messages. The portal papered over it from
-   outside by mixing `/portal/files` and `/api/sessions` into the same
-   timeline, but **that's three calls to assemble a log the adapter could
-   hand over ready-made** — and inside it knows things the portal doesn't
-   (which file a run wrote versus which one the client uploaded, without
-   guessing from the folder). If `/portal/activity` folded in the workspace
-   files and the human sessions, the portal could drop that patch job.
-
-6. **No failing run raises an alarm outside the portal.** The cron's prompt
-   already tells the agent that if it couldn't do the work it should leave
-   a visible ticket — good — but both of the vet clinic's runs failed
-   **before the agent even started** (`RuntimeError: No LLM provider
-   configured`), so there was nobody left to leave a trace: the only
-   footprint stayed in `executions`, where nobody looks. A flow that fails
-   two Mondays in a row needs to go find the client on their channel, not
-   wait for them to come in. That one's on the kit.
+1. **Still open — changing a flow's day or time.** Not a gateway CORS
+   problem any more: on the engine there is no separate job to PATCH,
+   changing the schedule is editing the `cron:` line of the flow's own
+   `FLOW.md`. What's missing is a verb: `POST /api/jobs/{id}/{action}`
+   (`engine/server/flows.py`) only knows `pause`/`resume`/`run`, so the
+   portal still sends the client to chat instead of writing the file
+   itself.
+2. **Done, closed.** `trigger_job` is published (`engine/server/flows.py:89`).
+3. **Still open — deleting a flow.** Same shape as #1: a flow IS the
+   `FLOW.md`, so deleting it is deleting one file — there is no separate
+   cron entry left to orphan, unlike the Hermes worry this item was
+   written against. What's missing is the same verb gap as #1: nothing
+   exposes it yet.
+4. **Done, closed.** The manifest publishes `timezone`
+   (`engine/server/portal.py:54`); the portal no longer needs to borrow an
+   offset from another date.
+5. **Still open, in a smaller shape.** The engine's events are already
+   ONE table (`core/db.py`'s `append_event`, written from flows, kanban,
+   mail, notify, memory, delegation…), which is far more than the old
+   two-source `executions`/`task_events` split. But the portal still does
+   the patch job itself, in the frontend — merging `/portal/files` and
+   `/api/sessions` into the timeline (`app/app/activity/page.tsx`) — so
+   the actual fix (the endpoint hands over a log already folding in files
+   and sessions) still hasn't happened.
+6. **Done, closed.** The `notify` plugin raises the alarm now — a broken
+   flow reaches the owner through their channel
+   (`kit/plugins/notify/core/notify_loop.py`; "Telling the owner" above).
 
 ---
 
@@ -1027,30 +678,6 @@ What they found IN ADDITION, and is already closed (commits `b5fe118`,
 4. **Three of Tero's tickets arrive with `status: "todo"`**, which neither
    `columnOf` nor `taskStatus` recognizes; both send it to "En curso". It
    works by accident.
-
-### What's left for the kit (in addition to the six from the previous block)
-
-7. **A connection request needs to be born blocked in ONE round trip.**
-   `adapter/portal_adapter.py:1723` (`create_ticket`) creates the ticket
-   `ready` and assigned, so the worker picks it up within seconds. The
-   portal today makes two round trips (create + block) and there's a ~2 s
-   window against the dispatcher's ~6-22 s. A `{"waiting": true}` closes it.
-8. **A dependency block on a ticket with NO PARENTS is an instant
-   re-promote** (`hermes_cli/kanban_db.py:5530` + `recompute_ready` at
-   `:3988`). It's the loop factory that burned US$0.09 in 13 minutes, and it
-   happens to **any** ticket, not just ours. It's the engine's: a candidate
-   to report upstream to Nous.
-9. **`connections/catalog.json:31`** — Telegram's `how` claims *"El bot ya
-   está creado"*, which is false when `TELEGRAM_BOT_TOKEN` is missing, and
-   the portal shows it verbatim above "Pedir que la conecten".
-10. **`notify_channel` in the manifest is what the client ANSWERED, not what
-    ACTUALLY WORKS** (`adapter/portal_adapter.py:342`). If we connect the
-    channel from our side, nobody updates `contact` and the banner keeps
-    showing up. The correct fix is to derive it from the real state of the
-    channels.
-11. **`NOTIFY_CHANNELS` doesn't accept `whatsapp`**
-    (`adapter/portal_adapter.py:165`): in the meantime it lives as a request
-    and never as a channel.
 
 ### A trap in the engine's API, for whoever sets up the next client
 
@@ -1204,41 +831,6 @@ None of this unblocks itself: while Usage stays hidden it bothers nobody,
 but **the day the billing model gets decided, this is the first thing to
 fix** — and if the screen gets switched on without fixing it, the client
 plans around a number 9 times smaller than their actual bill.
-
-## The proxy was getting in the way, and the deploy doesn't reach it (8/16)
-
-While resetting Mr.Wobble, the first message after onboarding came back
-like this:
-
-```
-HTTP 400: litellm.UnsupportedParamsError: openrouter does not support
-parameters: ['reasoning_effort'], for model=hermes-agent
-```
-
-Hermes sends `reasoning_effort` on every request, and litellm, instead of
-dropping the parameter the provider doesn't understand, returns 400.
-**Fixed** with `drop_params: true` in `compose/litellm.yaml` (kit). It's the
-same rule that was already written there for the callbacks: observability
-got in the way of inference, so it can never be the one that cuts it off.
-
-**What's still open: that fix doesn't travel with a normal deploy.**
-`deploy-remote.sh` doesn't touch `litellm.yaml` — the proxy gets installed
-and brought up by `tools/observability.sh`, with its own compose.
-Consequences:
-
-- The agent's compose **doesn't know about the service**:
-  `docker compose up -d --force-recreate litellm` in `/opt/agentes/<slug>`
-  answers `no such service` and **doesn't fail loudly if stderr gets
-  silenced** — it looks like it restarted when it restarted nothing. It
-  gets restarted with `docker restart <slug>-litellm` or via
-  `observability.sh`.
-- **The other agents with observability turned on still have the 400.**
-  They need `observability.sh` run against them, or the yaml copied over
-  and the proxy restarted. Mr.Wobble is already fixed.
-
-It's worth having `deploy-remote.sh` sync `litellm.yaml` whenever the agent
-has the proxy running: today a proxy fix depends on someone remembering to
-run a separate script.
 
 ## What the fresh deploy of 24/8 exposed
 
@@ -1445,3 +1037,102 @@ at `/app/home` renders no onboarding and a welcome screen instead.
 It was a decision about onboarding, not a one-line guard: either onboarding
 reads the manifest once at mount, or it holds its own completion flag and the
 poll stops being able to speak for it. Both, in the end.
+
+## Only while the Hermes fleet runs
+
+Everything below only matters because `kit/fleet.md` still has three agents
+on Hermes (the local demo, the VPS `tuagente`, and `east-v2`, the kit's own
+validation agent). None of it describes the engine, and it isn't grown —
+per "The engine: Pydantic AI, decided" at the top, a Hermes-only seam gets
+removed when touched, never extended. It goes away whole, not item by item,
+the day those three are rebuilt and the Hermes half of the kit is deleted.
+
+**Ticket lifecycle guard, Hermes kanban CLI — CLOSED 30/8/2026.** A card
+sitting in the client's approvals queue could be ended with `kanban complete`
+or `kanban archive`, silently killing the approval it was blocked on. Closed
+with a hook in `policy/hooks/gate.py` reading the real verbs off
+`hermes_cli/kanban.py` and `tools/kanban_tools.py`, a `kanban_complete`
+matcher added to `config.base.yaml`, and 21 new gate-battery cases. The
+engine's own board (`kit/plugins/kanban/core/board_store.py`) has five plain
+statuses and no verb that ends a ticket outright, so it needs no such guard.
+
+**Naming mechanics, pre-engine.** The portal's `POST /portal/identity` used
+to be saved by `portal_adapter.py` (0.26) into `portal_identity.json`,
+written into the SOUL inside a `<!-- kit:base -->`-style bounded block, and
+followed by a Telegram `setMyName` on the bot. The bot's photo had no Bot
+API method — it went by hand through `@BotFather /setuserpic`, and the
+SVG-to-PNG export for it (`lib/agentito.tsx`) was never finished. All
+obsolete: Telegram is gone, so there is no bot to name or photograph, and
+the engine's own naming (`engine/core/identity.py`) never touches a SOUL at
+all — see "The client has no way to customize their agent" above.
+
+**Worker orchestration** (assign, claim, dispatch, swarm): Hermes's native
+tools don't expose it outside a dispatcher worker. Decided we don't need it,
+for either engine.
+
+**Connections — the MCP-guard-curated catalog and the kit-adapter's own
+bugs (open after 8/9).** Mercado Pago written and audited but never run
+against a real (sandbox) account (`kit/connections/mercadopago/`, three
+bugs already fixed reading the popular reference integrations); the guard
+never registered with `hermes mcp add` (`hermes mcp list` →
+*No MCP servers configured*, so the agent sees none of the 41 curated
+tools); WhatsApp pairing still pending, and has to be a disposable number
+(whatsmeow can get a number blocked); Instagram's 23 `mcpware/instagram-mcp`
+tools classified from its README, never audited against its code
+(`kit/connections/instagram/README.md`) — all superseded, for our own
+account, by the engine's direct-Graph-API `instagram` plugin, already
+"BUILT, waiting on Luis for the credentials" at the top of this file. On
+`portal_adapter.py` itself: a connection request takes two round trips to
+be born blocked instead of one (`create_ticket`, `:1723`); a dependency
+block on a ticket with no parents instant-re-promotes
+(`hermes_cli/kanban_db.py:5530` + `recompute_ready`, `:3988` — a candidate
+to report upstream to Nous, since it hits any ticket, not just ours);
+`connections/catalog.json:31` claims Telegram's bot already exists when it
+doesn't (moot outright — Telegram is gone); `notify_channel` in the
+manifest is what the client answered, never checked against what actually
+works (`:342`); `NOTIFY_CHANNELS` never accepted `whatsapp` (`:165`).
+
+**Rejecting an approval — CLOSED 8/12, superseded rather than carried
+forward.** `_reject` in `portal_adapter.py` made rejecting a single
+`cliente`-signed comment that never spends an unblock —
+`kanban_db.py`'s `BLOCK_RECURRENCE_LIMIT` is what made unblocking on
+rejection kill requests after two rounds. The engine's own approval plugin
+(`kit/plugins/approval/core/store.py`, `POST /portal/approvals/{id}/reject`)
+is a from-scratch rewrite, not this code, and carries no `block_recurrences`
+or `triage` state to spend in the first place. The lesson (never resolve
+the permission you're asking for by spending its one real unblock on a
+"no") is worth keeping in mind if the engine's board ever grows something
+similar.
+
+**Privilege — the kit-adapter's own security model (8/12).** Three hops
+found chasing "a file the agent can write ends up interpreted by something
+with more privilege": the adapter's code living in `data/scripts/`
+(agent-owned, run as root) — closed by moving it to `kit-adapter/` `:ro`
+under uid 10000; `data/.env` as arbitrary code execution inside the adapter
+via a `PYTHONPATH` that shadows a stdlib module — closed by moving secrets
+to `secrets.env`, outside any container mount; `data/config.yaml` writable
+by the adapter through the shared `./data` mount — closed, now `:ro` for it
+too. Left open as defense in depth: the adapter can still write inside
+`policy/`, the same directory `guard.py` and the hooks live in — closes by
+giving the adapter its own `state/` folder and making `policy/` `:ro` for
+it too. None of these three hops exist in the engine's shape: no
+`portal_adapter.py`, no `data/` the client's container writes to, no Hermes
+`policy/` mount.
+
+**A scheduled run that dies below the model leaves nothing (Hermes cron,
+dossier §4.4).** 23 of the last 50 runs of an old comparison cron died on
+`TimeoutError: Cron job idle for 922s` / `RuntimeError: Connection error`
+with no turn left to obey the "leave a visible ticket" prompt, and nobody
+looked at whether `hermes cron runs` exposes enough to build an
+engine-level failure marker from the adapter. Superseded by the engine's
+own shape: `scheduler.py` catches a run's exception itself and writes
+`flow.failed` with no agent cooperation needed, and the `notify` plugin
+raises the alarm to the owner on top of that — see "Telling the owner" at
+the top and "Flows that tell the truth", item 6.
+
+**The litellm proxy (`compose/litellm.yaml`).** `drop_params: true` fixed
+Hermes sending `reasoning_effort`, a parameter OpenRouter rejects with a
+400. The fix never travels with a normal `deploy-remote.sh` run — the proxy
+is installed and brought up separately by `tools/observability.sh` — so any
+Hermes agent with observability on needs it re-synced by hand. Moot for the
+engine: it talks to OpenRouter directly, no litellm anywhere in `engine/`.
