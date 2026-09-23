@@ -106,8 +106,11 @@ Event = TextDelta | ToolStarted | MessageCompleted | Paused | RunCompleted | Fai
 
 
 def first_line(text: str) -> str:
-    """The first non-empty line, for a label. Empty text gives an empty label."""
-    return next((line for line in text.strip().splitlines() if line.strip()), "")[:120]
+    """The first non-empty line, for a label. Empty text gives an empty label.
+    Its markdown goes in `db.append_event`, before the cut: a `**` cut in half
+    would survive it."""
+    line = next((line for line in text.strip().splitlines() if line.strip()), "")
+    return db.plain_label(line)[:120]
 
 
 def failure_message(reason: str) -> str:

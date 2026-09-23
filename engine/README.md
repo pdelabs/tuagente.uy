@@ -1328,8 +1328,12 @@ it makes ONE call with a separate agent, no tools, structured output: a list of
 `hecho` / `preferencia` entries. What comes back is deduplicated against the
 notebook and appended BY THE CODE, dated, through the store. **The model picks
 the words, the code does the writing**, so a turn that talks about the notebook
-can never edit it. Each write is one `memoria` event — "Anoté: …" — and zero
-entries means no write and no event, which is the common case.
+can never edit it. Each write is one `memoria` event — «Me anoté: …» — and zero
+entries means no write and no event, which is the common case. The entries are
+written TO the client, «de vos» («Cerrás a las 14 los sábados»), because she
+reads the notebook in Files and the event in Activity: the QA client read
+«Anoté: El cliente quiere…» about herself (2026-09-23). The face's and the
+delegates' guidance say that «vos» in the notebook is the client.
 
 It skips three shapes, each measured and not a precaution: a run with no prompt
 (a run RESUMED after an approval, whose only new content is a tool result), a
@@ -1777,6 +1781,23 @@ tool calls against the baseline's 12 to 42, and no deliverable written — so
 read US$0.000859 as "a light tool turn on a small prompt", not as "the same
 turn for 29× less".
 
+## What the owner reads (Activity, Inicio)
+
+`GET /portal/activity` is a projection of the events table, and three rules make
+it something the owner can read (`tests/test_activity_feed.py`, no model):
+
+- **Bookkeeping is not served.** `db.INTERNAL_KINDS` — `turn_usage`, `spend`,
+  `compaction`, `correction` — stays in the table (Uso reads the money from
+  there) and out of the feed. The QA client read «Consumo del turno: 99049
+  tokens de entrada y 1056 de salida» under her own conversation.
+- **A label is one line of plain text**, flattened in `db.append_event`:
+  `**Posteos**` from an answer's first line reached her as asterisks.
+- **A start that ended says how.** The log is append-only, so «Empecé el
+  flujo» stayed `running` — «Miga está trabajando» — forever. The projection
+  serves each `flow.started` with the status of its run's last end in the same
+  session, and each `delegation.started` with its `finished` (in order) or the
+  turn's `error`.
+
 ## Known limits
 
 Measured or read in the code, left standing on purpose. None of them is a gate.
@@ -1790,11 +1811,10 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
 - **A delegation that dies uncontained leaves a `delegation.started` with no
   end.** The harness emits the end event from inside the delegate tool, so an
   exception that propagates out of it (a shared usage limit, a cancellation, a
-  crash with `contain_errors` off) ends the delegation without one. Activity
-  then shows what was asked for and never how it went — which is honest, since
-  the turn itself ends in the engine's failure line right after it, but a row
-  that closes nothing is a row somebody will read as a delegation still
-  running.
+  crash with `contain_errors` off) ends the delegation without one. The turn
+  itself ends in the engine's failure line right after it, and
+  `/portal/activity` serves the open start with that `error`'s status (see
+  «What the owner reads» below), so the row no longer reads as still running.
 - **The extraction's tokens are not in the turn's usage either.** Same shape as
   the compaction summarizer above and for the same reason: it is a separate
   `Agent.run()` inside a capability, so a turn that noted something down cost

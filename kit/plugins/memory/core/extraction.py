@@ -73,8 +73,16 @@ INSTRUCTIONS = (
     " haya dicho el agente y el cliente no haya confirmado.\n"
     "Cada entrada es UNA línea en español, que se entienda sola dentro de un"
     " año, sin la conversación al lado.\n"
+    "Escribila hablándole al cliente, de vos, porque él la lee en sus"
+    " Archivos: «Cerrás a las 14 los sábados», «Preferís que los textos para"
+    " redes digan «¿Con cuál te quedás?»». Nunca «El cliente…» ni «Le gusta…».\n"
     "Si no hay nada que anotar, devolvés la lista vacía. Es lo más común."
 )
+
+
+# What Activity says about it. The agent's first person, like every other row:
+# «Me anoté: Cerrás a las 14 los sábados». It was «Anoté: El cliente quiere…».
+LABEL = "Me anoté: "
 
 
 class Entry(BaseModel):
@@ -165,7 +173,7 @@ class Extraction(AbstractCapability):
         )
         db.append_event(
             "memoria",
-            ("Anoté: " + " · ".join(e.text.strip() for e in fresh))[:200],
+            (LABEL + " · ".join(e.text.strip() for e in fresh))[:200],
             "completed",
             ctx.deps.session_id,
             {"lines": lines},

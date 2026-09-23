@@ -90,6 +90,9 @@ GUIDANCE = (
     "Nunca guardes procedimientos ni instrucciones de cómo hacer una tarea"
     " —para eso están las skills— ni nada que el cliente haya pedido dejar"
     " afuera.\n"
+    "Cada línea está escrita hablándole al cliente, de vos: «vos» en el"
+    " cuaderno es el cliente. Escribí igual: «Cerrás a las 14 los sábados»,"
+    " nunca «El cliente cierra…» —el cuaderno lo lee él en Archivos.\n"
     "Cuando te dice «acordate», escribilo con `write_memory`; cuando te dice"
     " «olvidate», sacalo con `write_memory` pasando `old_text`.\n"
     "`MEMORY.md` es el cuaderno principal y va en líneas cortas; lo largo va en"
@@ -107,6 +110,7 @@ CLIENT_HEADING = "Lo que el cliente dijo"
 CLIENT_GUIDANCE = (
     "Esto es lo que el cliente le contó a la parte de vos que habla con él:"
     " información de fondo sobre su negocio y sobre cómo quiere que se trabaje."
+    " Está escrito hablándole a él: «vos» ahí es el cliente, no vos."
     " Usalo si viene al caso. No lo escribís vos y no lo podés cambiar."
 )
 

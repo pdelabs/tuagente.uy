@@ -110,12 +110,62 @@ async def session_chat_stream(session_id: str, request: Request):
 
 # ── the rest of the tabs ────────────────────────────────────────────────────
 
+# What closes a `…started` event, by the family its kind belongs to. A flow's
+# run ends in one of three; a delegation in its `finished`, or in the turn
+# around it breaking (`error`), which is the one way it can end with no
+# `finished` of its own.
+ENDS = {
+    "flow": ("flow.finished", "flow.failed", "flow.paused"),
+    "delegation": ("delegation.finished", "error"),
+}
+
+
+def settled(rows: list) -> dict[int, str]:
+    """The status a `…started` event is served with once what it started ended.
+
+    THE LOG IS APPEND-ONLY AND THIS IS ITS PROJECTION. «Empecé el flujo» is
+    written `running`, and it stayed `running` after the run finished: the
+    portal read that as «Miga está trabajando» on Inicio and Activity for good.
+    So each start takes the status of the event that closed it, matched in
+    the same session — a flow's run is one session, and a session's
+    delegations close in the order they opened.
+    """
+    open_: dict[tuple[str, str], list[int]] = {}
+    out: dict[int, str] = {}
+    for row in sorted(rows, key=lambda r: r["id"]):
+        family, _, verb = row["kind"].partition(".")
+        if verb == "started" and family in ENDS and row["session_id"]:
+            open_.setdefault((family, row["session_id"]), []).append(row["id"])
+            continue
+        for family, ends in ENDS.items():
+            if row["kind"] not in ends:
+                continue
+            waiting = open_.get((family, row["session_id"])) or []
+            if family == "flow":
+                # A paused run finishes later in the same session: the last
+                # word wins, and the start stays addressable until then.
+                for start in waiting:
+                    out[start] = row["status"]
+            elif row["kind"] == "error":
+                for start in waiting:
+                    out[start] = row["status"]
+                waiting.clear()
+            elif waiting:
+                out[waiting.pop(0)] = row["status"]
+    return out
+
+
 @router.get("/portal/activity")
 def activity():
+    """What the owner reads in Activity and Inicio: `db.owner_events`, with every
+    start that already ended served with the status of its end."""
+    rows = db.owner_events(200)
+    ended = settled(rows)
     return {
         "events": [
-            {"ts": iso(row["ts"]), "kind": row["kind"], "label": row["label"], "status": row["status"]}
-            for row in db.recent_events(200)
+            {"ts": iso(row["ts"]), "kind": row["kind"], "label": row["label"],
+             "status": ended.get(row["id"], row["status"])}
+            for row in rows
         ]
     }
 

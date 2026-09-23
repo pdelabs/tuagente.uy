@@ -9,6 +9,7 @@ touching what the client already read.
 """
 
 import json
+import re
 import sqlite3
 import threading
 import time
@@ -376,6 +377,32 @@ def running_flow_runs() -> list[sqlite3.Row]:
 
 # ── the event log ───────────────────────────────────────────────────────────
 
+# The kinds that are the ENGINE's bookkeeping and not something the owner did
+# or was done for her: what a turn cost (read by Uso, `server/extra.py`), a
+# history compacted, a correction appended to an answer she already reads
+# corrected. They stay in the table — the numbers are read from here — and stay
+# out of Activity and Inicio, where the QA client read «Consumo del turno:
+# 99049 tokens de entrada y 1056 de salida» under her own conversation.
+INTERNAL_KINDS = ("turn_usage", "spend", "compaction", "correction")
+
+# What a label must not carry: markdown the portal draws as text. `**Posteos**`
+# reached Activity raw from the first line of an answer.
+_MARKDOWN = (
+    (re.compile(r"\[([^\]]*)\]\([^)]*\)"), r"\1"),          # [text](url) -> text
+    (re.compile(r"(\*\*|__|`)"), ""),                          # bold, code
+    (re.compile(r"(?<![\w*])\*(?!\s)([^*]+?)(?<!\s)\*(?!\w)"), r"\1"),  # *italic*
+    (re.compile(r"^\s*(#{1,6}\s+|[-*+]\s+|>\s*)"), ""),       # heading, bullet, quote
+)
+
+
+def plain_label(text: str) -> str:
+    """One line of plain text: what an Activity row can show as it is."""
+    text = " ".join(text.split())
+    for pattern, replacement in _MARKDOWN:
+        text = pattern.sub(replacement, text)
+    return text.strip()
+
+
 def append_event(
     kind: str,
     label: str,
@@ -385,15 +412,39 @@ def append_event(
 ) -> None:
     """Append-only: every state change writes one and Activity is its projection.
 
+    THE LABEL IS A SPANISH SENTENCE THE OWNER READS, in the agent's first
+    person and to her in the second: «Me anoté: los sábados cerrás a las 14»,
+    never «El cliente…», never a variable name, never a token count. It is
+    flattened to one line of plain text here, so markdown in whatever the
+    caller quoted never reaches her as asterisks. A kind that is bookkeeping
+    and not something she reads goes in `INTERNAL_KINDS`.
+
     `kind` reaches the client's screen raw when the portal has no label for it
     (`app/app/activity/page.tsx`), so the ones the engine invents are written the
     way the client should read them.
     """
     write(
         "INSERT INTO events (ts, kind, label, status, session_id, payload) VALUES (?, ?, ?, ?, ?, ?)",
-        (time.time(), kind, label, status, session_id, json.dumps(payload) if payload else None),
+        (time.time(), kind, plain_label(label), status, session_id,
+         json.dumps(payload) if payload else None),
     )
 
 
 def recent_events(limit: int = 200) -> list[sqlite3.Row]:
     return query("SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,))
+
+
+def owner_events(limit: int = 200) -> list[sqlite3.Row]:
+    """The newest events the owner reads — everything but `INTERNAL_KINDS`."""
+    marks = ", ".join("?" for _ in INTERNAL_KINDS)
+    return query(
+        f"SELECT * FROM events WHERE kind NOT IN ({marks}) ORDER BY id DESC LIMIT ?",
+        (*INTERNAL_KINDS, limit),
+    )
+
+
+def events_of(kind: str, since: float = 0.0) -> list[sqlite3.Row]:
+    """Every event of one kind since a moment, oldest first."""
+    return query(
+        "SELECT * FROM events WHERE kind = ? AND ts >= ? ORDER BY id", (kind, since)
+    )
