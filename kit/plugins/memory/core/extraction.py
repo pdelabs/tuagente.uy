@@ -75,7 +75,10 @@ INSTRUCTIONS = (
     " año, sin la conversación al lado.\n"
     "Escribila hablándole al cliente, de vos, porque él la lee en sus"
     " Archivos: «Cerrás a las 14 los sábados», «Preferís que los textos para"
-    " redes digan «¿Con cuál te quedás?»». Nunca «El cliente…» ni «Le gusta…».\n"
+    " redes digan «¿Con cuál te quedás?»», «Tu WhatsApp es 099 123 456». Nunca"
+    " «El cliente…», «Le gusta…» ni el nombre de su empresa en lugar de «tu».\n"
+    "Un cambio que empieza más adelante lleva desde cuándo, y no borra lo que"
+    " vale hasta entonces: «Desde marzo abrís también los sábados de 9 a 13».\n"
     "Si no hay nada que anotar, devolvés la lista vacía. Es lo más común."
 )
 
