@@ -558,6 +558,8 @@ def toolset() -> FunctionToolset:
                 tildes y mayúscula inicial, como «El horario de los sábados». No
                 es el gancho ni la primera línea del pie: es su nombre.
             caption: el pie completo, tal como va a salir, sin los hashtags.
+                Si el posteo avisa algo —una fecha, un horario, un precio, un
+                lugar—, ese dato va dicho entero también acá.
             hashtags: hasta 5, sin el `#`.
             format: `carousel` para varias imágenes, `feed` para una sola
                 vertical, `square` cuadrada, `story` para una historia.

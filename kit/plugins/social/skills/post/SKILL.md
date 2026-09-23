@@ -99,7 +99,7 @@ Si la tapa promete tres cosas, adentro hay tres, ni dos ni cuatro.
   oraciones, son dos láminas o sobra una.
 
 **d. La prueba del hilo, antes de seguir.** Leé las oraciones en orden, de
-corrido, como un párrafo. Tiene que pasar las siete:
+corrido, como un párrafo. Tiene que pasar las ocho:
 
 1. Se entiende como UN párrafo, con principio y final.
 2. Si sacás cualquiera, se nota que falta.
@@ -119,6 +119,11 @@ corrido, como un párrafo. Tiene que pasar las siete:
    última: tiene que ser el pedido y el nombre del negocio, no la lista otra
    vez. Si repite, sacale lo repetido; si sin eso no queda nada, sobra una
    lámina.
+8. **El dato por el que existe el posteo va en una lámina y va a ir en el
+   pie.** Si el posteo es para avisar algo —una fecha, un horario, un precio,
+   un lugar, cómo se pide—, ese dato está dicho entero en alguna lámina, y
+   anotalo ahora: es lo que el pie no puede dejar afuera. Quien lee el pie sin
+   pasar las láminas tiene que saber cuándo, cuánto o dónde.
 
 Si alguna falla, no es un problema de redacción: es que todavía no hay
 historia. Volvé a (b). **Una imagen cuesta y una oración no: acá es donde se
@@ -137,12 +142,17 @@ look de texto solo, lo que cambia es la composición y dónde cae el resaltado.
 
 El pie acompaña al carrusel, no lo repite: **agrega lo que las láminas no
 dicen** —el contexto, el matiz, lo que el agente nunca hace— y termina con el
-mismo pedido que la última lámina. La fórmula, en este orden:
+mismo pedido que la última lámina. **Con una excepción: el dato por el que
+existe el posteo**, el que anotaste en la prueba del hilo. Ese va también en el
+pie, dicho entero —«los sábados de 9 a 13», no «ahora también los sábados»—,
+porque mucha gente lee el pie y no pasa las láminas. Un pie que sólo invita
+(«escribinos para coordinar») sin decir cuándo, cuánto o dónde dejó afuera lo
+único que el cliente pidió avisar. La fórmula, en este orden:
 
 - **Gancho**: una línea, la frase más fuerte del posteo. Es lo único que se ve
   antes del «más», así que no la gastes saludando ni describiendo la imagen.
-- **Dos a cuatro líneas cortas** que agreguen lo que la imagen no dice.
-  Concretas, una idea por línea.
+- **Dos a cuatro líneas cortas** que agreguen lo que la imagen no dice, y una
+  de ellas el dato del posteo si lo tiene. Concretas, una idea por línea.
 - **Cierre con un solo pedido.** Guardá *y* comentá *y* escribinos es no pedir
   nada.
 - **Hasta 5 hashtags**, que van aparte y no adentro del pie.
