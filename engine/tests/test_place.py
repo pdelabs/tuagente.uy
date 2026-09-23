@@ -75,8 +75,11 @@ brief = slide.with_suffix(".json")
 asset = stamp.ASSETS / "prueba-asset.png"
 made = {"slide": slide, "brief": brief, "asset": asset}
 out = None
+# A fresh client has no `marca/` at all: made here, taken away if it was not there.
+made_assets = not stamp.ASSETS.is_dir()
 try:
     stamp.WHERE.mkdir(parents=True, exist_ok=True)
+    stamp.ASSETS.mkdir(parents=True, exist_ok=True)
     Image.new("RGBA", (WIDE, TALL), BACKGROUND).save(slide)
     brief.write_text(json.dumps({"prompt": PROMPT, "format": "feed",
                                  "model": "openai/gpt-5.4-image-2",
@@ -132,6 +135,8 @@ finally:
     for path in made.values():
         if path is not None and Path(path).is_file():
             Path(path).unlink()
+    if made_assets:
+        stamp.ASSETS.rmdir()
 """
 
 

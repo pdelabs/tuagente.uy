@@ -53,6 +53,13 @@ from core import config
 
 WS = config.WORKSPACE
 BRAND = WS / looks.BRAND
+# A FRESH CLIENT HAS NO `marca/` AT ALL, and the throwaway brand needs one: it
+# is made here and taken away at the end if it was not there before.
+MADE_BRAND_DIR = not BRAND.parent.is_dir()
+BRAND.parent.mkdir(parents=True, exist_ok=True)
+# The closing slide's name is not what this test is about, and these briefs
+# carry none: the business is nobody for the length of this process.
+posts.company = lambda: None
 SHARED = ("Instagram slide, 1080x1350 portrait. Headline in a geometric sans-serif, extra bold, sentence case, "
           "left aligned, tight line height, text block starting 9% from the left edge, at most 75% wide. ")
 TAIL = " The ONLY text on the image is the headline below, reproduced character by character."
@@ -157,6 +164,8 @@ finally:
         BRAND.unlink(missing_ok=True)
     else:
         BRAND.write_text(original)
+    if MADE_BRAND_DIR:
+        BRAND.parent.rmdir()
     for path in made:
         path.unlink(missing_ok=True)
         path.with_suffix(".json").unlink(missing_ok=True)

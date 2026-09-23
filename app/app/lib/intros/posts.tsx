@@ -2,11 +2,13 @@
 
 // Posts' welcome screen.
 //
-// The one thing this screen has to land: THE AGENT DOES NOT PUBLISH. It
-// leaves the post ready and the client posts it. Everything else on the tab
-// (copy, download) only makes sense once that's understood, and a screen that
-// opens with "your agent's posts" without saying it invites someone to wait
-// for a post that is never going up.
+// The one thing this screen has to land: NOTHING GOES OUT WITHOUT THE CLIENT'S
+// YES. The agent leaves the post ready, and it goes up either because the
+// client posts it or because they ask the agent to and approve it in
+// Aprobaciones. It used to say «Publicás vos» while the tab offered «pedile
+// que lo publique» (QA, 2026-09-23): the two have to say the same thing, and
+// a screen that opens with "your agent's posts" without saying it invites
+// someone to wait for a post that is never going up.
 //
 // The illustration is one post as it looks in the tab -- the image, the text,
 // the hashtags -- drawn in inline SVG and divs. The picture is deliberately
@@ -48,7 +50,8 @@ export default function PostsIntro({ onOk }: IntroProps) {
       <Title>Listos para publicar, cuando vos digas</Title>
       <Lead>
         Acá quedan los posteos que tu agente arma: la imagen, el texto y los hashtags,
-        listos para revisar y bajar. Publicás vos, desde tu cuenta de siempre.
+        listos para revisar. Nada sale sin tu sí: lo bajás y lo subís vos, o le pedís
+        que lo publique y te lo deja en Aprobaciones.
       </Lead>
 
       <div className="mt-6 grid gap-6 md:grid-cols-2 md:items-start">

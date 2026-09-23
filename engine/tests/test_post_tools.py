@@ -13,11 +13,14 @@ instead of them. Free, a second, and every claim is about what is left on disk:
      untouched. That call is what the creator made when it was asked for a
      better caption and had no tool for words: `replace` deleted the folder and
      the first `brief_of` then died on a sidecar that was inside it.
-  b. A SAVE THAT FAILS HALFWAY LEAVES THE POST THAT WAS THERE — the same
+  b. A SAVE THAT FAILS LEAVES THE POST THAT WAS THERE — the same
      `replace=True` with a sidecar deliberately missing raises, and afterwards
      the old post has its own `post.json`, its own pictures, byte for byte.
-     The new post is built beside it and swapped in at the end; what a failure
-     leaves behind is the half-built folder, never the finished one.
+     Since the slides' words are checked before anything moves (`voseo`, the
+     closing slide's name), every sidecar is read first, so this failure now
+     happens before the first move: the pictures are still in `imagenes/` and
+     no half-built folder is left. The build-beside-and-swap is still what
+     covers a failure after that point.
   c. WORDS ARE CHANGED WITH `update_caption` — the caption, the hashtags and
      the alts in `post.json`, `caption.md` rewritten from the same two fields,
      the pictures untouched, and a `post.updated` event. An unknown post and a
@@ -64,6 +67,9 @@ sys.path.insert(0, "/opt/kit/plugins/social/core")
 import posts
 
 SLUG, CAPTION, NEW_CAPTION, PERMALINK = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+# The closing slide names the business, or a carousel is refused on an agent
+# that has one (`posts.check_slide`).
+CLOSING = f"brief dos «Pasá por {posts.company() or 'la prueba'}»"
 SESSION = "prueba-post-tools"
 WS = Path("/workspace")
 IMG = WS / "imagenes"
@@ -94,12 +100,12 @@ def call(tool, *args, **kwargs):
 IMG.mkdir(parents=True, exist_ok=True)
 tools = {name: tool.function for name, tool in posts.toolset().tools.items()}
 ctx = types.SimpleNamespace(deps=types.SimpleNamespace(workspace=WS, session_id=SESSION))
-report = {}
+report = {"closing": CLOSING}
 directory = None
 try:
     saved = tools["save_post"](
         ctx, SLUG, CAPTION, ["uno", "dos"], "carousel",
-        [picture("prueba-a.png", "brief uno"), picture("prueba-b.png", "brief dos")],
+        [picture("prueba-a.png", "brief uno"), picture("prueba-b.png", CLOSING)],
         None, ["alt uno", "alt dos"], True, False, "lista", "guardar",
     )
     post_id = saved["saved"]
@@ -149,7 +155,7 @@ try:
         for p in sorted(directory.iterdir()) if p.is_file()
     }
 
-    # (b) a save that dies halfway through moving the pictures in.
+    # (b) a save that dies on a picture with no brief.
     good = picture("prueba-c.png", "brief tres")
     naked = picture("prueba-d.png", "", brief=False)
     report["missing_brief"] = call(
@@ -166,6 +172,7 @@ try:
     report["left_behind"] = sorted(
         p.name for p in posts.root().iterdir() if p.name.startswith(posts.BUILDING)
     )
+    report["still_in_imagenes"] = (WS / good).is_file() and (WS / naked).is_file()
     report["listed"] = [p["id"] for p in posts.read_all()]
 
     # (c) the tool that should have been called in the first place.
@@ -267,8 +274,8 @@ def main() -> int:
         problems.append(f"the listing shows the post {r['listed'].count(r['saved']['saved'])} times")
     if any(name.startswith(".armando-") for name in r["listed"]):
         problems.append(f"the listing shows a half-built post: {r['listed']}")
-    if not r["left_behind"]:
-        problems.append("the pictures of the save that failed are nowhere")
+    if r["left_behind"] or not r["still_in_imagenes"]:
+        problems.append(f"the failed save moved pictures: {r['left_behind']}")
     print(f"  left behind: {r['left_behind'] or '(nothing)'} · listing: {r['listed']}")
     failures += judge("b. a save that fails leaves the post that was there", problems)
 
@@ -289,7 +296,7 @@ def main() -> int:
             problems.append(f"caption.md is {after['caption_md']!r}")
         if not after["pictures_intact"] or len(after["images"]) != 2:
             problems.append("the pictures are not the ones that were there")
-        if after["prompts"] != ["brief uno", "brief dos"]:
+        if after["prompts"] != ["brief uno", r["closing"]]:
             problems.append(f"the briefs changed: {after['prompts']}")
     if r["unknown_post"].get("raised") != "ModelRetry":
         problems.append(f"an unknown post gave {r['unknown_post']}")
@@ -311,7 +318,7 @@ def main() -> int:
         problems.append(f"it handed back {view['kind']} as {view['media_type']}")
     if not view["same_bytes"]:
         problems.append("the picture is not slide 2's bytes")
-    if "slide 2 de 2" not in view["line"]:
+    if "lámina 2 de 2" not in view["line"]:
         problems.append(f"the line says {view['line']!r}")
     for key in ("view_unknown", "view_out_of_range"):
         if r[key].get("raised") != "ModelRetry":
