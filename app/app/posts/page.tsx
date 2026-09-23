@@ -1135,9 +1135,12 @@ export default function PostsPage() {
       title="Posteos"
       subtitle="Lo que tu agente armó para tus redes. Sale cuando vos le decís que sí."
       actions={
-        <IconBtn label="Actualizar" disabled={loading} onClick={() => load()}>
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-        </IconBtn>
+        // WITH ITS WORD, not a lone icon: QA read the bare arrow as nothing
+        // (2026-09-23), and a tooltip is not there on a phone.
+        <Btn kind="secondary" size="sm" disabled={loading} onClick={() => load()}>
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          Actualizar
+        </Btn>
       }
     />
   );
