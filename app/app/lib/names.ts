@@ -70,6 +70,12 @@ export function readableFileName(path: string): string {
   const file = (path || "").split("/").filter(Boolean).pop() || path || "";
   if (!file || TECHNICAL_RE.test(file)) return file;
 
+  // A generated picture is named by its day and a counter
+  // (`imagenes/2026-09-23-1.png`): with the date stripped, Archivos listed it
+  // as «1». It is named as what it is, on the day it was made.
+  const picture = /^(\d{4})-(\d{2})-(\d{2})-(\d+)\.(png|jpe?g|webp|gif)$/i.exec(file);
+  if (picture) return `Imagen ${Number(picture[4])} · ${picture[3]}/${picture[2]}`;
+
   const withoutExtension = file.replace(/\.[A-Za-z0-9]{1,8}$/, "");
   // The agent puts the leading date there to sort the folder; the client
   // already has the date in the row and in the viewer.
