@@ -20,9 +20,6 @@ export type Manifest = {
    *  kit's plugins (`/portal/plugins`), so the field says what it holds. */
   adapter_version: string;
   modules: Record<string, boolean>;
-  /** Connections the client's flow needs and is missing (adapter >=0.24).
-   *  Feeds the home notice and the sidebar's dot. */
-  pending_connections?: number;
   /** Look the client chose for it, saved on the agent (adapter 0.26+).
    *  Absent on older adapters: the portal falls back to whatever the browser has. */
   look?: Record<string, number> | null;

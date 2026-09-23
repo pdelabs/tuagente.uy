@@ -22,13 +22,13 @@ import {
 import Link from "next/link";
 import {
   Activity, ArrowRight, CheckCircle2, ChevronRight, Clock, Columns3,
-  FolderOpen, Hand, LayoutDashboard, MessageSquare, Plug, Plus, RefreshCw, Workflow,
+  FolderOpen, Hand, LayoutDashboard, MessageSquare, Plus, RefreshCw, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
-  getActivity, getApprovals, getArtifacts, getConnections, getFiles, getFlows, getJobs,
+  getActivity, getApprovals, getArtifacts, getFiles, getFlows, getJobs,
   getManifest, getSessions, getTickets, loadConfig,
-  type ArtifactMeta, type Connection, type CronJob, type Flow, type HttpError,
+  type ArtifactMeta, type CronJob, type Flow, type HttpError,
   type Manifest, type PortalConfig, type Ticket,
 } from "../lib/agent";
 // The SAME flow ↔ scheduled-task match that Flows uses: if each screen
@@ -259,42 +259,6 @@ function Stat({ value, label, tone }: { value: number; label: string; tone: Tone
   );
 }
 
-/** Connections the client's flow needs and is missing: the agent is
- *  installed but its flow can't start — that's said BEFORE anything else,
- *  with the button that solves it. With nothing missing, the block doesn't
- *  exist. */
-function StartBlockers({ agentName, missing }: { agentName: string; missing: Connection[] }) {
-  if (missing.length === 0) return null;
-  const n = missing.length;
-  return (
-    <Card tone="amber">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white">
-            <Plug className="h-4 w-4 text-c-amber-ink" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-ink">
-              {n === 1
-                ? `A ${agentName} le falta 1 conexión para arrancar tu flujo`
-                : `A ${agentName} le faltan ${n} conexiones para arrancar tu flujo`}
-            </p>
-            <p className="mt-0.5 text-[13px] text-ink-soft">
-              {enumerate(missing.map((c) => c.label))}
-              {" — "}
-              {n === 1 ? missing[0].purpose : "sin eso, esa parte del trabajo queda esperando."}
-            </p>
-          </div>
-        </div>
-        <LinkBtn href="/app/connections">
-          {n === 1 ? "Conectarla" : "Conectarlas"}
-          <ArrowRight className="h-4 w-4" />
-        </LinkBtn>
-      </div>
-    </Card>
-  );
-}
-
 /** What needs your attention. With something pending, highlighted; with
  *  nothing, calm. */
 function NeedsAttention({ pending }: { pending: Approval[] }) {
@@ -489,7 +453,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const hadManifest = useRef(false);
 
-  const [connections, setConnections] = useState<Slot<Connection[]>>({ t: "loading" });
   const [approvals, setApprovals] = useState<Slot<Approval[]>>({ t: "loading" });
   const [tickets, setTickets] = useState<Slot<Ticket[]>>({ t: "loading" });
   const [events, setEvents] = useState<Slot<Event[]>>({ t: "loading" });
@@ -506,7 +469,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const load = useCallback((silent = false) => {
     if (!silent) {
       setFatal(null);
-      setConnections({ t: "loading" });
       setApprovals({ t: "loading" });
       setTickets({ t: "loading" });
       setEvents({ t: "loading" });
@@ -551,9 +513,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
         // nobody went looking for.
         const on = (k: string) => !HIDDEN_MODULES.has(k) && Boolean(m?.modules?.[k]);
         return Promise.allSettled([
-          // Only worth requesting if the adapter says there's something pending.
-          request(on("connections") && (m?.pending_connections ?? 0) > 0, "las conexiones",
-            () => getConnections(cfg).then((r) => arr<Connection>(r?.connections)), setConnections),
           request(on("approvals"), "las aprobaciones",
             () => getApprovals(cfg)
               .then((r) => arr<Approval>(r?.approvals)),
@@ -788,14 +747,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
         />
       ) : (
         <div className="flex flex-col gap-3">
-          {/* 0 · If the flow can't start, that goes before everything else */}
-          {connections.t === "ready" && (
-            <StartBlockers
-              agentName={manifest.agent}
-              missing={connections.data.filter((c) => c.required && c.status !== "connected")}
-            />
-          )}
-
           {/* 1 · What needs your attention, above everything */}
           {approvals.t === "loading" && <Skeleton rows={2} />}
           {approvals.t === "ready" && <NeedsAttention pending={approvals.data} />}

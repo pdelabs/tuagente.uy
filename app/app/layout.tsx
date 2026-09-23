@@ -505,10 +505,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {pending}
           </span>
         )}
-        {/* Connections the flow needs and is missing: an amber dot. */}
-        {m.key === "connections" && (manifest.pending_connections ?? 0) > 0 && (
-          <span className="h-2 w-2 shrink-0 rounded-full bg-c-amber-ink max-md:absolute max-md:right-1 max-md:top-1" />
-        )}
       </Link>
     );
   };
@@ -531,9 +527,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav className="flex flex-col gap-0.5">
           {enabled.filter((m) => !m.sec).map(item)}
 
-          {/* "Más": the workshop views. If something inside asks the client
-              for something (a pending connection), the dot rises to "Más"
-              itself so it never hides anything important while collapsed. */}
+          {/* "Más": the workshop views. */}
           {enabled.some((m) => m.sec) && (
             <>
               <button
@@ -544,9 +538,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               >
                 <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${showMore ? "" : "-rotate-90"}`} />
                 <span className="hidden flex-1 text-left md:inline">Más</span>
-                {!showMore && (manifest.pending_connections ?? 0) > 0 && (
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-c-amber-ink max-md:absolute max-md:right-1 max-md:top-1" />
-                )}
               </button>
               {showMore && enabled.filter((m) => m.sec).map(item)}
             </>
