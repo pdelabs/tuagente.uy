@@ -31,7 +31,7 @@ from . import extra, flows, gateway, portal
 # of them is: what comes back is the routers to serve.
 PLUGIN_ROUTERS = plugins.load()
 
-ALLOW_METHODS = b"GET, POST, PATCH, DELETE, OPTIONS"
+ALLOW_METHODS = b"GET, POST, PATCH, PUT, DELETE, OPTIONS"
 ALLOW_HEADERS = b"Authorization, Content-Type"
 
 
