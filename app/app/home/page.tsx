@@ -40,7 +40,7 @@ import {
   BOARD_COLUMNS, learnUtcOffset, cronCadence, columnForTask, whenItRuns, timeOf,
   momentOf, greetingOfTheDay, type TaskColumn, type Tone,
 } from "../lib/labels";
-import { humanizeRuns } from "../lib/events";
+import { isForTheFeed, plainLabel } from "../lib/events";
 import { agentDisplayName } from "../lib/onboarding";
 import { AgentitoAnimated, loadAgentLook } from "../lib/agentito";
 import type { AgentitoState } from "../lib/AgentitoRive";
@@ -152,7 +152,7 @@ function dotCls(kind: string, status: string): string {
   if (/(^ok$|complet|success|done|deliver|sent|unblock|resolv|entregad|listo)/.test(s)) return "bg-c-green-ink";
   if (/(fail|error|timeout|cancel|reject|rechaz)/.test(s)) return "bg-c-coral-ink";
   if (/(run|progress|pend|claim|start|queue|block|curso|proceso)/.test(s)) return "bg-c-amber-ink";
-  return kind === "ticket" ? "bg-c-violet-ink" : "bg-ink-soft/50";
+  return kind.startsWith("ticket.") ? "bg-c-violet-ink" : "bg-ink-soft/50";
 }
 
 // THE SPLIT AND THE NAMES ARE THE KANBAN'S, read from `lib/labels.ts`: a
@@ -573,21 +573,16 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
 
   const latest = useMemo(() => {
     if (events.t !== "ready") return null;
-    // THE CRON'S SLUG IS NOT A NAME. This used to show `flujo-vacunas-
-    // vencidas-semanal` and `flujo-avisos-ayuno-cirugias` as-is, on the
-    // product's FIRST screen, while Activity —with the same data— already
-    // showed the name the client gave their job. Same humanizer, in
-    // `lib/events.ts`.
-    const humanized = humanizeRuns(
-      events.data, flows.t === "ready" ? flows.data : null);
     // A task leaves several events in a row (created, commented, blocked)
     // and here they showed up as five identical rows: the client reads
     // "the same thing four times" and stops trusting the numbers. In the
     // day's summary, the last thing that happened to each thing is enough;
-    // the full detail, with its status, stays in Activity.
+    // the full detail, with its status, stays in Activity. And the engine's
+    // bookkeeping (a turn's tokens) is not something that happened.
     const seen = new Set<string>();
-    return humanized
-      .slice()
+    return events.data
+      .filter(isForTheFeed)
+      .map((e) => ({ ...e, label: plainLabel(e.label) }))
       .sort((a, b) => toMs(b.ts) - toMs(a.ts))
       .filter((e) => {
         const k = `${e.kind}|${(e.label || "").trim().toLowerCase()}`;
@@ -596,7 +591,7 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
         return true;
       })
       .slice(0, 5);
-  }, [events, flows]);
+  }, [events]);
 
   const deliverables = useMemo(() => {
     if (files.t !== "ready") return null;

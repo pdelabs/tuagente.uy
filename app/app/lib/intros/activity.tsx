@@ -24,21 +24,23 @@ type Event = {
   time: string;
   tone: Tone;
   text: string;
-  kind: "Tarea programada" | "Ticket";
+  // The same words the real screen's chips use (`lib/events.ts`).
+  kind: "Flujo" | "Tarea" | "Posteo";
   status: string;
   inProgress?: boolean;
 };
 
-// Newest on top, like on the real screen.
+// Newest on top, like on the real screen, and worded the way the agent writes
+// its own lines.
 const TODAY: Event[] = [
-  { time: "14:20", tone: "green", text: "Tarjeta cerrada", kind: "Ticket", status: "listo" },
-  { time: "12:05", tone: "amber", text: "Tarjeta movida a En curso", kind: "Ticket", status: "en curso", inProgress: true },
-  { time: "11:15", tone: "coral", text: "Chequeo de novedades", kind: "Tarea programada", status: "falló" },
-  { time: "08:00", tone: "green", text: "Resumen de la mañana", kind: "Tarea programada", status: "ok" },
+  { time: "14:20", tone: "green", text: "Dejé listo el posteo de la semana", kind: "Posteo", status: "terminada" },
+  { time: "12:05", tone: "amber", text: "Moví «Pedido para el sábado» a En curso", kind: "Tarea", status: "en curso", inProgress: true },
+  { time: "11:15", tone: "coral", text: "Flujo «Chequeo de novedades»", kind: "Flujo", status: "no pudo" },
+  { time: "08:00", tone: "green", text: "Terminé el flujo «Resumen de la mañana»", kind: "Flujo", status: "terminada" },
 ];
 
 const YESTERDAY: Event[] = [
-  { time: "19:30", tone: "green", text: "Reporte semanal", kind: "Tarea programada", status: "ok" },
+  { time: "19:30", tone: "green", text: "Terminé el flujo «Reporte semanal»", kind: "Flujo", status: "terminada" },
 ];
 
 // The dots are "donut"-style: light tonal fill + a border in that same tone's
@@ -124,8 +126,8 @@ export default function ActivityIntro({ onOk }: IntroProps) {
       <Eyebrow icon={Activity}>Actividad</Eyebrow>
       <Title>Qué estuvo haciendo tu agente, sin preguntarle</Title>
       <Lead>
-        La bitácora de tu agente en orden cronológico: sus tareas programadas y los movimientos de
-        cada tarjeta del tablero, mezclados en una sola línea. Del movimiento más nuevo para atrás.
+        La bitácora de tu agente en orden cronológico: lo que corre solo, lo que te deja listo y
+        cada movimiento del tablero, en una sola línea. Del movimiento más nuevo para atrás.
       </Lead>
 
       {/* ── The log ───────────────────────────────────────────────────────── */}
@@ -149,8 +151,8 @@ export default function ActivityIntro({ onOk }: IntroProps) {
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-3">
-        <Point icon={Layers} title="Dos fuentes, una línea">
-          Lo que corre solo y lo que pasa en el tablero, ordenado por hora.
+        <Point icon={Layers} title="Todo en una línea">
+          Tus flujos, tus posteos y lo que pasa en el tablero, ordenado por hora.
         </Point>
         <Point icon={CalendarDays} title="Agrupado por día">
           Hoy, ayer y así para atrás, con la hora exacta de cada movimiento.
