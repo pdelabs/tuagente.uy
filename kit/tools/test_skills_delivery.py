@@ -210,7 +210,7 @@ class WhatFollowsThePurchase(unittest.TestCase):
 
     def test_a_fresh_client_gets_the_defaults_and_the_base_capability(self):
         self.assertEqual(self.installed(self.fresh),
-                         ["approval", "artifact", "capability", "deliverable",
+                         ["approval", "artifact", "business", "capability", "deliverable",
                           "flow", "kanban", "notify", "transcribe"])
 
     def test_buying_two_capabilities_brings_two_plugins(self):

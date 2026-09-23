@@ -1,0 +1,23 @@
+{
+  "id": "business",
+  "version": "1.0.0",
+  "description": "An internal researcher reads the client's website and what is public about the business, and leaves a draft of how the business works for the agent to start from: what it sells, to whom, prices, where and when, channels, voice, and the questions only the owner can answer",
+  "client_copy": "Lee tu web y te deja un borrador de cómo es tu negocio, para que tu agente arranque sabiendo.",
+  "_comment": [
+    "SYSTEM, BECAUSE EVERY AGENT STARTS NOT KNOWING THE BUSINESS. Onboarding",
+    "asks for the website and used to promise «sigo leyendo tu web» with nothing",
+    "behind it: the engine saved the URL and nobody read it (2026-09-23 audit).",
+    "",
+    "A SUB-AGENT, NOT A FACE TURN. The research is dozens of pages of web text;",
+    "run by the face it would sit in the conversation's history forever. The",
+    "researcher reads, and what comes back is one file and two lines.",
+    "",
+    "IT STARTS ON ITS OWN ONCE PER WEBSITE (a ticker reads identity.json), and",
+    "the face can delegate to it again when the client asks to redo it."
+  ],
+  "requires": {},
+  "surfaces": {
+    "core": "core/"
+  },
+  "system": true
+}

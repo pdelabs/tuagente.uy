@@ -46,7 +46,7 @@ KIT_PLUGINS = Path(os.environ.get("CORE_KIT_PLUGINS", "/opt/kit/plugins"))
 PLUGINS = [
     p.strip()
     for p in os.environ.get(
-        "CORE_PLUGINS", "kanban,approval,deliverable,memory,image,instagram,social,mail,notify"
+        "CORE_PLUGINS", "kanban,approval,deliverable,memory,image,instagram,social,mail,notify,business"
     ).split(",")
     if p.strip()
 ]

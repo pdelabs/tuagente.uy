@@ -78,7 +78,7 @@ The seeded identity has `contact.channel: "none"`, which the portal reads as
 **A mechanism is a plugin of the kit, not a module of this engine** — unless it
 is the clock, which is the engine's own (see **Flows** below). The ones this
 engine runs by default —
-`CORE_PLUGINS=kanban,approval,deliverable,memory,image,instagram,social,mail,notify` —
+`CORE_PLUGINS=kanban,approval,deliverable,memory,image,instagram,social,mail,notify,business` —
 are the kit's own plugins, in dependency order (`requires.plugins` in each
 manifest says who must come first, and `instagram` is also in front of `social`
 because `social` asks it for two things by name), and each one declares `"surfaces": {"core": "core/"}` in
@@ -1357,6 +1357,31 @@ Last run: **4/4, 0 failures, US$0.0007 metered.** Two things it settled:
   guardar procedimientos en la memoria», with nothing added to the notebook.
   The guidance is in the instruction channel and the notebook is not, which is
   the difference that makes that sentence possible.
+
+## Knowing the business
+
+Onboarding asks for the website. The `business` plugin (`kit/plugins/business/`,
+`system: true`) reads it: a sub-agent, the **investigador del negocio**
+(`researcher.py`, `researcher.md`), with `web_search`, `web_fetch` and one tool
+that writes, `save_draft`, which renders `negocio/borrador.md` with fixed
+headings — what it sells, to whom, published prices, where and when, channels,
+voice with an example, what sets it apart, the questions only the owner can
+answer, and every URL it read.
+
+- **On its own, once per website.** A ticker (`business_watch.py`, async, on the
+  engine's loop) reads `identity.json`; a `company|url` it has not researched
+  runs the researcher directly — not a face turn, so the pages never enter a
+  conversation. The mark goes in before the run: a failure is one Activity line
+  and no retry. Without a website nothing runs: a name alone finds whoever has
+  the same name.
+- **On request, through the face**, which delegates to the same researcher
+  when the client asks to redo it or gives another site.
+- **The face reads the draft as background** (`instructions.md`): unconfirmed,
+  worth less than what the client says, and one of its questions at a time.
+
+Measured 2026-09-23 on the lab against tuagente.uy: two pages read, prices,
+WhatsApp and voice right, five questions that make sense.
+Check it: `python3 engine/tests/test_business.py` (researcher swapped).
 
 ## Telling the owner
 

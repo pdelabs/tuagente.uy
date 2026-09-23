@@ -619,7 +619,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                         ? "Escribí tu dirección, o seguí y lo vemos más adelante."
                         : "Seguís sin avisos."}
                 {url.trim() && (
-                  <> Mientras tanto sigo leyendo tu web: lo que saque queda en Archivos.</>
+                  <> Mientras tanto leo tu web: el borrador de tu negocio te queda en Archivos.</>
                 )}
               </span>
             </div>

@@ -865,9 +865,10 @@ ENGINE_CLIENT = ["social"]
 # two pools and not one.
 ENGINE_FLOWS = ["instagram", "mail"]
 # THE SIXTH SHAPE: a plugin of our engine that EVERY client has. `notify` mails
-# the owner what waits for them and what broke; nobody buys it, and it carries
+# the owner what waits for them and what broke, `business` reads the business
+# and leaves its draft; nobody buys them, and they carry
 # `core/` and nothing else, like the third shape.
-ENGINE_SYSTEM = ["notify"]
+ENGINE_SYSTEM = ["business", "notify"]
 
 
 class TheKitsOwnRegistry(unittest.TestCase):
