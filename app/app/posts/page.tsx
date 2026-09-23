@@ -163,6 +163,15 @@ function handleOf(company: string | null | undefined, agent: string): string {
   return flat || "tuagente";
 }
 
+/** WHAT THE POST IS CALLED: the `title` the creator gave it when it saved it,
+ *  accents and all. The slug was the only name before, and «Sabados octubre»
+ *  is a folder, not a name (QA, 2026-09-23). The social plugin always serves
+ *  one — a post from before titles gets its caption's first line — so the
+ *  fallback here is only for an agent whose plugin predates the field.
+ *  `lib/agent.ts`'s `Post` doesn't carry it yet: read off the object. */
+const titleOf = (p: Post): string =>
+  (p as Post & { title?: string }).title || p.caption.split("\n")[0] || humanizeSlug(p.slug);
+
 /** The caption WITHOUT the blank lines a caption is full of, for the two
  *  clamped lines of the card: the first blank one eats a whole line and the
  *  card ends on an ellipsis having said almost nothing. It comes back whole
@@ -892,80 +901,92 @@ function PostCard({ cfg, p, look, handle, flowName, onOpen, wide = false }: {
   const [index, setIndex] = useState(0);
   const current = p.images[Math.min(index, p.images.length - 1)];
 
+  // The name goes ABOVE the card and not inside it: the card is drawn as the
+  // feed the post is going into, and Instagram shows no title.
+  const title = titleOf(p);
   return (
-    <article className="overflow-hidden rounded-xl border border-black/[0.07] bg-white">
-      <header className="flex items-center gap-2.5 px-3 py-2.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-black/[0.07] bg-c-violet/50">
-          <AgentitoAvatar look={look} className="h-7 w-7" />
-        </span>
-        <p className="min-w-0 flex-1 truncate text-[13px] text-ink">
-          <b className="font-bold">{handle}</b>
-          <span className="text-ink-soft"> · {relative(p.created_at)}</span>
-        </p>
-        <CardMenu post={p} onOpen={onOpen} />
-      </header>
+    <section aria-label={title}>
+      <h2 className="mb-1.5 truncate text-[13px] font-semibold text-ink">
+        {onOpen ? (
+          <button onClick={onOpen} className="max-w-full truncate text-left transition hover:text-primary">
+            {title}
+          </button>
+        ) : title}
+      </h2>
+      <article className="overflow-hidden rounded-xl border border-black/[0.07] bg-white">
+        <header className="flex items-center gap-2.5 px-3 py-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-black/[0.07] bg-c-violet/50">
+            <AgentitoAvatar look={look} className="h-7 w-7" />
+          </span>
+          <p className="min-w-0 flex-1 truncate text-[13px] text-ink">
+            <b className="font-bold">{handle}</b>
+            <span className="text-ink-soft"> · {relative(p.created_at)}</span>
+          </p>
+          <CardMenu post={p} onOpen={onOpen} />
+        </header>
 
-      {wide ? (
-        p.images.length === 0 ? <Empty /> : (
-          <div className="flex flex-col">
-            {p.images.map((img, i) => (
-              <StackedImage key={img.name} cfg={cfg} p={p} name={img.name} index={i} />
-            ))}
-          </div>
-        )
-      ) : (
-        <Gallery cfg={cfg} p={p} index={index} onIndex={setIndex} />
-      )}
+        {wide ? (
+          p.images.length === 0 ? <Empty /> : (
+            <div className="flex flex-col">
+              {p.images.map((img, i) => (
+                <StackedImage key={img.name} cfg={cfg} p={p} name={img.name} index={i} />
+              ))}
+            </div>
+          )
+        ) : (
+          <Gallery cfg={cfg} p={p} index={index} onIndex={setIndex} />
+        )}
 
-      <Reactions />
-      <Caption handle={handle} p={p} expandable={!wide} />
+        <Reactions />
+        <Caption handle={handle} p={p} expandable={!wide} />
 
-      {/* The date line, and the shape of the piece on its right: what a feed
-          post says under the caption is meta, and that is what the format is.
-          It sat in the row of buttons below and at 400px it wrapped onto a
-          line of its own, a chip alone in the middle of nothing. */}
-      <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1.5 text-[10px] uppercase tracking-wide text-ink-soft/80">
-        <span className="min-w-0">
-          {onOpen ? (
-            // `uppercase` again on the button: Tailwind's preflight resets
-            // `text-transform` on every <button>, so it does not inherit.
-            <button onClick={onOpen} className="uppercase transition hover:text-ink-soft">
-              {dayLine(p.date)}
-            </button>
-          ) : (
-            dayLine(p.date)
-          )}
-          {p.flow && (
-            <>
-              {" · "}
-              <Link
-                href={`/app/flows/${p.flow}`}
-                className="underline-offset-4 transition hover:text-primary hover:underline"
-              >
-                del flujo {flowName ?? humanizeSlug(p.flow)}
-              </Link>
-            </>
-          )}
-        </span>
-        <span className="ml-auto"><Chip tone={shape.tone}>{shape.label}</Chip></span>
-      </div>
+        {/* The date line, and the shape of the piece on its right: what a feed
+            post says under the caption is meta, and that is what the format is.
+            It sat in the row of buttons below and at 400px it wrapped onto a
+            line of its own, a chip alone in the middle of nothing. */}
+        <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1.5 text-[10px] uppercase tracking-wide text-ink-soft/80">
+          <span className="min-w-0">
+            {onOpen ? (
+              // `uppercase` again on the button: Tailwind's preflight resets
+              // `text-transform` on every <button>, so it does not inherit.
+              <button onClick={onOpen} className="uppercase transition hover:text-ink-soft">
+                {dayLine(p.date)}
+              </button>
+            ) : (
+              dayLine(p.date)
+            )}
+            {p.flow && (
+              <>
+                {" · "}
+                <Link
+                  href={`/app/flows/${p.flow}`}
+                  className="underline-offset-4 transition hover:text-primary hover:underline"
+                >
+                  del flujo {flowName ?? humanizeSlug(p.flow)}
+                </Link>
+              </>
+            )}
+          </span>
+          <span className="ml-auto"><Chip tone={shape.tone}>{shape.label}</Chip></span>
+        </div>
 
-      {/* The product's own actions. Copying and downloading stay small and
-          secondary — the card has to keep reading as a post — and PUBLISHING
-          is the primary one, because it is the whole of what the client came
-          to decide. A post that already went out has no button: it has the
-          date it went out and the link to it. */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-black/[0.07] px-3 py-2.5">
-        <CopyText text={() => forPublishing(p)} label="Copiar texto" />
-        {!wide && current && <DownloadImage cfg={cfg} id={p.id} name={current.name} />}
-        <span className="ml-auto">
-          {p.published ? <Published post={p} /> : <PublishLink post={p} />}
-        </span>
-      </div>
-      <div className="px-3 pb-3">
-        <AltText alt={wide ? (p.alts ?? [p.alt]).map((a, i) => (p.images.length > 1 ? `${i + 1}. ${a}` : a)).join("\n") : altOf(p, index)} />
-      </div>
-    </article>
+        {/* The product's own actions. Copying and downloading stay small and
+            secondary — the card has to keep reading as a post — and PUBLISHING
+            is the primary one, because it is the whole of what the client came
+            to decide. A post that already went out has no button: it has the
+            date it went out and the link to it. */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-black/[0.07] px-3 py-2.5">
+          <CopyText text={() => forPublishing(p)} label="Copiar texto" />
+          {!wide && current && <DownloadImage cfg={cfg} id={p.id} name={current.name} />}
+          <span className="ml-auto">
+            {p.published ? <Published post={p} /> : <PublishLink post={p} />}
+          </span>
+        </div>
+        <div className="px-3 pb-3">
+          <AltText alt={wide ? (p.alts ?? [p.alt]).map((a, i) => (p.images.length > 1 ? `${i + 1}. ${a}` : a)).join("\n") : altOf(p, index)} />
+        </div>
+      </article>
+    </section>
   );
 }
 

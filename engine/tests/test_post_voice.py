@@ -121,10 +121,10 @@ try:
     posts.company = lambda: None
     tu_slide = [picture("voz-a.png", "Pan en la mesa. Texto: «¿Cuál va contigo?»"),
                 picture("voz-b.png", "Cierre. Texto: «Pasá a buscarlo»")]
-    report["tu_slide"] = call("save_post", SLUG, "Pasá hoy.", ["pan"], "carousel",
+    report["tu_slide"] = call("save_post", SLUG, "Pan de prueba", "Pasá hoy.", ["pan"], "carousel",
                               tu_slide, None, ["a", "b"], False, False, "lista", "mandar")
     report["tu_slide_untouched"] = untouched(tu_slide)
-    report["tu_caption"] = call("save_post", SLUG, "Si tienes hambre, vení.", ["pan"],
+    report["tu_caption"] = call("save_post", SLUG, "Pan de prueba", "Si tienes hambre, vení.", ["pan"],
                                 "carousel",
                                 [picture("voz-c.png", "Texto: «Pan»"),
                                  picture("voz-d.png", "Texto: «Pasá»")],
@@ -134,16 +134,16 @@ try:
     posts.company = lambda: COMPANY
     unsigned = [picture("voz-e.png", "Texto: «Pan de hoy»"),
                 picture("voz-f.png", "Texto: «Pasá a buscarlo»")]
-    report["unsigned"] = call("save_post", SLUG, "Pasá hoy.", ["pan"], "carousel",
+    report["unsigned"] = call("save_post", SLUG, "Pan de prueba", "Pasá hoy.", ["pan"], "carousel",
                               unsigned, None, ["a", "b"], False, False, "lista", "mandar")
     report["unsigned_untouched"] = untouched(unsigned)
-    report["single"] = call("save_post", SLUG + "-sola", "Pasá hoy.", ["pan"], "feed",
+    report["single"] = call("save_post", SLUG + "-sola", "Pan de prueba", "Pasá hoy.", ["pan"], "feed",
                             [picture("voz-g.png", "Texto: «Pan de hoy»")], "a")
     if "ok" in report["single"]:
         shutil.rmtree(posts.folder(report["single"]["ok"]["saved"]))
     signed = [picture("voz-h.png", "Texto: «Pan de hoy»"),
               picture("voz-i.png", "Texto: «¿Con quién lo compartís?» y abajo «PASÁ POR PANADERIA PRUEBA»")]
-    report["signed"] = call("save_post", SLUG, "Pasá hoy.", ["pan"], "carousel",
+    report["signed"] = call("save_post", SLUG, "Pan de prueba", "Pasá hoy.", ["pan"], "carousel",
                             signed, None, ["a", "b"], False, False, "lista", "mandar")
     post_id = report["signed"]["ok"]["saved"]
     directory = posts.folder(post_id)
@@ -197,7 +197,7 @@ try:
     report["closing_edit_signed"] = call("replace_slide", post_id, 2, closing_edit,
                                          "otra frase", None,
                                          "Texto: «Vení a buscarlo» y abajo «PANADERIA PRUEBA»")
-    report["edit_as_new"] = call("save_post", SLUG + "-nuevo", "Pasá hoy.", ["pan"], "feed",
+    report["edit_as_new"] = call("save_post", SLUG + "-nuevo", "Pan de prueba", "Pasá hoy.", ["pan"], "feed",
                                  [picture("voz-l.png", "el cambio", reference="imagenes/x.png")],
                                  "a")
 

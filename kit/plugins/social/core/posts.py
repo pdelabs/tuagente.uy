@@ -132,6 +132,8 @@ MAX_CAPTION = 2200
 MAX_ALT = 1000
 MAX_HASHTAGS = 5
 MAX_IMAGES = 10
+# Ours: a name that fits on a chip in the chat and on a line of Inicio.
+MAX_TITLE = 60
 
 # What the route serves a piece as. `generate_image` only ever writes PNG; the
 # other two are here because a client's own picture can land in the workspace
@@ -207,9 +209,12 @@ def expand(data: dict) -> dict:
     is always answered, `{}` on a post nothing was fixed on — and `.get`,
     because a post written before any of this existed is still on disk and the
     tab has to draw it.
+
+    `title` is always answered too, for the same reason: `title_of`.
     """
     directory = folder(data["id"])
     return data | {
+        "title": title_of(data),
         "images": [
             {
                 "name": name,
@@ -444,6 +449,20 @@ def check_slide(number: int, brief: str, closing: bool, image: str | None = None
         raise ModelRetry(UNSIGNED.format(number=number, name=name, signed=together, how=how))
 
 
+def clean_title(title: str) -> str:
+    """The post's name, one short line. The creator writes it — the model
+    supplies the words — because a name derived from the slug has lost its
+    accents and one derived from the cover is a hook, not a name."""
+    title = " ".join(title.split())
+    if not title or len(title) > MAX_TITLE:
+        raise ModelRetry(
+            f"el título tiene {len(title)} caracteres: van de tres a seis "
+            f"palabras, hasta {MAX_TITLE} caracteres, como «El horario de los "
+            "sábados»"
+        )
+    return title
+
+
 def clean_tags(hashtags: list[str]) -> list[str]:
     """The hashtags without their `#`, and never more than Instagram takes.
 
@@ -501,6 +520,7 @@ def toolset() -> FunctionToolset:
     def save_post(
         ctx: RunContext,
         slug: str,
+        title: str,
         caption: str,
         hashtags: list[str],
         format: Format,
@@ -532,6 +552,10 @@ def toolset() -> FunctionToolset:
 
         Args:
             slug: el tema en dos o tres palabras, en minúsculas y con guiones.
+            title: cómo se llama el posteo donde el cliente lo ve —el chat,
+                Inicio, Posteos—: de tres a seis palabras, en español con sus
+                tildes y mayúscula inicial, como «El horario de los sábados». No
+                es el gancho ni la primera línea del pie: es su nombre.
             caption: el pie completo, tal como va a salir, sin los hashtags.
             hashtags: hasta 5, sin el `#`.
             format: `carousel` para varias imágenes, `feed` para una sola
@@ -560,6 +584,7 @@ def toolset() -> FunctionToolset:
                 f"«{slug}» no sirve como slug: minúsculas, números y guiones, "
                 f"hasta {MAX_SLUG} caracteres"
             )
+        title = clean_title(title)
         caption = clean_caption(caption)
         tags = clean_tags(hashtags)
         if not 1 <= len(images) <= MAX_IMAGES:
@@ -644,6 +669,8 @@ def toolset() -> FunctionToolset:
         data = {
             "id": post_id,
             "slug": slug,
+            # What the post is called wherever the owner reads it (`title_of`).
+            "title": title,
             "date": date,
             "format": format,
             # What every slide was cut to (`SIZE`), in pixels.
@@ -682,7 +709,7 @@ def toolset() -> FunctionToolset:
         if leaving.is_dir():
             shutil.rmtree(leaving)
         db.append_event(
-            "post.saved", f"Dejé listo el posteo «{hook_of(data)}»", "completed",
+            "post.saved", f"Dejé listo el posteo «{title_of(data)}»", "completed",
             ctx.deps.session_id, {"id": post_id},
         )
         # `slides` so the report the creator writes says how many the client is
@@ -697,6 +724,7 @@ def toolset() -> FunctionToolset:
         caption: str,
         hashtags: list[str] | None = None,
         alts: list[str] | None = None,
+        title: str | None = None,
     ) -> dict:
         """Cambiarle las palabras a un posteo que ya está en Posteos.
 
@@ -719,6 +747,8 @@ def toolset() -> FunctionToolset:
             hashtags: hasta 5, sin el `#`. Si no los pasás quedan los de antes.
             alts: uno por imagen y en el mismo orden. Si no los pasás quedan
                 los de antes.
+            title: el nombre nuevo del posteo, sólo si te lo pidieron. Si no
+                lo pasás queda el de antes.
         """
         directory = folder(post_id)
         path = directory / POST
@@ -740,6 +770,8 @@ def toolset() -> FunctionToolset:
                 "acá; si el cliente quiere otra cosa, es otro posteo"
             )
         data["caption"] = clean_caption(caption)
+        if title is not None:
+            data["title"] = clean_title(title)
         if hashtags is not None:
             data["hashtags"] = clean_tags(hashtags)
         if alts is not None:
@@ -756,7 +788,7 @@ def toolset() -> FunctionToolset:
             caption_file(data["caption"], data["hashtags"])
         )
         db.append_event(
-            "post.updated", f"Cambié el texto del posteo «{hook_of(data)}»", "completed",
+            "post.updated", f"Cambié el texto del posteo «{title_of(data)}»", "completed",
             ctx.deps.session_id, {"id": post_id},
         )
         return {"id": post_id, "slides": len(data["images"]),
@@ -936,7 +968,7 @@ def toolset() -> FunctionToolset:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
         db.append_event(
             "post.slide_replaced",
-            f"Cambié la lámina {number} del posteo «{hook_of(data)}»",
+            f"Cambié la lámina {number} del posteo «{title_of(data)}»",
             "completed", ctx.deps.session_id, {"id": post_id, "slide": number},
         )
         # `previous_kept` so the report can say the old one is still there,
@@ -981,15 +1013,23 @@ def results(slug: str) -> list[dict]:
         found.append({
             "path": f"{WHERE}/{data['id']}/{piece}",
             "mtime": (folder(data["id"]) / POST).stat().st_mtime,
-            "label": hook_of(data),
+            "label": title_of(data),
         })
     return found
 
 
-def hook_of(data: dict) -> str:
-    """What a post is called where the owner reads it: the caption's first
-    line, cut. Never the id — `2026-09-23-pan-masa-madre` is a folder name —
-    and never the slug, which is the same thing with the date off."""
+def title_of(data: dict) -> str:
+    """What a post is called where the owner reads it: its `title`, which the
+    creator gives in `save_post`. Never the id — `2026-09-23-pan-masa-madre`
+    is a folder name — and never the slug, which is the same thing with the
+    date off and the accents gone: QA read «Sabados octubre» in the chat, in
+    Inicio and in Posteos (2026-09-23).
+
+    A post saved before `title` existed is still on disk and has none; it is
+    called by its caption's first line, cut, which is what every post was
+    called until then."""
+    if data.get("title"):
+        return data["title"]
     caption = data["caption"].strip()
     hook = caption.splitlines()[0] if caption else data["slug"].replace("-", " ")
     return hook if len(hook) <= LABEL else hook[: LABEL - 1].rstrip() + "…"

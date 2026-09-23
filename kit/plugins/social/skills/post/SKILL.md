@@ -224,8 +224,10 @@ resolver, que un pie bueno sirve.
 
 ## 7. Guardalo
 
-`save_post(slug, caption, hashtags, format="carousel", images=[…], alts=[…],
-structure="…", goal="…")`: las imágenes en el orden en que se ven, un texto
+`save_post(slug, title, caption, hashtags, format="carousel", images=[…],
+alts=[…], structure="…", goal="…")`: el título es cómo se llama el posteo
+donde el cliente lo ve, de tres a seis palabras y con sus tildes («El horario
+de los sábados»); las imágenes en el orden en que se ven, un texto
 alternativo por cada una en ese mismo orden, y la estructura y el objetivo que
 elegiste en el paso 3. La herramienta pone la carpeta, los nombres y la fecha; vos
 ponés las palabras. El id es la fecha y el slug: otro tema en el mismo día es
