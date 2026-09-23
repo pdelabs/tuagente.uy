@@ -86,6 +86,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
+from PIL import Image, ImageOps
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.messages import BinaryImage
 from pydantic_ai.toolsets import FunctionToolset
@@ -131,6 +132,8 @@ MAX_CAPTION = 2200
 MAX_ALT = 1000
 MAX_HASHTAGS = 5
 MAX_IMAGES = 10
+# Ours: a name that fits on a chip in the chat and on a line of Inicio.
+MAX_TITLE = 60
 
 # What the route serves a piece as. `generate_image` only ever writes PNG; the
 # other two are here because a client's own picture can land in the workspace
@@ -141,7 +144,8 @@ TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 
 # THE FORMAT OF A POST IS NOT THE FORMAT OF A PIECE, and that is why
 # `carousel` is here and NOT in the image plugin's `RATIO`. A carousel's slides
-# are 4:5, exactly what `feed` already asks for, so a fourth ratio would be the
+# are 4:5, exactly what a `feed` piece is once `fit` has cut it (`SIZE`), so a
+# fourth ratio would be the
 # same geometry under a second name — a new key, a new `Literal` and a new line
 # of docstring in another plugin, for nothing. The skill tells the creator to
 # generate every slide as `feed`, this word says what the client ends up
@@ -149,9 +153,24 @@ TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 # picture is ever cut to.
 Format = Literal["feed", "square", "story", "carousel"]
 
+# THE PIXELS A POST IS SAVED AT, and they are Instagram's, not the image
+# model's. The provider has no 4:5 and answers `feed` as 3:4, 1152×1536 (the
+# image plugin's `RATIO` has the measurement), and Instagram's portrait feed is
+# 4:5: left to Instagram, the crop happened on the phone of whoever published,
+# and the API refuses a 3:4 outright (its narrowest is 4:5). So the slide is
+# cut HERE, by code, as it goes into the post: centred, which takes 48 px off
+# the top and 48 off the bottom of a 1152×1536 — about 3% each — and then
+# scaled to 1080 wide. The brief keeps its text out of those bands
+# (`skills/post/SKILL.md`, step 5). Only the cut is kept: the bands are air by
+# design, and a second copy of every slide is a second answer to «which one is
+# the post».
+SIZE = {"feed": (1080, 1350), "carousel": (1080, 1350),
+        "square": (1080, 1080), "story": (1080, 1920)}
+
 # Read by the client: the portal shows `error.message` on the tab she is on.
 NO_POST = "No hay ningún posteo {post_id} en este agente."
 NO_IMAGE = "El posteo {post_id} no tiene ninguna imagen {name}."
+NO_LOGO = "No hay ningún logo {name} en la carpeta de tu marca."
 
 # A TRAILING BLOCK OF HASHTAG LINES COMES OFF THE CAPTION. They have a field of
 # their own and `caption.md` puts them back at the end, so a caption that
@@ -191,9 +210,12 @@ def expand(data: dict) -> dict:
     is always answered, `{}` on a post nothing was fixed on — and `.get`,
     because a post written before any of this existed is still on disk and the
     tab has to draw it.
+
+    `title` is always answered too, for the same reason: `title_of`.
     """
     directory = folder(data["id"])
     return data | {
+        "title": title_of(data),
         "images": [
             {
                 "name": name,
@@ -292,6 +314,18 @@ def incoming(workspace: Path, relative: str) -> Path:
     return path
 
 
+def fit(source: Path, target: Path, format: str) -> None:
+    """`source` cut to the post's shape and written as `target`; `source` goes.
+
+    `ImageOps.fit` is the centred crop and the resize in one call. The file
+    type is the target's suffix, which is the source's: a client's JPEG stays a
+    JPEG and the route keeps serving it with its own type.
+    """
+    with Image.open(source) as picture:
+        ImageOps.fit(picture, SIZE[format], Image.Resampling.LANCZOS).save(target)
+    source.unlink()
+
+
 def brief_of(image: Path) -> str:
     """What the picture was made from, and the sidecar taken out of `imagenes/`.
 
@@ -368,16 +402,38 @@ def signed(brief: str, name: str) -> bool:
     return plain(name) in plain(" ".join(voseo.quoted(brief)))
 
 
+# THE REFUSAL HANDS OVER THE SENTENCE, AND SAYS WHOSE RULE IT IS. The first
+# wording said «tiene que decir de quién es… Rehacé esa lámina», and on the QA
+# agent (AQUA Bicicletería, 2026-09-23) a text fix of the closing slide ran
+# twice and ended with the face asking the owner «el sistema exige incluirlo.
+# ¿Autorizás que quede así?» — a rule of ours put to her as a question she had
+# no way to answer. The name is how a closing is made, like the voice: the
+# creator adds it and moves on, and the refusal says so in as many words, with
+# the text it should end up with already written.
 UNSIGNED = (
-    "la última lámina es el cierre y tiene que decir de quién es el posteo: su "
-    "texto, entre « », lleva el nombre del negocio tal cual, «{name}», junto al "
-    "pedido. Rehacé esa lámina con el nombre en el texto. No guardé nada."
+    "la lámina {number} es el cierre, y el cierre dice de quién es el posteo: "
+    "su texto entre « » lleva el nombre del negocio tal cual, «{name}». "
+    "Agregáselo vos, por ejemplo «{signed}», y seguí: {how} Es cómo se arma un "
+    "cierre, como hablar de vos: no se le pregunta al cliente ni va en tu "
+    "informe. No guardé nada."
+)
+# What to do with the picture, which is the one thing that differs between a
+# new post and a fix: a new post's slide is drawn again with its whole brief
+# (`save_post` refuses an edit as a slide of a new post); a fix's new slide is
+# edited, which keeps everything else the client already saw.
+REDRAW = "rehacé esa lámina con ese texto."
+REEDIT = (
+    "editá la imagen nueva con `generate_image(\"el texto «{text}» pasa a "
+    "decir «{signed}»\", format=\"feed\", reference=\"{image}\")` y pasame en "
+    "`brief` el brief de la lámina con ese texto adentro."
 )
 
 
-def check_slide(number: int, brief: str, closing: bool) -> None:
+def check_slide(number: int, brief: str, closing: bool, image: str | None = None) -> None:
     """The words one slide shows, before anything moves: `vos`, and the
-    business's name if it is the closing slide of a carousel."""
+    business's name if it is the closing slide of a carousel. `image` is the
+    new picture of a fix, which is what the refusal tells the creator to edit;
+    `None` on a new post."""
     words = voseo.slide_words(brief)
     if words:
         raise ModelRetry(
@@ -387,7 +443,28 @@ def check_slide(number: int, brief: str, closing: bool) -> None:
         )
     name = company()
     if closing and name and not signed(brief, name):
-        raise ModelRetry(UNSIGNED.format(name=name))
+        text = " ".join(voseo.quoted(brief)).strip()
+        # The name as a sentence of its own: joined with a bare space the wt4
+        # fix came out «…al 091 444 550 AQUA Bicicletería» (2026-09-23).
+        together = (f"{text} {name}" if not text or text[-1] in ".!?…»"
+                    else f"{text}. {name}")
+        how = (REDRAW if image is None
+               else REEDIT.format(text=text, signed=together, image=image))
+        raise ModelRetry(UNSIGNED.format(number=number, name=name, signed=together, how=how))
+
+
+def clean_title(title: str) -> str:
+    """The post's name, one short line. The creator writes it — the model
+    supplies the words — because a name derived from the slug has lost its
+    accents and one derived from the cover is a hook, not a name."""
+    title = " ".join(title.split())
+    if not title or len(title) > MAX_TITLE:
+        raise ModelRetry(
+            f"el título tiene {len(title)} caracteres: van de tres a seis "
+            f"palabras, hasta {MAX_TITLE} caracteres, como «El horario de los "
+            "sábados»"
+        )
+    return title
 
 
 def clean_tags(hashtags: list[str]) -> list[str]:
@@ -447,6 +524,7 @@ def toolset() -> FunctionToolset:
     def save_post(
         ctx: RunContext,
         slug: str,
+        title: str,
         caption: str,
         hashtags: list[str],
         format: Format,
@@ -478,7 +556,13 @@ def toolset() -> FunctionToolset:
 
         Args:
             slug: el tema en dos o tres palabras, en minúsculas y con guiones.
+            title: cómo se llama el posteo donde el cliente lo ve —el chat,
+                Inicio, Posteos—: de tres a seis palabras, en español con sus
+                tildes y mayúscula inicial, como «El horario de los sábados». No
+                es el gancho ni la primera línea del pie: es su nombre.
             caption: el pie completo, tal como va a salir, sin los hashtags.
+                Si el posteo avisa algo —una fecha, un horario, un precio, un
+                lugar—, ese dato va dicho entero también acá.
             hashtags: hasta 5, sin el `#`.
             format: `carousel` para varias imágenes, `feed` para una sola
                 vertical, `square` cuadrada, `story` para una historia.
@@ -506,6 +590,7 @@ def toolset() -> FunctionToolset:
                 f"«{slug}» no sirve como slug: minúsculas, números y guiones, "
                 f"hasta {MAX_SLUG} caracteres"
             )
+        title = clean_title(title)
         caption = clean_caption(caption)
         tags = clean_tags(hashtags)
         if not 1 <= len(images) <= MAX_IMAGES:
@@ -585,13 +670,17 @@ def toolset() -> FunctionToolset:
         for number, source in enumerate(sources, 1):
             name = f"{number:02d}{source.suffix.lower()}"
             briefs.append(brief_of(source))
-            source.rename(staging / name)
+            fit(source, staging / name, format)
             names.append(name)
         data = {
             "id": post_id,
             "slug": slug,
+            # What the post is called wherever the owner reads it (`title_of`).
+            "title": title,
             "date": date,
             "format": format,
+            # What every slide was cut to (`SIZE`), in pixels.
+            "size": list(SIZE[format]),
             # Which of the brand's looks it wears, read off the first brief
             # (`looks.py`). `None` for a brand that declares none.
             "look": look,
@@ -626,7 +715,7 @@ def toolset() -> FunctionToolset:
         if leaving.is_dir():
             shutil.rmtree(leaving)
         db.append_event(
-            "post.saved", f"Dejé listo el posteo «{hook_of(data)}»", "completed",
+            "post.saved", f"Dejé listo el posteo «{title_of(data)}»", "completed",
             ctx.deps.session_id, {"id": post_id},
         )
         # `slides` so the report the creator writes says how many the client is
@@ -641,6 +730,7 @@ def toolset() -> FunctionToolset:
         caption: str,
         hashtags: list[str] | None = None,
         alts: list[str] | None = None,
+        title: str | None = None,
     ) -> dict:
         """Cambiarle las palabras a un posteo que ya está en Posteos.
 
@@ -663,6 +753,8 @@ def toolset() -> FunctionToolset:
             hashtags: hasta 5, sin el `#`. Si no los pasás quedan los de antes.
             alts: uno por imagen y en el mismo orden. Si no los pasás quedan
                 los de antes.
+            title: el nombre nuevo del posteo, sólo si te lo pidieron. Si no
+                lo pasás queda el de antes.
         """
         directory = folder(post_id)
         path = directory / POST
@@ -684,6 +776,8 @@ def toolset() -> FunctionToolset:
                 "acá; si el cliente quiere otra cosa, es otro posteo"
             )
         data["caption"] = clean_caption(caption)
+        if title is not None:
+            data["title"] = clean_title(title)
         if hashtags is not None:
             data["hashtags"] = clean_tags(hashtags)
         if alts is not None:
@@ -700,7 +794,7 @@ def toolset() -> FunctionToolset:
             caption_file(data["caption"], data["hashtags"])
         )
         db.append_event(
-            "post.updated", f"Cambié el texto del posteo «{hook_of(data)}»", "completed",
+            "post.updated", f"Cambié el texto del posteo «{title_of(data)}»", "completed",
             ctx.deps.session_id, {"id": post_id},
         )
         return {"id": post_id, "slides": len(data["images"]),
@@ -738,8 +832,12 @@ def toolset() -> FunctionToolset:
         # can quote, and the picture itself, which Pydantic AI puts in front of
         # the model as an image. Without this the creator fixed slides it had
         # never seen, from the brief and the client's words alone.
+        # And it is the slide AS POSTED: cut to Instagram's frame (`fit`), not
+        # the taller picture `generate_image` handed over. What the client
+        # says is cut off is cut off here.
         return [
-            f"La lámina {number} de {len(names)} de «{post_id}», tal como está ahora.",
+            f"La lámina {number} de {len(names)} de «{post_id}», tal como está "
+            "ahora y como sale en Instagram.",
             BinaryImage(path.read_bytes(), media_type=TYPES[path.suffix.lower()]),
         ]
 
@@ -829,7 +927,7 @@ def toolset() -> FunctionToolset:
         else:
             brief = record["prompt"]
         check_slide(number, brief, closing=data["format"] == "carousel"
-                    and number == len(names))
+                    and number == len(names), image=image)
         brief_of(source)
         old = names[number - 1]
         # A POST FROM BEFORE BRIEFS WERE KEPT has no `prompts`: its slides were
@@ -862,7 +960,9 @@ def toolset() -> FunctionToolset:
         # slide that comes back as a different type takes its own extension,
         # and the post would otherwise list `02.png` with `02.webp` beside it.
         name = f"{number:02d}{source.suffix.lower()}"
-        source.rename(directory / name)
+        # Cut to the post's shape like every slide of it, so a fix is never
+        # the one slide of a carousel that comes out taller.
+        fit(source, directory / name, data["format"])
         names[number - 1] = name
         data["versions"][name] = history
         prompts[number - 1] = brief
@@ -874,7 +974,7 @@ def toolset() -> FunctionToolset:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
         db.append_event(
             "post.slide_replaced",
-            f"Cambié la lámina {number} del posteo «{hook_of(data)}»",
+            f"Cambié la lámina {number} del posteo «{title_of(data)}»",
             "completed", ctx.deps.session_id, {"id": post_id, "slide": number},
         )
         # `previous_kept` so the report can say the old one is still there,
@@ -894,7 +994,97 @@ router = APIRouter()
 
 @router.get("/portal/posts")
 def listing():
-    return {"available": True, "posts": read_all()}
+    return {"available": True, "posts": read_all(), "account": account()}
+
+
+# ── whose account the tab draws the posts on ────────────────────────────────
+#
+# THE CARD IS DRAWN AS THE FEED THE POST IS GOING INTO, and the feed's header is
+# the ACCOUNT's: its handle and its picture. The tab used to make both up — the
+# company's name lowercased into a handle («aquabicicleteria», an account that
+# does not exist) and the agent's own face as the avatar — and QA read the
+# preview as somebody else's Instagram (2026-09-23). What is known, in order:
+#
+# - the account the `instagram` plugin is connected to, whose username it read
+#   from `/me` (`ig_store.username`). Optional: bound in `plugin.py` from
+#   `engine.use("instagram.username", default=None)`, `None` without it.
+# - the handle the business draft found on the business's own pages, in the
+#   section the `business` plugin writes it under: an `instagram.com/<x>` link
+#   first — a link is the account itself — and then a lone `@handle`.
+# - nothing, and the tab shows the business's name without an @.
+#
+# And the picture is the brand's logo when `marca/` has one — a file whose name
+# says `logo`, the way `place_image`'s assets are named — and otherwise the tab
+# draws the name's initial. Never the agent's face: the agent does not post.
+USERNAME = None
+
+# The business plugin's draft and the heading its channels go under
+# (`business_draft.SECTIONS`), named here as a workspace convention and not
+# imported: that plugin is not a dependency of this one.
+DRAFT = "negocio/borrador.md"
+CHANNELS = "## Por dónde te encuentran"
+PROFILE = re.compile(r"instagram\.com/([A-Za-z0-9._]{1,30})")
+# Not after a letter, a dot or another @: «info@negocio.uy» is a mail.
+HANDLE = re.compile(r"(?<![\w.@])@([A-Za-z0-9._]{1,30})")
+# Instagram paths that are not an account.
+NOT_ACCOUNTS = {"p", "reel", "reels", "explore", "stories", "tv"}
+BRAND = "marca"
+LOGO = "logo"
+
+
+def draft_handle() -> str | None:
+    """The Instagram handle the draft lists among the business's channels."""
+    path = config.WORKSPACE / DRAFT
+    text = path.read_text() if path.is_file() else ""
+    if CHANNELS not in text:
+        return None
+    channels = text.split(CHANNELS, 1)[1].split("\n## ", 1)[0]
+    # A handle never ends in a dot, and a sentence that ends on one does.
+    linked = [m.group(1).rstrip(".") for m in PROFILE.finditer(channels)]
+    linked = [name for name in linked if name.lower() not in NOT_ACCOUNTS]
+    if linked:
+        return linked[0]
+    found = HANDLE.search(channels)
+    return found.group(1).rstrip(".") if found else None
+
+
+def logo() -> str | None:
+    """The brand's logo in `marca/`, by file name, or `None`."""
+    brand = config.WORKSPACE / BRAND
+    if not brand.is_dir():
+        return None
+    found = sorted(
+        path.name for path in brand.iterdir()
+        if path.is_file() and path.suffix.lower() in TYPES and LOGO in path.stem.casefold()
+    )
+    return found[0] if found else None
+
+
+def account() -> dict:
+    """`{handle, name, avatar_url}`: whose feed the tab draws. `handle` has no
+    @ and is `None` when nothing knows it; `avatar_url` is relative to the
+    adapter and needs the bearer, like every picture the tab draws."""
+    handle = (USERNAME() if USERNAME else None) or draft_handle()
+    mark = logo()
+    return {
+        "handle": handle,
+        "name": company(),
+        "avatar_url": f"/portal/posts/brand/{mark}" if mark else None,
+    }
+
+
+# BEFORE `/portal/posts/{post_id}/{name:path}`, which would otherwise take
+# «brand» for a post id: a route is matched in the order it was added. A post
+# id is always `<YYYY-MM-DD>-<slug>`, so no post is ever called «brand».
+@router.get("/portal/posts/brand/{name}")
+def brand_picture(name: str):
+    """The logo's bytes. The allowlist is `logo()` itself: any other name is a
+    404, whatever it is made of."""
+    if name != logo():
+        raise HTTPException(404, NO_LOGO.format(name=name))
+    path = config.WORKSPACE / BRAND / name
+    return Response(path.read_bytes(), media_type=TYPES[path.suffix.lower()],
+                    headers={"Content-Disposition": f'inline; filename="{name}"'})
 
 
 # How long the label of a post is, on a flow's page: the hook, cut.
@@ -919,15 +1109,23 @@ def results(slug: str) -> list[dict]:
         found.append({
             "path": f"{WHERE}/{data['id']}/{piece}",
             "mtime": (folder(data["id"]) / POST).stat().st_mtime,
-            "label": hook_of(data),
+            "label": title_of(data),
         })
     return found
 
 
-def hook_of(data: dict) -> str:
-    """What a post is called where the owner reads it: the caption's first
-    line, cut. Never the id — `2026-09-23-pan-masa-madre` is a folder name —
-    and never the slug, which is the same thing with the date off."""
+def title_of(data: dict) -> str:
+    """What a post is called where the owner reads it: its `title`, which the
+    creator gives in `save_post`. Never the id — `2026-09-23-pan-masa-madre`
+    is a folder name — and never the slug, which is the same thing with the
+    date off and the accents gone: QA read «Sabados octubre» in the chat, in
+    Inicio and in Posteos (2026-09-23).
+
+    A post saved before `title` existed is still on disk and has none; it is
+    called by its caption's first line, cut, which is what every post was
+    called until then."""
+    if data.get("title"):
+        return data["title"]
     caption = data["caption"].strip()
     hook = caption.splitlines()[0] if caption else data["slug"].replace("-", " ")
     return hook if len(hook) <= LABEL else hook[: LABEL - 1].rstrip() + "…"

@@ -40,6 +40,17 @@ instead of them. Free, a second, and every claim is about what is left on disk:
      left missing. The first version read the brief after moving the old
      slide out, and died there with a hole in the post.
 
+  f. EVERY SLIDE IS SAVED AT INSTAGRAM'S SHAPE — the provider answers `feed`
+     as 3:4 (1152×1536) and the portrait feed is 4:5: `save_post` and
+     `replace_slide` cut each slide to 1080×1350 in the middle, so the 48 px
+     bands painted red at its top and bottom are gone and nothing else is,
+     `post.json` records the size, and a `square` post comes out 1080×1080.
+
+  g. A POST IS CALLED BY ITS TITLE — the creator's `title`, accents and all,
+     in `post.json`, in what the route serves and in Activity; `update_caption`
+     can rename it; a post saved before titles existed is served its caption's
+     first line. The slug is what QA read as «Sabados octubre» (2026-09-23).
+
 IT CLEANS UP AFTER ITSELF: the post, the pictures, the scratch folders and the
 events it wrote are gone by the end, whatever happened.
 
@@ -71,15 +82,27 @@ SLUG, CAPTION, NEW_CAPTION, PERMALINK = sys.argv[1], sys.argv[2], sys.argv[3], s
 # that has one (`posts.check_slide`).
 CLOSING = f"brief dos «Pasá por {posts.company() or 'la prueba'}»"
 SESSION = "prueba-post-tools"
+TITLE = "Prueba de títulos, con tildes"
 WS = Path("/workspace")
 IMG = WS / "imagenes"
 made = []
 
 
-# A throwaway slide with its sidecar, the shape `generate_image` leaves.
-def picture(name, prompt, brief=True):
+# A throwaway slide with its sidecar, the shape `generate_image` leaves: a
+# REAL picture at the provider's 3:4, because `save_post` cuts every slide to
+# Instagram's 4:5 and a file that is not a picture does not get cut. The top
+# and bottom 48 px are red — exactly what the cut takes off — so a slide that
+# still has red on its first or last row was not cut, or not in the middle.
+def picture(name, prompt, brief=True, size=(1152, 1536)):
+    from PIL import Image, ImageDraw
     path = IMG / name
-    path.write_bytes(b"\x89PNG\r\n\x1a\n" + name.encode())
+    slide = Image.new("RGB", size, "white")
+    band = (size[1] - size[0] * 5 // 4) // 2
+    if band > 0:
+        draw = ImageDraw.Draw(slide)
+        draw.rectangle((0, 0, size[0], band - 1), fill="red")
+        draw.rectangle((0, size[1] - band, size[0], size[1]), fill="red")
+    slide.save(path)
     made.append(path)
     if brief:
         sidecar = path.with_suffix(".json")
@@ -104,7 +127,7 @@ report = {"closing": CLOSING}
 directory = None
 try:
     saved = tools["save_post"](
-        ctx, SLUG, CAPTION, ["uno", "dos"], "carousel",
+        ctx, SLUG, TITLE, CAPTION, ["uno", "dos"], "carousel",
         [picture("prueba-a.png", "brief uno"), picture("prueba-b.png", CLOSING)],
         None, ["alt uno", "alt dos"], True, False, "lista", "guardar",
     )
@@ -112,6 +135,26 @@ try:
     directory = posts.folder(post_id)
     report["saved"] = saved
     before = {p.name: p.read_bytes() for p in sorted(directory.iterdir()) if p.is_file()}
+
+    # (f) every slide as Instagram's 4:5: its size, and whether a red band
+    # survived on its first or last row.
+    from PIL import Image
+    def shape(path):
+        with Image.open(path) as slide:
+            rgb = slide.convert("RGB")
+            edges = [rgb.getpixel((rgb.width // 2, y)) for y in (0, rgb.height - 1)]
+            return {"size": list(slide.size), "red_edge": any(px == (255, 0, 0) for px in edges)}
+    report["cut"] = {
+        "slides": {name: shape(directory / name) for name in ("01.png", "02.png")},
+        "recorded": json.loads((directory / "post.json").read_text()).get("size"),
+    }
+    square = tools["save_post"](
+        ctx, SLUG + "-cuadrado", TITLE, CAPTION, ["uno"], "square",
+        [picture("prueba-f.png", "brief cuadrado", size=(1024, 1024))], "alt",
+    )
+    report["cut"]["square"] = shape(posts.folder(square["saved"]) / "01.png")
+    import shutil as _shutil
+    _shutil.rmtree(posts.folder(square["saved"]))
 
     # (d) seeing a slide. The picture is not JSON, so what is reported is what
     # it is and whether its bytes are the slide's.
@@ -126,8 +169,10 @@ try:
 
     # (e) the same post, as the first posts were saved: no briefs, no history.
     old_style = json.loads((directory / "post.json").read_text())
-    old_style.pop("prompts"); old_style.pop("versions")
+    old_style.pop("prompts"); old_style.pop("versions"); old_style.pop("title")
     (directory / "post.json").write_text(json.dumps(old_style, ensure_ascii=False, indent=2))
+    report["titles"] = {"saved": json.loads(before["post.json"])["title"],
+                        "served_untitled": posts.read(post_id)["title"]}
     report["old_fix"] = call("replace_slide", post_id, 1, picture("prueba-e.png", "brief nuevo"), "se ve chico")
     fixed = json.loads((directory / "post.json").read_text())
     report["old_after"] = {
@@ -137,6 +182,7 @@ try:
         "files": sorted(p.name for p in directory.iterdir() if p.is_file()),
         "kept_file": (directory / "anteriores" / "01-1.png").is_file(),
     }
+    report["cut"]["fixed"] = shape(directory / "01.png")
     # Back to how (a) to (c) expect it, byte for byte: they compare the folder
     # with what it was right after the save.
     (directory / "01.png").write_bytes(before["01.png"])
@@ -147,7 +193,7 @@ try:
 
     # (a) the call that deleted the post.
     report["own_images"] = call(
-        "save_post", SLUG, CAPTION, ["uno"], "carousel",
+        "save_post", SLUG, TITLE, CAPTION, ["uno"], "carousel",
         [f"posteos/{post_id}/01.png"], None, ["alt uno"], True, False, "lista", "guardar",
     )
     report["after_own_images"] = {
@@ -159,7 +205,7 @@ try:
     good = picture("prueba-c.png", "brief tres")
     naked = picture("prueba-d.png", "", brief=False)
     report["missing_brief"] = call(
-        "save_post", SLUG, "Otro pie", ["uno"], "carousel",
+        "save_post", SLUG, TITLE, "Otro pie", ["uno"], "carousel",
         [good, naked], None, ["alt uno", "alt dos"], True, False, "lista", "guardar",
     )
     report["after_missing_brief"] = {
@@ -177,11 +223,13 @@ try:
 
     # (c) the tool that should have been called in the first place.
     report["update"] = call(
-        "update_caption", post_id, NEW_CAPTION, ["tres"], ["alt uno nuevo", "alt dos nuevo"]
+        "update_caption", post_id, NEW_CAPTION, ["tres"], ["alt uno nuevo", "alt dos nuevo"],
+        title="Otro título, también con tildes",
     )
     data = json.loads((directory / "post.json").read_text())
     report["after_update"] = {
         "caption": data["caption"],
+        "title": posts.read(post_id)["title"],
         "hashtags": data["hashtags"],
         "alts": data["alts"],
         "alt": data["alt"],
@@ -286,6 +334,8 @@ def main() -> int:
         after = r["after_update"]
         if after["caption"] != NEW_CAPTION:
             problems.append(f"the caption is {after['caption']!r}")
+        if after["title"] != "Otro título, también con tildes":
+            problems.append(f"the title is {after['title']!r}")
         if after["hashtags"] != ["tres"]:
             problems.append(f"the hashtags are {after['hashtags']}")
         if after["alts"] != ["alt uno nuevo", "alt dos nuevo"]:
@@ -336,6 +386,31 @@ def main() -> int:
     if "01.png" not in after["files"] or "02.png" not in after["files"] or not after["kept_file"]:
         problems.append(f"the folder has {after['files']}")
     failures += judge("e. a post from before briefs were kept can have a slide fixed", problems)
+
+    problems = []
+    cut = r["cut"]
+    for name, slide in list(cut["slides"].items()) + [("the fixed 01.png", cut["fixed"])]:
+        if slide["size"] != [1080, 1350]:
+            problems.append(f"{name} is {slide['size']}")
+        if slide["red_edge"]:
+            problems.append(f"{name} kept a band the cut should have taken")
+    if cut["recorded"] != [1080, 1350]:
+        problems.append(f"post.json records {cut['recorded']}")
+    if cut["square"]["size"] != [1080, 1080]:
+        problems.append(f"a square post is {cut['square']['size']}")
+    print(f"  slides {cut['slides']['01.png']['size']} · square {cut['square']['size']}")
+    failures += judge("f. every slide is saved at Instagram's shape, cut in the middle", problems)
+
+    problems = []
+    titles = r["titles"]
+    if titles["saved"] != "Prueba de títulos, con tildes":
+        problems.append(f"post.json has the title {titles['saved']!r}")
+    if titles["served_untitled"] != CAPTION:
+        problems.append(f"a post from before titles is called {titles['served_untitled']!r}")
+    labels = [event["label"] for event in r["events"]]
+    if not any("Prueba de títulos, con tildes" in label for label in labels):
+        problems.append(f"no event names the post by its title: {labels}")
+    failures += judge("g. a post is called by its title, accents and all", problems)
 
     print("POST TOOLS: PASS" if not failures else "POST TOOLS: FAIL")
     return 1 if failures else 0

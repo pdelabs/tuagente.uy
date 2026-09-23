@@ -106,7 +106,7 @@ save = posts.toolset().tools["save_post"].function
 ctx = types.SimpleNamespace(deps=types.SimpleNamespace(workspace=WS, session_id="prueba-looks"))
 def try_save(slug, image, **more):
     try:
-        return {"ok": save(ctx, slug, "Un pie.", ["prueba"], "feed", [image], alt="Una imagen.", **more)}
+        return {"ok": save(ctx, slug, "Un título", "Un pie.", ["prueba"], "feed", [image], alt="Una imagen.", **more)}
     except Exception as exc:
         return {"raised": type(exc).__name__, "said": str(exc)}
 
@@ -145,7 +145,7 @@ try:
     # (h) the story. A carousel needs two pictures' worth of arguments.
     def carousel(slug, tag, **more):
         try:
-            return {"ok": save(ctx, slug, "Un pie.", ["prueba"], "carousel",
+            return {"ok": save(ctx, slug, "Un título", "Un pie.", ["prueba"], "carousel",
                                [picture(f"{tag}a", brief("dia", "A.")), picture(f"{tag}b", brief("dia", "B."))],
                                alts=["Una.", "Otra."], **more)}
         except Exception as exc:

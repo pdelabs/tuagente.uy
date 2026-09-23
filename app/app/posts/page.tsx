@@ -11,7 +11,7 @@
 // a post's state.
 //
 // IT IS DRAWN AS THE FEED IT IS GOING INTO: one centred 470px column, newest
-// first, the header with the agent's face and the account's handle, the image
+// first, the header with the account's picture and its handle, the image
 // at its real shape, the row of icons, the caption clamped to two lines with
 // a «más». The client is deciding whether this goes up on THEIR Instagram,
 // and a three-column grid of thumbnails answers a different question (how
@@ -23,7 +23,8 @@
 // something that is already up.
 //
 // Contract (the social plugin's router, shown when the manifest flips `posts`):
-//   GET {adapter}/portal/posts           → { available, posts: Post[] }  newest first
+//   GET {adapter}/portal/posts           → { available, posts: Post[], account }  newest first
+//   GET {adapter}/portal/posts/brand/{f} → the brand's logo, bearer required
 //   GET {adapter}/portal/posts/{id}      → Post  (404 once it no longer exists)
 //   GET {adapter}/portal/posts/{id}/{f}  → the image's bytes, bearer required
 //
@@ -34,8 +35,8 @@
 //
 // FIXING ONE SLIDE GOES THROUGH THE CHAT, never through a call of this tab's
 // own: the portal talks to the agent by talking to the agent. «Arreglar esta
-// imagen» writes «Arreglá la lámina N del posteo «<id>»: <what the client
-// says>» and opens `/app/chat?p=…`, and that param SENDS the message on
+// imagen» writes «Arreglá la lámina N del posteo «<title>» (<id>): <what the
+// client says>» and opens `/app/chat?p=…`, and that param SENDS the message on
 // arrival (`app/app/chat/page.tsx`) instead of leaving it in the box — which
 // is why the sentence is finished HERE, in one line of input, and not left
 // hanging on a colon for the client to complete in a screen they have just
@@ -72,16 +73,14 @@ import {
   Maximize2, MessageCircle, RefreshCw, Send, Wand2, X,
 } from "lucide-react";
 import {
-  getFlows, getManifest, getPost, getPostImage, getPosts, loadConfig,
+  getAdapterBytes, getFlows, getManifest, getPost, getPostImage, getPosts, loadConfig,
   type Flow, type HttpError, type Manifest, type Post, type PortalConfig,
   type PostVersion,
 } from "../lib/agent";
 import { imageMime } from "../lib/entities";
 import { PARAM, closeInRoute, openInRoute, urlFor, useRouteParam } from "../lib/routes";
-import { AgentitoAvatar, loadAgentLook, type AgentitoLook } from "../lib/agentito";
 import { buildChatLink } from "../lib/flowExamples";
 import { moment, whenItHappened } from "../lib/labels";
-import { loadAgentName } from "../lib/onboarding";
 import {
   Btn, Chip, EmptyState, ErrorState, IconBtn, Modal, PageHeader, Spinner,
   StaleLinkNotice, inputCls,
@@ -149,19 +148,64 @@ const humanizeSlug = (slug: string) => {
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
-/** WHOSE ACCOUNT THIS IS, WRITTEN THE WAY A HANDLE IS WRITTEN. Derived, not
- *  declared: nothing in the identity carries the client's Instagram handle
- *  today (see the report), so the company's name gets lowercased and stripped
- *  of spaces and accents — «Ferretería Demo» → `ferreteriademo`. The day the
- *  identity grows a `handle`, this reads it instead of guessing. */
-function handleOf(company: string | null | undefined, agent: string): string {
-  const source = (company || agent || "").trim();
-  const flat = source
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9._]/g, "");
-  return flat || "tuagente";
+/** WHOSE ACCOUNT THE POSTS GO OUT ON, as the social plugin knows it
+ *  (`posts.account`): the connected Instagram account's username, or the
+ *  handle the business draft found on the business's own pages, and the
+ *  brand's logo when `marca/` has one. `handle` is `null` when nothing knows
+ *  it, and then the card says the business's name without an @: the tab used
+ *  to derive a handle from the name («aquabicicleteria», an account that does
+ *  not exist) and put the agent's face on it, and QA read the preview as
+ *  somebody else's Instagram (2026-09-23). The agent does not post; the
+ *  business does. `lib/agent.ts`'s `getPosts` doesn't type it yet. */
+type Account = { handle: string | null; name: string | null; avatar_url: string | null };
+
+/** What the card's header and the caption's bold name say. */
+const signature = (account: Account | null, company: string | null | undefined): string =>
+  account?.handle || account?.name || company || "Tu cuenta";
+
+/** The account's picture: the brand's logo, fetched with the bearer like
+ *  every other picture here, or the name's first letter in a neutral circle
+ *  while there is no logo — or while it is on its way. */
+function AccountAvatar({ cfg, account, label }: {
+  cfg: PortalConfig | null; account: Account | null; label: string;
+}) {
+  const path = account?.avatar_url ?? null;
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!cfg || !path) { setUrl(null); return; }
+    let alive = true;
+    let made: string | null = null;
+    getAdapterBytes(cfg, path)
+      .then((bytes) => {
+        if (!alive) return;
+        made = URL.createObjectURL(new Blob([bytes], { type: imageMime(path) }));
+        setUrl(made);
+      })
+      .catch(() => { if (alive) setUrl(null); });
+    return () => {
+      alive = false;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [cfg, path]);
+  const initial = (account?.name || label).trim().charAt(0).toUpperCase();
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-black/[0.07] bg-black/[0.04] text-[13px] font-bold text-ink-soft">
+      {url
+        // eslint-disable-next-line @next/next/no-img-element
+        ? <img src={url} alt="" className="h-full w-full object-cover" />
+        : initial}
+    </span>
+  );
 }
+
+/** WHAT THE POST IS CALLED: the `title` the creator gave it when it saved it,
+ *  accents and all. The slug was the only name before, and «Sabados octubre»
+ *  is a folder, not a name (QA, 2026-09-23). The social plugin always serves
+ *  one — a post from before titles gets its caption's first line — so the
+ *  fallback here is only for an agent whose plugin predates the field.
+ *  `lib/agent.ts`'s `Post` doesn't carry it yet: read off the object. */
+const titleOf = (p: Post): string =>
+  (p as Post & { title?: string }).title || p.caption.split("\n")[0] || humanizeSlug(p.slug);
 
 /** The caption WITHOUT the blank lines a caption is full of, for the two
  *  clamped lines of the card: the first blank one eats a whole line and the
@@ -457,9 +501,11 @@ function DownloadImage({ cfg, id, name, as }: {
 
 /* ── One slide: its brief, and asking for it to be fixed ─────────────────── */
 
-/** The sentence that travels to the chat. The id and the number are in it
- *  because they are what the creator's tool needs, and the rest are the
- *  client's own words: what is wrong is the one thing the portal cannot know. */
+/** The sentence that travels to the chat. It leads with the post's NAME,
+ *  because the owner reads it in her own conversation, and carries the id in
+ *  brackets because it is what the creator's tool takes; the number is the
+ *  slide, and the rest are the client's own words: what is wrong is the one
+ *  thing the portal cannot know. */
 // THE CLIENT'S DOUBLE QUOTES BECOME « ». A `"` in what she typed travels into
 // the agent's delegation to the creator, and inside that tool call's JSON an
 // unescaped quote ENDS the text: on our own agent the creator received «Saca
@@ -470,8 +516,8 @@ function DownloadImage({ cfg, id, name, as }: {
 const guillemets = (text: string) =>
   text.replace(/"([^"]*)"/g, "«$1»").replace(/"/g, "”");
 
-const fixRequest = (id: string, number: number, what: string) =>
-  `Arreglá la lámina ${number} del posteo «${id}»: ${guillemets(what)}`;
+const fixRequest = (post: Post, number: number, what: string) =>
+  `Arreglá la lámina ${number} del posteo «${titleOf(post)}» (${post.id}): ${guillemets(what)}`;
 
 // The primary button as a LINK: `Btn` only draws a <button>, and this one has
 // to be an <a> so middle-click and "open in a new tab" keep working — the same
@@ -484,8 +530,10 @@ const ASK_LINK =
 
 /** The sentence that travels to the chat. Finished, because `?p=` SENDS it on
  *  arrival: the client does not land in the chat with half a request to
- *  complete. The id is in it because it is what the agent's tool takes. */
-const publishRequest = (id: string) => `Publicá en Instagram el posteo «${id}»`;
+ *  complete. By its name, and the id in brackets because it is what the
+ *  agent's tool takes. */
+const publishRequest = (post: Post) =>
+  `Publicá en Instagram el posteo «${titleOf(post)}» (${post.id})`;
 
 /** «Publicar en Instagram» — and it is a LINK to the chat, not a call of this
  *  tab's own. The portal talks to the agent by talking to the agent: the face
@@ -497,7 +545,7 @@ const publishRequest = (id: string) => `Publicá en Instagram el posteo «${id}�
  *  "open in a new tab" keep working. */
 function PublishLink({ post }: { post: Post }) {
   return (
-    <Link href={buildChatLink(publishRequest(post.id))} className={ASK_LINK}>
+    <Link href={buildChatLink(publishRequest(post))} className={ASK_LINK}>
       <Instagram className="h-3.5 w-3.5" />
       Publicar en Instagram
     </Link>
@@ -572,7 +620,7 @@ function FixSlide({ post, number }: { post: Post; number: number }) {
   const router = useRouter();
   const field = useId();
   const ask = what.trim();
-  const href = ask ? buildChatLink(fixRequest(post.id, number, ask)) : null;
+  const href = ask ? buildChatLink(fixRequest(post, number, ask)) : null;
 
   if (!open) {
     return (
@@ -879,10 +927,10 @@ function AltText({ alt }: { alt: string }) {
  *  three things the portal can do with it. `wide` is the detail: every image
  *  stacked instead of a carousel, and the caption already open, because
  *  whoever arrived from a link came for the whole thing. */
-function PostCard({ cfg, p, look, handle, flowName, onOpen, wide = false }: {
+function PostCard({ cfg, p, account, handle, flowName, onOpen, wide = false }: {
   cfg: PortalConfig | null;
   p: Post;
-  look: AgentitoLook;
+  account: Account | null;
   handle: string;
   flowName: string | null;
   onOpen?: () => void;
@@ -892,80 +940,90 @@ function PostCard({ cfg, p, look, handle, flowName, onOpen, wide = false }: {
   const [index, setIndex] = useState(0);
   const current = p.images[Math.min(index, p.images.length - 1)];
 
+  // The name goes ABOVE the card and not inside it: the card is drawn as the
+  // feed the post is going into, and Instagram shows no title.
+  const title = titleOf(p);
   return (
-    <article className="overflow-hidden rounded-xl border border-black/[0.07] bg-white">
-      <header className="flex items-center gap-2.5 px-3 py-2.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-black/[0.07] bg-c-violet/50">
-          <AgentitoAvatar look={look} className="h-7 w-7" />
-        </span>
-        <p className="min-w-0 flex-1 truncate text-[13px] text-ink">
-          <b className="font-bold">{handle}</b>
-          <span className="text-ink-soft"> · {relative(p.created_at)}</span>
-        </p>
-        <CardMenu post={p} onOpen={onOpen} />
-      </header>
+    <section aria-label={title}>
+      <h2 className="mb-1.5 truncate text-[13px] font-semibold text-ink">
+        {onOpen ? (
+          <button onClick={onOpen} className="max-w-full truncate text-left transition hover:text-primary">
+            {title}
+          </button>
+        ) : title}
+      </h2>
+      <article className="overflow-hidden rounded-xl border border-black/[0.07] bg-white">
+        <header className="flex items-center gap-2.5 px-3 py-2.5">
+          <AccountAvatar cfg={cfg} account={account} label={handle} />
+          <p className="min-w-0 flex-1 truncate text-[13px] text-ink">
+            <b className="font-bold">{handle}</b>
+            <span className="text-ink-soft"> · {relative(p.created_at)}</span>
+          </p>
+          <CardMenu post={p} onOpen={onOpen} />
+        </header>
 
-      {wide ? (
-        p.images.length === 0 ? <Empty /> : (
-          <div className="flex flex-col">
-            {p.images.map((img, i) => (
-              <StackedImage key={img.name} cfg={cfg} p={p} name={img.name} index={i} />
-            ))}
-          </div>
-        )
-      ) : (
-        <Gallery cfg={cfg} p={p} index={index} onIndex={setIndex} />
-      )}
+        {wide ? (
+          p.images.length === 0 ? <Empty /> : (
+            <div className="flex flex-col">
+              {p.images.map((img, i) => (
+                <StackedImage key={img.name} cfg={cfg} p={p} name={img.name} index={i} />
+              ))}
+            </div>
+          )
+        ) : (
+          <Gallery cfg={cfg} p={p} index={index} onIndex={setIndex} />
+        )}
 
-      <Reactions />
-      <Caption handle={handle} p={p} expandable={!wide} />
+        <Reactions />
+        <Caption handle={handle} p={p} expandable={!wide} />
 
-      {/* The date line, and the shape of the piece on its right: what a feed
-          post says under the caption is meta, and that is what the format is.
-          It sat in the row of buttons below and at 400px it wrapped onto a
-          line of its own, a chip alone in the middle of nothing. */}
-      <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1.5 text-[10px] uppercase tracking-wide text-ink-soft/80">
-        <span className="min-w-0">
-          {onOpen ? (
-            // `uppercase` again on the button: Tailwind's preflight resets
-            // `text-transform` on every <button>, so it does not inherit.
-            <button onClick={onOpen} className="uppercase transition hover:text-ink-soft">
-              {dayLine(p.date)}
-            </button>
-          ) : (
-            dayLine(p.date)
-          )}
-          {p.flow && (
-            <>
-              {" · "}
-              <Link
-                href={`/app/flows/${p.flow}`}
-                className="underline-offset-4 transition hover:text-primary hover:underline"
-              >
-                del flujo {flowName ?? humanizeSlug(p.flow)}
-              </Link>
-            </>
-          )}
-        </span>
-        <span className="ml-auto"><Chip tone={shape.tone}>{shape.label}</Chip></span>
-      </div>
+        {/* The date line, and the shape of the piece on its right: what a feed
+            post says under the caption is meta, and that is what the format is.
+            It sat in the row of buttons below and at 400px it wrapped onto a
+            line of its own, a chip alone in the middle of nothing. */}
+        <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1.5 text-[10px] uppercase tracking-wide text-ink-soft/80">
+          <span className="min-w-0">
+            {onOpen ? (
+              // `uppercase` again on the button: Tailwind's preflight resets
+              // `text-transform` on every <button>, so it does not inherit.
+              <button onClick={onOpen} className="uppercase transition hover:text-ink-soft">
+                {dayLine(p.date)}
+              </button>
+            ) : (
+              dayLine(p.date)
+            )}
+            {p.flow && (
+              <>
+                {" · "}
+                <Link
+                  href={`/app/flows/${p.flow}`}
+                  className="underline-offset-4 transition hover:text-primary hover:underline"
+                >
+                  del flujo {flowName ?? humanizeSlug(p.flow)}
+                </Link>
+              </>
+            )}
+          </span>
+          <span className="ml-auto"><Chip tone={shape.tone}>{shape.label}</Chip></span>
+        </div>
 
-      {/* The product's own actions. Copying and downloading stay small and
-          secondary — the card has to keep reading as a post — and PUBLISHING
-          is the primary one, because it is the whole of what the client came
-          to decide. A post that already went out has no button: it has the
-          date it went out and the link to it. */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-black/[0.07] px-3 py-2.5">
-        <CopyText text={() => forPublishing(p)} label="Copiar texto" />
-        {!wide && current && <DownloadImage cfg={cfg} id={p.id} name={current.name} />}
-        <span className="ml-auto">
-          {p.published ? <Published post={p} /> : <PublishLink post={p} />}
-        </span>
-      </div>
-      <div className="px-3 pb-3">
-        <AltText alt={wide ? (p.alts ?? [p.alt]).map((a, i) => (p.images.length > 1 ? `${i + 1}. ${a}` : a)).join("\n") : altOf(p, index)} />
-      </div>
-    </article>
+        {/* The product's own actions. Copying and downloading stay small and
+            secondary — the card has to keep reading as a post — and PUBLISHING
+            is the primary one, because it is the whole of what the client came
+            to decide. A post that already went out has no button: it has the
+            date it went out and the link to it. */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-black/[0.07] px-3 py-2.5">
+          <CopyText text={() => forPublishing(p)} label="Copiar texto" />
+          {!wide && current && <DownloadImage cfg={cfg} id={p.id} name={current.name} />}
+          <span className="ml-auto">
+            {p.published ? <Published post={p} /> : <PublishLink post={p} />}
+          </span>
+        </div>
+        <div className="px-3 pb-3">
+          <AltText alt={wide ? (p.alts ?? [p.alt]).map((a, i) => (p.images.length > 1 ? `${i + 1}. ${a}` : a)).join("\n") : altOf(p, index)} />
+        </div>
+      </article>
+    </section>
   );
 }
 
@@ -1012,11 +1070,10 @@ export default function PostsPage() {
   const [loading, setLoading] = useState(false);
   // The flows, only to put their NAME on the card: the post carries the slug.
   const [flows, setFlows] = useState<Flow[] | null>(null);
-  // Who signs the posts: the client's company and the face they gave their
-  // agent. The look is read lazily, like the layout does, so the first frame
-  // doesn't paint the default violet one and flash.
+  // Whose account the posts go out on, as the listing answers it. The
+  // manifest's company is only for an agent whose plugin doesn't answer it.
+  const [account, setAccount] = useState<Account | null>(null);
   const [manifest, setManifest] = useState<Manifest | null>(null);
-  const [look, setLook] = useState<AgentitoLook>(loadAgentLook);
 
   // Which post is open is decided by the URL (`?post=2026-09-15-…`): it can be
   // shared, refreshed, and "back" closes it.
@@ -1026,14 +1083,18 @@ export default function PostsPage() {
   const [detail, setDetail] = useState<Post | null>(null);
   const [detailErr, setDetailErr] = useState<string | null>(null);
 
-  useEffect(() => { setCfg(loadConfig()); setLook(loadAgentLook()); }, []);
+  useEffect(() => { setCfg(loadConfig()); }, []);
 
   // silent: the background refresh doesn't blank the feed.
   const load = useCallback((silent = false) => {
     if (!cfg) return;
     if (!silent) setLoading(true);
     getPosts(cfg)
-      .then((r) => { setPosts(r.posts); setErr(null); })
+      .then((r) => {
+        setPosts(r.posts);
+        setAccount((r as typeof r & { account?: Account }).account ?? null);
+        setErr(null);
+      })
       .catch((e: HttpError) => setErr({ status: e.status, message: e.message }))
       .finally(() => setLoading(false));
   }, [cfg]);
@@ -1046,8 +1107,7 @@ export default function PostsPage() {
       // Without the names the cards still work: the slug gets humanized.
       .catch(() => setFlows([]));
     getManifest(cfg)
-      // Without the manifest the handle falls back to the name this browser
-      // knows; the feed doesn't wait for it.
+      // Only a fallback for the account's name; the feed doesn't wait for it.
       .then(setManifest)
       .catch(() => setManifest(null));
     const id = setInterval(() => load(true), REFRESH_MS);
@@ -1072,19 +1132,19 @@ export default function PostsPage() {
     [flows],
   );
 
-  const handle = useMemo(
-    () => handleOf(manifest?.company, manifest?.agent || loadAgentName() || ""),
-    [manifest],
-  );
+  const handle = useMemo(() => signature(account, manifest?.company), [account, manifest]);
 
   const header = (
     <PageHeader
       title="Posteos"
       subtitle="Lo que tu agente armó para tus redes. Sale cuando vos le decís que sí."
       actions={
-        <IconBtn label="Actualizar" disabled={loading} onClick={() => load()}>
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-        </IconBtn>
+        // WITH ITS WORD, not a lone icon: QA read the bare arrow as nothing
+        // (2026-09-23), and a tooltip is not there on a phone.
+        <Btn kind="secondary" size="sm" disabled={loading} onClick={() => load()}>
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          Actualizar
+        </Btn>
       }
     />
   );
@@ -1103,7 +1163,7 @@ export default function PostsPage() {
         <PostCard
           cfg={cfg}
           p={detail}
-          look={look}
+          account={account}
           handle={handle}
           flowName={flowName(detail.flow)}
           wide
@@ -1145,7 +1205,7 @@ export default function PostsPage() {
             key={p.id}
             cfg={cfg}
             p={p}
-            look={look}
+            account={account}
             handle={handle}
             flowName={flowName(p.flow)}
             onOpen={() => open(p.id)}

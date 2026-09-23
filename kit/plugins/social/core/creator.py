@@ -154,10 +154,11 @@ def todays_look() -> str:
 # plugin had left an hour earlier with the name, the address, the hours, the
 # products and the voice. Whether the creator thinks of opening a second file
 # is a convention; this puts the file in front of it on every delegation.
-# The path is the `business` plugin's (`business_draft.DRAFT`), named here as
-# a workspace convention and not imported: that plugin is not a dependency of
-# this one, and a client without it simply has no draft.
-DRAFT = "negocio/borrador.md"
+# The path is the `business` plugin's (`business_draft.DRAFT`), named in
+# `posts.py` as a workspace convention and not imported: that plugin is not a
+# dependency of this one, and a client without it simply has no draft. The tab
+# reads the same file for the account's handle (`posts.account`).
+DRAFT = posts.DRAFT
 
 BUSINESS = "## El negocio"
 

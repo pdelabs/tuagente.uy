@@ -36,7 +36,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 import posts
-from PIL import Image
+from PIL import Image, ImageOps
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.messages import BinaryImage
 from pydantic_ai.toolsets import FunctionToolset
@@ -155,7 +155,14 @@ def toolset() -> FunctionToolset:
         # is that brief plus one line.
         brief = json.loads(slide.with_suffix(BRIEF).read_text())
 
-        picture = Image.open(slide).convert("RGBA")
+        # CUT TO THE POST'S SHAPE FIRST, so the corner is the corner the client
+        # will see. `save_post` cuts every slide to Instagram's frame
+        # (`posts.SIZE`), and a mark placed on the provider's taller 3:4 lost
+        # half its air to that cut: 6% of the width above the bottom edge was
+        # 3% after it. Cut here, `save_post`'s own cut finds nothing to take.
+        with Image.open(slide) as bare:
+            picture = ImageOps.fit(bare.convert("RGBA"), posts.SIZE[brief["format"]],
+                                   Image.Resampling.LANCZOS)
         mark = Image.open(ASSETS / asset).convert("RGBA")
         width = round(picture.width * size)
         height = round(mark.height * width / mark.width)
