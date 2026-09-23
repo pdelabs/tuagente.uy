@@ -89,9 +89,6 @@ What's left **UNVERIFIED** inside rows that were otherwise tested:
 - `?folder=entregables` (`interno` was tested, which is the hard case, not
   this one).
 - `?file=` **without** the `workspace/` prefix.
-- `?skill=<one of ours>` opening the editor (it was tested that the Edit
-  button only shows up where the adapter can actually edit it; the direct
-  link into the editor wasn't).
 - `?p=` from chat, which isn't a detail but counts as arriving with intent.
 
 Rules for file routes:
@@ -113,18 +110,12 @@ Rules for file routes:
   folder is empty" with eight files inside, because the filter was eating
   exactly what the link came to show.
 
-`?skill=` works for **every** skill, but they don't all do the same thing,
-and that matters when writing the message that goes with the link:
-
-- **One of ours** (the ones we built for that client) opens its text,
-  editable.
-- **A system one** (the kit's and the engine's) expands the "Common to the
-  system" drawer, brings it into view and highlights it with its name and
-  summary. It doesn't open an editor because there's nothing to edit: the
-  adapter only serves the content of the editable ones. A link to one of
-  these is "look at which one it is", not "edit it".
-- A name that doesn't exist shows a notice and leaves the full list in view,
-  instead of doing nothing.
+`?skill=` works for **every** skill and does the same thing for all of them:
+it brings the skill into view and highlights it with its name and summary,
+expanding the "Common to the system" drawer if that's where it lives. There is
+no editor — the engine serves no skill's text — so a link to one is "look at
+which one it is", not "edit it". A name that doesn't exist shows a notice and
+leaves the full list in view, instead of doing nothing.
 
 **"Brings it into view" has only been true since 8/12 (second pass).**
 Before that, this table's promise was false for the single most common

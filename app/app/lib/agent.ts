@@ -797,14 +797,6 @@ export type FlowDetail = Flow & { how: string; runs?: FlowRun[] };
 export const getFlowDetail = (c: PortalConfig, slug: string) =>
   get<FlowDetail>(c.adapter, `/portal/flows/${encodeURIComponent(slug)}`, c);
 
-/** The full SKILL.md of one of our skills (adapter >=0.21). */
-export const getSkillContent = (c: PortalConfig, name: string) =>
-  get<{ name: string; content: string }>(c.adapter, `/portal/skills/${encodeURIComponent(name)}`, c);
-/** Editing the skill IS editing how the agent works: the engine reindexes it
- *  on its own within a few minutes, nothing needs restarting. */
-export const saveSkill = (c: PortalConfig, name: string, content: string) =>
-  post<{ ok: boolean }>(c.adapter, `/portal/skills/${encodeURIComponent(name)}`, c, { content });
-
 /** A post the agent left READY TO PUBLISH: the image, the text and the
  *  hashtags. Served by the social plugin's own router, and only present when
  *  the manifest flips `posts`.
