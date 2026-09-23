@@ -8,10 +8,12 @@
 // charged US$ 1.52. Nine times too low, which is the worst direction — the
 // client plans around that and finds out the truth when the invoice arrives.
 //
-// Now the number comes from whoever charges: the adapter asks OpenRouter
-// about THIS agent's key and serves back whatever it answered. That's why
-// the screen is short: three numbers, the cap if there is one, and where
-// they come from. No tokens (no client knows what one is), no sessions, no
+// Now the number comes from whoever charges: the engine asks the provider
+// (OpenRouter) what THIS agent spent and serves back whatever it answered.
+// That's why the screen is short: three numbers, the key's cap if there is
+// one -- a different number, about the key and not the agent -- and where
+// they come from. The provider's name stays off the screen: to the owner it
+// is a word that means nothing. No tokens (no client knows what one is), no sessions, no
 // bars — we don't have a daily series, and drawing one with this little data
 // would be making it up.
 //
@@ -25,7 +27,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Wallet, RefreshCw } from "lucide-react";
 import { loadConfig, getUsage, type HttpError, type PortalConfig, type Usage } from "../lib/agent";
-import { Card, EmptyState, ErrorState, IconBtn, PageHeader, Spinner } from "../lib/ui";
+import { Card, EmptyState, ErrorState, IconBtn, PageHeader, SUPPORT, Spinner } from "../lib/ui";
 import { timeOf } from "../lib/labels";
 
 type Failure = { status?: number; message: string };
@@ -141,32 +143,42 @@ export default function UsagePage() {
             <Stat label="Desde siempre" value={amount(total)} />
           </div>
           <p className="mt-4 border-t border-black/[0.07] pt-3.5 text-[11px] leading-snug text-ink-soft">
-            Los números vienen de OpenRouter: es lo que tu agente gasta de verdad,
+            Los números los da el proveedor de IA: es lo que tu agente gasta de verdad,
             no una estimación nuestra. Incluye todo lo que hace — responder, generar
             imágenes, buscar. No es tu abono y no es un cobro: está para que veas
             cuánto se usa.
           </p>
         </Card>
 
-        {/* The cap, if the key has one. NO BAR: a bar at 15% says "relax" and
-            one at 90% says "stop", and neither of those is ours to say — the
-            cap belongs to the key, not to the client's plan. Both numbers,
-            side by side, and let them do the math. */}
+        {/* The cap, if there is one. NO BAR, AND NOT NEXT TO THE SPEND. The
+            cap belongs to the provider key, which can serve more than this
+            agent, while the three numbers above are this agent's: putting
+            «lleva gastados US$ 12» under «tope de US$ 10» told the QA client
+            her agent was over a limit it had not reached. What the number
+            is, and what happens when it's reached, said once and calmly. */}
         {limit != null && (
           <Card className="mt-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
-              Tope de la cuenta
+              Tope de seguridad
             </p>
-            <p className="mt-1.5 text-[13px] text-ink">
-              La clave de tu agente tiene un tope de{" "}
-              <span className="font-semibold tabular-nums">{usd(limit)}</span>
-              {total != null && (
-                <>
-                  {" "}y lleva gastados{" "}
-                  <span className="font-semibold tabular-nums">{usd(total)}</span>
-                </>
-              )}
-              .
+            <p className="mt-1.5 text-[13px] leading-relaxed text-ink">
+              Hay un tope de{" "}
+              <span className="font-semibold tabular-nums">{usd(limit)}</span>{" "}
+              para el gasto en IA. Es un freno que ponemos nosotros para que un error
+              nunca se convierta en un gasto grande, no un límite de tu plan.
+            </p>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
+              Si algún día se llega, tu agente deja de responder hasta que lo subamos;
+              no se pierde nada de lo que hizo. Si pasa,{" "}
+              <a
+                href={SUPPORT.whatsapp}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold underline underline-offset-2"
+              >
+                escribinos
+              </a>{" "}
+              y lo destrabamos.
             </p>
           </Card>
         )}
