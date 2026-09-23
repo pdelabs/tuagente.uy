@@ -36,9 +36,12 @@ that reaches a gated tool has nothing to write the request down with, nowhere
 for the client to answer, and no way back into the turn.
 
 `SKILLS = []` because the plugin's `SKILL.md` is about blocking a Hermes
-kanban ticket, and this engine has no board: the gate replaced that mechanism
-whole. The skill is not broken, it is simply not this engine's, and shipping
-its prose here would be telling the agent to use a board that is not there.
+kanban ticket with `hermes kanban block`: on this engine the gate replaced that
+mechanism whole, and shipping its prose here would tell the face to run a CLI
+that is not there. The file stays in the manifest only because the Hermes
+agents in `kit/fleet.md` still run this plugin and read it; when they are
+rebuilt on this engine, the SKILL.md, this line and the override in
+`engine/core/plugins.py` go together.
 """
 
 import render

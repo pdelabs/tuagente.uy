@@ -24,10 +24,6 @@ import board_routes
 import board_store  # noqa: F401 — imported for the tables it creates on load
 import board_tools
 
-# The store is this plugin's own and the screens are the portal's: there is no
-# procedure to teach, so there is no SKILL.md to ship.
-SKILLS: list[str] = []
-
 
 def register(engine) -> None:
     # Bound, not read: the plugin whose thread also lives at

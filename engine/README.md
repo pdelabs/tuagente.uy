@@ -194,8 +194,13 @@ that make its `Agent(...)` fit this engine — see **Sub-agents** below:
 
 Two things are not verbs. **Skills** load from `surfaces.skills` as on any
 agent, unless the plugin's module defines `SKILLS` — a list that overrides the
-manifest here, and `[]` means it brings none to this engine (`approval`'s
-SKILL.md is Hermes-kanban prose). And **`instructions.md`** is read by the
+manifest here, and `[]` means it brings none to this engine. Two plugins still
+use it and the docstring of `core/plugins.py` says why: `approval`, whose
+SKILL.md is Hermes-kanban prose the Hermes fleet still reads, and `social`,
+whose `post` SKILL.md is the creator's instructions and the name the
+`social-package` row detects the capability by. A plugin with no skills simply
+declares none (`kanban`). **Curated flows** are `surfaces.flows`, copied into
+`workspace/flows/` by the loader (below, «Flows»). And **`instructions.md`** is read by the
 loader, not by the plugin: it goes into the prompt before anything `register()`
 adds.
 

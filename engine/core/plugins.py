@@ -75,8 +75,21 @@ FLOW.md into the client's workspace.
 
 SKILLS ARE STILL `surfaces.skills`, unless the plugin's module defines
 `SKILLS`: a list that overrides the manifest for this engine, and `[]` means it
-brings none here. The approval plugin's SKILL.md is Hermes-kanban prose and the
-flow plugin's drives a runner this engine does not have.
+brings none here. It is a Hermes seam and two plugins still need it, each for a
+reason outside this engine:
+
+- `approval`, whose SKILL.md is Hermes-kanban prose. The Hermes agents in
+  `kit/fleet.md` still run the approval plugin as a system plugin and read that
+  file; indexing it here would tell the face to block a board it does not have.
+  It goes when those agents are rebuilt on this engine.
+- `social`, whose `post` SKILL.md is the CREATOR's instructions, read whole
+  into the sub-agent (`social/core/creator.py`); on the face's index it would
+  offer tools the face does not have. It stays a `surfaces.skills` because the
+  `social-package` row detects and verifies the capability by that skill's name
+  (`kit/capabilities/catalog.json`, `kit/tools/`).
+
+A plugin with no skills declares none in its manifest and needs no override
+(`kanban`).
 """
 
 import hashlib
