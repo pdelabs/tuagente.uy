@@ -20,6 +20,13 @@ the face's third and whole brief hit the two-delegation cap.
   d. THE FACE IS TOLD THE RULE — the capability's instructions say to quote
      the client between « » and never with double quotes, and the capability
      is on the face when a plugin registered a delegate.
+  e. ACTIVITY READS A LINE FOR THE OWNER, NOT THE BRIEF — QA read «Le pedí al
+     creador de posteos: El cliente pidió que…» (2026-09-23). `delegate_task`
+     asks for `for_the_owner`, required and only there; it is taken off the
+     args before the harness validates them, a call without it goes back to
+     the face, and the start event's label is «Le pedí al <label> que <line>»
+     (a «Que» and a closing period the model added do not double up) with
+     the brief whole in the payload.
 
 WHERE IT POINTS. `CORE_CONTAINER` moves it onto a second instance; the default
 is the main compose's `tuagente-core`.
@@ -35,6 +42,7 @@ CONTAINER = os.environ.get("CORE_CONTAINER", "tuagente-core")
 INSIDE = r"""
 import asyncio, json, types
 from pydantic_ai.tools import ToolDefinition
+from pydantic_ai_harness.subagents import DelegationStartEvent
 
 from core import agent, delegation, plugins
 
@@ -53,8 +61,37 @@ def check(tool, args):
         return {"raised": type(exc).__name__, "said": str(exc)}
 
 
+def validate(args):
+    call = types.SimpleNamespace(tool_call_id="llamada-1")
+    try:
+        return {"ok": asyncio.run(guard.before_tool_validate(ctx, call=call, tool_def=DELEGATE, args=args))}
+    except Exception as exc:
+        return {"raised": type(exc).__name__, "said": str(exc)}
+
+
+prepared = asyncio.run(guard.prepare_tools(ctx, [
+    ToolDefinition(name=delegation.TOOL, parameters_json_schema={
+        "type": "object", "properties": {"agent_name": {"type": "string"}, "task": {"type": "string"}},
+        "required": ["agent_name", "task"]}),
+    OTHER,
+]))
+brief = "El cliente pidió que solo se reemplace el texto de la lámina 3 por «Reservá por WhatsApp.»"
+validated = validate(json.dumps({"agent_name": name, "task": brief,
+                                 "for_the_owner": "Que arregle la lámina 3 de «Nuevo horario»."}))
+missing = validate({"agent_name": name, "task": brief})
+rows = []
+delegation.db = types.SimpleNamespace(append_event=lambda *a: rows.append(a))
+event = DelegationStartEvent(agent_name=name, task=brief, truncated=False, model=None, inherits_tools=False)
+event.tool_call_id = "llamada-1"
+asyncio.run(guard._started(types.SimpleNamespace(run_id="r", deps=ctx.deps), event))
+
 cut = "Arreglá únicamente la slide 5. El cliente pidió: «Saca el "
 print(json.dumps({
+    "schemas": [t.parameters_json_schema for t in prepared],
+    "validated": validated,
+    "missing": missing,
+    "brief": brief,
+    "row": rows[0],
     "label": delegation.LABELS.get(name),
     "cut": check(DELEGATE, {"agent_name": name, "task": cut}),
     "whole": check(DELEGATE, {"agent_name": name, "task": "El cliente pidió: «Sacá “también”.»"}),
@@ -108,6 +145,24 @@ def main() -> int:
     if not r["on_face"]:
         problems.append("the capability is not on the face")
     failures += judge("d. the face is told the rule", problems)
+
+    problems = []
+    delegate_schema, other_schema = r["schemas"]
+    if "for_the_owner" not in delegate_schema["properties"] or "for_the_owner" not in delegate_schema["required"]:
+        problems.append(f"delegate_task does not ask for it: {delegate_schema}")
+    if "for_the_owner" in (other_schema or {}).get("properties", {}):
+        problems.append("another tool asks for it")
+    if set((r["validated"].get("ok") or {}).keys()) != {"agent_name", "task"}:
+        problems.append(f"the args the harness validates are {r['validated']}")
+    if r["missing"].get("raised") != "ModelRetry" or "for_the_owner" not in r["missing"].get("said", ""):
+        problems.append(f"a call without it gave {r['missing']}")
+    _, line, _, _, payload = r["row"]
+    want = f"Le pedí al {r['label']} que arregle la lámina 3 de «Nuevo horario»"
+    if line != want:
+        problems.append(f"Activity reads {line!r}, not {want!r}")
+    if payload.get("task") != r["brief"] or not payload.get("for_the_owner"):
+        problems.append(f"the payload is {payload}")
+    failures += judge("e. Activity reads a line for the owner, not the brief", problems)
 
     print("DELEGATION GUARD: " + ("PASS" if not failures else "FAIL"))
     return 1 if failures else 0

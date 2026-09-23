@@ -20,7 +20,7 @@ the whole mechanism against the running container:
       and the post it saved carries the flow's slug — which is `flow_of` still
       working, and the proof that the creator runs with the FACE's deps.
   S3. THE DELEGATION IS VISIBLE AND PRICED. Activity has «Le pedí al creador de
-      posteos: …» and «El creador de posteos terminó en N s», and the turn's
+      posteos que …» — the face's line for the owner, not the brief — and «El creador de posteos terminó en N s», and the turn's
       `turn_usage` event says `delegations: 1` and is bigger than the same
       event for a turn that delegated nothing.
   S4. A CREATOR FAILURE DOES NOT KILL THE TURN. Twice: a prompt the image
@@ -455,8 +455,9 @@ def main() -> int:
         failures += judge(
             "S3.a Activity says what it asked for",
             [] if started_rows and started_rows[0]["label"].startswith(
-                "Le pedí al creador de posteos: ")
-            else [f"no delegation.started: {[r['kind'] for r in events_of(session_id)]}"],
+                "Le pedí al creador de posteos que ")
+            and "cliente" not in started_rows[0]["label"]
+            else [f"delegation.started: {[r['label'] for r in started_rows] or [r['kind'] for r in events_of(session_id)]}"],
         )
         finished = events_of(session_id, "delegation.finished")
         failures += judge(

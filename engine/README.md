@@ -834,7 +834,9 @@ reads and answers the client from. An image the provider refuses never even
 gets that far — it is a `ModelRetry` inside the creator, which reports it.
 
 **Both ends are visible and priced.** `core/delegation.py` writes
-`delegation.started` («Le pedí al creador de posteos: <the brief, cut at 120>»)
+`delegation.started` («Le pedí al creador de posteos que <for_the_owner>»: a
+line the face writes FOR the owner in an extra `delegate_task` argument, never
+the brief, which stays whole in the payload)
 and `delegation.finished` («El creador de posteos terminó en N s», or «…no
 pudo: tardó más de lo que tenía») into the events table on ANY run — a chat
 turn, a flow's run, a run resumed after an approval, which has no stream at

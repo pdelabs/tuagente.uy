@@ -17,13 +17,25 @@ THE NAME THE CLIENT READS COMES FROM THE PLUGIN, never from the delegate's id.
 `instagram-creator` is an id, in English, like every other id in the kit; «el
 creador de posteos» is what the client is told, and the plugin passes it with
 `engine.subagent(..., label=…)`.
+
+AND WHAT SHE READS IT WAS ASKED IS A LINE WRITTEN FOR HER, not the brief. QA's
+second round (2026-09-23) read «Le pedí al creador de posteos: El cliente pidió
+que solo se reemplace…» — the first 120 characters of a brief the face wrote
+for the creator, about the owner in the third person. The brief is for the
+delegate and stays whole in the event's payload (and in the trace); the label
+is `for_the_owner`, one more argument the face fills on every `delegate_task`
+— added to the harness's schema here and taken off before the harness
+validates, so the delegate never sees it. The model supplies the words («arme
+un posteo sobre los sábados»), the code the sentence around them.
 """
 
-from dataclasses import dataclass
+import json
+import re
+from dataclasses import dataclass, replace
 
 from pydantic_ai import ModelRetry
 from pydantic_ai.capabilities import AbstractCapability, on_event
-from pydantic_ai.tools import RunContext
+from pydantic_ai.tools import RunContext, ToolDefinition
 from pydantic_ai_harness.subagents import DelegationEndEvent, DelegationStartEvent
 
 from . import db
@@ -46,12 +58,27 @@ FINISHED = "delegation.finished"
 # Filled by `engine.subagent(...)` at startup and read here.
 LABELS: dict[str, str] = {}
 
-# How much of the brief travels into Activity. The whole task is in the trace;
-# what the client wants on that screen is which delegate got what, at a glance.
-TASK_CHARS = 120
+# The argument the face writes the owner's line in, and how long it may be on
+# that screen: which delegate got what, at a glance.
+FOR_THE_OWNER = "for_the_owner"
+ASKED_CHARS = 120
+FOR_THE_OWNER_SCHEMA = {
+    "type": "string",
+    "description": (
+        "What you asked, for your client's Activity screen: a few Spanish words"
+        " that complete «Le pedí al <ayudante> que …», in the subjunctive, to her"
+        " and never about her («arme un posteo sobre la promo de invierno»,"
+        " «arregle la lámina 1 de «Nuevo horario»», «lea tu web de nuevo»)."
+        " Not the brief: that goes in `task`."
+    ),
+}
+MISSING = (
+    "Te faltó `for_the_owner`: en pocas palabras, qué le pediste al {label}, para"
+    " que tu cliente lo lea en Actividad («arme un posteo sobre …»)."
+)
 
 # Read by the client, so: Spanish, and the outcome said as a fact.
-ASKED = "Le pedí al {label}: {task}"
+ASKED = "Le pedí al {label} que {asked}"
 DONE = "El {label} terminó en {seconds} s"
 COULD_NOT = "El {label} no pudo: {why}"
 
@@ -87,6 +114,11 @@ QUOTING = (
     "Nunca uses comillas dobles adentro del pedido: una comilla doble lo corta ahí."
 )
 
+# The owner's line of each delegation in flight, by the call's `tool_call_id`:
+# taken off the args before the harness validates them, read back when its
+# start event fires (the event carries the same id).
+_asked: dict[str, str] = {}
+
 # How many delegations each run made, by `run_id`. Read once and forgotten, by
 # `core/turn_usage.py`, which is what puts `delegations` on the turn's event.
 _counts: dict[str, int] = {}
@@ -110,8 +142,15 @@ def label(name: str) -> str:
     return LABELS.get(name, name)
 
 
-def started_line(event: DelegationStartEvent) -> str:
-    return ASKED.format(label=label(event.agent_name), task=event.task[:TASK_CHARS])
+def owner_line(said: str) -> str:
+    """The face's words as the tail of «Le pedí al … que …»: without a «que» of
+    its own, without the closing period, and short."""
+    said = re.sub(r"^\s*que\s+", "", said.strip(), flags=re.I).rstrip(" .")
+    return said[:ASKED_CHARS]
+
+
+def started_line(event: DelegationStartEvent, asked: str) -> str:
+    return ASKED.format(label=label(event.agent_name), asked=owner_line(asked))
 
 
 def finished_line(event: DelegationEndEvent) -> str:
@@ -142,6 +181,29 @@ class Delegation(AbstractCapability):
     def get_instructions(self):
         return QUOTING
 
+    async def prepare_tools(self, ctx: RunContext, tool_defs: list[ToolDefinition]) -> list[ToolDefinition]:
+        """`delegate_task` asks for the owner's line too, required."""
+        out = []
+        for tool in tool_defs:
+            if tool.name == TOOL:
+                schema = dict(tool.parameters_json_schema)
+                schema["properties"] = {**schema.get("properties", {}), FOR_THE_OWNER: FOR_THE_OWNER_SCHEMA}
+                schema["required"] = [*schema.get("required", []), FOR_THE_OWNER]
+                tool = replace(tool, parameters_json_schema=schema)
+            out.append(tool)
+        return out
+
+    async def before_tool_validate(self, ctx: RunContext, *, call, tool_def, args):
+        """The owner's line off the args, kept for the start event."""
+        if tool_def.name != TOOL:
+            return args
+        args = json.loads(args or "{}") if isinstance(args, str) else dict(args)
+        said = (args.pop(FOR_THE_OWNER, None) or "").strip()
+        if not said:
+            raise ModelRetry(MISSING.format(label=label(args.get("agent_name") or "")))
+        _asked[call.tool_call_id] = said
+        return args
+
     async def before_tool_execute(self, ctx: RunContext, *, call, tool_def, args):
         """A brief that stopped mid-quote goes back to the face, not to the delegate."""
         if tool_def.name == TOOL:
@@ -154,9 +216,10 @@ class Delegation(AbstractCapability):
     @on_event(DelegationStartEvent)
     async def _started(self, ctx: RunContext, event: DelegationStartEvent) -> None:
         _counts[ctx.run_id or ""] = _counts.get(ctx.run_id or "", 0) + 1
+        asked = _asked.pop(event.tool_call_id or "", "")
         db.append_event(
-            STARTED, started_line(event), "running", ctx.deps.session_id,
-            {"agent": event.agent_name, "task": event.task},
+            STARTED, started_line(event, asked), "running", ctx.deps.session_id,
+            {"agent": event.agent_name, "task": event.task, "for_the_owner": asked},
         )
 
     @on_event(DelegationEndEvent)
