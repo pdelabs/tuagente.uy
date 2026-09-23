@@ -5,6 +5,8 @@
 //   GET  {adapter}/portal/files        → { files: [{ path, size, mtime }] }
 //   GET  {adapter}/portal/files/{path} → text/plain
 //   POST {adapter}/portal/upload       → { ok, path: "workspace/entrada/…", bytes }
+//   PUT  {adapter}/portal/files/{path} → { ok, path, bytes } (raw text body; only
+//                                        what the listing marks `editable`)
 // List navigable by folders (derived from the paths) + a viewer in a Modal.
 //
 // Agent-side conventions this module respects:
@@ -27,15 +29,21 @@
 // the screen goes back to read-only. Offering a button the other side
 // doesn't have is the fastest way for the client to think something of
 // theirs broke.
+//
+// AND SHE EDITS WHAT IS HERS TO EDIT. The business draft's note says «corregí
+// lo que no sea así», and QA (2026-09-23) opened it here and found no way to:
+// the page said the agent's files could be read, not edited. The engine marks
+// each file `editable` (her uploads, the draft) and enforces the same rule on
+// save; the agent's own work stays read-only. No `editable`, no pencil.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Check, Code2, Download, Eye, File, FileCode, FileJson, FileText, Folder, FolderOpen,
-  Inbox, Search, Upload, X, type LucideIcon,
+  Inbox, Pencil, Search, Upload, X, type LucideIcon,
 } from "lucide-react";
 import {
-  loadConfig, getFiles, getFileText, getFileBytes, getManifest, uploadFile,
+  loadConfig, getFiles, getFileText, getFileBytes, getManifest, uploadFile, saveFileText,
   type Manifest, type PortalConfig,
 } from "../lib/agent";
 import {
@@ -50,7 +58,7 @@ import { FileBody, AgentImage } from "../lib/EntityViewer";
 import { readableFileName, fileType } from "../lib/names";
 import Spreadsheet, { CsvPreview } from "../lib/Spreadsheet";
 
-type FileEntry = { path: string; size?: number; mtime?: string | number };
+type FileEntry = { path: string; size?: number; mtime?: string | number; editable?: boolean };
 
 // `binary`: not text, no preview — download only.
 type Viewer = {
@@ -278,6 +286,10 @@ export default function FilesPage() {
   const [viewer, setViewer] = useState<Viewer | null>(null);
   // The viewer formats by default; "original" shows the raw text (to copy).
   const [raw, setRaw] = useState(false);
+  // What she is typing while she edits the open file; `null` is reading.
+  const [editing, setEditing] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
 
   useEffect(() => { setCfg(loadConfig()); }, []);
 
@@ -354,6 +366,8 @@ export default function FilesPage() {
   const loadFile = useCallback((path: string) => {
     if (!cfg) return;
     setRaw(false);
+    setEditing(null);
+    setSaveErr(null);
     // Spreadsheets DO get shown: the agent delivers quotes and reports in
     // xlsx, and downloading them just to see three numbers isn't a preview.
     if (isSpreadsheet(path)) {
@@ -426,6 +440,40 @@ export default function FilesPage() {
     } finally {
       setDownloading(false);
     }
+  };
+
+  /* ── Editing what is hers ──────────────────────────────────────────────── */
+
+  const dirty = editing !== null && viewer !== null && editing !== viewer.text;
+
+  /** Saves the whole text, then shows it as saved: the viewer reads what
+   *  was sent, and the list refreshes for the new size and time. */
+  const saveEdit = async () => {
+    if (!cfg || !viewer || editing === null) return;
+    setSaving(true);
+    setSaveErr(null);
+    try {
+      await saveFileText(cfg, viewer.path, editing);
+      setViewer({ ...viewer, text: editing });
+      setEditing(null);
+      reload();
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Closing with unsaved changes asks first: a click outside the modal is
+  // the easiest way to lose a paragraph she just typed.
+  const closeEditor = () => {
+    if (dirty && !window.confirm("Tenés cambios sin guardar. ¿Salir igual?")) return;
+    setEditing(null);
+    setSaveErr(null);
+  };
+  const closeModal = () => {
+    if (dirty && !window.confirm("Tenés cambios sin guardar. ¿Salir igual?")) return;
+    closeViewer();
   };
 
   /* ── Leaving something for the agent ───────────────────────────────────── */
@@ -823,7 +871,7 @@ export default function FilesPage() {
         </div>
       )}
       {viewer && !(viewer.err && /^404/.test(viewer.err)) && (
-        <Modal wide onClose={closeViewer}>
+        <Modal wide onClose={closeModal}>
           <div className="flex items-start justify-between gap-3 border-b border-black/[0.07] px-4 py-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-ink">{fm?.title || viewerName}</p>
@@ -847,7 +895,12 @@ export default function FilesPage() {
               <IconBtn label="Descargar" disabled={downloading} onClick={downloadFile}>
                 <Download className="h-4 w-4" />
               </IconBtn>
-              {viewer.text !== null && viewer.text.trim() !== "" && (
+              {viewerMeta?.editable && viewer.text !== null && editing === null && (
+                <IconBtn label="Editar" onClick={() => { setSaveErr(null); setEditing(viewer.text); }}>
+                  <Pencil className="h-4 w-4" />
+                </IconBtn>
+              )}
+              {viewer.text !== null && viewer.text.trim() !== "" && editing === null && (
                 <IconBtn
                   label={raw ? "Ver formateado" : "Ver original"}
                   onClick={() => setRaw((v) => !v)}
@@ -855,7 +908,7 @@ export default function FilesPage() {
                   {raw ? <FileText className="h-4 w-4" /> : <Code2 className="h-4 w-4" />}
                 </IconBtn>
               )}
-              <IconBtn label="Cerrar" onClick={closeViewer}>
+              <IconBtn label="Cerrar" onClick={closeModal}>
                 <X className="h-4 w-4" />
               </IconBtn>
             </div>
@@ -891,7 +944,17 @@ export default function FilesPage() {
                 onRetry={() => loadFile(viewer.path)}
               />
             )}
-            {viewer.text !== null && (
+            {editing !== null ? (
+              // The whole file, as it is on disk: what she saves is exactly
+              // what she sees here, headings and all.
+              <textarea
+                value={editing}
+                onChange={(e) => setEditing(e.target.value)}
+                spellCheck
+                autoFocus
+                className={`${inputCls} min-h-[55vh] resize-y font-mono text-[12.5px] leading-relaxed`}
+              />
+            ) : viewer.text !== null && (
               viewer.text.trim() === "" ? (
                 <p className="text-sm text-ink-soft">El archivo está vacío.</p>
               ) : raw ? (
@@ -910,6 +973,19 @@ export default function FilesPage() {
               )
             )}
           </div>
+          {editing !== null && (
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-black/[0.07] px-4 py-3">
+              {saveErr && (
+                <p className="mr-auto text-[12px] font-medium text-c-coral-ink">
+                  No pude guardar ({saveErr}).
+                </p>
+              )}
+              <Btn kind="ghost" size="sm" onClick={closeEditor} disabled={saving}>Cancelar</Btn>
+              <Btn size="sm" onClick={saveEdit} disabled={saving || !dirty}>
+                {saving ? "Guardando…" : "Guardar"}
+              </Btn>
+            </div>
+          )}
         </Modal>
       )}
     </div>

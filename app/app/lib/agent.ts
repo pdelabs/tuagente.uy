@@ -662,6 +662,24 @@ export const getFileBytes = async (c: PortalConfig, path: string) => {
   if (!res.ok) throw httpError(res.status, path);
   return res.arrayBuffer();
 };
+/** The owner's edit of a text file, replacing it whole. Only what the
+ *  listing marks `editable` (her uploads, the business draft): the engine
+ *  answers anything else with a 403 whose message is shown as-is. */
+export const saveFileText = async (c: PortalConfig, path: string, text: string) => {
+  const res = await fetch(`${c.adapter}/portal/files/${encodeURIComponent(path)}`, {
+    method: "PUT",
+    headers: { ...headers(c), "Content-Type": "text/plain; charset=utf-8" },
+    body: text,
+  });
+  // The engine's `{error: {message}}`, in Spanish and written for her ("es
+  // de tu agente: desde acá se puede leer, no editar"); `failure` only reads
+  // the kit adapter's flat `{error}`.
+  if (!res.ok) {
+    const body = await res.json();
+    throw httpError(res.status, path, body.error.message);
+  }
+  return res.json() as Promise<{ ok: boolean; path: string; bytes: number }>;
+};
 /** What the agent has spent, per whoever bills for it.
  *
  *  The number comes from OpenRouter for THIS agent's key -- adding up what

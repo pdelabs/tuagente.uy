@@ -18,6 +18,10 @@ nothing behind it (`kit/plugins/business/`).
      sent back once with the site's pages, and the second save goes through.
   f. THE SITE'S PAGES ARE CODE'S — the sitemap's, or the home's raw links
      (menus included): same site only, one spelling each, no assets.
+  g. THE FACE CORRECTS ONE SECTION — `correct_draft` rewrites that section and
+     every other byte of the file is the same, the owner's hand edits included;
+     a section she deleted comes back at the end, and with no draft there is
+     nothing to correct.
 
 WHERE IT POINTS. `CORE_CONTAINER`; the default is the lab's `tuagente-core`.
 """
@@ -108,6 +112,26 @@ try:
     business_site.get = fake_get
     out["pages"] = asyncio.run(business_site.pages("https://x.uy/"))
 
+    # g.
+    correct = business_draft.corrections().tools["correct_draft"].function
+    parts = dict(summary="Tenés una ferretería.", offer=["Herramientas"], customers="Vecinos.",
+                 prices=["Martillo, $ 450"], where_and_when=["Abrís de 9 a 19:30"], channels=[],
+                 voice="", edge="", questions=["¿Hacés envíos?", "¿Abrís los sábados?"],
+                 sources=["https://x.uy"])
+    base = business_draft.render(parts, datetime(2026, 9, 23))
+    # The owner's hand edit from Archivos, with a `## ` of her own inside a section.
+    base = base.replace("Vecinos.", "Vecinos del barrio.\n\n## Mayoristas\n\nTambién.")
+    draft.write_text(base)
+    out["said"] = correct(section="where_and_when", content=["Abrís de 9 a 19:30", "Los sábados cerrás a las 14"])
+    correct(section="questions", content=["¿Hacés envíos?"])
+    out["base"], out["corrected"] = base, draft.read_text()
+    draft.write_text(base.replace("## Cómo hablás\n\nNo lo encontré publicado.\n\n", ""))
+    correct(section="voice", content=["Cercano, de vos."])
+    out["restored"] = draft.read_text()
+    draft.unlink()
+    out["no_draft"] = correct(section="prices", content=["x"])
+    out["no_draft_wrote"] = draft.exists()
+
     # b.
     db.write("DELETE FROM business_marks")
     set_identity("Ferretería Demo", "")
@@ -173,14 +197,15 @@ def main() -> int:
 
     problems = []
     d = r["draft"]
-    headings = ["En pocas palabras", "Qué vende", "A quién le vende", "Precios publicados",
-                "Dónde y cuándo", "Por dónde se lo encuentra", "Cómo habla",
-                "Qué lo hace distinto", "Lo que no encontré y me sirve saber", "De dónde lo saqué"]
+    headings = ["En pocas palabras", "Qué vendés", "A quién le vendés", "Precios publicados",
+                "Dónde y cuándo", "Por dónde te encuentran", "Cómo hablás",
+                "Qué te hace distinto", "Lo que no encontré y me sirve saber", "De dónde lo saqué"]
     places = [d.find(f"## {h}") for h in headings]
     if -1 in places or places != sorted(places):
         problems.append("a heading is missing or out of order")
-    if "Borrador que armé leyendo https://x.uy, https://x.uy/contacto" not in d:
-        problems.append("the note does not say where it came from")
+    # Counted, not listed: three pages of x.uy.
+    if "Borrador que armé leyendo 3 páginas de x.uy el " not in d:
+        problems.append("the note does not count the pages it read")
     if d.count("No lo encontré publicado.") != 3:
         problems.append(f"the three empty ones read {d.count('No lo encontré publicado.')} times as not found")
     if "- Pinturas" not in d or "- ¿Hacen envíos?" not in d:
@@ -219,6 +244,26 @@ def main() -> int:
     want = ["https://x.uy/", "https://x.uy/servicios", "https://x.uy/precios", "https://www.x.uy/blog"]
     problems = [] if r["pages"] == want else [f"the map is {r['pages']!r}"]
     failures += judge("f. the site's pages are code's", problems)
+
+    problems = []
+    b, c = r["base"], r["corrected"]
+    wanted = "## Dónde y cuándo\n\n- Abrís de 9 a 19:30\n- Los sábados cerrás a las 14\n\n## Por dónde"
+    if wanted not in c:
+        problems.append("the section did not read as corrected")
+    if "## Lo que no encontré y me sirve saber\n\n- ¿Hacés envíos?\n\n## De dónde" not in c:
+        problems.append("the answered question did not leave the list")
+    head, tail = b.split("## Dónde y cuándo")[0], b.split("## Por dónde te encuentran")[1].split("## Lo que no")[0]
+    if not c.startswith(head) or tail not in c or not c.endswith(b.split("## De dónde lo saqué")[1]):
+        problems.append("a byte outside the corrected sections changed")
+    if "Vecinos del barrio.\n\n## Mayoristas\n\nTambién." not in c:
+        problems.append("the owner's own edit did not survive")
+    if not r["restored"].endswith("## Cómo hablás\n\nCercano, de vos.\n"):
+        problems.append(f"a deleted section did not come back at the end: {r['restored'][-80:]!r}")
+    if "Corregí «Dónde y cuándo»" not in r["said"]:
+        problems.append(f"the face was told {r['said']!r}")
+    if "Todavía no hay borrador" not in r["no_draft"] or r["no_draft_wrote"]:
+        problems.append(f"with no draft it answered {r['no_draft']!r}")
+    failures += judge("g. the face corrects one section", problems)
 
     print("BUSINESS: " + ("PASS" if not failures else "FAIL"))
     return 1 if failures else 0
