@@ -30,6 +30,12 @@ nothing behind it (`kit/plugins/business/`).
      every other byte of the file is the same, the owner's hand edits included;
      a section she deleted comes back at the end, and with no draft there is
      nothing to correct.
+  j. A CORRECTION TAKES ITS ANSWERED QUESTIONS WITH IT — QA's owner gave the
+     new hours and the questions kept asking the opening days and the
+     currency: the questions named in `answered_questions` leave the list in
+     the same call (a copy that drops the «¿» or the end still counts), the
+     rest stay in order, and a question that is not on the list goes back
+     with the list and writes nothing.
 
 WHERE IT POINTS. `CORE_CONTAINER`; the default is the lab's `tuagente-core`.
 """
@@ -166,14 +172,31 @@ try:
     # The owner's hand edit from Archivos, with a `## ` of her own inside a section.
     base = base.replace("Vecinos.", "Vecinos del barrio.\n\n## Mayoristas\n\nTambién.")
     draft.write_text(base)
-    out["said"] = correct(section="where_and_when", content=["Abrís de 9 a 19:30", "Los sábados cerrás a las 14"])
-    correct(section="questions", content=["¿Hacés envíos?"])
+    out["said"] = correct(section="where_and_when", content=["Abrís de 9 a 19:30", "Los sábados cerrás a las 14"],
+                           answered_questions=[])
+    correct(section="questions", content=["¿Hacés envíos?"], answered_questions=[])
     out["base"], out["corrected"] = base, draft.read_text()
     draft.write_text(base.replace("## Cómo hablás\n\nNo lo encontré publicado.\n\n", ""))
-    correct(section="voice", content=["Cercano, de vos."])
+    correct(section="voice", content=["Cercano, de vos."], answered_questions=[])
     out["restored"] = draft.read_text()
+    # j.
+    four = dict(parts, questions=["¿En qué moneda están tus precios?", "¿Abrís otros días?",
+                                  "¿Quién atiende los reclamos?", "¿Hacés envíos?"])
+    draft.write_text(business_draft.render(four, datetime(2026, 9, 23)))
+    out["answered_said"] = correct(
+        section="where_and_when",
+        content=["Abrís de lunes a viernes de 9 a 18", "Desde marzo, también los sábados de 9 a 13"],
+        answered_questions=["En qué moneda están tus precios", "¿Abrís otros días?"])
+    out["answered"] = draft.read_text()
+    kept = draft.read_text()
+    try:
+        correct(section="prices", content=["Martillo, $ 450 (pesos)"], answered_questions=["¿Tenés estacionamiento?"])
+        out["unknown"] = "saved"
+    except ModelRetry as exc:
+        out["unknown"] = str(exc)
+    out["unknown_kept"] = draft.read_text() == kept
     draft.unlink()
-    out["no_draft"] = correct(section="prices", content=["x"])
+    out["no_draft"] = correct(section="prices", content=["x"], answered_questions=[])
     out["no_draft_wrote"] = draft.exists()
 
     # b.
@@ -324,6 +347,20 @@ def main() -> int:
     if "Todavía no hay borrador" not in r["no_draft"] or r["no_draft_wrote"]:
         problems.append(f"with no draft it answered {r['no_draft']!r}")
     failures += judge("g. the face corrects one section", problems)
+
+    problems = []
+    a = r["answered"]
+    if "## Lo que no encontré y me sirve saber\n\n- ¿Quién atiende los reclamos?\n- ¿Hacés envíos?\n\n## De dónde" not in a:
+        problems.append(f"the questions read {a.split('## Lo que no')[1][:200]!r}")
+    if "- Desde marzo, también los sábados de 9 a 13" not in a:
+        problems.append("the section itself was not corrected")
+    if "Saqué 2 de las preguntas" not in r["answered_said"]:
+        problems.append(f"the face was told {r['answered_said']!r}")
+    if "¿Tenés estacionamiento?" not in r["unknown"] or "- ¿Quién atiende los reclamos?" not in r["unknown"]:
+        problems.append(f"an unknown question gave {r['unknown'][:200]!r}")
+    if not r["unknown_kept"]:
+        problems.append("a refused correction wrote the draft")
+    failures += judge("j. a correction takes its answered questions with it", problems)
 
     print("BUSINESS: " + ("PASS" if not failures else "FAIL"))
     return 1 if failures else 0

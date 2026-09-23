@@ -16,6 +16,15 @@ cerramos a las 14»; memory got it and the draft kept saying 19:30, so Archivos
 contradicted what she had just said. `correct_draft` is the face's: it rewrites
 one section in the same format and leaves every other byte of the file alone —
 including whatever the owner edited by hand from Archivos.
+
+A CORRECTION KEEPS WHAT IS STILL TRUE, AND TAKES ITS QUESTIONS WITH IT. QA's
+second round (2026-09-23): «desde octubre abrimos de lunes a viernes de 10 a 19
+y los sábados de 9 a 13» replaced the hours that hold until October, and the
+questions kept asking the currency and the other opening days — the docstring
+asked for a second call on `questions` and the face never made it. So the
+questions her words answer are an argument of the same call, required, and the
+code takes them off the list; a question it cannot find goes back with the
+list as it reads now, so a paraphrase does not silently leave it there.
 """
 
 import re
@@ -62,6 +71,12 @@ NOT_FOUND = "No lo encontré publicado."
 NO_QUESTIONS = "Por ahora no me queda ninguna pregunta."
 SAVED = "Guardé el borrador en {path}."
 CORRECTED = "Corregí «{heading}» en {path}."
+ANSWERED = "Saqué {count} de las preguntas del final: tu cliente ya las contestó."
+NOT_A_QUESTION = (
+    "{unknown} no está entre las preguntas del borrador. Copiá la pregunta como"
+    " está en la lista, o dejá `answered_questions` vacío si no contesta"
+    " ninguna. Las preguntas ahora son:\n{questions}"
+)
 NO_DRAFT = "Todavía no hay borrador en {path}: guardá lo que te dijo en tu memoria y listo."
 
 # THE DRAFT HAS TO HAVE READ THE SITE, and it is checked here because the prose
@@ -158,14 +173,41 @@ def replace(text: str, key: str, value: str | list[str]) -> str:
     correction is what she asked for, and it has to land somewhere she sees.
     """
     lines = text.splitlines(keepends=True)
+    start, end = bounds(lines, key)
+    if start is None:
+        return text.rstrip("\n") + f"\n\n## {HEADINGS[key]}\n\n{section(key, value)}\n"
+    tail = "\n\n" if end < len(lines) else "\n"
+    return "".join(lines[: start + 1]) + f"\n{section(key, value)}{tail}" + "".join(lines[end:])
+
+
+def bounds(lines: list[str], key: str) -> tuple[int | None, int]:
+    """The heading line of section `key` and the line its next section starts on."""
     ours = {f"## {h}" for h in HEADINGS.values()}
     heading = f"## {HEADINGS[key]}"
     start = next((i for i, line in enumerate(lines) if line.rstrip() == heading), None)
     if start is None:
-        return text.rstrip("\n") + f"\n\n{heading}\n\n{section(key, value)}\n"
+        return None, len(lines)
     end = next((i for i in range(start + 1, len(lines)) if lines[i].rstrip() in ours), len(lines))
-    tail = "\n\n" if end < len(lines) else "\n"
-    return "".join(lines[: start + 1]) + f"\n{section(key, value)}{tail}" + "".join(lines[end:])
+    return start, end
+
+
+def items(text: str, key: str) -> list[str]:
+    """The bullets of a list section as they read now, owner's edits included."""
+    lines = text.splitlines()
+    start, end = bounds(lines, key)
+    if start is None:
+        return []
+    return [line[2:].strip() for line in lines[start + 1:end] if line.startswith("- ")]
+
+
+def flat(text: str) -> str:
+    return re.sub(r"[\W_]+", "", text.casefold())
+
+
+def same_question(asked: str, listed: str) -> bool:
+    """Whether the face's copy of a question is that question: letters and
+    digits only, case aside, and a copy that dropped the end still counts."""
+    return bool(flat(asked)) and flat(asked) in flat(listed)
 
 
 def toolset() -> FunctionToolset:
@@ -242,29 +284,45 @@ def corrections() -> FunctionToolset:
     ts = FunctionToolset()
 
     @ts.tool_plain
-    def correct_draft(section: Section, content: list[str]) -> str:
+    def correct_draft(section: Section, content: list[str], answered_questions: list[str]) -> str:
         """Rewrite one section of `negocio/borrador.md` with what your client just told you.
 
-        The WHOLE section as it should read now, not only the change: what was
-        right stays, what she corrected is replaced, what she added goes in.
-        Spanish, to her, in vos («Cerrás los sábados a las 14»). For a list
-        section (offer, prices, where_and_when, channels, questions) one item
-        per line; for the others, one or two paragraphs.
-
-        When she answers one of the questions, correct the section the answer
-        belongs to AND `questions` with that question gone.
+        The WHOLE section as it should read now, not only the change. KEEP
+        WHAT IS STILL TRUE: a change that starts later is added with its
+        date, next to what holds until then — she says «desde marzo también
+        abrimos los sábados de 9 a 13» and the hours read «Abrís de lunes a
+        viernes de 9 a 18» AND «Desde marzo, también los sábados de 9 a 13»,
+        not the Saturday alone. Replace a line only when she says it is
+        wrong or no longer so. Spanish, to her, in vos («Cerrás los sábados a
+        las 14»). For a list section (offer, prices, where_and_when, channels,
+        questions) one item per line; for the others, one or two paragraphs.
 
         Args:
             section: which section: summary, offer, customers, prices, where_and_when, channels, voice, edge or questions.
             content: the section's new lines.
+            answered_questions: every question of «Lo que no encontré y me sirve saber» that what she told you answers, copied as it reads there; they leave the list. Empty when her words answer none.
         """
         target = config.WORKSPACE / DRAFT
         if not target.exists():
             return NO_DRAFT.format(path=DRAFT)
         lists = ("offer", "prices", "where_and_when", "channels", "questions")
         value = content if section in lists else "\n\n".join(c.strip() for c in content)
-        target.write_text(replace(target.read_text(), section, value))
-        return CORRECTED.format(heading=HEADINGS[section], path=DRAFT)
+        text = replace(target.read_text(), section, value)
+        if answered_questions:
+            open_ = items(text, "questions")
+            unknown = [a for a in answered_questions if not any(same_question(a, q) for q in open_)]
+            if unknown:
+                raise ModelRetry(NOT_A_QUESTION.format(
+                    unknown=", ".join(f"«{u}»" for u in unknown),
+                    questions="\n".join(f"- {q}" for q in open_) or NO_QUESTIONS,
+                ))
+            left = [q for q in open_ if not any(same_question(a, q) for a in answered_questions)]
+            text = replace(text, "questions", left)
+        target.write_text(text)
+        said = CORRECTED.format(heading=HEADINGS[section], path=DRAFT)
+        if answered_questions:
+            said += " " + ANSWERED.format(count=len(open_) - len(left))
+        return said
 
     return ts
 
