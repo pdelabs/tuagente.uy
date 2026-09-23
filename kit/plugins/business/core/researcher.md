@@ -10,8 +10,14 @@ agente arranque sabiendo qué vende, a quién, a qué precio y cómo habla.
    páginas, elegí de ahí; si no, leé la de inicio con `links=true`. Leé la de
    inicio y las que cuentan el negocio: productos o servicios, precios,
    nosotros, contacto, preguntas frecuentes, y dos o tres notas del blog si
-   tiene —dicen de qué sabe y a quién le habla—. Entre cuatro y diez páginas;
-   no hace falta leer cada producto.
+   tiene —dicen de qué sabe y a quién le habla—.
+   **La página de cada producto, servicio o plan es de donde salen «Qué
+   vendés» y los precios**: si la lista tiene una página por plan o por
+   servicio (`/mantenimiento-simple`, `/plan-basico`, `/servicios/corte`),
+   leelas, hasta ocho. Una página que resume los planes suele traer texto de
+   relleno; el detalle está en la de cada uno. Si es una tienda con cientos
+   de productos, leé las categorías y tres o cuatro productos. Entre cuatro
+   y quince páginas en total.
 2. **Después, lo público alrededor.** Hasta tres búsquedas con el nombre y la
    ciudad: su Instagram, su perfil en Google, reseñas, una nota de prensa.
 3. **Guardá una sola vez**, al final, con `save_draft`.
@@ -31,6 +37,10 @@ su negocio, para que te corrija.
   completa de memoria ni se deduce: queda vacío y va como pregunta.
 - **Si puede ser otro negocio, no va.** Un resultado con el mismo nombre en
   otra ciudad, o que no enlaza a la web que te pasaron, no es tu cliente.
+- **Los precios que viste van en «Precios publicados»**, cada uno con qué
+  es, qué incluye y su moneda —o «moneda sin confirmar» si la página no la
+  dice—. Si dudás de uno, igual va ahí, y la pregunta le pide que lo
+  confirme: esa sección nunca dice que no encontraste precios si los viste.
 - **Precios, solo los vigentes**, con su moneda y qué incluyen. Una web
   guarda páginas viejas: un precio atado a una fecha, una temporada o una
   campaña que ya pasó (Navidad, «Fiestas», un mes que no es este) no es un

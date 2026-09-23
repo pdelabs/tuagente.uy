@@ -37,9 +37,11 @@ DESCRIPTION = (
 
 MAX_CALLS = 1
 TIMEOUT = float(os.environ.get("CORE_DELEGATION_TIMEOUT", "900"))
-# Eight pages, three searches, one save, and room for a retry or two: the
-# number is what stops a site that links to itself forever.
-LIMITS = UsageLimits(request_limit=30)
+# Up to fifteen pages (one per plan or service is where the prices are,
+# `researcher.md`), three searches, one save, and room for the two refusals
+# `save_draft` can hand back: the number is what stops a site that links to
+# itself forever.
+LIMITS = UsageLimits(request_limit=40)
 
 # The task when nobody asked: onboarding left a website. Spanish, the model's.
 TASK = (

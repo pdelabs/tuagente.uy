@@ -18,6 +18,14 @@ nothing behind it (`kit/plugins/business/`).
      sent back once with the site's pages, and the second save goes through.
   f. THE SITE'S PAGES ARE CODE'S — the sitemap's, or the home's raw links
      (menus included): same site only, one spelling each, no assets.
+  h. A SITEMAP INDEX IS FOLLOWED, AND THE MENU ADDS TO IT — QA's Wix site
+     listed its pages in a child sitemap, and the list came out as the home
+     alone; the per-plan pages are in it now, and a menu link the sitemap
+     forgot is too.
+  i. PRICES SEEN ARE PRICES LISTED — a draft whose questions quote $ 990 with
+     `prices` empty goes back once naming the amount and where it is; the
+     second save goes through; with the prices listed, amounts in a question
+     are fine.
   g. THE FACE CORRECTS ONE SECTION — `correct_draft` rewrites that section and
      every other byte of the file is the same, the owner's hand edits included;
      a section she deleted comes back at the end, and with no draft there is
@@ -111,6 +119,42 @@ try:
                 '<a href="https://otro.com/">O</a><a href="mailto:a@x.uy">M</a>')
     business_site.get = fake_get
     out["pages"] = asyncio.run(business_site.pages("https://x.uy/"))
+
+    # h.
+    async def index_get(url, accept):
+        if url == "https://y.uy/sitemap.xml":
+            return ('<?xml version="1.0"?><sitemapindex><sitemap><loc>https://y.uy/pages-sitemap.xml</loc>'
+                    '</sitemap></sitemapindex>')
+        if url == "https://y.uy/pages-sitemap.xml":
+            return ('<urlset><url><loc>https://y.uy/mantenimientos</loc></url>'
+                    '<url><loc>https://y.uy/plan-simple</loc></url></urlset>')
+        return '<nav><a href="/contacto">C</a><a href="/plan-simple">S</a></nav>'
+    business_site.get = index_get
+    out["indexed"] = asyncio.run(business_site.pages("https://y.uy/"))
+
+    # i.
+    async def few_pages(url):
+        return [url]
+    business_site.pages = few_pages
+    draft.unlink(missing_ok=True)
+    quoted = dict(args, sources=["https://precios.uy/"],
+                  questions=["¿Siguen vigentes el simple ($ 990) y el completo ($ 2890)?"])
+    try:
+        asyncio.run(tool.function(None, **quoted))
+        out["unpriced"] = "saved"
+    except ModelRetry as exc:
+        out["unpriced"] = str(exc)
+    out["unpriced_wrote"] = draft.exists()
+    asyncio.run(tool.function(None, **quoted))
+    out["unpriced_again"] = draft.exists()
+    draft.unlink()
+    try:
+        asyncio.run(tool.function(None, **dict(quoted, sources=["https://otros.uy/"],
+                                                prices=["Mantenimiento simple: $ 990, moneda sin confirmar"])))
+        out["priced"] = draft.exists()
+    except ModelRetry as exc:
+        out["priced"] = str(exc)
+    business_site.pages = real_pages
 
     # g.
     correct = business_draft.corrections().tools["correct_draft"].function
@@ -244,6 +288,22 @@ def main() -> int:
     want = ["https://x.uy/", "https://x.uy/servicios", "https://x.uy/precios", "https://www.x.uy/blog"]
     problems = [] if r["pages"] == want else [f"the map is {r['pages']!r}"]
     failures += judge("f. the site's pages are code's", problems)
+
+    want = ["https://y.uy/", "https://y.uy/mantenimientos", "https://y.uy/plan-simple", "https://y.uy/contacto"]
+    problems = [] if r["indexed"] == want else [f"the map is {r['indexed']!r}"]
+    failures += judge("h. a sitemap index is followed, and the menu adds to it", problems)
+
+    problems = []
+    u = r["unpriced"]
+    if "«$ 990" not in u or "«Lo que no encontré y me sirve saber»" not in u or "moneda sin confirmar" not in u:
+        problems.append(f"the unpriced draft was not sent back: {u[:200]!r}")
+    if r["unpriced_wrote"]:
+        problems.append("the refused draft was written anyway")
+    if not r["unpriced_again"]:
+        problems.append("the second save did not go through")
+    if r["priced"] is not True:
+        problems.append(f"a draft with its prices listed gave {r['priced']!r}")
+    failures += judge("i. prices seen are prices listed", problems)
 
     problems = []
     b, c = r["base"], r["corrected"]

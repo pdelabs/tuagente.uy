@@ -18,6 +18,7 @@ one section in the same format and leaves every other byte of the file alone —
 including whatever the owner edited by hand from Archivos.
 """
 
+import re
 from datetime import datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -75,6 +76,42 @@ READ_MORE = (
     " frecuentes, y dos o tres notas del blog si tiene—. Estas son:\n{pages}"
 )
 _refused: set[str] = set()
+
+# PRICES SEEN ARE PRICES LISTED. QA's bike shop (2026-09-23): «Precios
+# publicados: No lo encontré publicado.» above a question that quoted the three
+# plans at $ 990, $ 1490 and $ 2890 — the researcher read the prices, doubted
+# them, and put them only in a question, so the draft contradicted itself. A
+# money amount anywhere else in the draft with `prices` empty is sent back
+# ONCE per site and process; the second save goes through, for the draft whose
+# only amount really is not a price (a fine, a capital, a press note's revenue).
+MONEY = re.compile(
+    r"(?:U\$S|US\$|\$|€|\bUSD|\bUYU|\bARS)\s?\d|\d[\d.,]*\s?(?:pesos|dólares|euros|reales)\b",
+    re.I,
+)
+PRICES_EMPTY = (
+    "Nombrás montos ({amounts}) en {where}, pero «Precios publicados» quedó vacío."
+    " Los precios que viste en la web van en `prices`: cada uno con qué es y su"
+    " moneda, o «moneda sin confirmar» si la página no la dice. Una pregunta puede"
+    " pedirle que los confirme, pero la sección de precios no dice «no lo"
+    " encontré» cuando viste precios. Si esos montos no son precios de lo que"
+    " vende, o son de relleno (el mismo en todo, sin moneda ni unidad), guardá"
+    " de nuevo sin cambiar nada."
+)
+_priced: set[str] = set()
+
+
+def amounts(parts: dict) -> dict[str, list[str]]:
+    """The money amounts each section but `prices` names, a few characters each."""
+    found: dict[str, list[str]] = {}
+    for key, _ in SECTIONS:
+        if key in ("prices", "sources"):
+            continue
+        value = parts.get(key) or ""
+        text = "\n".join(value) if isinstance(value, list) else value
+        hits = [text[m.start():m.end() + 6].strip() for m in MONEY.finditer(text)]
+        if hits:
+            found[key] = hits
+    return found
 
 
 def read_from(sources: list[str]) -> str:
@@ -161,7 +198,7 @@ def toolset() -> FunctionToolset:
             summary: two or three sentences to the owner: what her business is, where, since when if known («Tenés una panadería en…»).
             offer: what she sells, one product or service line per item.
             customers: who buys from her, as her site presents it.
-            prices: CURRENT published prices only, with currency and what each one is for. A price tied to a date, a season or a campaign that is over (Navidad, «Fiestas», a past month) goes as «de una promoción pasada» or into the questions, never as a current price; a price that looks like a placeholder («$ 9» on everything, no currency) is not listed: it goes into the questions.
+            prices: EVERY current price you saw on a page, each with what it is for and its currency («moneda sin confirmar» when the page does not say it). A price you are unsure of still goes here, and a question asks her to confirm it: this section is never empty when a page showed prices. A price tied to a date, a season or a campaign that is over (Navidad, «Fiestas», a past month) goes as «de una promoción pasada» or into the questions, never as a current price; a price that looks like a placeholder («$ 9» on everything, no currency) is not listed: it goes into the questions.
             where_and_when: address, areas she serves, opening hours, delivery («Abrís de lunes a sábado de 6:30 a 19:30»).
             channels: website, Instagram, WhatsApp, phone, email — each with its handle or link.
             voice: how she talks to her customers (formal, cercano, vos/usted, emojis or not), with a short example taken from her site.
@@ -184,6 +221,14 @@ def toolset() -> FunctionToolset:
             "where_and_when": where_and_when, "channels": channels, "voice": voice,
             "edge": edge, "questions": questions, "sources": sources,
         }
+        seen = amounts(parts)
+        site = business_site.host(sources[0]) if sources else ""
+        if seen and not any(p.strip() for p in prices) and site not in _priced:
+            _priced.add(site)
+            raise ModelRetry(PRICES_EMPTY.format(
+                amounts=", ".join(f"«{a}»" for hits in seen.values() for a in hits[:3]),
+                where=" y ".join(f"«{HEADINGS[k]}»" for k in seen),
+            ))
         target = config.WORKSPACE / DRAFT
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(render(parts, datetime.now(ZoneInfo(config.TIMEZONE))))
