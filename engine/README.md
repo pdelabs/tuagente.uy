@@ -1547,7 +1547,7 @@ Three things it settled, none of them guessable from the docs:
   session.py had to move, and the risk `docs/engine-plan.md` names —
   "persisted vs sent history under a processor" — does not exist here.
 - **The context-window fraction is a dead knob on this model.** `CORE_COMPACT_AT`
-  is a fraction of the model's window and `openai/gpt-5.6-luna`'s window is
+  is a fraction of the model's window and `openai/gpt-6-luna`'s window is
   1_050_000 tokens, so the default 0.6 means 630_000 tokens. What bounds the
   history is `CORE_COMPACT_AT_TOKENS` (4 characters per token over the
   serialized messages). Either one trips compaction; on a small-window model
@@ -1701,7 +1701,7 @@ Measured or read in the code, left standing on purpose. None of them is a gate.
 ## What Pydantic AI 2.43 actually does
 
 - `pydantic-ai-slim[openrouter]==2.43.0` — the `openrouter` extra exists under
-  that exact name, and `openrouter:openai/gpt-5.6-luna` infers an
+  that exact name, and `openrouter:openai/gpt-6-luna` infers an
   `OpenRouterModel` with no provider wiring of our own.
 - Streaming is `async with agent.run_stream_events(...) as events:` — an async
   context manager over an `AgentRunEvents` iterator, not a plain async

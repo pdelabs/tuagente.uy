@@ -5,7 +5,7 @@ services:
     user: "10000:10000"
     env_file: ./secrets.env
     environment:
-      CORE_MODEL: openrouter:openai/gpt-5.6-luna
+      CORE_MODEL: openrouter:openai/gpt-6-luna
       CORE_CORS_ORIGINS: http://localhost:8090,http://127.0.0.1:8090
       TZ: America/Montevideo
       DELIVERABLES_DIR: /workspace/entregables

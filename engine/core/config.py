@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 # The model the cost baseline was measured on (notes/cost-and-engine-findings.md).
-MODEL = os.environ.get("CORE_MODEL", "openrouter:openai/gpt-5.6-luna")
+MODEL = os.environ.get("CORE_MODEL", "openrouter:openai/gpt-6-luna")
 
 # Without a cap the request goes out asking for the model's whole output budget
 # (65536 tokens on this one) and OpenRouter's affordability check answers 402
