@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conformance check: is this Hermes agent ready for the portal?
+"""Conformance check: is this agent ready for the portal?
 
 Runs against an already-deployed agent and verifies the whole contract,
 without writing anything. Used to onboard a new client with no surprises.
@@ -245,10 +245,8 @@ def main():
     def _posts_ok(d, h):
         # THE TAB IS A LIST AND A DOWNLOAD, so both are checked. A post whose
         # picture does not come back is a card with a hole in it, and the
-        # picture is the half the client is there for. The bytes are served by
-        # the plugin that wrote them and NOT by `/portal/files`, which answers
-        # `text/plain` for everything it has -- a PNG through that route
-        # arrives as mojibake, which is why the type is asserted here.
+        # picture is the half the client is there for, so the type is asserted:
+        # a picture served as text is mojibake in the card.
         if not d.get("available"):
             raise AssertionError("declared but the posts reader is not answering")
         listed = d["posts"]
@@ -264,6 +262,10 @@ def main():
     modcheck("posts", f"{A}/portal/posts", _posts_ok)
 
     # Files: on top of the listing, the content must NEVER be served as html.
+    # A picture, a PDF or a sheet goes out with its own type since 2026-09-23
+    # (it used to be `text/plain` for everything, which made every download of
+    # a binary a 500); what is asserted is the part that protects the client:
+    # nothing the agent wrote runs as a page in the portal's origin.
     if mods.get("files"):
         def _files():
             data, _ = jget(f"{A}/portal/files", K)
@@ -271,8 +273,10 @@ def main():
             if files:
                 _, hdrs = http(f"{A}/portal/files/{files[0]['path']}", K)
                 ctype = hdrs.get("Content-Type", "")
-                if "text/plain" not in ctype:
-                    raise AssertionError(f"serves files as {ctype!r}, has to be text/plain")
+                if "html" in ctype or "svg" in ctype or "javascript" in ctype:
+                    raise AssertionError(f"serves {files[0]['path']} as {ctype!r}, which the browser would run")
+                if hdrs.get("X-Content-Type-Options", "").lower() != "nosniff":
+                    raise AssertionError("serves files without X-Content-Type-Options: nosniff")
             return f"{len(files)} files"
         check("Module files", _files)
     else:
