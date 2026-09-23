@@ -78,6 +78,7 @@ came out of that morning and both are in this file:
 import json
 import re
 import shutil
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -90,7 +91,8 @@ from pydantic_ai.messages import BinaryImage
 from pydantic_ai.toolsets import FunctionToolset
 
 import looks
-from core import config, db
+import voseo
+from core import config, db, identity
 from core.tools.workspace import under
 
 WHERE = "posteos"
@@ -308,20 +310,84 @@ def peek_brief(image: Path) -> str:
     """The same brief, LEFT WHERE IT IS. For whoever has to read it before
     deciding whether the post gets saved at all: a refusal must leave
     `imagenes/` exactly as it found it, sidecars included."""
-    return json.loads(image.with_suffix(BRIEF).read_text())["prompt"]
+    return sidecar(image)["prompt"]
+
+
+def sidecar(image: Path) -> dict:
+    """The whole sidecar: the brief, and `reference` when the picture is an
+    EDIT of another one (`generate_image(reference=…)`), whose `prompt` is then
+    the change and not a description of the picture."""
+    return json.loads(image.with_suffix(BRIEF).read_text())
 
 
 def clean_caption(caption: str) -> str:
     """The caption as it is stored: the trailing hashtag block off, trimmed,
-    and refused if it does not fit in Instagram. Shared by the tool that writes
-    a post and the one that rewrites its words, so the two cannot drift."""
+    and refused if it does not fit in Instagram or does not speak `vos`
+    (`voseo.py`). Shared by the tool that writes a post and the one that
+    rewrites its words, so the two cannot drift."""
     caption = HASHTAG_LINES.sub("", caption).strip()
     if len(caption) > MAX_CAPTION:
         raise ModelRetry(
             f"el pie tiene {len(caption)} caracteres y en Instagram entran "
             f"{MAX_CAPTION}: cortalo"
         )
+    words = voseo.found(caption)
+    if words:
+        raise ModelRetry(
+            f"el pie habla de tú y el cliente habla de vos: {voseo.fixes(words)}. "
+            "Escribilo de vos. No guardé nada."
+        )
     return caption
+
+
+# THE CLOSING SLIDE SAYS WHOSE POST IT IS. The QA carousel of 2026-09-23 was six
+# slides of bread with the bakery's name nowhere: a post a follower sends to a
+# friend has to say where the bread is from, and the one slide whose job is
+# the ask is the one that carries it. The name is the identity's `company` —
+# what the owner typed at onboarding — so the model supplies the sentence and
+# the code checks the name is in it, spelled the owner's way (case and accents
+# aside: «PANADERÍA VERDUN» is a design choice, not a different name).
+# DRAWN BY THE IMAGE MODEL, NOT PASTED BY CODE, and on purpose: a code overlay
+# needs a font the engine image does not carry (only Pillow's default,
+# measured) and would sit on the picture in a typeface no brand chose, where
+# the slide's own text is drawn in the look's. `place_image` is still the way
+# a logo FILE goes on, and the checklist is what catches a misspelled name.
+def company() -> str | None:
+    """The business's name, or `None` before onboarding has set one."""
+    return identity.load().get("company") or None
+
+
+def plain(text: str) -> str:
+    """Case and accents out of the way, for comparing a name."""
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    return " ".join("".join(c for c in decomposed if not unicodedata.combining(c)).split())
+
+
+def signed(brief: str, name: str) -> bool:
+    """Whether the words a brief asks the picture to carry include `name`."""
+    return plain(name) in plain(" ".join(voseo.quoted(brief)))
+
+
+UNSIGNED = (
+    "la última lámina es el cierre y tiene que decir de quién es el posteo: su "
+    "texto, entre « », lleva el nombre del negocio tal cual, «{name}», junto al "
+    "pedido. Rehacé esa lámina con el nombre en el texto. No guardé nada."
+)
+
+
+def check_slide(number: int, brief: str, closing: bool) -> None:
+    """The words one slide shows, before anything moves: `vos`, and the
+    business's name if it is the closing slide of a carousel."""
+    words = voseo.slide_words(brief)
+    if words:
+        raise ModelRetry(
+            f"el texto de la lámina {number} habla de tú y el cliente habla de "
+            f"vos: {voseo.fixes(words)}. Rehacé esa lámina con el texto de vos. "
+            "No guardé nada."
+        )
+    name = company()
+    if closing and name and not signed(brief, name):
+        raise ModelRetry(UNSIGNED.format(name=name))
 
 
 def clean_tags(hashtags: list[str]) -> list[str]:
@@ -458,6 +524,21 @@ def toolset() -> FunctionToolset:
             )
         descriptions = check_alts(alts if alts is not None else [alt], len(images))
         sources = [incoming(ctx.deps.workspace, relative) for relative in images]
+        # WHAT THE SLIDES SAY, read off their briefs before a file moves. An
+        # EDIT is not a slide of a new post: its brief is the change, not the
+        # picture, and a post saved with it would carry a slide nobody can fix
+        # later. For a picture no client has seen, drawing it again is the fix.
+        records = [sidecar(source) for source in sources]
+        for relative, record in zip(images, records):
+            if record.get("reference"):
+                raise ModelRetry(
+                    f"{relative} es una edición de otra imagen, y en un posteo "
+                    "nuevo cada lámina va con su brief entero: generala de cero "
+                    "con el brief completo. No guardé nada."
+                )
+        for number, record in enumerate(records, 1):
+            check_slide(number, record["prompt"],
+                        closing=format == "carousel" and number == len(records))
 
         now = datetime.now(ZoneInfo(config.TIMEZONE))
         date = now.strftime("%Y-%m-%d")
@@ -482,7 +563,7 @@ def toolset() -> FunctionToolset:
             free = ", ".join(f"`{name}`" for name in blocks if name not in rest)
             raise ModelRetry(
                 f"el look `{look}` descansa hoy: lo usaron los últimos posteos. "
-                f"Rehacé las slides con uno de estos: {free}. No guardé nada."
+                f"Rehacé las láminas con uno de estos: {free}. No guardé nada."
             )
         # THE NEW POST IS BUILT BESIDE THE OLD ONE AND SWAPPED IN AT THE END.
         # Everything that can fail — a sidecar that is not there, a rename —
@@ -545,7 +626,7 @@ def toolset() -> FunctionToolset:
         if leaving.is_dir():
             shutil.rmtree(leaving)
         db.append_event(
-            "post.saved", f"Dejé listo el posteo «{slug}»", "completed",
+            "post.saved", f"Dejé listo el posteo «{hook_of(data)}»", "completed",
             ctx.deps.session_id, {"id": post_id},
         )
         # `slides` so the report the creator writes says how many the client is
@@ -619,7 +700,7 @@ def toolset() -> FunctionToolset:
             caption_file(data["caption"], data["hashtags"])
         )
         db.append_event(
-            "post.updated", f"Cambié el pie de «{post_id}»", "completed",
+            "post.updated", f"Cambié el texto del posteo «{hook_of(data)}»", "completed",
             ctx.deps.session_id, {"id": post_id},
         )
         return {"id": post_id, "slides": len(data["images"]),
@@ -627,18 +708,18 @@ def toolset() -> FunctionToolset:
 
     @ts.tool
     def view_slide(ctx: RunContext, post_id: str, number: int) -> list:
-        """Ver una slide de un posteo guardado, tal como está ahora.
+        """Ver una lámina de un posteo guardado, tal como está ahora.
 
-        Te devuelvo la imagen y la ves. Usala antes de arreglar una slide:
+        Te devuelvo la imagen y la ves. Usala antes de arreglar una lámina:
         lo que el cliente dice que está mal —el texto cortado, un dibujo raro,
         un fondo que no le gusta— lo ves acá, y el brief sólo te dice lo que
-        se pidió, no lo que salió. Si el pedido habla de las otras slides
+        se pidió, no lo que salió. Si el pedido habla de las otras láminas
         («que sea distinta a las demás», «que siga a la anterior»), mirá
         también esas.
 
         Args:
             post_id: el id del posteo, como `2026-09-21-tema`.
-            number: qué slide, contando desde 1.
+            number: qué lámina, contando desde 1.
         """
         data = read(post_id)
         if data is None:
@@ -649,7 +730,7 @@ def toolset() -> FunctionToolset:
         names = [image["name"] for image in data["images"]]
         if not 1 <= number <= len(names):
             raise ModelRetry(
-                f"el posteo «{post_id}» tiene {len(names)} slides y me pediste "
+                f"el posteo «{post_id}» tiene {len(names)} láminas y me pediste "
                 f"la {number}"
             )
         path = folder(post_id) / names[number - 1]
@@ -658,7 +739,7 @@ def toolset() -> FunctionToolset:
         # the model as an image. Without this the creator fixed slides it had
         # never seen, from the brief and the client's words alone.
         return [
-            f"La slide {number} de {len(names)} de «{post_id}», tal como está ahora.",
+            f"La lámina {number} de {len(names)} de «{post_id}», tal como está ahora.",
             BinaryImage(path.read_bytes(), media_type=TYPES[path.suffix.lower()]),
         ]
 
@@ -670,14 +751,15 @@ def toolset() -> FunctionToolset:
         image: str,
         reason: str,
         alt: str | None = None,
+        brief: str | None = None,
     ) -> dict:
-        """Cambiar UNA sola slide de un posteo que ya está guardado.
+        """Cambiar UNA sola lámina de un posteo que ya está guardado.
 
         Es la única forma de arreglar una imagen sin rehacer el posteo: cambia
-        esa slide y no toca ninguna otra, ni el pie, ni los hashtags. Llamala
+        esa lámina y no toca ninguna otra, ni el pie, ni los hashtags. Llamala
         recién cuando generaste la imagen nueva y la miraste.
 
-        Las slides se cuentan como las pasa el cliente: la 1 es el gancho y la
+        Las láminas se cuentan como las pasa el cliente: la 1 es el gancho y la
         última es el cierre. Se puede arreglar cualquier posteo, no sólo el de
         hoy.
 
@@ -685,15 +767,20 @@ def toolset() -> FunctionToolset:
         texto alternativo y el motivo, y el cliente la sigue viendo en Posteos.
         Elegir cuál de las dos le gusta más es de él, no tuyo.
 
-        El brief de esa slide queda reemplazado por el de la imagen nueva, así
+        El brief de esa lámina queda reemplazado por el de la imagen nueva, así
         que generala a partir del que está guardado en el posteo y cambiá sólo
         lo que el pedido dice: el resto, palabra por palabra, es lo que mantiene
         el carrusel parejo.
 
+        Si la imagen nueva es una EDICIÓN de la que estaba
+        (`generate_image(..., reference=…)`), lo que le pediste a esa edición
+        es sólo el cambio: en `brief` pasame el brief entero de la lámina tal
+        como queda, el que estaba con el cambio adentro.
+
         Args:
             post_id: el id del posteo, `<fecha>-<slug>`, tal como viene en el
                 pedido.
-            number: qué slide cambiás, contando desde 1.
+            number: qué lámina cambiás, contando desde 1.
             image: la imagen nueva, por su ruta en el espacio de trabajo: la
                 que te devolvió `generate_image`.
             reason: qué estaba mal, con las palabras del cliente tal como te
@@ -701,6 +788,8 @@ def toolset() -> FunctionToolset:
                 imagen vieja.
             alt: el texto alternativo nuevo, si cambió lo que se ve. Si no lo
                 pasás queda el que ya tenía.
+            brief: sólo si la imagen es una edición: el brief entero de la
+                lámina, como queda después del cambio.
         """
         directory = folder(post_id)
         path = directory / POST
@@ -713,7 +802,7 @@ def toolset() -> FunctionToolset:
         names = data["images"]
         if not 1 <= number <= len(names):
             raise ModelRetry(
-                f"el posteo «{post_id}» tiene {len(names)} slides y me pediste "
+                f"el posteo «{post_id}» tiene {len(names)} láminas y me pediste "
                 f"la {number}"
             )
         if alt and len(alt) > MAX_ALT:
@@ -722,7 +811,26 @@ def toolset() -> FunctionToolset:
                 f"es {MAX_ALT}: una oración alcanza"
             )
         source = incoming(ctx.deps.workspace, image)
-        brief = brief_of(source)
+        # AN EDIT'S SIDECAR CARRIES THE CHANGE, NOT THE PICTURE. A text-only
+        # fix is an edit of the slide that was there (`generate_image`'s
+        # `reference`), and its prompt is «el texto X pasa a decir Y». Filed as
+        # the slide's brief it would leave the next fix nothing to start from,
+        # so the whole brief comes from the creator — the old one with the
+        # change in it, which it has in hand — and without it this refuses.
+        record = sidecar(source)
+        if record.get("reference"):
+            if not brief:
+                raise ModelRetry(
+                    "esa imagen es una edición de "
+                    f"{record['reference']}: pasame en `brief` el brief entero "
+                    "de la lámina como queda, el que estaba con el cambio "
+                    "adentro. No cambié nada."
+                )
+        else:
+            brief = record["prompt"]
+        check_slide(number, brief, closing=data["format"] == "carousel"
+                    and number == len(names))
+        brief_of(source)
         old = names[number - 1]
         # A POST FROM BEFORE BRIEFS WERE KEPT has no `prompts`: its slides were
         # made from briefs nobody wrote down. Their place is `None`, and the
@@ -765,12 +873,15 @@ def toolset() -> FunctionToolset:
             data["alt"] = data["alts"][0]
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
         db.append_event(
-            "post.slide_replaced", f"Cambié la slide {number} de «{post_id}»",
+            "post.slide_replaced",
+            f"Cambié la lámina {number} del posteo «{hook_of(data)}»",
             "completed", ctx.deps.session_id, {"id": post_id, "slide": number},
         )
-        # `kept` so the report can say the old one is still there, which is the
-        # half of this the client has to hear to stop being afraid of asking.
-        return {"id": post_id, "slide": number, "file": name, "kept": history[-1]["file"],
+        # `previous_kept` so the report can say the old one is still there,
+        # which is the half of this the client has to hear to stop being afraid
+        # of asking. A fact and not a path: the path was a file name, and the
+        # creator put it in its report (QA, 2026-09-23).
+        return {"id": post_id, "slide": number, "previous_kept": True,
                 "slides": len(names), "url": f"/portal/posts/{post_id}"}
 
     return ts
@@ -805,13 +916,21 @@ def results(slug: str) -> list[dict]:
         if data.get("flow") != slug:
             continue
         piece = data["images"][0]["name"] if data["images"] else CAPTION
-        hook = data["caption"].strip().splitlines()[0] if data["caption"].strip() else data["id"]
         found.append({
             "path": f"{WHERE}/{data['id']}/{piece}",
             "mtime": (folder(data["id"]) / POST).stat().st_mtime,
-            "label": hook if len(hook) <= LABEL else hook[: LABEL - 1].rstrip() + "…",
+            "label": hook_of(data),
         })
     return found
+
+
+def hook_of(data: dict) -> str:
+    """What a post is called where the owner reads it: the caption's first
+    line, cut. Never the id — `2026-09-23-pan-masa-madre` is a folder name —
+    and never the slug, which is the same thing with the date off."""
+    caption = data["caption"].strip()
+    hook = caption.splitlines()[0] if caption else data["slug"].replace("-", " ")
+    return hook if len(hook) <= LABEL else hook[: LABEL - 1].rstrip() + "…"
 
 
 @router.get("/portal/posts/{post_id}")
