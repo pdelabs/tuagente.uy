@@ -40,11 +40,13 @@ KIT_PLUGINS = Path(os.environ.get("CORE_KIT_PLUGINS", "/opt/kit/plugins"))
 # before `social` because the creator asks for the performance toolset that
 # plugin provides, and for the token the two of them share. `mail` is last
 # because it writes into the board and hands the gate a card of its own, so
-# `kanban` and `approval` have to be there before it registers.
+# `kanban` and `approval` have to be there before it registers. `notify` needs
+# nobody (it reads the engine's own tables) and sits at the end so what it
+# provides is there for no one by accident.
 PLUGINS = [
     p.strip()
     for p in os.environ.get(
-        "CORE_PLUGINS", "kanban,approval,deliverable,memory,image,instagram,social,mail"
+        "CORE_PLUGINS", "kanban,approval,deliverable,memory,image,instagram,social,mail,notify"
     ).split(",")
     if p.strip()
 ]

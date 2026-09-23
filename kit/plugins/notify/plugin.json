@@ -1,0 +1,23 @@
+{
+  "id": "notify",
+  "version": "1.0.0",
+  "description": "The owner hears about what the agent did on its own: a request waiting for an ok, a reminder when it keeps waiting, a flow that broke. Code decides what and when; a channel plugin sends it (email over Resend today)",
+  "client_copy": "Te avisa por mail cuando algo espera tu ok o cuando algo no salió.",
+  "_comment": [
+    "SYSTEM, BECAUSE AN AGENT THAT WORKS ON ITS OWN AND NEVER SAYS SO is the",
+    "failure both test clients named first. Nobody buys this; everybody has it.",
+    "",
+    "IT REQUIRES NO PLUGIN. What it reads -- `approvals`, `events` -- are the",
+    "engine's own tables (`engine/core/db.py`), so an agent without `approval`",
+    "still hears about a broken flow.",
+    "",
+    "NO KEY, NO CHANNEL, NOT AN ERROR. Without RESEND_API_KEY the email channel",
+    "is not registered, the manifest's `notify_channels` is empty and the portal",
+    "offers nothing: the lab's state until there is an account."
+  ],
+  "requires": {},
+  "surfaces": {
+    "core": "core/"
+  },
+  "system": true
+}
