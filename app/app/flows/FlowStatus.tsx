@@ -15,15 +15,12 @@ import {
 import { jobAction, type FlowResult, type PortalConfig } from "../lib/agent";
 import { EntityChip } from "../lib/entities";
 import { PARAM } from "../lib/routes";
-import { Chip, SUPPORT } from "../lib/ui";
+import { Chip, SUPPORT, connectRequest, enumerateEs, supportWhatsApp } from "../lib/ui";
 import { buildChatLink } from "../lib/flowExamples";
 import {
   runOnce, inFlight, useRuns, runOf, type RealStatus, type Note,
 } from "./runs";
 
-/** What this flow is missing, by name. NO LINK: connecting it is ours to do,
- *  not a screen the client can finish on their own, so the notice says what
- *  is missing and who sets it up. */
 function fileName(path: string): string {
   const base = (path || "").split("/").pop() || path;
   return base.replace(/^\d{4}-\d{2}-\d{2}[-_ ]/, "") || base;
@@ -48,16 +45,31 @@ export function ResultChip({ result }: { result: FlowResult }) {
   return <EntityChip entity={{ kind: "file", path: result.path }} label={label} />;
 }
 
-/** `names` are the engine's labels (`missing_connection_labels`): the
+/** What this flow is missing, by name, and the way to get it: connecting is
+ *  ours to do, not a screen the owner can finish on her own. So the notice
+ *  says what is missing, that she asks and we connect it, and the link opens
+ *  our WhatsApp with that request already written. «escribinos y lo dejamos
+ *  andando» with nothing to tap was a promise with no door (QA, 2026-09-23).
+ *
+ *  `names` are the engine's labels (`missing_connection_labels`): the
  *  portal's own dictionary didn't know `instagram` and showed the id. */
-export function MissingConnection({ names, className = "" }: { names: string[]; className?: string }) {
-  const list = names.length > 1
-    ? `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`
-    : names[0];
+export function MissingConnection({ names, flow, className = "" }: {
+  names: string[]; flow?: string; className?: string;
+}) {
   return (
-    <p className={`rounded-lg border border-c-amber bg-c-amber/25 p-3 text-[13px] font-semibold text-c-amber-ink ${className}`}>
-      Falta conectar {list}: escribinos y lo dejamos andando.
-    </p>
+    <div className={`rounded-lg border border-c-amber bg-c-amber/25 p-3 text-[13px] text-c-amber-ink ${className}`}>
+      <p className="font-semibold">
+        Falta conectar {enumerateEs(names)}. Nos lo pedís y lo conectamos nosotros.
+      </p>
+      <a
+        href={supportWhatsApp(connectRequest(names, flow))}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-1 inline-block text-[12.5px] font-semibold underline underline-offset-2"
+      >
+        Pedírnoslo por WhatsApp
+      </a>
+    </div>
   );
 }
 
@@ -316,6 +328,7 @@ export function FlowActions({ cfg, e, name, trigger, triggerType, onChange }: {
   // the button is not repeated: it would be the same verb twice on the same
   // card.
   const retryAbove = Boolean(e.note?.retryable);
+  const blockedBy = e.missingConnections.length > 0 ? enumerateEs(e.missingConnections) : null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -326,6 +339,7 @@ export function FlowActions({ cfg, e, name, trigger, triggerType, onChange }: {
               cfg, e.jobId as string, { paused: e.paused, fingerprint: e.fingerprint }, onChange)}
             loading={flying}
             disabled={flying || busy !== null || e.running || e.missingConnections.length > 0}
+            title={blockedBy ? `Falta conectar ${blockedBy}` : undefined}
             icon={Zap}
           >
             Probarlo ahora
@@ -361,6 +375,14 @@ export function FlowActions({ cfg, e, name, trigger, triggerType, onChange }: {
         )}
       </div>
 
+      {/* A GREYED BUTTON SAYS WHY. It went grey with no reason given: the
+          owner tapped it, nothing happened, and she read it as broken. */}
+      {blockedBy && !retryAbove && (
+        <p className="text-[12.5px] leading-snug text-ink-soft">
+          Falta conectar {blockedBy} para probarlo.
+        </p>
+      )}
+
       {/* BEFORE pressing it: on a paused flow, "Probarlo ahora" does not
           resume it. Said here so the decision is informed, and again when it
           finishes. */}
@@ -388,10 +410,11 @@ export function FlowActions({ cfg, e, name, trigger, triggerType, onChange }: {
   );
 }
 
-function SmallButton({ onClick, loading, disabled, icon: Icon, children }: {
+function SmallButton({ onClick, loading, disabled, title, icon: Icon, children }: {
   onClick: () => void;
   loading: boolean;
   disabled?: boolean;
+  title?: string;
   icon: typeof Zap;
   children: React.ReactNode;
 }) {
@@ -399,6 +422,7 @@ function SmallButton({ onClick, loading, disabled, icon: Icon, children }: {
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-black/10 bg-white px-2.5 text-[12.5px] font-semibold text-ink transition hover:bg-black/[0.03] disabled:opacity-50"
     >
       {loading

@@ -116,13 +116,13 @@ function FlowCard({ f, e, cfg, posts, onChange }: {
 
       {/* The missing connection, SECOND and separate: it is not a diagnosis,
           and it says WHICH one is missing -- "lo que falta" says nothing. */}
-      {e.missingConnections.length > 0 && <MissingConnection names={e.missingConnections} />}
+      {e.missingConnections.length > 0 && <MissingConnection names={e.missingConnections} flow={f.name} />}
 
       {f.results.length > 0 && (
         <div>
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
             Resultados
-            <span className="ml-1.5 tabular-nums text-ink-soft/70">{f.results_total}</span>
+            <span className="tabular-nums text-ink-soft/70"> · {f.results_total}</span>
           </p>
           <ul className="flex flex-col gap-1">
             {f.results.slice(0, 5).map((r) => (

@@ -17,6 +17,20 @@ export const SUPPORT = {
   phone: "+598 99 002 835",
 };
 
+/** Our WhatsApp with the message already written. For the screens where the
+ *  next step is ours — connecting something — so the owner does not have to
+ *  explain from scratch what she is asking for. */
+export const supportWhatsApp = (message: string) =>
+  `${SUPPORT.whatsapp}?text=${encodeURIComponent(message)}`;
+
+/** «a», «a y b», «a, b y c». */
+export const enumerateEs = (items: string[]) =>
+  items.length > 1 ? `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}` : items[0] ?? "";
+
+/** The sentence the owner sends us to get something connected. */
+export const connectRequest = (labels: string[], flow?: string) =>
+  `Hola, quiero conectar ${enumerateEs(labels)} a mi agente` + (flow ? ` para el flujo «${flow}».` : ".");
+
 /** Support link. Goes on screens where the client can get stuck (login, no
  *  connection, error) and at the bottom of the menu.
  *

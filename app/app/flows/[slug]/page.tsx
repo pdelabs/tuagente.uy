@@ -193,13 +193,18 @@ export default function FlowDetailPage() {
 
         {/* Same notice as the list. */}
         {e.missingConnections.length > 0 && (
-          <MissingConnection names={e.missingConnections} className="mb-5" />
+          <MissingConnection names={e.missingConnections} flow={flow.name} className="mb-5" />
         )}
 
         <section className="mb-6">
           <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
+            {/* The count only when there is one: «RESULTADOS0» (QA) was the
+                label and a zero glued together, over a line that already
+                says there are none. */}
             Resultados
-            <span className="ml-1.5 tabular-nums text-ink-soft/70">{flow.results_total}</span>
+            {flow.results_total > 0 && (
+              <span className="tabular-nums text-ink-soft/70"> · {flow.results_total}</span>
+            )}
           </h2>
           {flow.results.length === 0 ? (
             <p className="text-[13px] text-ink-soft">
