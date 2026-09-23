@@ -12,6 +12,12 @@
 // The `prompt` is in the CLIENT's first person because it's what they'd say
 // to the agent: what gets sent is their message, not an instruction of ours.
 //
+// THE DESCRIPTION IS A PROPOSAL, NOT A SERVICE. «Todas las semanas te dejo
+// tres posts escritos con su imagen» read as something already running, and
+// nothing runs until the owner and the agent set it up in the chat: the QA
+// client tapped it and waited for posts that were never scheduled. Each one
+// says «Te propongo armarlo», and no card promises a count or a cadence.
+//
 // Each one says whether it needs a connection. Promising something the agent
 // can't do yet is the worst way to start a relationship where they're about
 // to trust you with the work -- and it nudges them toward Connections, which
@@ -29,54 +35,54 @@ export type FlowExample = {
 export const FLOW_EXAMPLES: FlowExample[] = [
   {
     title: "Vigilar a la competencia",
-    description: "Cada lunes miro qué publicaron y te dejo un resumen de lo que cambió.",
+    description: "Te propongo armarlo: cada tanto miro qué publicaron y te resumo lo que cambió.",
     prompt: "Quiero que todas las semanas mires qué están haciendo mis competidores y me dejes un resumen de lo que cambió. Preguntame lo que te falte para armarlo.",
   },
   {
     title: "Contenido para redes",
-    description: "Todas las semanas te dejo tres posts escritos con su imagen, listos para que apruebes.",
+    description: "Te propongo armarlo: posts escritos con su imagen, listos para que los apruebes.",
     prompt: "Quiero que todas las semanas me dejes listos unos posts para redes, con el texto y la imagen, para que yo los apruebe. Preguntame lo que te falte para armarlo.",
   },
   {
     title: "Resumen de reuniones",
-    description: "Me pasás el audio y te devuelvo las decisiones y quién quedó a cargo de qué.",
+    description: "Te propongo armarlo: me pasás el audio y te devuelvo las decisiones y quién quedó a cargo de qué.",
     prompt: "Quiero pasarte el audio de una reunión y que me devuelvas las decisiones y quién quedó a cargo de cada cosa. Preguntame lo que te falte para armarlo.",
   },
   {
     title: "Reseñas de tu negocio",
-    description: "Miro las que aparecen y te aviso solo cuando hay una mala.",
+    description: "Te propongo armarlo: miro las que aparecen y te aviso solo cuando hay una mala.",
     prompt: "Quiero que mires las reseñas nuevas de mi negocio y me avises solo cuando haya una mala. Preguntame lo que te falte para armarlo.",
   },
   {
     title: "Precios de proveedores",
-    description: "Reviso sus listas y te aviso si alguno cambió.",
+    description: "Te propongo armarlo: reviso sus listas y te aviso si alguno cambió.",
     prompt: "Quiero que revises los precios de mis proveedores cada tanto y me avises si alguno cambió. Preguntame lo que te falte para armarlo.",
   },
   {
     title: "El newsletter del mes",
-    description: "Junto lo que pasó y te dejo el borrador escrito.",
+    description: "Te propongo armarlo: junto lo que pasó y te dejo el borrador escrito.",
     prompt: "Quiero que cada mes juntes lo que pasó en la empresa y me dejes el borrador del newsletter escrito. Preguntame lo que te falte para armarlo.",
   },
   {
     title: "Presupuestos",
-    description: "Me contás lo que hablaste con el cliente y lo armo con tu formato.",
+    description: "Te propongo armarlo: me contás lo que hablaste con el cliente y lo armo con tu formato.",
     prompt: "Quiero contarte lo que hablé con un cliente y que me armes el presupuesto con mi formato. Preguntame lo que te falte para armarlo, incluido cómo son mis presupuestos.",
   },
   {
     title: "Leads que llegan por mail",
-    description: "Cada pedido de presupuesto queda anotado con el contacto y qué necesita.",
+    description: "Te propongo armarlo: cada pedido de presupuesto queda anotado con el contacto y qué necesita.",
     prompt: "Quiero que cada mail que pide presupuesto quede anotado como tarea, con el contacto y qué necesita. Preguntame lo que te falte para armarlo.",
     missing: "tu casilla",
   },
   {
     title: "Los cobros del día",
-    description: "Todas las mañanas te digo qué entró ayer y qué quedó pendiente.",
+    description: "Te propongo armarlo: a la mañana te digo qué entró ayer y qué quedó pendiente.",
     prompt: "Quiero que todas las mañanas me digas cuánto se cobró ayer y qué quedó pendiente. Preguntame lo que te falte para armarlo.",
     missing: "Mercado Pago",
   },
   {
     title: "WhatsApp sin responder",
-    description: "Reviso quién quedó esperando y te paso la lista.",
+    description: "Te propongo armarlo: reviso quién quedó esperando y te paso la lista.",
     prompt: "Quiero que revises los WhatsApp que quedaron sin responder y me pases la lista de quién está esperando. Preguntame lo que te falte para armarlo.",
     missing: "WhatsApp",
   },

@@ -12,7 +12,7 @@ import Link from "next/link";
 import {
   AlertTriangle, CalendarClock, CheckCircle2, HelpCircle, Images, Loader2, Pause, Play, Zap,
 } from "lucide-react";
-import { connectionLabel, jobAction, type FlowResult, type PortalConfig } from "../lib/agent";
+import { jobAction, type FlowResult, type PortalConfig } from "../lib/agent";
 import { EntityChip } from "../lib/entities";
 import { PARAM } from "../lib/routes";
 import { Chip, SUPPORT } from "../lib/ui";
@@ -48,8 +48,9 @@ export function ResultChip({ result }: { result: FlowResult }) {
   return <EntityChip entity={{ kind: "file", path: result.path }} label={label} />;
 }
 
-export function MissingConnection({ ids, className = "" }: { ids: string[]; className?: string }) {
-  const names = ids.map((id) => connectionLabel(id));
+/** `names` are the engine's labels (`missing_connection_labels`): the
+ *  portal's own dictionary didn't know `instagram` and showed the id. */
+export function MissingConnection({ names, className = "" }: { names: string[]; className?: string }) {
   const list = names.length > 1
     ? `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`
     : names[0];
@@ -150,7 +151,7 @@ export function WhyItCouldNot({ cfg, e, name, onChange }: {
           "you can't unblock this yourself" and only offered Notify Us -- and
           the run that got unblocked in the lab got unblocked with exactly
           this button. */}
-      {note.retryable && cfg && e.jobId && (
+      {note.retryable && cfg && e.jobId && e.missingConnections.length === 0 && (
         <div className="mt-2">
           <p className={`mb-1.5 text-[12.5px] leading-relaxed ${
             coral ? "text-c-coral-ink/85" : "text-c-amber-ink/85"
@@ -324,7 +325,7 @@ export function FlowActions({ cfg, e, name, trigger, triggerType, onChange }: {
             onClick={() => runOnce(
               cfg, e.jobId as string, { paused: e.paused, fingerprint: e.fingerprint }, onChange)}
             loading={flying}
-            disabled={flying || busy !== null || e.running}
+            disabled={flying || busy !== null || e.running || e.missingConnections.length > 0}
             icon={Zap}
           >
             Probarlo ahora

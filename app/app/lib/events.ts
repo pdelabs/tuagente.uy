@@ -14,62 +14,85 @@
 //
 // The criterion lives here; the screens choose how to draw it.
 
-import { readFailure } from "./labels";
-import type { CronJob, Flow } from "./agent";
-
-/** One line of the agent's history. `href` and `reason` are added by the
- *  portal: the adapter only sends `ts/kind/label/status` and nothing else. */
+/** One line of the agent's history. `href` is added by the portal: the
+ *  adapter only sends `ts/kind/label/status` and nothing else. */
 export type AgentEvent = {
   ts: string;
   kind: string;
   label: string;
   status: string;
-  /** Where the row leads (a flow, a file). Tickets go by their id. */
+  /** Where the row leads (a file, a conversation). Tasks go by their id. */
   href?: string;
-  /** Why it couldn't, in plain terms. Only on runs that failed. */
-  reason?: string;
 };
 
-const msOf = (ts: string | null | undefined): number => {
-  const t = new Date(ts ?? "").getTime();
-  return Number.isNaN(t) ? 0 : t;
+/* ── What kind of thing happened ──────────────────────────────────────────── */
+
+// The kinds the engine writes (`db.append_event` across `engine/core/` and
+// `kit/plugins/*/core/`), plus the two the portal builds itself in Activity
+// (`archivo`, `conversacion`). SEVERAL KINDS, ONE WORD: a flow writes five
+// kinds and the owner sees one thing, «Flujo» -- the filter chips are one per
+// WORD, not one per kind, or «Flujo» shows up three times in a row.
+const KIND_LABEL: Record<string, string> = {
+  respuesta: "Respuesta",
+  error: "Error",
+  "flow.started": "Flujo",
+  "flow.finished": "Flujo",
+  "flow.failed": "Flujo",
+  "flow.paused": "Flujo",
+  "flow.incomplete": "Flujo",
+  "delegation.started": "Encargo",
+  "delegation.finished": "Encargo",
+  "post.saved": "Posteo",
+  "post.updated": "Posteo",
+  "post.slide_replaced": "Posteo",
+  "post.published": "Posteo",
+  approval_requested: "Aprobación",
+  approval_reproposed: "Aprobación",
+  approval_approved: "Aprobación",
+  approval_rejected: "Aprobación",
+  "ticket.created": "Tarea",
+  "ticket.moved": "Tarea",
+  "ticket.commented": "Tarea",
+  "message.sent": "Mensaje",
+  "comment.replied": "Comentario",
+  "comment.hidden": "Comentario",
+  "mail.sent": "Mail",
+  memoria: "Memoria",
+  notify: "Aviso",
+  "business.researched": "Negocio",
+  archivo: "Archivo",
+  conversacion: "Conversación",
 };
 
-/** Flow runs, with the name the client gave them.
- *
- *  "flujo-vacunas-vencidas-semanal · No pudo" was the line that revealed the
- *  failure to the vet clinic, and also the only one she couldn't open to see
- *  why. Now it says the flow's name, states the reason in plain terms, and
- *  leads to the screen where it can be paused or retried.
- *
- *  `jobs` is optional: without the list of scheduled tasks there's no way to
- *  know why it failed, but the name and the link still come out. */
-export function humanizeRuns(
-  evs: AgentEvent[], flows: Flow[] | null, jobs?: CronJob[] | null,
-): AgentEvent[] {
-  if (!flows?.length) return evs;
-  const byJobName = new Map<string, Flow>();
-  // `flujo-` is a compatibility key: it is the prefix already written on the
-  // cron jobs of deployed agents, so it is NOT translated.
-  for (const f of flows) byJobName.set(`flujo-${f.slug}`, f);
-  return evs.map((ev) => {
-    if (ev.kind !== "job_run") return ev;
-    const f = byJobName.get((ev.label || "").trim());
-    if (!f) return ev;
-    const job = jobs?.find((j) => (j.name || "").trim() === `flujo-${f.slug}`);
-    // The engine's error is from the LATEST run: it can only be attributed to
-    // this row if this row IS the latest one. Pinning it on an old one would
-    // be making it up.
-    const isTheLatest = Boolean(
-      job?.last_run_at && ev.ts && Math.abs(msOf(job.last_run_at) - msOf(ev.ts)) < 120_000);
-    const failed = /(fail|error|timeout|cancel)/i.test(ev.status || "");
-    return {
-      ...ev,
-      label: f.name,
-      href: `/app/flows/${encodeURIComponent(f.slug)}`,
-      reason: failed && isTheLatest ? readFailure(job?.last_error).what : undefined,
-    };
-  });
+/** The word for a kind. An unknown one is «Otro», never the raw id: a kind
+ *  the engine starts writing tomorrow can't reach the owner as `foo.bar`. */
+export const kindLabel = (kind: string): string =>
+  KIND_LABEL[(kind || "").trim().toLowerCase()] ?? "Otro";
+
+// The engine's bookkeeping (`turn_usage`, `spend`, `compaction`,
+// `correction`) never reaches `/portal/activity`: the engine serves owner
+// sentences only (`db.owner_events`), so there is nothing to filter here.
+
+/* ── The label, as one line of plain text ─────────────────────────────────── */
+
+/** A post's id (`2026-09-23-pan-masa-madre`) inside a sentence. Same shape as
+ *  `entities.tsx`'s `POST_RE`, unanchored. */
+const POST_ID_IN_TEXT = /\b\d{4}-\d{2}-\d{2}-((?=[a-z0-9-]*[a-z])[a-z0-9][a-z0-9-]{0,39})\b/gi;
+
+/** A post's name as the owner reads it: its slug, in words
+ *  (`pan-masa-madre` → «Pan masa madre»). A post carries no title of its own;
+ *  the slug is the name the agent gave it. */
+export function postTitle(slugOrId: string): string {
+  const slug = slugOrId.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+  const words = slug.replace(/-+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** The engine serves a label as one line of plain text (its markdown already
+ *  flattened), but a post still travels in it by its id («Cambié la imagen 1
+ *  de «2026-09-23-pan-masa-madre»»): here it reads as the post's name. */
+export function plainLabel(label: string): string {
+  return (label || "").replace(POST_ID_IN_TEXT, (_, slug: string) => postTitle(slug));
 }
 
 /* ── What counts as a conversation ────────────────────────────────────────── */

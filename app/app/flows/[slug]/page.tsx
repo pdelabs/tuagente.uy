@@ -193,7 +193,7 @@ export default function FlowDetailPage() {
 
         {/* Same notice as the list. */}
         {e.missingConnections.length > 0 && (
-          <MissingConnection ids={e.missingConnections} className="mb-5" />
+          <MissingConnection names={e.missingConnections} className="mb-5" />
         )}
 
         <section className="mb-6">

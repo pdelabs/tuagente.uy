@@ -1,7 +1,7 @@
 "use client";
 
 // Chat module — thread centered like Open WebUI, with streaming, rich markdown,
-// a collapsible tool block, regenerate/edit, export and live scroll.
+// a collapsible tool block, edit-and-resend, export and live scroll.
 // New conversation → /portal/chat/stream (the OpenAI dialect); resuming a
 // session → /portal/sessions/{id}/chat/stream (assistant.delta / tool.started
 // / run.completed). Both dialects: `engine/server/sse.py`.
@@ -9,11 +9,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown, ArrowUp, Brain, Check, ChevronRight, Copy, Download, Loader2, Menu,
-  MessageSquareOff, Paperclip, Pencil, RefreshCw, Square, Wrench, X,
+  MessageSquareOff, Paperclip, Pencil, Square, Wrench, X,
 } from "lucide-react";
 import {
-  loadConfig, chatStream, sessionChatStream, getSessions, getSessionMessages,
-  uploadFile, type PortalConfig, type ChatMessage,
+  loadConfig, chatStream, sessionChatStream, getActivity, getSessions, getSessionMessages,
+  uploadFile, type HttpError, type PortalConfig, type ChatMessage,
 } from "../lib/agent";
 import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
 import {
@@ -42,9 +42,66 @@ type Msg = {
   role: "user" | "assistant";
   content: string;
   tools?: string[]; // tools used in the run (live only)
+  notes?: string[]; // what it wrote down in its notebook during the run (live only)
 };
 
 const THINKING = "_thinking";
+
+// The conversation the client was last in, so coming back to Chat lands there
+// and not on a blank «Nueva conversación». A CONVENIENCE, NOT THE SOURCE: the
+// URL (`?conversation=`) says what is open; this only fills the URL when the
+// client arrives at Chat with nothing in it. Under the `tuagente_` prefix, so
+// a change of agent wipes it with everything else (`forgetAgent`).
+const LAST_CONVERSATION_KEY = "tuagente_chat_last";
+
+function rememberConversation(id: string | null) {
+  try {
+    if (id) localStorage.setItem(LAST_CONVERSATION_KEY, id);
+    else localStorage.removeItem(LAST_CONVERSATION_KEY);
+  } catch { /* private mode: the URL still works */ }
+}
+
+function lastConversation(): string | null {
+  try {
+    return localStorage.getItem(LAST_CONVERSATION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** A conversation as the engine has it: its name, its turns, and whether a
+ *  turn of it is still working. */
+async function fetchThread(c: PortalConfig, id: string) {
+  const r: { title?: string | null; running: boolean; data?: StoredMessage[] } =
+    await getSessionMessages(c, id);
+  return {
+    title: r.title ?? null,
+    running: r.running,
+    turns: (r.data ?? [])
+      .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
+      .map((m): Msg => ({ role: m.role as "user" | "assistant", content: m.content as string })),
+  };
+}
+
+/** Which session a NEW conversation's first turn landed in.
+ *
+ *  `/portal/chat/stream` (the OpenAI dialect) carries no session id back, so
+ *  without this a new conversation never got a URL: the header said «Nueva
+ *  conversación» over a conversation with ten messages, a reload lost it, and
+ *  leaving Chat and coming back showed a blank one. The engine writes the
+ *  first user message as the session's preview (`core/session.py`,
+ *  `run_turn`), and the session this turn just touched is the most recently
+ *  active one with that preview.
+ *
+ *  PENDING: the engine should send the session id in that dialect; then this
+ *  goes. */
+function sessionOfFirstTurn(list: SessionSummary[], firstMessage: string): string | null {
+  const preview = firstMessage.trim().slice(0, 200);
+  const match = list
+    .filter((s) => (s.preview ?? "").trim() === preview)
+    .sort((a, b) => b.last_active - a.last_active)[0];
+  return match?.id ?? null;
+}
 
 // What the agent is doing, in the client's words. The tool's raw name is
 // NEVER shown: "Using skill view…" and "Using kanban show…" were two of the
@@ -60,10 +117,10 @@ const THINKING = "_thinking";
 function gestureFor(tool: string | undefined): AgentitoState {
   if (!tool || tool === THINKING) return "thinking";
   if (/^(clarify|todo|memory)$/.test(tool)) return "thinking";
-  if (/^(read_file|search_files|session_search|read_terminal|skill_view|skills_list|feishu_doc_read|kanban_(show|list)|project_list)$/.test(tool)) {
+  if (/^(read_file|list_files|read_memory|search_memory|read_ticket|search_files|session_search|read_terminal|skill_view|skills_list|feishu_doc_read|kanban_(show|list)|project_list)$/.test(tool)) {
     return "reading";
   }
-  if (/^(write_file|patch|image_generate|video_generate|kanban_(create|comment|complete|block|unblock|link)|project_create)$/.test(tool)) {
+  if (/^(write_file|write_memory|create_ticket|save_post|save_draft|patch|image_generate|generate_image|video_generate|kanban_(create|comment|complete|block|unblock|link)|project_create)$/.test(tool)) {
     return "writing";
   }
   if (/^(web_search|web_fetch|web_extract|x_search|browser_|vision_analyze|video_analyze)/.test(tool)) {
@@ -72,18 +129,42 @@ function gestureFor(tool: string | undefined): AgentitoState {
   return "doing";
 }
 
+/** What the agent wrote down in its notebook during a turn, as the owner reads
+ *  it. The memory plugin logs each one to Activity as «Me anoté: …»
+ *  (`kit/plugins/memory/core/extraction.py`, `LABEL`); the stream only says a
+ *  note was taken, never what it says. */
+const NOTE_PREFIX = /^Me anoté:\s*/;
+
+/** Marks a `sendErr` that is the engine saying it's busy, not a failure. */
+const BUSY = "__ocupada__";
+
 /** Collapsible block with what the agent did before answering. */
-function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
+function ToolTrace({ tools, notes = [], live }: { tools: string[]; notes?: string[]; live?: boolean }) {
   const [open, setOpen] = useState(false);
-  if (!tools.length) return null;
+  if (!tools.length && !notes.length) return null;
   const last = tools[tools.length - 1];
   const used = tools.filter((t) => t !== THINKING);
-  const summary = summarizeActions(tools);
+  const summary = used.length || !notes.length ? summarizeActions(tools) : actionFor("write_memory").done;
+  // OPENING IT HAS TO SAY MORE THAN THE LINE ITSELF. With one step and nothing
+  // noted, the list below was the summary repeated word for word: the
+  // memory step read «Escribió lo suyo» closed and «Escribió lo suyo» open.
+  const expandable = live || used.length > 1 || notes.length > 0;
+  const lineCls = "flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12px] text-ink-soft";
+  if (!expandable) {
+    return (
+      <div className="mb-2">
+        <p className={lineCls}>
+          {used.length > 0 ? <Wrench className="h-3 w-3" /> : <Brain className="h-3 w-3" />}
+          {summary}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="mb-2">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[12px] text-ink-soft transition hover:bg-black/[0.04] hover:text-ink"
+        className={`${lineCls} transition hover:bg-black/[0.04] hover:text-ink`}
       >
         <ChevronRight className={`h-3 w-3 transition-transform ${open ? "rotate-90" : ""}`} />
         {live ? (
@@ -103,6 +184,11 @@ function ToolTrace({ tools, live }: { tools: string[]; live?: boolean }) {
           {tools.map((t, i) => (
             <li key={`${t}-${i}`} title={t} className="text-[12px] text-ink-soft">
               {actionFor(t).done}
+            </li>
+          ))}
+          {notes.map((n, i) => (
+            <li key={`note-${i}`} className="text-[12px] text-ink">
+              <span className="text-ink-soft">Se anotó: </span>«{n}»
             </li>
           ))}
         </ol>
@@ -200,19 +286,20 @@ export default function ChatPage() {
   // uses to know whether the thread it opened is still the thread on screen:
   // a slower request is ignored, never awaited.
   const listSeq = useRef(0);
-  const refreshSessions = useCallback((c: PortalConfig) => {
+  const refreshSessions = useCallback((c: PortalConfig): Promise<SessionSummary[] | null> => {
     const seq = ++listSeq.current;
-    getSessions(c)
+    return getSessions(c)
       .then((r: { data?: SessionSummary[] }) =>
         [...(r.data ?? [])].sort((a, b) => b.last_active - a.last_active))
       .then((list) => {
-        if (listSeq.current !== seq) return;
+        if (listSeq.current !== seq) return list;
         setSessionsErr(null);
         setSessions(list);
+        return list;
       })
       .catch((e) => {
-        if (listSeq.current !== seq) return;
-        setSessionsErr(e instanceof Error ? e.message : "error de red");
+        if (listSeq.current === seq) setSessionsErr(e instanceof Error ? e.message : "error de red");
+        return null;
       });
   }, []);
   useEffect(() => { if (cfg) refreshSessions(cfg); }, [cfg, refreshSessions]);
@@ -305,6 +392,17 @@ export default function ChatPage() {
     openInRoute({ [PARAM.conversation]: id });
   }, []);
 
+  // The conversation restored from `LAST_CONVERSATION_KEY` rather than asked
+  // for: if it is gone, the client lands on a new one instead of on «Esa
+  // conversación ya no está» about a link they never followed.
+  const restoredRef = useRef<string | null>(null);
+
+  // A TURN OUTLIVES THE PAGE THAT STARTED IT: the engine keeps working after
+  // the client leaves (`running` in the thread). Coming back to a message with
+  // no answer under it YET used to look like the message was lost; now the
+  // agent shows it's on it, and the thread is re-read until it's done.
+  const [working, setWorking] = useState(false);
+
   const loadThread = useCallback((c: PortalConfig, id: string) => {
     const seq = ++openSeq.current;
     setMsgs([]);
@@ -315,17 +413,13 @@ export default function ChatPage() {
     setLoadingThread(true);
     setAtBottom(true);
     setThreadTitle(null);
-    getSessionMessages(c, id)
-      .then((r: { title?: string | null; data?: StoredMessage[] }) => ({
-        title: r.title ?? null,
-        turns: (r.data ?? [])
-          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
-          .map((m): Msg => ({ role: m.role as "user" | "assistant", content: m.content as string })),
-      }))
-      .then(({ title, turns }) => {
+    setWorking(false);
+    fetchThread(c, id)
+      .then(({ title, turns, running }) => {
         if (openSeq.current !== seq) return;
         setThreadTitle(title);
         setMsgs(turns);
+        setWorking(running);
       })
       .catch((e) => {
         if (openSeq.current !== seq) return;
@@ -333,10 +427,32 @@ export default function ChatPage() {
         // isn't there anymore (deleted, or from another agent). "Couldn't talk
         // to your agent — 404 on /api/sessions" was a lie, and jargon on top.
         const msg = e instanceof Error ? e.message : "error de red";
-        setThreadErr(/\b404\b/.test(msg) ? "__vieja__" : msg);
+        const gone = (e as HttpError).status === 404 || /\b404\b/.test(msg);
+        if (gone && restoredRef.current === id) {
+          rememberConversation(null);
+          replaceInRoute({ [PARAM.conversation]: null });
+          return;
+        }
+        setThreadErr(gone ? "__vieja__" : msg);
       })
       .finally(() => { if (openSeq.current === seq) setLoadingThread(false); });
   }, []);
+
+  useEffect(() => {
+    if (!cfg || !activeId || !working || sending) return;
+    const seq = openSeq.current;
+    const t = setInterval(() => {
+      fetchThread(cfg, activeId)
+        .then(({ turns, running }) => {
+          if (openSeq.current !== seq) return;
+          setMsgs(turns);
+          setWorking(running);
+          if (!running) refreshSessions(cfg);
+        })
+        .catch(() => { /* the next tick asks again */ });
+    }, 3_000);
+    return () => clearInterval(t);
+  }, [cfg, activeId, working, sending, refreshSessions]);
 
   // Which conversation is on screen. Without this, the "a send is in flight"
   // guard swallowed conversation CHANGES: hitting back while the agent was
@@ -344,6 +460,10 @@ export default function ChatPage() {
   // the next message got written into A. Verified via the API. The guard has
   // to protect the send, not hide the navigation.
   const activeIdRef = useRef<string | null | undefined>(undefined);
+  // The id a new conversation just learned it has (`sessionOfFirstTurn`). The
+  // URL gets it, and the thread on screen IS that conversation already:
+  // reloading it would only flash a spinner and drop the tool trails.
+  const adoptedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!cfg) return;
@@ -351,6 +471,28 @@ export default function ChatPage() {
     activeIdRef.current = activeId;
     // `undefined` = first pass: not a conversation change.
     const threadChanged = previous !== undefined && previous !== activeId;
+    if (activeId) rememberConversation(activeId);
+
+    // ARRIVING AT CHAT WITH NOTHING IN THE URL reopens the conversation the
+    // client was in. Only on arrival: «Nueva conversación», or tapping Chat
+    // while already on it, is the client asking for a blank one. And not
+    // with `?p=`, which is a new conversation by definition: the effect above
+    // has already sent it and already cleaned it out of the URL, so what says
+    // so here is the send in flight.
+    if (previous === undefined && !activeId && !sendingRef.current) {
+      const last = lastConversation();
+      if (last) {
+        restoredRef.current = last;
+        setLoadingThread(true);
+        replaceInRoute({ [PARAM.conversation]: last });
+        return;
+      }
+    }
+
+    if (activeId && activeId === adoptedRef.current) {
+      adoptedRef.current = null;
+      return;
+    }
 
     if (sendingRef.current) {
       // Same thread and a send in flight: don't touch anything. This is the
@@ -371,6 +513,7 @@ export default function ChatPage() {
       // composer.
       openSeq.current++;
       setMsgs([]);
+      setWorking(false);
       setLoadingThread(false);
       setThreadErr(null);
       setSendErr(null);
@@ -383,6 +526,20 @@ export default function ChatPage() {
   }, [cfg, activeId, loadThread]);
 
   // Sends `text`, starting from `base` as the prior history.
+  /** What the agent noted during the turn that started at `since` (epoch ms).
+   *  The turn's own events carry no session in `/portal/activity`, so the
+   *  window is the time the turn took; a couple of seconds of slack for the
+   *  agent's clock against the browser's. */
+  const notesSince = async (since: number): Promise<string[]> => {
+    if (!cfg) return [];
+    const r = await getActivity(cfg).catch(() => null);
+    return (r?.events ?? [])
+      .filter((e: { kind?: string; ts?: string }) =>
+        e.kind === "memoria" && new Date(e.ts ?? "").getTime() >= since - 3_000)
+      .flatMap((e: { label?: string }) =>
+        (e.label ?? "").replace(NOTE_PREFIX, "").split(" · ").map((n) => n.trim()).filter(Boolean));
+  };
+
   const run = async (text: string, base: Msg[]) => {
     if (!cfg || !text.trim() || sendingRef.current) return;
     sendingRef.current = true;
@@ -417,6 +574,16 @@ export default function ChatPage() {
     abortRef.current = ac;
 
     const tools: string[] = [];
+    const startedAt = Date.now();
+    // A new conversation's id, learned once its first turn is over -- or
+    // stopped: the engine keeps what was said up to the stop.
+    let adopt: string | null = null;
+    const settle = async () => {
+      const list = await refreshSessions(cfg);
+      if (activeId || !list) return;
+      const first = history.find((m) => m.role === "user")?.content ?? text;
+      adopt = sessionOfFirstTurn(list, first);
+    };
     const apply = (content: string) => {
       if (!isCurrent()) return;
       setMsgs((ms) => [
@@ -485,14 +652,20 @@ export default function ChatPage() {
       if (isCurrent()) {
         setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
       }
-      refreshSessions(cfg);
+      const [, notes] = await Promise.all([settle(), notesSince(startedAt)]);
+      if (notes.length && isCurrent()) {
+        setMsgs((ms) => {
+          const last = ms[ms.length - 1];
+          return last?.role === "assistant" ? [...ms.slice(0, -1), { ...last, notes }] : ms;
+        });
+      }
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         flush();
         if (isCurrent()) {
           setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
         }
-        refreshSessions(cfg);
+        await settle();
       } else if (isCurrent()) {
         setMsgs(base);
         setInput(text);
@@ -504,7 +677,18 @@ export default function ChatPage() {
         // exists -- and on top of that Retry here can never work: it just
         // hits the same session that isn't there.
         const msg = e instanceof Error ? e.message : "error de red";
-        setSendErr(/\b404\b/.test(msg) ? "__vieja__" : msg);
+        const status = (e as HttpError).status;
+        // 409: the conversation is still working on the previous message
+        // (a turn outlives the page). The engine's sentence says so; the
+        // thread gets re-read until it's done, and the message stays in the box.
+        if (status === 409) {
+          setSendErr(`${BUSY}${msg}`);
+          if (activeId) setWorking(true);
+        } else {
+          // A session that isn't there answers 404 on read and 400 on send.
+          setSendErr(status === 404 || (activeId && status === 400) || /\b404\b/.test(msg)
+            ? "__vieja__" : msg);
+        }
       }
     } finally {
       abortRef.current = null;
@@ -516,9 +700,21 @@ export default function ChatPage() {
         setLiveTools([]);
       }
     }
+    // After the send is released, not inside it: a URL change while
+    // `sendingRef` is still up reads as "the client navigated away" and
+    // aborts. Replace and not push: it is the same conversation, now named.
+    if (adopt && isCurrent()) {
+      adoptedRef.current = adopt;
+      replaceInRoute({ [PARAM.conversation]: adopt });
+    }
   };
 
   const send = (raw: string) => {
+    // NOT WHILE THE THREAD IS STILL ARRIVING. A message sent then went out
+    // against an empty history, and when the thread landed it painted over
+    // the message and its answer: the box had emptied and nothing was on
+    // screen. The text stays in the box until the thread is there.
+    if (loadingThread) return;
     const paths = attachments.map((a) => a.path).join("\n");
     const text = [raw.trim(), paths].filter(Boolean).join("\n");
     if (!text) return;
@@ -526,24 +722,18 @@ export default function ChatPage() {
     run(text, msgs);
   };
 
-  // Regenerate: repeats the user's last request. In a new conversation it
-  // replaces the answer; in a saved agent session history can't be rewritten,
-  // so it goes in as a new turn.
-  const regenerate = () => {
-    const lastUser = [...msgs].reverse().find((m) => m.role === "user");
-    if (!lastUser || sending) return;
-    if (activeId) {
-      run(lastUser.content, msgs);
-    } else {
-      const idx = msgs.lastIndexOf(lastUser);
-      run(lastUser.content, msgs.slice(0, idx));
-    }
-  };
-
-  const submitEdit = (idx: number) => {
+  // THERE IS NO "REGENERATE": the engine's history can't be rewritten, so
+  // repeating a request goes in as one more turn -- the client's message
+  // showed up twice, and in a new conversation it opened a second one with the
+  // same first line. Asking again is typing it again.
+  //
+  // Editing a message is the same fact: it goes in as a NEW message at the end,
+  // after everything that was said. Cutting the thread at the edited message
+  // showed a history the agent no longer had, and a reload brought it back.
+  const submitEdit = () => {
     const text = editText.trim();
-    if (!text || sending) return;
-    run(text, msgs.slice(0, idx));
+    if (!text || sending || loadingThread) return;
+    run(text, msgs);
   };
 
   const exportMd = () => {
@@ -582,7 +772,14 @@ export default function ChatPage() {
   if (!cfg) return <Spinner />;
 
   const lastIdx = msgs.length - 1;
-  const canSend = !sending && input.trim().length > 0;
+  const canSend = !sending && !loadingThread && !working && input.trim().length > 0;
+  // An open conversation is never «Nueva conversación»: its name in the list,
+  // or the one the engine gave it, or the first thing the client said in it.
+  const conversationTitle = !activeId
+    ? "Nueva conversación"
+    : activeSession
+      ? sessionTitle(activeSession)
+      : threadTitle || msgs.find((m) => m.role === "user")?.content.split("\n")[0] || "Conversación";
 
   const sidebar = (
     <Sessions
@@ -627,7 +824,7 @@ export default function ChatPage() {
             <Menu className="h-4 w-4" />
           </button>
           <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-            {activeSession ? sessionTitle(activeSession) : (activeId && threadTitle) || "Nueva conversación"}
+            {conversationTitle}
           </p>
           {/* Only saved conversations have a link. One just started doesn't
               exist yet on the agent's side: promising a link that leads
@@ -684,7 +881,7 @@ export default function ChatPage() {
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitEdit(i); }
+                              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitEdit(); }
                               if (e.key === "Escape") setEditingIdx(null);
                             }}
                             rows={2}
@@ -692,8 +889,8 @@ export default function ChatPage() {
                           />
                           <div className="mt-2 flex justify-end gap-2">
                             <Btn kind="ghost" size="sm" onClick={() => setEditingIdx(null)}>Cancelar</Btn>
-                            <Btn size="sm" onClick={() => submitEdit(i)} disabled={!editText.trim()}>
-                              Enviar de nuevo
+                            <Btn size="sm" onClick={submitEdit} disabled={!editText.trim()}>
+                              Mandarlo como mensaje nuevo
                             </Btn>
                           </div>
                         </div>
@@ -733,9 +930,10 @@ export default function ChatPage() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                      {(m.tools?.length || (sending && i === lastIdx && liveTools.length > 0)) && (
+                      {(m.tools?.length || m.notes?.length || (sending && i === lastIdx && liveTools.length > 0)) && (
                         <ToolTrace
                           tools={sending && i === lastIdx ? liveTools : m.tools ?? []}
+                          notes={sending && i === lastIdx ? [] : m.notes}
                           live={sending && i === lastIdx}
                         />
                       )}
@@ -743,16 +941,23 @@ export default function ChatPage() {
                       {m.content.trim() && !(sending && i === lastIdx) && (
                         <div className="mt-1 flex opacity-0 transition group-hover:opacity-100">
                           <CopyBtn text={m.content} />
-                          {i === lastIdx && (
-                            <IconBtn label="Volver a generar" onClick={regenerate}>
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            </IconBtn>
-                          )}
                         </div>
                       )}
                       </div>
                     </div>
                   ),
+                )}
+                {working && !sending && (
+                  <div className="flex gap-2.5">
+                    <div className="mt-0.5 h-7 w-7 shrink-0">
+                      <AgentitoAnimated celebrations={0} look={agentLook} state="doing" className="h-full w-full" />
+                    </div>
+                    <p className="flex items-center gap-1.5 px-1.5 py-1 text-[12px] text-ink-soft">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                      {agentName ? `${agentName} sigue trabajando` : "Sigue trabajando"} en tu mensaje. La
+                      respuesta aparece acá sola.
+                    </p>
+                  </div>
                 )}
               </div>
             )}
@@ -780,6 +985,10 @@ export default function ChatPage() {
                 <Btn size="sm" kind="secondary" onClick={newConversation} disabled={sending}>
                   Empezar una nueva
                 </Btn>
+              </div>
+            ) : sendErr?.startsWith(BUSY) ? (
+              <div className="mb-2 rounded-lg border border-c-amber bg-c-amber/30 px-3 py-2 text-[13px] font-medium text-c-amber-ink">
+                {sendErr.slice(BUSY.length)}
               </div>
             ) : sendErr ? (
               <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-c-coral bg-c-coral/30 px-3 py-2 text-[13px] text-c-coral-ink">

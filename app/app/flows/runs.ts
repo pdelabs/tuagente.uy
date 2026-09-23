@@ -44,7 +44,7 @@
 import { useSyncExternalStore } from "react";
 import { whenItHappened, whenItRuns, readFailure, moment } from "../lib/labels";
 import {
-  getJobs, jobAction, type CronJob, type Flow, type PortalConfig,
+  getJobs, jobAction, type CronJob, type Flow, type HttpError, type PortalConfig,
 } from "../lib/agent";
 
 export type StatusKey =
@@ -231,7 +231,8 @@ export function realStatus(f: Flow, cross: Cross, opts: StatusOptions = {}): Rea
   const job = cross.kind === "task" ? cross.job : null;
   const exec = job?.latest_execution ?? null;
   const unconfirmed = cross.kind === "no-data";
-  const missingConnections = f.status === "incomplete" ? f.missing_connections ?? [] : [];
+  // The engine's words for them («tu cuenta de Instagram»), not ids.
+  const missingConnections = f.status === "incomplete" ? f.missing_connection_labels : [];
 
   const jobId = job?.id ?? null;
   const paused = Boolean(job && (job.enabled === false || job.state === "paused"))
@@ -741,7 +742,15 @@ export async function runOnce(
     await jobAction(cfg, jobId, "run");
   } catch (e) {
     notePending(jobId, null);
-    patch({ phase: "error", ok: false, message: `No pude (${errorMessage(e)}). Probá de nuevo en un rato.` });
+    // A 409 is the engine refusing on purpose («Todavía no puedo correr «X»:
+    // falta conectar …»): its sentence is the whole answer, and «probá de
+    // nuevo en un rato» would promise a retry that can't work.
+    patch({
+      phase: "error", ok: false,
+      message: (e as HttpError).status === 409
+        ? errorMessage(e)
+        : `No pude (${errorMessage(e)}). Probá de nuevo en un rato.`,
+    });
     clearLater(jobId);
     return;
   }

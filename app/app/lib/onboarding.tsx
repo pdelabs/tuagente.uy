@@ -33,17 +33,20 @@ const SUGGESTED_NAMES = [
   "Kiko", "Mora", "Nino", "Pocha", "Chispa", "Lino", "Juana", "Bruno", "Tuca", "Rosita", "Nilo",
 ];
 
-/** A random look, guaranteed different from the current one: the dice the
- *  naming step rolls when the client asks for another face. */
+/** A random look that is VISIBLY another face: the dice the naming step rolls
+ *  when the client asks for one.
+ *
+ *  "Different" used to mean one axis out of eight: a roll that only moved the
+ *  pupils or the specks on the skin passed, and the QA client read the dice as
+ *  "barely changes anything". Now the color always changes -- the one trait
+ *  seen from across the room -- and so do at least three more. */
 export function randomizeLook(current: AgentitoLook): AgentitoLook {
+  const axes = Object.entries(RIVE_AXES) as [keyof AgentitoLook, number][];
   for (;;) {
     const look = { ...current };
-    for (const [axis, n] of Object.entries(RIVE_AXES) as [keyof AgentitoLook, number][]) {
-      look[axis] = Math.floor(Math.random() * n);
-    }
-    if (Object.keys(RIVE_AXES).some((a) => look[a as keyof AgentitoLook] !== current[a as keyof AgentitoLook])) {
-      return look;
-    }
+    for (const [axis, n] of axes) look[axis] = Math.floor(Math.random() * n);
+    const changed = axes.filter(([axis]) => look[axis] !== current[axis]).length;
+    if (look.tone !== current.tone && changed >= 4) return look;
   }
 }
 
@@ -120,7 +123,10 @@ const POINTS = [
     icon: Columns3,
     tone: "bg-c-amber",
     title: "Tablero",
-    description: "Cada cosa que me pedís queda como una tarea, y ves en qué anda.",
+    // NOT «every request becomes a task»: the QA client asked six things and
+    // her board stayed empty, because what gets answered on the spot never
+    // goes there. What goes there is what takes longer.
+    description: "Lo que no termino en el momento queda como tarea, y ves en qué anda.",
   },
   {
     key: "approvals",
@@ -340,11 +346,11 @@ export default function Onboarding({ manifest, cfg, onDone }: {
         {step === "chat" && (
           <div className="mb-6 animate-fadeup">
             <h1 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink sm:text-[38px]">
-              Ya estamos
+              Contámelo a tu manera
             </h1>
             <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-ink-soft">
-              Contestale lo que te pregunte y lo armamos entre los dos. Cuando
-              quieras, entrá al portal: la charla sigue ahí.
+              Mandame el pedido, contestame lo que te pregunte y lo armamos entre
+              los dos. Cuando quieras, entrá al portal: la charla sigue ahí.
             </p>
           </div>
         )}
@@ -356,7 +362,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
             <p className="mx-auto mt-3 max-w-lg text-[15px] leading-relaxed text-ink-soft">
               Lo mejor que puedo hacer por vos es ocuparme de lo que se repite,
               sin que tengas que acordarte. Tocá algo parecido a lo que
-              necesitás y lo armamos ahora.
+              necesitás: te dejo el pedido escrito para que lo cambies antes
+              de mandármelo.
             </p>
           </div>
         )}
@@ -366,9 +373,8 @@ export default function Onboarding({ manifest, cfg, onDone }: {
               ¿Por dónde te aviso?
             </h1>
             <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-ink-soft">
-              {canEmail
-                ? "Cuando termine algo tuyo o necesite tu ok, te escribo por donde vos digas. Si preferís verlo más adelante, también está bien."
-                : "Cuando termine algo tuyo o necesite tu ok, te lo dejo acá."}
+              Cuando termine algo tuyo o necesite tu ok, te escribo por donde vos
+              digas. Si preferís verlo más adelante, también está bien.
             </p>
           </div>
         )}
@@ -396,18 +402,20 @@ export default function Onboarding({ manifest, cfg, onDone }: {
             state={readingWeb ? gesture : "calm"}
             className="h-full w-full"
           />
-          {/* The dice lives glued to the character: it changes ITS look, not the page. */}
-          {step === "naming" && (
-            <button
-              onClick={anotherLook}
-              title="Otro look"
-              aria-label="Otro look"
-              className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white shadow-soft transition hover:scale-105 hover:bg-black/[0.03] active:scale-95"
-            >
-              <Dices className="h-[18px] w-[18px] text-ink" />
-            </button>
-          )}
         </div>
+        {/* THE ONLY CONTROL FOR THE FACE, SO IT SAYS WHAT IT DOES. It used to
+            be a bare dice icon glued to the character, and the QA client
+            never found a step to choose how her agent looks: an icon with no
+            words reads as decoration. Under the character, with a label. */}
+        {step === "naming" && (
+          <button
+            onClick={anotherLook}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-[13px] font-semibold text-ink transition hover:bg-black/[0.03] active:scale-95"
+          >
+            <Dices className="h-4 w-4" />
+            Probar otra cara
+          </button>
+        )}
 
         {/* "Hi! I'm ____" in the agent's voice is just plain ambiguous: a name
             field under a face has no subject, and filling it in feels like
@@ -517,10 +525,21 @@ export default function Onboarding({ manifest, cfg, onDone }: {
               </div>
             )}
 
-            <div className="mt-8">
-              <Btn onClick={() => setStep("notify")}>
+            <div className="mt-8 flex flex-col items-center gap-2">
+              {/* NOTHING TO CHOOSE, NO QUESTION. With no channel the agent can
+                  send through, «¿Por dónde te aviso?» was a screen with no
+                  options and one button: the QA client read it as a broken
+                  step. It is skipped, and "no channel" still gets saved
+                  (`continueFromNotify`) -- that is what tells the portal the
+                  question was answered. */}
+              <Btn onClick={() => (canEmail ? setStep("notify") : continueFromNotify())}>
                 Continuar <ArrowRight className="h-4 w-4" />
               </Btn>
+              {!canEmail && url.trim() && (
+                <span className="max-w-sm text-[12px] leading-relaxed text-ink-soft">
+                  Mientras tanto leo tu web: el borrador de tu negocio te queda en Archivos.
+                </span>
+              )}
             </div>
           </div>
         ) : step === "notify" ? (
@@ -530,23 +549,19 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                 portal is any use -- a test client said it plainly: "the sheet
                 is waiting for me to show up and I'm not going to". */}
             <div className="mx-auto mt-2 w-full max-w-md rounded-card border border-black/[0.07] bg-white p-5 text-left">
-              {canEmail && (
-                <>
-                  <p className="text-[15px] font-bold text-ink">
-                    ¿Por dónde te aviso cuando pase algo?
-                  </p>
-                  <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
-                    Cuando algo necesite tu ok, o cuando anote algo tuyo y quiera confirmarlo.
-                    Como mucho un mail cada media hora, y nunca de noche.
-                  </p>
-                </>
-              )}
+              <p className="text-[15px] font-bold text-ink">
+                ¿Por dónde te aviso cuando pase algo?
+              </p>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+                Cuando algo necesite tu ok, o cuando anote algo tuyo y quiera confirmarlo.
+                Como mucho un mail cada media hora, y nunca de noche.
+              </p>
               {/* BOTH ANSWERS NAMED. "Not now" sits next to email on purpose:
                   it's an answer, not an escape hatch hidden at the bottom. Only
                   channels the agent can send through are offered: one it can't
-                  is a promise nobody keeps. */}
-              {canEmail ? (
-                <div className="mt-3 flex flex-wrap gap-2">
+                  is a promise nobody keeps -- which is why, with none, this
+                  step is never reached (see the overview's Continue). */}
+              <div className="mt-3 flex flex-wrap gap-2">
                   {([
                     ["email", "Correo"],
                     ["none", "Ahora no"],
@@ -563,14 +578,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                       {label}
                     </button>
                   ))}
-                </div>
-              ) : (
-                <p className="text-[13px] leading-relaxed text-ink-soft">
-                  Por ahora no tengo cómo escribirte afuera de acá: lo que haga te
-                  va a estar esperando en el portal y lo ves cuando entres.
-                  Trabajo igual — lo que cambia es que te enterás cuando venís.
-                </p>
-              )}
+              </div>
 
               {/* Just the address: the mail goes out from our side, so
                   nothing of the company's has to be connected first. */}
@@ -609,9 +617,7 @@ export default function Onboarding({ manifest, cfg, onDone }: {
                   client who picked something, continued, and only found out
                   inside that nothing was going to reach her. */}
               <span className="max-w-sm text-[12px] leading-relaxed text-ink-soft">
-                {!canEmail
-                  ? null
-                  : channel === ""
+                {channel === ""
                     ? "Elegí una, o tocá «Ahora no» si preferís verlo más adelante."
                     : realChannel === "email"
                       ? "Listo: te escribo a esa dirección."

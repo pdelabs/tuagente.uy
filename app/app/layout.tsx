@@ -80,6 +80,23 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   { key: "skills", path: "/app/skills", label: "Habilidades", icon: Puzzle, sec: true },
 ];
 
+const MORE_OPEN_KEY = "tuagente_nav_more_open";
+
+function loadMoreOpen(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(MORE_OPEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveMoreOpen(open: boolean) {
+  try {
+    localStorage.setItem(MORE_OPEN_KEY, open ? "1" : "0");
+  } catch { /* private mode: good for this visit */ }
+}
+
 function Login({ onReady }: { onReady: () => void }) {
   const [link, setLink] = useState("");
   const [err, setErr] = useState("");
@@ -151,7 +168,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [name, setName] = useState<string | null>(null);
   const [agentLook, setAgentLook] = useState(loadAgentLook);
   // "Más" starts closed: the workshop views don't compete with the flows.
-  const [showMore, setShowMore] = useState(false);
+  // But it REMEMBERS: the QA client opened it, went into Actividad, and found
+  // it folded again on every tab change -- the tab she was on hidden under a
+  // closed menu. The last state is kept (per agent, under the `tuagente_`
+  // prefix), and being inside one of its tabs opens it.
+  const [showMore, setShowMore] = useState(loadMoreOpen);
+  const toggleMore = () => setShowMore((v) => { saveMoreOpen(!v); return !v; });
   useEffect(() => { setName(loadAgentName()); }, []);
   const { seen, dismiss } = useIntroGate();
 
@@ -181,6 +203,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => { setWithIntent(false); }, [pathname]);
   useEffect(() => { if (pointsToDetail) setWithIntent(true); }, [pointsToDetail, pathname]);
   const currentModule = MODULES.find((m) => pathname.startsWith(m.path));
+  useEffect(() => {
+    if (currentModule?.sec) { setShowMore(true); saveMoreOpen(true); }
+  }, [currentModule?.sec]);
 
   // The credential travels in the hash and stays stuck in the address bar.
   // With "copy link" on every screen, that goes from ugly to dangerous: the
@@ -520,7 +545,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {enabled.some((m) => m.sec) && (
             <>
               <button
-                onClick={() => setShowMore((v) => !v)}
+                onClick={toggleMore}
                 aria-expanded={showMore}
                 title="Más"
                 className="relative mt-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink-soft transition hover:bg-black/[0.04] hover:text-ink max-md:justify-center max-md:px-0"

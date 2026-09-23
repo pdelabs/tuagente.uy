@@ -1,14 +1,14 @@
 "use client";
 
 // Activity: everything the agent did, in chronological order.
-// Contract (adapter v0.3): GET {adapter}/portal/activity →
-//   { events: [{ ts, kind: "job_run" | "ticket", label, status }] }
+// Contract: GET {adapter}/portal/activity →
+//   { events: [{ ts, kind, label, status }] }, the kinds in `lib/events.ts`.
 // Grouped by day (Today/Yesterday/date), silent refresh every 30s.
 //
-// Ticket events carry the ticket's TITLE but not its id: we resolve it by
-// cross-referencing /portal/tickets (title→id map, fetched once and refreshed
-// only on demand). If the ticket isn't in that list — archived or deleted —
-// the event isn't clickable and we don't show anything weird.
+// A task's events (`ticket.*`) carry the task's TITLE, in «», but not its id:
+// we resolve it by cross-referencing /portal/tickets (title→id map, fetched
+// once and refreshed only on demand). If the task isn't in that list —
+// archived or deleted — the event isn't clickable and we don't show anything weird.
 //
 // WHY THIS SCREEN SAID "NO ACTIVITY YET" (blind QA, 8/12).
 // An accountant set up three flows and had it write three documents, came in
@@ -36,18 +36,17 @@ import { Activity, ChevronRight, RefreshCw, Search } from "lucide-react";
 import {
   getActivity,
   getFiles,
-  getFlows,
   getJobs,
   getSessions,
   getTickets,
   loadConfig,
   type CronJob,
-  type Flow,
   type PortalConfig,
 } from "../lib/agent";
 import { EntityProvider } from "../lib/EntityViewer";
 import { useOpenEntity } from "../lib/entities";
 import { loadAgentName } from "../lib/onboarding";
+import { readableFileName } from "../lib/names";
 import {
   Btn, Card, Chip, EmptyState, ErrorState, IconBtn, PageHeader, SUPPORT, Spinner, inputCls,
 } from "../lib/ui";
@@ -56,7 +55,7 @@ import {
   momentOf, channelLabel, eventLabel,
 } from "../lib/labels";
 import {
-  isHumanConversation, humanizeRuns, type AgentEvent,
+  isHumanConversation, kindLabel, plainLabel, type AgentEvent,
 } from "../lib/events";
 
 type ActivityEvent = AgentEvent;
@@ -70,39 +69,7 @@ const REFRESH_MS = 30_000;
 const PAGE_SIZE = 30; // events per batch
 const WRAP = "mx-auto max-w-4xl px-6 py-6 md:px-8";
 
-// Adapter's raw kind → readable label (the chips come from the data).
-// `archivo` and `conversacion` are built by the portal: see the note above.
-// The kinds the engine writes (`db.append_event` across `engine/` and the
-// plugins). The old list was the Hermes adapter's (`job_run`, `archivo`,
-// `conversacion`), which this engine never writes: every chip read raw, as
-// `flow.finished` or `delegation.started`.
-const KIND_LABEL: Record<string, string> = {
-  respuesta: "Respuesta",
-  error: "Error",
-  "flow.started": "Flujo",
-  "flow.finished": "Flujo",
-  "flow.failed": "Flujo",
-  "flow.paused": "Flujo",
-  "flow.incomplete": "Flujo",
-  "delegation.started": "Encargo",
-  "delegation.finished": "Encargo",
-  "post.saved": "Posteo",
-  "post.updated": "Posteo",
-  "post.slide_replaced": "Posteo",
-  "post.published": "Posteo",
-  approval_requested: "Aprobación",
-  approval_approved: "Aprobación",
-  approval_rejected: "Aprobación",
-  "ticket.created": "Tarea",
-  "ticket.moved": "Tarea",
-  "ticket.commented": "Tarea",
-  "message.sent": "Mensaje",
-  "comment.replied": "Comentario",
-  "mail.sent": "Mail",
-  memoria: "Memoria",
-  notify: "Aviso",
-  turn_usage: "Consumo",
-};
+// The kind's word (the "Tipo" chips) comes from `lib/events.ts`.
 
 // The status arrives raw from the engine and in English. It now comes from
 // the portal's single dictionary (`lib/labels.ts`), the same one the
@@ -154,8 +121,12 @@ function dotCls(kind: string, status: string): string {
   if (g === "ok") return "bg-c-green-ink";
   if (g === "error") return "bg-c-coral-ink";
   if (g === "progress") return "bg-c-amber-ink";
-  return kind === "ticket" ? "bg-c-violet-ink" : "bg-ink-soft/50";
+  return kind.startsWith("ticket.") ? "bg-c-violet-ink" : "bg-ink-soft/50";
 }
+
+/** The task a `ticket.*` label names: the engine writes it between «»
+ *  («Moví «Pedido del sábado» a En curso»). */
+const taskTitleIn = (label: string) => /«([^»]+)»/.exec(label || "")?.[1] ?? "";
 
 /** Comparison insensitive to case, accents and extra spaces. */
 const norm = (s: string) =>
@@ -216,14 +187,19 @@ const is404 = (msg: string) => /^404\b/.test(msg);
 const SCRIPT_EXT = /\.(py|sh|bash|zsh|rb|pl|js|mjs|cjs|ts|tsx|jsx|ipynb)$/i;
 const INBOX_PREFIX = "entrada/";
 
-/** The file's name, with no date up front and no folder trailing behind. */
-const fileName = (path: string) => {
-  const base = (path || "").split("/").pop() || path;
-  return base.replace(/^\d{4}-\d{2}-\d{2}[-_ ]/, "").replace(/\.[a-z0-9]+$/i, "") || base;
-};
 
-/** What the agent wrote, as events. The scaffolding (its own scripts,
- *  `interno/`) stays out: what goes here is what the client recognizes as work. */
+// FOLDERS WHOSE FILES ALREADY HAVE THEIR OWN LINE. A post is `post.saved`
+// and its slides, a note is `memoria`, a flow is its `flow.*` events: listing
+// their files too put «Escribió «post»», «Escribió «01»» and «Escribió
+// «MEMORY»» in the owner's log -- the storage, read aloud, next to the event
+// that already said what happened.
+const COVERED_BY_EVENTS = ["interno/", "posteos/", "memoria/", "flows/"];
+
+const BUSINESS_DRAFT = "negocio/borrador.md";
+
+/** What the agent wrote, as events. The scaffolding (its own scripts, what
+ *  another event already tells) stays out: what goes here is what the client
+ *  recognizes as work, named the way she'd name it. */
 function eventsFromFiles(
   files: { path: string; mtime: number }[] | null, utcOffset: number,
 ): ActivityEvent[] {
@@ -231,15 +207,19 @@ function eventsFromFiles(
   return files
     .filter((f) => {
       const p = f.path || "";
-      return p && !p.startsWith("interno/") && !SCRIPT_EXT.test(p);
+      return p && !COVERED_BY_EVENTS.some((d) => p.startsWith(d)) && !SCRIPT_EXT.test(p)
+        && !p.split("/").some((part) => part.startsWith("."));
     })
     .slice(0, 60)
     .map((f) => ({
       ts: isoWithOffset(f.mtime * 1000, utcOffset),
       kind: "archivo",
-      // Who put it there matters: `entrada/` is what the client uploads, and
-      // saying "your agent wrote" about the CSV she uploaded would be a cheap lie.
-      label: (f.path.startsWith(INBOX_PREFIX) ? "Recibió " : "Escribió ") + `«${fileName(f.path)}»`,
+      label: f.path === BUSINESS_DRAFT
+        ? "Escribió el borrador de tu negocio"
+        // Who put it there matters: `entrada/` is what the client uploads,
+        // and saying "your agent wrote" about the CSV she uploaded would be a
+        // cheap lie.
+        : (f.path.startsWith(INBOX_PREFIX) ? "Recibió " : "Escribió ") + `«${readableFileName(f.path)}»`,
       status: "",
       href: `/app/files?file=${encodeURIComponent(f.path)}`,
     }));
@@ -329,15 +309,10 @@ function Row({ ev, ticketId, times = 1, agentName }: {
       </span>
       <span className={`mt-1.5 h-2 w-2 shrink-0 self-start rounded-full ${dotCls(ev.kind, ev.status)}`} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm text-ink">{ev.label}</span>
-        {/* The line the vet couldn't open. Now the reason is written right
-            here, in plain terms, without having to go dig for it. */}
-        {ev.reason && (
-          <span className="block truncate text-[12px] text-c-coral-ink">{ev.reason}</span>
-        )}
+        <span className="block truncate text-sm text-ink">{plainLabel(ev.label)}</span>
       </span>
       <span className="flex shrink-0 items-center gap-2 self-start pt-0.5">
-        <Chip>{KIND_LABEL[ev.kind] ?? ev.kind}</Chip>
+        <Chip>{kindLabel(ev.kind)}</Chip>
         {ev.status && (
           <span className="text-[11px] text-ink-soft">
             {statusLabel(ev.status, agentName)}
@@ -405,7 +380,6 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
   // is mandatory: if one fails, the timeline just loses that row and continues.
   const [files, setFiles] = useState<{ path: string; mtime: number }[] | null>(null);
   const [sessions, setSessions] = useState<RawSession[] | null>(null);
-  const [flows, setFlows] = useState<Flow[] | null>(null);
   const [jobs, setJobs] = useState<CronJob[] | null>(null);
   const hasData = useRef(false);
 
@@ -460,7 +434,6 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
     getSessions(cfg)
       .then((r) => setSessions(Array.isArray(r?.data) ? r.data : []))
       .catch(() => {});
-    getFlows(cfg).then((r) => setFlows(r?.flows ?? [])).catch(() => {});
     getJobs(cfg).then((r) => setJobs(Array.isArray(r?.jobs) ? r.jobs : [])).catch(() => {});
   }, [cfg]);
 
@@ -500,11 +473,11 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
 
   const all = useMemo(
     () => [
-      ...humanizeRuns(events ?? [], flows, jobs),
+      ...(events ?? []),
       ...eventsFromFiles(files, utcOffset),
       ...eventsFromSessions(sessions, utcOffset),
     ].sort((a, b) => msOf(b.ts) - msOf(a.ts)),
-    [events, flows, jobs, files, sessions, utcOffset],
+    [events, files, sessions, utcOffset],
   );
   const technicalCount = useMemo(
     () => all.filter((e) => isMachineEvent(e.status)).length, [all]);
@@ -513,13 +486,13 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
     [all, showTechnical],
   );
 
-  // Available types: the ones that actually came in, sorted by label.
+  // Available types: the WORDS that actually came in, one chip each. `kind`
+  // below holds that word, not a raw kind: five flow kinds are one «Flujo».
   const kinds = useMemo(() => {
-    const set = new Set(sortedEvents.map((e) => e.kind).filter(Boolean));
-    return Array.from(set).sort((a, b) =>
-      (KIND_LABEL[a] ?? a).localeCompare(KIND_LABEL[b] ?? b, "es"),
-    );
+    const set = new Set(sortedEvents.map((e) => kindLabel(e.kind)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
   }, [sortedEvents]);
+  const ofKind = (e: ActivityEvent, k: string) => kindLabel(e.kind) === k;
 
   const groupsPresent = useMemo(() => {
     const set = new Set(sortedEvents.map((e) => filterGroup(e.status)));
@@ -531,7 +504,7 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
     const q = norm(search);
     return sortedEvents.filter((e) => {
       if (!inRange(e.ts, range)) return false;
-      if (q && !norm(e.label || "").includes(q)) return false;
+      if (q && !norm(plainLabel(e.label)).includes(q)) return false;
       return true;
     });
   }, [sortedEvents, range, search]);
@@ -551,13 +524,13 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
     [base, group],
   );
   const byKind = useMemo(
-    () => (kind ? base.filter((e) => e.kind === kind) : base),
+    () => (kind ? base.filter((e) => ofKind(e, kind)) : base),
     [base, kind],
   );
   const visible = useMemo(
     () =>
       base.filter(
-        (e) => (!kind || e.kind === kind) && (!group || filterGroup(e.status) === group),
+        (e) => (!kind || ofKind(e, kind)) && (!group || filterGroup(e.status) === group),
       ),
     [base, kind, group],
   );
@@ -589,7 +562,7 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
   }, [shown]);
 
   const idFor = (ev: ActivityEvent) =>
-    ev.kind === "ticket" ? ticketIds.get(norm(ev.label || "")) : undefined;
+    ev.kind.startsWith("ticket.") ? ticketIds.get(norm(taskTitleIn(ev.label))) : undefined;
 
   // What the agent is called for this client: they named it. "Your agent
   // picked it up" was the generic label on the screen of someone who'd
@@ -718,9 +691,9 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
                       key={k}
                       active={kind === k}
                       onClick={() => setKind(kind === k ? null : k)}
-                      count={byGroup.filter((e) => e.kind === k).length}
+                      count={byGroup.filter((e) => ofKind(e, k)).length}
                     >
-                      {KIND_LABEL[k] ?? k}
+                      {k}
                     </FilterChip>
                   ))}
                 </div>

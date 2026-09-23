@@ -208,15 +208,21 @@ function httpError(status: number, path: string, detail?: string): HttpError {
   return e;
 }
 
-/** The engine explains its 400s/409s in `{error}`: that text is worth more
- *  than the number. */
+/** The engine explains its 400s/409s in `{error: {message}}` (the older
+ *  adapter, `{error: "…"}`): that text is worth more than the number. Without
+ *  reading `.message`, every refused run-now read «No pude (409 at …)». */
 async function failure(res: Response, path: string): Promise<HttpError> {
-  let detail = "";
+  return httpError(res.status, path, await errorText(res));
+}
+
+/** The Spanish sentence an error response carries, or "". */
+async function errorText(res: Response): Promise<string> {
   try {
     const body = await res.json();
-    if (typeof body?.error === "string") detail = body.error;
+    if (typeof body?.error === "string") return body.error;
+    if (typeof body?.error?.message === "string") return body.error.message;
   } catch { /* no JSON body */ }
-  return httpError(res.status, path, detail);
+  return "";
 }
 
 /* ── What clock the business lives on ────────────────────────────────────────
@@ -672,23 +678,21 @@ export const saveFileText = async (c: PortalConfig, path: string, text: string) 
     body: text,
   });
   // The engine's `{error: {message}}`, in Spanish and written for her ("es
-  // de tu agente: desde acá se puede leer, no editar"); `failure` only reads
-  // the kit adapter's flat `{error}`.
+  // de tu agente: desde acá se puede leer, no editar"), shown as-is.
   if (!res.ok) {
     const body = await res.json();
     throw httpError(res.status, path, body.error.message);
   }
   return res.json() as Promise<{ ok: boolean; path: string; bytes: number }>;
 };
-/** What the agent has spent, per whoever bills for it.
+/** What THIS agent has spent, from its own events: each turn and each call
+ *  outside one records what it cost (`engine/server/extra.py`, `usage`). The
+ *  days are the business's.
  *
- *  The number comes from OpenRouter for THIS agent's key -- adding up what
- *  passed through a proxy once missed it 9x LOW, because image generation
- *  hits the provider directly. The key never reaches the browser: the engine
- *  makes the call.
- *
- *  `available: false` (no key, or the provider isn't answering) comes back
- *  with 200: the screen says so and no number gets drawn. */
+ *  THE KEY'S FIGURES TRAVEL APART, under `key`: the provider key can serve
+ *  more than this agent, so its cap and its total are not this agent's --
+ *  next to each other they read as "over the cap" when it wasn't. `key` is
+ *  null when there is no key or the provider doesn't answer. */
 export type Usage = {
   available?: boolean;
   reason?: string;
@@ -697,8 +701,10 @@ export type Usage = {
   today_usd?: number | null;
   month_usd?: number | null;
   total_usd?: number | null;
-  /** The key's cap; null = no cap. */
-  limit_usd?: number | null;
+  /** Calls nobody could price: with any, the amounts are a floor. */
+  unpriced?: number;
+  /** The key's cap (null = no cap) and what the key has been charged. */
+  key?: { limit_usd: number | null; usage_usd: number | null } | null;
   updated_at?: string;
 };
 export const getUsage = (c: PortalConfig) => get<Usage>(c.adapter, "/portal/usage", c);
@@ -752,6 +758,9 @@ export type Flow = {
   trigger: string;
   status: "active" | "paused" | "incomplete" | string;
   missing_connections: string[];
+  /** The same, as the client calls each one («el correo de la empresa»),
+   *  from the plugin that answers for it. What the screens show. */
+  missing_connection_labels: string[];
   last_run?: { at?: string | null; status?: string } | null;
   /** Id of the scheduled task that fires the flow; null on a flow that only
    *  runs when asked. Without it, the portal ties the flow to its task by the
@@ -968,14 +977,7 @@ export async function sessionChatStream(
       signal,
     },
   );
-  if (!res.ok || !res.body) {
-    let detail = `${res.status} at session chat`;
-    try {
-      const err = await res.json();
-      if (err?.error?.message) detail = err.error.message;
-    } catch { /* no JSON body */ }
-    throw new Error(detail);
-  }
+  if (!res.ok || !res.body) throw await failure(res, "session chat");
 
   const reader = res.body.getReader();
   const dec = new TextDecoder();
@@ -1050,7 +1052,9 @@ export async function chatStream(
     body: JSON.stringify({ messages, stream: true }),
     signal,
   });
-  if (!res.ok || !res.body) throw new Error(`${res.status} at chat`);
+  // A 409 is the conversation still working on the previous message: its
+  // sentence is what the client reads.
+  if (!res.ok || !res.body) throw await failure(res, "chat");
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let acc = "", buf = "", eventName = "";
@@ -1086,20 +1090,4 @@ export async function chatStream(
     }
   }
   return acc;
-}
-
-/** A connection's label by its id, to name it wherever the client needs it
- *  (a flow's `missing_connections`). Catalog ids (`email`, `google-workspace`)
- *  are ours; the client should never have to read them, so an unknown one
- *  falls back to something readable instead of the raw id. */
-export function connectionLabel(id: string): string {
-  const KNOWN: Record<string, string> = {
-    email: "el correo de la empresa",
-    whatsapp: "WhatsApp",
-    slack: "Slack",
-    "google-workspace": "Google Planillas y Drive",
-    "gmail-lectura": "Gmail",
-    "auxiliary-models": "los modelos de IA auxiliares",
-  };
-  return KNOWN[id] ?? id.replace(/-/g, " ");
 }

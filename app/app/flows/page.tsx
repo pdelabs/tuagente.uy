@@ -116,7 +116,7 @@ function FlowCard({ f, e, cfg, posts, onChange }: {
 
       {/* The missing connection, SECOND and separate: it is not a diagnosis,
           and it says WHICH one is missing -- "lo que falta" says nothing. */}
-      {e.missingConnections.length > 0 && <MissingConnection ids={e.missingConnections} />}
+      {e.missingConnections.length > 0 && <MissingConnection names={e.missingConnections} />}
 
       {f.results.length > 0 && (
         <div>

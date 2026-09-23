@@ -46,7 +46,7 @@ function Panel() {
         <Stat label="Desde siempre" value="US$ 23,10" />
       </div>
       <p className="mt-3 text-[11px] leading-snug text-ink-soft">
-        Los números vienen de OpenRouter: es lo que tu agente gasta de verdad.
+        Los números los da el proveedor de IA: es lo que tu agente gasta de verdad.
       </p>
     </Mockup>
   );
@@ -73,8 +73,8 @@ export default function UsageIntro({ onOk }: IntroProps) {
 
       <div className="mt-6 grid gap-5 md:grid-cols-3">
         <Point icon={Receipt} title="El número lo da quien cobra">
-          No es una cuenta nuestra: se lo preguntamos a OpenRouter, el proveedor de los motores de
-          IA con los que trabaja tu agente. Es lo que efectivamente se gastó.
+          No es una cuenta nuestra: se lo preguntamos al proveedor de la inteligencia artificial
+          con la que trabaja tu agente. Es lo que efectivamente se gastó.
         </Point>
         <Point icon={CalendarDays} title="Hoy, este mes y desde siempre">
           Tres números y nada más. Con el del día ves si algo se disparó; con el del mes, cómo viene

@@ -9,6 +9,7 @@ import { createContext, useContext } from "react";
 import Link from "next/link";
 import { FileText, Image as ImageIcon, Images, Sheet, Ticket as TicketIcon } from "lucide-react";
 import { PARAM } from "./routes";
+import { postTitle } from "./events";
 
 export type Entity =
   | { kind: "ticket"; id: string }
@@ -102,15 +103,19 @@ const ENTITY_HINT = {
  *  built with the route helper's own param name: with
  *  `window.location.origin` it would come out one way in the prerender and
  *  another in the browser, which is a hydration mismatch on a static page. */
-function PostLink({ id }: { id: string }) {
+function PostLink({ id, label }: { id: string; label?: string }) {
+  // BY ITS NAME, NOT ITS ID. The chip read `2026-09-23-pan-masa-madre` in
+  // monospace, which is an address: the owner reads «Pan masa madre». A label
+  // the agent wrote for the link (`[el de masa madre](…)`) wins.
+  const text = label && label.trim().toLowerCase() !== id ? label.trim() : postTitle(id);
   return (
     <Link
       href={`/app/posts?${PARAM.post}=${encodeURIComponent(id)}`}
       title={ENTITY_HINT.post}
-      className="inline-flex max-w-full items-center gap-1 rounded-md border border-c-violet bg-c-violet/40 px-1.5 py-0.5 align-middle font-mono text-[0.85em] text-primary transition hover:border-primary hover:bg-c-violet"
+      className="inline-flex max-w-full items-center gap-1 rounded-md border border-c-violet bg-c-violet/40 px-1.5 py-0.5 align-middle text-[0.85em] font-medium text-primary transition hover:border-primary hover:bg-c-violet"
     >
       <Images className="h-3 w-3 shrink-0" />
-      <span className="truncate">{id}</span>
+      <span className="truncate">{text}</span>
     </Link>
   );
 }
@@ -118,7 +123,7 @@ function PostLink({ id }: { id: string }) {
 export function EntityChip({ entity, label }: { entity: Entity; label: string }) {
   const open = useOpenEntity();
   // A post opens in its own tab, where it is drawn the size it is going out at.
-  if (entity.kind === "post") return <PostLink id={entity.id} />;
+  if (entity.kind === "post") return <PostLink id={entity.id} label={label} />;
   // The icon says what it is before you touch it: a photo opens to look at,
   // a spreadsheet opens to download.
   const Icon =

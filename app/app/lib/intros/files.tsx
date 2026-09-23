@@ -5,8 +5,8 @@
 // viewer) and the three points on the right. Illustration in divs, no
 // external images; the entry animation respects prefers-reduced-motion.
 //
-// "informe-mensual.md · 14 KB · hace 2 h" has the exact shape of a real
-// file -- name, size, when -- so the stack sits inside `Mockup`: three made-up
+// "Informe del mes · Documento · hace 2 h" has the exact shape of a real
+// file -- name, kind, when -- so the stack sits inside `Mockup`: three made-up
 // files on the screen that promises to show your own would be three files
 // someone's going to go looking for.
 //
@@ -29,7 +29,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  ArrowRight, Code2, Download, Eye, FileCode2, FileSpreadsheet, FileText, FolderOpen, Inbox,
+  ArrowRight, Download, Eye, FileSpreadsheet, FileText, FolderOpen, Image as ImageIcon, Inbox,
   Lock, MessagesSquare, Upload, Wrench, type LucideIcon,
 } from "lucide-react";
 import { getManifest, loadConfig } from "../agent";
@@ -68,25 +68,29 @@ function useDeclaredUpload(): boolean | null {
 
 type Row = { name: string; meta: string; icon: LucideIcon; tone: string; open?: boolean };
 
-// Three very different extensions, each with its own icon and tone.
+// Three kinds of paper an owner recognizes, each with its own icon and tone,
+// NAMED THE WAY SHE'D NAME THEM. The drawing used to be `informe-mensual.md`,
+// `listado-final.csv` and `procesar.py` -- extensions and a script, which is
+// how a programmer sees a folder -- and the QA client read it as "this tab
+// isn't for me".
 const ROWS: Row[] = [
   {
-    name: "informe-mensual.md",
-    meta: "14 KB · hace 2 h",
+    name: "Informe del mes",
+    meta: "Documento · hace 2 h",
     icon: FileText,
     tone: "bg-c-violet text-c-violet-ink",
     open: true,
   },
   {
-    name: "listado-final.csv",
-    meta: "86 KB · ayer",
+    name: "Listado de clientes",
+    meta: "Planilla · ayer",
     icon: FileSpreadsheet,
     tone: "bg-c-green text-c-green-ink",
   },
   {
-    name: "procesar.py",
-    meta: "4 KB · hace 3 días",
-    icon: FileCode2,
+    name: "Foto para el posteo",
+    meta: "Imagen · hace 3 días",
+    icon: ImageIcon,
     tone: "bg-c-amber text-c-amber-ink",
   },
 ];
@@ -96,9 +100,9 @@ function Line({ w }: { w: string }) {
   return <div className={`h-1.5 rounded-full bg-black/[0.09] ${w}`} />;
 }
 
-/** A token in the code block (dark background, tonal highlight). */
-function Tok({ w, tone }: { w: string; tone: string }) {
-  return <div className={`h-1.5 rounded-full ${tone} ${w}`} />;
+/** One cell of the viewer's little table. */
+function Cell({ w, strong = false }: { w: string; strong?: boolean }) {
+  return <div className={`h-1.5 rounded-full ${strong ? "bg-ink/40" : "bg-black/[0.09]"} ${w}`} />;
 }
 
 // min-w-0 on the root: without it the grid cell grows to fit the longest file
@@ -128,7 +132,7 @@ function Workspace({ withInbox }: { withInbox: boolean }) {
         </div>
       )}
 
-      {/* The stack: .md, .csv and .py told apart by icon and color. */}
+      {/* The stack: a document, a spreadsheet and a photo told apart by icon and color. */}
       <div className="space-y-1.5">
         {ROWS.map((r, i) => (
           <div
@@ -150,16 +154,16 @@ function Workspace({ withInbox }: { withInbox: boolean }) {
         ))}
       </div>
 
-      {/* The viewer: title, formatted text and the highlighted code block. */}
+      {/* The viewer: title, formatted text and a small table. */}
       <div
         style={{ animationDelay: "300ms" }}
         className="tgf-in mt-2.5 overflow-hidden rounded-xl border border-black/[0.07] bg-white"
       >
         <div className="flex items-center justify-between gap-2 border-b border-black/[0.06] px-2.5 py-1.5">
-          <span className="min-w-0 truncate text-[11px] font-semibold text-ink">informe-mensual.md</span>
+          <span className="min-w-0 truncate text-[11px] font-semibold text-ink">Informe del mes</span>
           <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-black/[0.05] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-soft">
-            <Code2 className="h-2.5 w-2.5" />
-            original
+            <Eye className="h-2.5 w-2.5" />
+            vista
           </span>
         </div>
         <div className="space-y-2.5 px-3 py-3">
@@ -176,20 +180,17 @@ function Workspace({ withInbox }: { withInbox: boolean }) {
               </div>
             ))}
           </div>
-          <div className="space-y-1.5 rounded-lg bg-ink px-2.5 py-2">
-            <div className="flex gap-1.5">
-              <Tok w="w-[8%]" tone="bg-c-violet/80" />
-              <Tok w="w-[17%]" tone="bg-c-green" />
-              <Tok w="w-[6%]" tone="bg-white/25" />
-            </div>
-            <div className="flex gap-1.5 pl-[8%]">
-              <Tok w="w-[12%]" tone="bg-c-amber" />
-              <Tok w="w-[19%]" tone="bg-white/25" />
-            </div>
-            <div className="flex gap-1.5">
-              <Tok w="w-[7%]" tone="bg-c-coral" />
-              <Tok w="w-[11%]" tone="bg-white/20" />
-            </div>
+          <div className="overflow-hidden rounded-lg border border-black/[0.07]">
+            {[0, 1, 2].map((r) => (
+              <div
+                key={r}
+                className={`grid grid-cols-3 gap-2 px-2 py-1.5 ${r === 0 ? "bg-black/[0.04]" : "border-t border-black/[0.06]"}`}
+              >
+                <Cell w="w-[70%]" strong={r === 0} />
+                <Cell w="w-[55%]" strong={r === 0} />
+                <Cell w="w-[40%]" strong={r === 0} />
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -255,7 +256,7 @@ function ReadOnly() {
     <Box>
       <Header icon={Lock}>Solo lectura</Header>
       <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
-        Es una ventana al workspace de tu agente: los archivos se miran y se bajan, pero desde el
+        Es una ventana a los papeles de tu agente: los archivos se miran y se bajan, pero desde el
         portal no se modifica nada. Si le querés pasar algo tuyo, mandáselo por el chat.
       </p>
     </Box>
@@ -289,7 +290,7 @@ export default function FilesIntro({ onOk }: IntroProps) {
       note={canUpload === null
         ? undefined
         : canUpload
-          ? "Le podés dejar archivos; editar o borrar los suyos, no."
+          ? "Le podés dejar archivos, y corregir los tuyos y el borrador de tu negocio; lo demás es de tu agente."
           : "Solo lectura: desde acá no se modifica nada."}
     >
       <style>{CSS}</style>
@@ -306,8 +307,8 @@ export default function FilesIntro({ onOk }: IntroProps) {
         <Workspace withInbox={canUpload === true} />
         <div className="grid min-w-0 gap-5">
           <Point icon={Eye} title="Se leen como corresponde">
-            Los .md se ven formateados, las planillas como planilla y el código con resaltado. Si lo
-            querés copiar tal cual, un botón te muestra el original crudo.
+            Los documentos se ven con su formato, las planillas como planilla y las fotos como
+            foto. Si querés copiar un texto tal cual, un botón te lo muestra sin formato.
           </Point>
           <Point icon={Download} title="Y te los llevás">
             Cualquier archivo se baja tal cual está, incluso los que no se pueden mostrar acá
