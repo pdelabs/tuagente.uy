@@ -55,7 +55,7 @@ import {
   Spinner, inputCls,
 } from "../lib/ui";
 import { FileBody, AgentImage } from "../lib/EntityViewer";
-import { readableFileName, fileType } from "../lib/names";
+import { readableFileName, fileType, folderLabel } from "../lib/names";
 import Spreadsheet, { CsvPreview } from "../lib/Spreadsheet";
 
 type FileEntry = { path: string; size?: number; mtime?: string | number; editable?: boolean };
@@ -290,6 +290,14 @@ export default function FilesPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  // «Guardado», for a few seconds after a save. Without it the editor just
+  // closed, and QA (2026-09-23) could not tell a save from a cancel.
+  const [justSaved, setJustSaved] = useState(false);
+  useEffect(() => {
+    if (!justSaved) return;
+    const t = setTimeout(() => setJustSaved(false), 4_000);
+    return () => clearTimeout(t);
+  }, [justSaved]);
 
   useEffect(() => { setCfg(loadConfig()); }, []);
 
@@ -368,6 +376,7 @@ export default function FilesPage() {
     setRaw(false);
     setEditing(null);
     setSaveErr(null);
+    setJustSaved(false);
     // Spreadsheets DO get shown: the agent delivers quotes and reports in
     // xlsx, and downloading them just to see three numbers isn't a preview.
     if (isSpreadsheet(path)) {
@@ -456,6 +465,7 @@ export default function FilesPage() {
       await saveFileText(cfg, viewer.path, editing);
       setViewer({ ...viewer, text: editing });
       setEditing(null);
+      setJustSaved(true);
       reload();
     } catch (e) {
       setSaveErr(e instanceof Error ? e.message : String(e));
@@ -587,7 +597,10 @@ export default function FilesPage() {
 
     const all = entriesFor(listed, dir);
     const needle = norm(q.trim());
-    const folderList = needle ? all.folderList.filter((f) => norm(f.name).includes(needle)) : all.folderList;
+    const folderList = needle
+      ? all.folderList.filter((f) => norm(f.name).includes(needle)
+        || norm(folderLabel(dir ? `${dir}/${f.name}` : f.name)).includes(needle))
+      : all.folderList;
     // Searched by both: the client types "hoja de ruta" (what she sees) and
     // the file is named `2026-08-13-hoja-de-ruta-…` (what's actually there).
     const inDir = needle
@@ -619,7 +632,7 @@ export default function FilesPage() {
                     onClick={() => goTo(crumbs.slice(0, i + 1).join("/"))}
                     className={isLast ? "font-semibold text-ink" : "font-medium text-ink-soft transition hover:text-ink"}
                   >
-                    {seg}
+                    {folderLabel(crumbs.slice(0, i + 1).join("/"))}
                   </button>
                 </span>
               );
@@ -659,7 +672,9 @@ export default function FilesPage() {
                   {!dir && f.name === INBOX
                     ? <Inbox className="h-4 w-4 shrink-0 text-ink-soft" />
                     : <Folder className="h-4 w-4 shrink-0 text-ink-soft" />}
-                  <span className="min-w-0 truncate text-sm font-medium text-ink">{f.name}</span>
+                  <span className="min-w-0 truncate text-sm font-medium text-ink" title={f.name}>
+                    {folderLabel(dir ? `${dir}/${f.name}` : f.name)}
+                  </span>
                   {!dir && f.name === DELIVERABLES && <Chip tone="violet">para vos</Chip>}
                   {!dir && f.name === INBOX && <Chip tone="green">lo que le dejás</Chip>}
                   <span className="flex-1" />
@@ -895,8 +910,17 @@ export default function FilesPage() {
               <IconBtn label="Descargar" disabled={downloading} onClick={downloadFile}>
                 <Download className="h-4 w-4" />
               </IconBtn>
+              {justSaved && (
+                <span className="mr-1 inline-flex items-center gap-1 text-[12px] font-semibold text-c-green-ink">
+                  <Check className="h-3.5 w-3.5" />
+                  Guardado
+                </span>
+              )}
               {viewerMeta?.editable && viewer.text !== null && editing === null && (
-                <IconBtn label="Editar" onClick={() => { setSaveErr(null); setEditing(viewer.text); }}>
+                <IconBtn
+                  label="Editar"
+                  onClick={() => { setSaveErr(null); setJustSaved(false); setEditing(viewer.text); }}
+                >
                   <Pencil className="h-4 w-4" />
                 </IconBtn>
               )}
@@ -946,14 +970,23 @@ export default function FilesPage() {
             )}
             {editing !== null ? (
               // The whole file, as it is on disk: what she saves is exactly
-              // what she sees here, headings and all.
-              <textarea
-                value={editing}
-                onChange={(e) => setEditing(e.target.value)}
-                spellCheck
-                autoFocus
-                className={`${inputCls} min-h-[55vh] resize-y font-mono text-[12.5px] leading-relaxed`}
-              />
+              // what she sees here, headings and all. NOT A RICH EDITOR: the
+              // file is markdown and stays markdown. What changes is that it
+              // reads as a page (the portal's own type, room between lines)
+              // and says, once, that the `#` and the dashes are just text.
+              <div className="flex flex-col gap-2">
+                <p className="text-[12.5px] leading-snug text-ink-soft">
+                  Es texto: cambiá lo que no sea así. Los <b className="font-semibold">#</b> marcan
+                  los títulos y los guiones, las listas; dejalos como están.
+                </p>
+                <textarea
+                  value={editing}
+                  onChange={(e) => setEditing(e.target.value)}
+                  spellCheck
+                  autoFocus
+                  className={`${inputCls} min-h-[55vh] resize-y px-4 py-3 text-[14px] leading-7`}
+                />
+              </div>
             ) : viewer.text !== null && (
               viewer.text.trim() === "" ? (
                 <p className="text-sm text-ink-soft">El archivo está vacío.</p>

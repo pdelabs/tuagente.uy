@@ -28,10 +28,45 @@ const TRAILING_STOPWORDS = new Set([
  *  `validar_hoja_ruta_hoy.py` -- there the technical name IS the information. */
 const TECHNICAL_RE = /\.(py|rb|sh|bash|zsh|pl|js|mjs|cjs|ts|tsx|jsx|ipynb|json|jsonl|ya?ml|toml|ini|cfg|conf|env|log|sql|xml|css|html?)$/i;
 
+/** The files the product itself puts in every workspace, by what they ARE to
+ *  the owner. Their names are addresses the engine picked: «MEMORY» and
+ *  «Borrador» said nothing, and the notebook's said it in English. */
+const KNOWN_FILES: Record<string, string> = {
+  "negocio/borrador.md": "El borrador de tu negocio",
+  "memoria/main/MEMORY.md": "Lo que tu agente se acuerda",
+};
+
+/** The workspace's own folders, in the owner's words. The folders the agent
+ *  makes for her work are named by the agent, in her language, and show as
+ *  they are; these are the engine's and the plugins', and `main` or `flows`
+ *  on her screen was English she never chose. */
+const KNOWN_FOLDERS: Record<string, string> = {
+  negocio: "Tu negocio",
+  memoria: "Memoria",
+  "memoria/main": "De tu agente",
+  entregables: "Entregables",
+  entrada: "Entrada",
+  imagenes: "Imágenes",
+  posteos: "Posteos",
+  flows: "Flujos",
+  interno: "Interno",
+};
+
+const inWorkspace = (path: string) =>
+  (path || "").replace(/^\/?(?:opt\/data\/)?workspace\//, "").replace(/^\.?\/+/, "");
+
+/** A folder's name as the owner reads it, by its full path (`memoria/main`). */
+export function folderLabel(path: string): string {
+  const p = inWorkspace(path).replace(/\/+$/, "");
+  return KNOWN_FOLDERS[p] ?? p.split("/").pop() ?? p;
+}
+
 /** `entregables/2026-08-13-hoja-de-ruta-del-reparto.md` -> "Hoja de ruta del
  *  reparto". Returns the file name as-is when translating it doesn't help
  *  (scaffolding) or when nothing readable is left. */
 export function readableFileName(path: string): string {
+  const known = KNOWN_FILES[inWorkspace(path)];
+  if (known) return known;
   const file = (path || "").split("/").filter(Boolean).pop() || path || "";
   if (!file || TECHNICAL_RE.test(file)) return file;
 
