@@ -170,12 +170,44 @@ def activity():
     }
 
 
+# WHAT ARCHIVOS DOES NOT LIST, because it is the agent's machinery and another
+# tab already shows it. QA's second round (2026-09-23) read, in Archivos,
+# `imagenes/` with every picture next to a `.json` of the same name, and the
+# folders `flows`, `memoria/instagram-creator` and `memoria/main`:
+#
+# - an image's SIDECAR (`imagenes/2026-09-23-1.json` beside `…-1.png`, the
+#   image plugin's `BRIEF`): the prompt it was drawn from, which the creator
+#   reads and the owner has no use for;
+# - `flows/`, which is what the Flujos tab draws;
+# - a sub-agent's notebook (`memoria/<delegate>/`): what the creator noted for
+#   itself. The face's own, `memoria/main/`, stays: it is what her agent
+#   remembers about her, and she reads it.
+#
+# LISTING ONLY. `GET /portal/files/{path}` still serves every one of them by
+# path — another tab, or a chat chip, may name one.
+IMAGES = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+HIDDEN_FOLDERS = ("flows/",)
+OWN_MEMORY = "memoria/main/"
+
+
+def listed_in_files(path: Path, relative: str) -> bool:
+    if relative.startswith(HIDDEN_FOLDERS):
+        return False
+    if relative.startswith("memoria/") and not relative.startswith(OWN_MEMORY):
+        return False
+    if path.suffix == ".json" and any(path.with_suffix(ext).is_file() for ext in IMAGES):
+        return False
+    return True
+
+
 @router.get("/portal/files")
 def files():
     root = config.WORKSPACE
     listed = []
     for path in sorted(root.rglob("*")):
         if not path.is_file() or any(part.startswith(".") for part in path.parts):
+            continue
+        if not listed_in_files(path, str(path.relative_to(root))):
             continue
         stat = path.stat()
         relative = str(path.relative_to(root))

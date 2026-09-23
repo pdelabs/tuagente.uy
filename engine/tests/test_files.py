@@ -14,10 +14,17 @@ what arrives on the wire:
      wrote go out as `text/plain` with `nosniff`, never as a page.
   d. NOT THERE IS A 404 — a name that is not in the workspace and a `../` that
      tries to leave read the same, in Spanish.
+  e. ARCHIVOS DOES NOT LIST THE MACHINERY — QA (2026-09-23) read every image
+     next to a `.json` of its name, and `flows`, `memoria/instagram-creator`
+     and `memoria/main` as folders. An image's sidecar, `flows/` and a
+     sub-agent's notebook are off the LISTING; the face's own memory and a
+     `.json` with no picture beside it stay; and every hidden one is still
+     served by path.
 
 IT CLEANS UP AFTER ITSELF: the folder it wrote is gone by the end.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -30,7 +37,7 @@ CORE = Path(__file__).resolve().parent.parent
 CONTAINER = os.environ.get("CORE_CONTAINER", "tuagente-core")
 ADAPTER = os.environ.get("CORE_ADAPTER", "http://127.0.0.1:8643")
 
-secrets = (CORE / "secrets.env").read_text().splitlines()
+secrets = Path(os.environ.get("CORE_SECRETS", CORE / "secrets.env")).read_text().splitlines()
 KEY = next(line.split("=", 1)[1].strip() for line in secrets if line.startswith("API_SERVER_KEY="))
 
 FOLDER = "prueba-archivos"
@@ -55,6 +62,35 @@ for name, hexed in zip(sys.argv[2::2], sys.argv[3::2]):
 """
 CLEAN = "import shutil, sys; shutil.rmtree('/workspace/' + sys.argv[1], ignore_errors=True)"
 
+# e. Written where the rule looks, each under a name of its own so cleaning up
+# touches nothing the agent wrote.
+LISTED = {
+    f"{FOLDER}/2026-09-23-1.png": PNG,
+    f"{FOLDER}/datos.json": b"{}",
+    "memoria/main/prueba-archivos.md": TEXT,
+}
+UNLISTED = {
+    f"{FOLDER}/2026-09-23-1.json": b'{"prompt": "x"}',
+    "flows/prueba-archivos/FLOW.md": TEXT,
+    "memoria/prueba-archivos/MEMORY.md": TEXT,
+}
+WRITE_AT = r"""
+import sys
+from pathlib import Path
+for name, hexed in zip(sys.argv[1::2], sys.argv[2::2]):
+    path = Path("/workspace") / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(bytes.fromhex(hexed))
+"""
+UNLIST = r"""
+import shutil, sys
+from pathlib import Path
+for name in sys.argv[1:]:
+    (Path("/workspace") / name).unlink(missing_ok=True)
+for folder in ("flows/prueba-archivos", "memoria/prueba-archivos"):
+    shutil.rmtree("/workspace/" + folder, ignore_errors=True)
+"""
+
 
 def inside(code: str, *args: str) -> None:
     subprocess.run(["docker", "exec", CONTAINER, "python3", "-c", code, *args], check=True)
@@ -75,6 +111,12 @@ def fetch(path: str) -> tuple[int, dict, bytes]:
             return response.status, lower(response.headers), response.read()
     except urllib.error.HTTPError as exc:
         return exc.code, lower(exc.headers), exc.read()
+
+
+def listing() -> list[str]:
+    request = urllib.request.Request(f"{ADAPTER}/portal/files", headers={"Authorization": f"Bearer {KEY}"})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return [f["path"] for f in json.loads(response.read())["files"]]
 
 
 def judge(name: str, problems: list[str]) -> list[str]:
@@ -125,8 +167,18 @@ def main() -> int:
             elif "No hay ningún archivo" not in body.decode():
                 problems.append(f"{path} said {body[:80]!r}")
         failures += judge("d. not there is a 404", problems)
+
+        both = {**LISTED, **UNLISTED}
+        inside(WRITE_AT, *[part for name, blob in both.items() for part in (name, blob.hex())])
+        paths = listing()
+        problems = [f"{name} is not listed" for name in LISTED if name not in paths]
+        problems += [f"{name} is listed" for name in UNLISTED if name in paths]
+        problems += [f"{name} is not served by path" for name, blob in UNLISTED.items()
+                     if fetch(name)[2] != blob]
+        failures += judge("e. Archivos does not list the machinery", problems)
     finally:
         inside(CLEAN, FOLDER)
+        inside(UNLIST, *LISTED, *UNLISTED)
 
     print("FILES: " + ("PASS" if not failures else "FAIL"))
     return 1 if failures else 0
