@@ -187,18 +187,24 @@ que puede aparecer en esa pieza —las comillas son cómo `save_post` sabe qué
 dice la lámina—: ningún otro, ni fechas, ni dominios, ni logos ni la marca en
 una esquina, ni subtítulos en inglés, ni marcas de agua, ni el número de
 lámina, ni códigos de color dibujados. El nombre del negocio va sólo en la
-última, adentro de su texto y no como firma en un rincón. Todo en español, con sus tildes, y con
-aire arriba y abajo: Instagram recorta los bordes de una pieza vertical.
+última, adentro de su texto y no como firma en un rincón. Todo en español, con sus tildes.
+
+**Y el texto lejos del borde de arriba y del de abajo**, dicho así en cada
+brief: «nada escrito en el décimo de arriba ni en el décimo de abajo de la
+imagen». La imagen sale un poco más alta que un posteo de Instagram y al
+guardarla se le recorta una franja arriba y otra abajo: lo que esté escrito
+ahí se pierde.
 
 `generate_image(prompt, format="feed")`, **una lámina por vez y en orden**:
-`feed` es la proporción 4:5 del carrusel y todas las piezas van iguales.
+`feed` es la proporción del carrusel y todas las piezas van iguales.
 
 ## 6. Mirá cada una. Siempre
 
 La herramienta te devuelve la imagen y la ves, apenas la generás. Recorrela
 contra estos cinco puntos:
 
-1. **Se lee**: el texto entra, no se corta y no se pisa con el fondo.
+1. **Se lee**: el texto entra, no se corta, no se pisa con el fondo y no
+   toca la franja de arriba ni la de abajo, que se recortan al guardar.
 2. **Es del look que elegiste**: el fondo, los colores y el adorno son los de
    ese bloque y nada más, igual que las otras láminas de este carrusel. Un
    robot, un personaje o un fondo que el bloque no nombra es una falla aunque

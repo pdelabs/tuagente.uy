@@ -91,9 +91,10 @@ MODEL = "openai/gpt-5.4-image-2"
 # accepted vocabulary in the body — 1:1, 3:2, 2:3, 4:3, 3:4, 16:9, 9:16, 21:9,
 # auto (measured 2026-09-14, and only `square` had ever been asked for before,
 # so the shape every post actually uses was the broken one). 3:4 is the nearest
-# vertical, it is honoured exactly (1152×1536), and Instagram crops it to 4:5,
-# which takes about 6% off the top and the bottom: whatever matters stays out
-# of those bands. The old Hermes plugin hit the same wall and answered 1:1,
+# vertical, it is honoured exactly (1152×1536), and the social plugin's
+# `save_post` cuts it to 4:5 by code as the slide goes into a post (`posts.py`,
+# `SIZE`), which takes 48 px off the top and 48 off the bottom: whatever
+# matters stays out of those bands, and the post skill's briefs say so. The old Hermes plugin hit the same wall and answered 1:1,
 # which is honest and gives up the vertical — the thing a feed post is for.
 RATIO = {"feed": "3:4", "square": "1:1", "story": "9:16"}
 

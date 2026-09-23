@@ -86,6 +86,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
+from PIL import Image, ImageOps
 from pydantic_ai import ModelRetry, RunContext
 from pydantic_ai.messages import BinaryImage
 from pydantic_ai.toolsets import FunctionToolset
@@ -141,13 +142,28 @@ TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 
 # THE FORMAT OF A POST IS NOT THE FORMAT OF A PIECE, and that is why
 # `carousel` is here and NOT in the image plugin's `RATIO`. A carousel's slides
-# are 4:5, exactly what `feed` already asks for, so a fourth ratio would be the
+# are 4:5, exactly what a `feed` piece is once `fit` has cut it (`SIZE`), so a
+# fourth ratio would be the
 # same geometry under a second name — a new key, a new `Literal` and a new line
 # of docstring in another plugin, for nothing. The skill tells the creator to
 # generate every slide as `feed`, this word says what the client ends up
 # flipping through, and the image plugin's vocabulary stays the three shapes a
 # picture is ever cut to.
 Format = Literal["feed", "square", "story", "carousel"]
+
+# THE PIXELS A POST IS SAVED AT, and they are Instagram's, not the image
+# model's. The provider has no 4:5 and answers `feed` as 3:4, 1152×1536 (the
+# image plugin's `RATIO` has the measurement), and Instagram's portrait feed is
+# 4:5: left to Instagram, the crop happened on the phone of whoever published,
+# and the API refuses a 3:4 outright (its narrowest is 4:5). So the slide is
+# cut HERE, by code, as it goes into the post: centred, which takes 48 px off
+# the top and 48 off the bottom of a 1152×1536 — about 3% each — and then
+# scaled to 1080 wide. The brief keeps its text out of those bands
+# (`skills/post/SKILL.md`, step 5). Only the cut is kept: the bands are air by
+# design, and a second copy of every slide is a second answer to «which one is
+# the post».
+SIZE = {"feed": (1080, 1350), "carousel": (1080, 1350),
+        "square": (1080, 1080), "story": (1080, 1920)}
 
 # Read by the client: the portal shows `error.message` on the tab she is on.
 NO_POST = "No hay ningún posteo {post_id} en este agente."
@@ -290,6 +306,18 @@ def incoming(workspace: Path, relative: str) -> Path:
             "`replace_slide`"
         )
     return path
+
+
+def fit(source: Path, target: Path, format: str) -> None:
+    """`source` cut to the post's shape and written as `target`; `source` goes.
+
+    `ImageOps.fit` is the centred crop and the resize in one call. The file
+    type is the target's suffix, which is the source's: a client's JPEG stays a
+    JPEG and the route keeps serving it with its own type.
+    """
+    with Image.open(source) as picture:
+        ImageOps.fit(picture, SIZE[format], Image.Resampling.LANCZOS).save(target)
+    source.unlink()
 
 
 def brief_of(image: Path) -> str:
@@ -611,13 +639,15 @@ def toolset() -> FunctionToolset:
         for number, source in enumerate(sources, 1):
             name = f"{number:02d}{source.suffix.lower()}"
             briefs.append(brief_of(source))
-            source.rename(staging / name)
+            fit(source, staging / name, format)
             names.append(name)
         data = {
             "id": post_id,
             "slug": slug,
             "date": date,
             "format": format,
+            # What every slide was cut to (`SIZE`), in pixels.
+            "size": list(SIZE[format]),
             # Which of the brand's looks it wears, read off the first brief
             # (`looks.py`). `None` for a brand that declares none.
             "look": look,
@@ -764,8 +794,12 @@ def toolset() -> FunctionToolset:
         # can quote, and the picture itself, which Pydantic AI puts in front of
         # the model as an image. Without this the creator fixed slides it had
         # never seen, from the brief and the client's words alone.
+        # And it is the slide AS POSTED: cut to Instagram's frame (`fit`), not
+        # the taller picture `generate_image` handed over. What the client
+        # says is cut off is cut off here.
         return [
-            f"La lámina {number} de {len(names)} de «{post_id}», tal como está ahora.",
+            f"La lámina {number} de {len(names)} de «{post_id}», tal como está "
+            "ahora y como sale en Instagram.",
             BinaryImage(path.read_bytes(), media_type=TYPES[path.suffix.lower()]),
         ]
 
@@ -888,7 +922,9 @@ def toolset() -> FunctionToolset:
         # slide that comes back as a different type takes its own extension,
         # and the post would otherwise list `02.png` with `02.webp` beside it.
         name = f"{number:02d}{source.suffix.lower()}"
-        source.rename(directory / name)
+        # Cut to the post's shape like every slide of it, so a fix is never
+        # the one slide of a carousel that comes out taller.
+        fit(source, directory / name, data["format"])
         names[number - 1] = name
         data["versions"][name] = history
         prompts[number - 1] = brief

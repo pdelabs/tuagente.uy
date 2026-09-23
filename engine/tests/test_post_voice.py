@@ -57,6 +57,7 @@ INSIDE = r"""
 import asyncio, base64, json, shutil, sqlite3, sys, types
 from datetime import datetime
 from pathlib import Path
+from PIL import Image
 
 sys.path.insert(0, "/opt/kit/plugins/social/core")
 sys.path.insert(0, "/opt/kit/plugins/image/core")
@@ -74,7 +75,8 @@ made = []
 
 def picture(name, prompt, reference=None):
     path = IMG / name
-    path.write_bytes(b"\x89PNG\r\n\x1a\n" + name.encode())
+    # A real picture: `save_post` cuts every slide to Instagram's shape.
+    Image.new("RGB", (12, 16), "white").save(path)
     made.append(path)
     record = {"prompt": prompt, "format": "feed", "model": "prueba",
               "created_at": "2026-09-23T09:00:00-03:00"}

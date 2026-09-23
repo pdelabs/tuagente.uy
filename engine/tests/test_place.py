@@ -10,8 +10,10 @@ has to get right, because what it does is arithmetic and not judgement:
      its own sidecar, and the slide it was made from still where it was, with
      its own. The creator chooses between the two, so losing the bare one would
      be the tool deciding for it.
-  b. IT IS STILL THE SLIDE — the same pixel size. A composite that resized the
-     piece would be a carousel where one slide is a different shape.
+  b. IT IS THE SLIDE IN THE POST'S FRAME — 1080×1350, the size `save_post`
+     cuts every slide to (`posts.SIZE`). Cut first and placed after, so the
+     corner the mark hugs is the corner the client sees: placed on the taller
+     picture, the save's cut took half of the air under it.
   c. THE ASSET IS IN THE CORNER, AND ITS TRANSPARENCY SURVIVED — the asset's
      opaque half is the asset's colour at the corner it was asked for, the
      quadrant it left transparent is still the slide's background, and so is a
@@ -44,13 +46,16 @@ CONTAINER = os.environ.get("CORE_CONTAINER", "tuagente-core")
 
 # The slide, the asset, and what the tool is asked for. The numbers are here so
 # the arithmetic is asserted against something written down, not against what
-# the code happens to compute: 600 × 0.28 = 168 wide, 600 × 0.06 = 36 of air,
-# so a square asset sits at (396, 546) of a 600×750 slide.
-WIDE, TALL = 600, 750
+# the code happens to compute. The slide is what `generate_image` hands over
+# for `feed`, 1152×1536, and the tool cuts it to the post's 1080×1350 BEFORE
+# placing anything (`posts.SIZE`): 1080 × 0.28 = 302 wide, 1080 × 0.06 = 65 of
+# air, so a square asset sits at (713, 983) of the frame the client will see.
+WIDE, TALL = 1152, 1536
+FRAME = [1080, 1350]
 SIZE, MARGIN = 0.28, 0.06
 CORNER = "bottom-right"
-PLACED = 168
-GAP = 36
+PLACED = 302
+GAP = 65
 BACKGROUND = (20, 19, 31, 255)
 ASSET_COLOUR = (233, 76, 61, 255)
 PROMPT = "Instagram slide, fondo #14131F, titular blanco. Titular: la prueba."
@@ -105,9 +110,9 @@ try:
     made["out_brief"] = out.with_suffix(".json")
 
     composite = Image.open(out).convert("RGBA")
-    width = round(WIDE * SIZE)
-    gap = round(WIDE * MARGIN)
-    left, top = WIDE - width - gap, TALL - width - gap
+    width = round(composite.width * SIZE)
+    gap = round(composite.width * MARGIN)
+    left, top = composite.width - width - gap, composite.height - width - gap
     refused = ""
     try:
         tools["place_image"](ctx, f"imagenes/{slide.name}", "no-existe.png", CORNER)
@@ -172,12 +177,12 @@ def main() -> int:
     failures += judge("a. the picture landed and the bare one stayed", problems)
 
     failures += judge(
-        "b. it is still the slide",
-        [] if measured["size"] == [WIDE, TALL] else [f"it is {measured['size']}"],
+        "b. it is the slide in the post's frame",
+        [] if measured["size"] == FRAME else [f"it is {measured['size']}"],
     )
 
     problems = []
-    if measured["placed"] != [PLACED, GAP, WIDE - PLACED - GAP, TALL - PLACED - GAP]:
+    if measured["placed"] != [PLACED, GAP, FRAME[0] - PLACED - GAP, FRAME[1] - PLACED - GAP]:
         problems.append(f"the geometry is {measured['placed']}")
     if tuple(measured["opaque"]) != ASSET_COLOUR:
         problems.append(f"the asset's colour is not at the corner: {measured['opaque']}")

@@ -40,6 +40,12 @@ instead of them. Free, a second, and every claim is about what is left on disk:
      left missing. The first version read the brief after moving the old
      slide out, and died there with a hole in the post.
 
+  f. EVERY SLIDE IS SAVED AT INSTAGRAM'S SHAPE — the provider answers `feed`
+     as 3:4 (1152×1536) and the portrait feed is 4:5: `save_post` and
+     `replace_slide` cut each slide to 1080×1350 in the middle, so the 48 px
+     bands painted red at its top and bottom are gone and nothing else is,
+     `post.json` records the size, and a `square` post comes out 1080×1080.
+
 IT CLEANS UP AFTER ITSELF: the post, the pictures, the scratch folders and the
 events it wrote are gone by the end, whatever happened.
 
@@ -76,10 +82,21 @@ IMG = WS / "imagenes"
 made = []
 
 
-# A throwaway slide with its sidecar, the shape `generate_image` leaves.
-def picture(name, prompt, brief=True):
+# A throwaway slide with its sidecar, the shape `generate_image` leaves: a
+# REAL picture at the provider's 3:4, because `save_post` cuts every slide to
+# Instagram's 4:5 and a file that is not a picture does not get cut. The top
+# and bottom 48 px are red — exactly what the cut takes off — so a slide that
+# still has red on its first or last row was not cut, or not in the middle.
+def picture(name, prompt, brief=True, size=(1152, 1536)):
+    from PIL import Image, ImageDraw
     path = IMG / name
-    path.write_bytes(b"\x89PNG\r\n\x1a\n" + name.encode())
+    slide = Image.new("RGB", size, "white")
+    band = (size[1] - size[0] * 5 // 4) // 2
+    if band > 0:
+        draw = ImageDraw.Draw(slide)
+        draw.rectangle((0, 0, size[0], band - 1), fill="red")
+        draw.rectangle((0, size[1] - band, size[0], size[1]), fill="red")
+    slide.save(path)
     made.append(path)
     if brief:
         sidecar = path.with_suffix(".json")
@@ -113,6 +130,26 @@ try:
     report["saved"] = saved
     before = {p.name: p.read_bytes() for p in sorted(directory.iterdir()) if p.is_file()}
 
+    # (f) every slide as Instagram's 4:5: its size, and whether a red band
+    # survived on its first or last row.
+    from PIL import Image
+    def shape(path):
+        with Image.open(path) as slide:
+            rgb = slide.convert("RGB")
+            edges = [rgb.getpixel((rgb.width // 2, y)) for y in (0, rgb.height - 1)]
+            return {"size": list(slide.size), "red_edge": any(px == (255, 0, 0) for px in edges)}
+    report["cut"] = {
+        "slides": {name: shape(directory / name) for name in ("01.png", "02.png")},
+        "recorded": json.loads((directory / "post.json").read_text()).get("size"),
+    }
+    square = tools["save_post"](
+        ctx, SLUG + "-cuadrado", CAPTION, ["uno"], "square",
+        [picture("prueba-f.png", "brief cuadrado", size=(1024, 1024))], "alt",
+    )
+    report["cut"]["square"] = shape(posts.folder(square["saved"]) / "01.png")
+    import shutil as _shutil
+    _shutil.rmtree(posts.folder(square["saved"]))
+
     # (d) seeing a slide. The picture is not JSON, so what is reported is what
     # it is and whether its bytes are the slide's.
     seen = tools["view_slide"](ctx, post_id, 2)
@@ -137,6 +174,7 @@ try:
         "files": sorted(p.name for p in directory.iterdir() if p.is_file()),
         "kept_file": (directory / "anteriores" / "01-1.png").is_file(),
     }
+    report["cut"]["fixed"] = shape(directory / "01.png")
     # Back to how (a) to (c) expect it, byte for byte: they compare the folder
     # with what it was right after the save.
     (directory / "01.png").write_bytes(before["01.png"])
@@ -336,6 +374,20 @@ def main() -> int:
     if "01.png" not in after["files"] or "02.png" not in after["files"] or not after["kept_file"]:
         problems.append(f"the folder has {after['files']}")
     failures += judge("e. a post from before briefs were kept can have a slide fixed", problems)
+
+    problems = []
+    cut = r["cut"]
+    for name, slide in list(cut["slides"].items()) + [("the fixed 01.png", cut["fixed"])]:
+        if slide["size"] != [1080, 1350]:
+            problems.append(f"{name} is {slide['size']}")
+        if slide["red_edge"]:
+            problems.append(f"{name} kept a band the cut should have taken")
+    if cut["recorded"] != [1080, 1350]:
+        problems.append(f"post.json records {cut['recorded']}")
+    if cut["square"]["size"] != [1080, 1080]:
+        problems.append(f"a square post is {cut['square']['size']}")
+    print(f"  slides {cut['slides']['01.png']['size']} · square {cut['square']['size']}")
+    failures += judge("f. every slide is saved at Instagram's shape, cut in the middle", problems)
 
     print("POST TOOLS: PASS" if not failures else "POST TOOLS: FAIL")
     return 1 if failures else 0
