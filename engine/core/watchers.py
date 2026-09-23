@@ -38,3 +38,29 @@ def register(name: str, fn: Callable[[], str | None], every: int) -> None:
     if name in WATCHERS:
         raise ValueError(f"two plugins registered the watcher {name!r}")
     WATCHERS[name] = Watcher(fn, every)
+
+
+# ── tickers ─────────────────────────────────────────────────────────────────
+#
+# THE SAME CLOCK WITH NO FLOW AT THE END OF IT. A watcher's text becomes a run
+# of the agent; some code on a clock never should — the `notify` plugin reads
+# what happened and mails the owner, and a model turn there would be the
+# fifteen-minute cron all over again. A ticker is called every `every` seconds
+# and what it does is all there is.
+
+
+@dataclass(frozen=True)
+class Ticker:
+    # SYNC, in a thread, like a watcher. What it raises is logged, once per
+    # distinct error, and the next call happens on schedule.
+    fn: Callable[[], None]
+    every: int
+
+
+TICKERS: dict[str, Ticker] = {}
+
+
+def register_ticker(name: str, fn: Callable[[], None], every: int) -> None:
+    if name in TICKERS:
+        raise ValueError(f"two plugins registered the ticker {name!r}")
+    TICKERS[name] = Ticker(fn, every)
