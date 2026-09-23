@@ -8,19 +8,19 @@
 // charged US$ 1.52. Nine times too low, which is the worst direction — the
 // client plans around that and finds out the truth when the invoice arrives.
 //
-// Now the number comes from whoever charges: the engine asks the provider
-// (OpenRouter) what THIS agent spent and serves back whatever it answered.
+// Now the numbers are THIS agent's own: every turn and every call outside one
+// records what it cost, priced the way the provider (OpenRouter) charges it.
 // That's why the screen is short: three numbers, the key's cap if there is
 // one -- a different number, about the key and not the agent -- and where
 // they come from. The provider's name stays off the screen: to the owner it
-// is a word that means nothing. No tokens (no client knows what one is), no sessions, no
-// bars — we don't have a daily series, and drawing one with this little data
-// would be making it up.
+// is a word that means nothing. No tokens (no client knows what one is), no
+// sessions, no bars — we don't have a daily series, and drawing one with this
+// little data would be making it up.
 //
-// Contract (adapter v0.39): GET {adapter}/portal/usage →
-//   { available: true, today_usd, month_usd, total_usd, limit_usd, updated_at }
-//   or { available: false, reason } if the agent has no provider key or the
-//   provider didn't answer.
+// Contract: GET {adapter}/portal/usage →
+//   { available: true, today_usd, month_usd, total_usd, unpriced,
+//     key: { limit_usd, usage_usd } | null, updated_at }
+//   `unpriced` > 0 makes the amounts a floor («≥»).
 // Any amount can come back null: that means "the provider doesn't report it",
 // which is NOT zero. A null renders as "—" and never as "US$ 0.00".
 
@@ -132,21 +132,32 @@ export default function UsagePage() {
     const today = num(usage.today_usd);
     const month = num(usage.month_usd);
     const total = num(usage.total_usd);
-    const limit = num(usage.limit_usd);
+    const limit = num(usage.key?.limit_usd);
+    // Calls the provider left without a price: the amounts are then a floor,
+    // and saying «US$ 0,42» flat would call those calls free.
+    const floor = (usage.unpriced ?? 0) > 0;
+    const shown = (v: number | null) => (floor && v != null ? `≥ ${usd(v)}` : amount(v));
 
     return (
       <>
         <Card>
           <div className="grid gap-5 sm:grid-cols-3">
-            <Stat label="Hoy" value={amount(today)} big />
-            <Stat label="Este mes" value={amount(month)} />
-            <Stat label="Desde siempre" value={amount(total)} />
+            <Stat label="Hoy" value={shown(today)} big />
+            <Stat label="Este mes" value={shown(month)} />
+            <Stat label="Desde siempre" value={shown(total)} />
           </div>
+          {floor && (
+            <p className="mt-3 text-[12px] leading-snug text-ink-soft">
+              Son al menos estos montos: {usage.unpriced === 1
+                ? "una consulta no trajo su precio"
+                : `${usage.unpriced} consultas no trajeron su precio`}, así que lo real
+              puede ser un poco más.
+            </p>
+          )}
           <p className="mt-4 border-t border-black/[0.07] pt-3.5 text-[11px] leading-snug text-ink-soft">
-            Los números los da el proveedor de IA: es lo que tu agente gasta de verdad,
-            no una estimación nuestra. Incluye todo lo que hace — responder, generar
-            imágenes, buscar. No es tu abono y no es un cobro: está para que veas
-            cuánto se usa.
+            Es lo que gastó este agente, consulta por consulta, con los precios del
+            proveedor de IA. Incluye todo lo que hace — responder, generar imágenes,
+            buscar. No es tu abono y no es un cobro: está para que veas cuánto se usa.
           </p>
         </Card>
 

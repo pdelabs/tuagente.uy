@@ -668,15 +668,14 @@ export const getFileBytes = async (c: PortalConfig, path: string) => {
   if (!res.ok) throw httpError(res.status, path);
   return res.arrayBuffer();
 };
-/** What the agent has spent, per whoever bills for it.
+/** What THIS agent has spent, from its own events: each turn and each call
+ *  outside one records what it cost (`engine/server/extra.py`, `usage`). The
+ *  days are the business's.
  *
- *  The number comes from OpenRouter for THIS agent's key -- adding up what
- *  passed through a proxy once missed it 9x LOW, because image generation
- *  hits the provider directly. The key never reaches the browser: the engine
- *  makes the call.
- *
- *  `available: false` (no key, or the provider isn't answering) comes back
- *  with 200: the screen says so and no number gets drawn. */
+ *  THE KEY'S FIGURES TRAVEL APART, under `key`: the provider key can serve
+ *  more than this agent, so its cap and its total are not this agent's --
+ *  next to each other they read as "over the cap" when it wasn't. `key` is
+ *  null when there is no key or the provider doesn't answer. */
 export type Usage = {
   available?: boolean;
   reason?: string;
@@ -685,8 +684,10 @@ export type Usage = {
   today_usd?: number | null;
   month_usd?: number | null;
   total_usd?: number | null;
-  /** The key's cap; null = no cap. */
-  limit_usd?: number | null;
+  /** Calls nobody could price: with any, the amounts are a floor. */
+  unpriced?: number;
+  /** The key's cap (null = no cap) and what the key has been charged. */
+  key?: { limit_usd: number | null; usage_usd: number | null } | null;
   updated_at?: string;
 };
 export const getUsage = (c: PortalConfig) => get<Usage>(c.adapter, "/portal/usage", c);
