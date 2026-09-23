@@ -134,8 +134,7 @@ function canonicalUrlOf(entity: Entity): string {
     return urlFor("/app/artifacts", { [PARAM.artifact]: entity.id });
   }
   if (entity.kind === "file") return urlFor("/app/files", { [PARAM.file]: entity.path });
-  if (entity.kind === "post") return urlFor("/app/posts", { [PARAM.post]: entity.id });
-  return urlFor("/app/connections", { [PARAM.connection]: entity.id });
+  return urlFor("/app/posts", { [PARAM.post]: entity.id });
 }
 
 function EntityViewer({ cfg, entity, onClose }: {
@@ -159,11 +158,11 @@ function EntityViewer({ cfg, entity, onClose }: {
   useEffect(() => {
     let alive = true;
     setErr(null);
-    // "connection" never reaches here: its chip IS the card and opens no modal.
-    // Neither does "post": its chip is a link to Posteos, where the picture is
-    // drawn at the size it is going out at instead of squeezed into a modal.
-    if (entity.kind === "connection" || entity.kind === "permissions"
-        || entity.kind === "capability" || entity.kind === "post") return;
+    // "capability" never reaches here: its chip IS the card and opens no
+    // modal. Neither does "post": its chip is a link to Posteos, where the
+    // picture is drawn at the size it is going out at instead of squeezed
+    // into a modal.
+    if (entity.kind === "capability" || entity.kind === "post") return;
     // A photo or a PDF isn't requested as text: it's shown or downloaded.
     if (isPhoto || downloadOnly) return;
     const p =
@@ -181,8 +180,6 @@ function EntityViewer({ cfg, entity, onClose }: {
         ticket: "Esa tarea ya no existe.",
         artifact: "Esa visualización ya no está disponible.",
         file: "No encontré ese archivo.",
-        connection: "",
-        permissions: "",
         capability: "",
         post: "",
       }[entity.kind];
@@ -204,8 +201,7 @@ function EntityViewer({ cfg, entity, onClose }: {
     }
   }, [cfg, isFile, path]);
 
-  if (entity.kind === "connection" || entity.kind === "permissions"
-      || entity.kind === "capability") return null; // its chip IS the card
+  if (entity.kind === "capability") return null; // its chip IS the card
   if (entity.kind === "post") return null; // its chip is a link to Posteos
 
   const title =

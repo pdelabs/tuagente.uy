@@ -8,7 +8,6 @@
 import { createContext, useContext } from "react";
 import Link from "next/link";
 import { FileText, Image as ImageIcon, Images, LayoutDashboard, Sheet, Ticket as TicketIcon } from "lucide-react";
-import { ConnectionCardInline, PermissionsInline } from "./ConnectionChip";
 import { CapabilityInline } from "./CapabilityChip";
 import { PARAM } from "./routes";
 
@@ -17,8 +16,6 @@ export type Entity =
   | { kind: "file"; path: string }
   | { kind: "artifact"; id: string }
   | { kind: "post"; id: string }
-  | { kind: "connection"; id: string }
-  | { kind: "permissions"; id: string }
   | { kind: "capability"; id: string };
 
 const TICKET_RE = /^t_[0-9a-f]{6,16}$/i;
@@ -34,14 +31,6 @@ const ARTIFACT_RE = /^art_\d{10}_[\w-]+$/i;
  *  has to carry a letter, and a dot is not part of an id). The source of the
  *  shape is the tool's own `SLUG`: lowercase, digits and hyphens, 40 max. */
 const POST_RE = /^\d{4}-\d{2}-\d{2}-(?=[a-z0-9-]*[a-z])[a-z0-9][a-z0-9-]{0,39}$/i;
-// The agent mentions a catalog connection as `connection:google-workspace`
-// (its SOUL teaches it to): the chat draws it as a card with status and a
-// button.
-const CONNECTION_RE = /^connection:([a-z0-9][a-z0-9-]*)$/i;
-// `permissions:whatsapp` -- the agent CAN'T change the policy, but it can
-// point at where it gets changed: instead of a flat "I can't send WhatsApps",
-// it puts the control right there and the client decides on the spot.
-const PERMISSIONS_RE = /^permissions:([a-z0-9][a-z0-9-]*)$/i;
 // `capability:image-editing` -- what the agent CAN'T do yet and could be
 // turned on. The SOUL teaches it to write this alone on its own line and
 // promises "the portal turns it into a card": until now the portal didn't,
@@ -99,10 +88,6 @@ export function detectEntity(raw: string): Entity | null {
   if (TICKET_RE.test(text)) return { kind: "ticket", id: text };
   if (ARTIFACT_RE.test(text)) return { kind: "artifact", id: text };
   if (POST_RE.test(text)) return { kind: "post", id: text.toLowerCase() };
-  const cx = CONNECTION_RE.exec(text);
-  if (cx) return { kind: "connection", id: cx[1].toLowerCase() };
-  const pm = PERMISSIONS_RE.exec(text);
-  if (pm) return { kind: "permissions", id: pm[1].toLowerCase() };
   const cap = CAPABILITY_RE.exec(text);
   if (cap) return { kind: "capability", id: cap[1].toLowerCase() };
   const m = FILE_RE.exec(text);
@@ -145,9 +130,6 @@ function PostLink({ id }: { id: string }) {
 
 export function EntityChip({ entity, label }: { entity: Entity; label: string }) {
   const open = useOpenEntity();
-  // A connection doesn't open a modal: it IS the card, with status and a button.
-  if (entity.kind === "connection") return <ConnectionCardInline id={entity.id} />;
-  if (entity.kind === "permissions") return <PermissionsInline id={entity.id} />;
   if (entity.kind === "capability") return <CapabilityInline id={entity.id} />;
   // A post opens in its own tab, where it is drawn the size it is going out at.
   if (entity.kind === "post") return <PostLink id={entity.id} />;

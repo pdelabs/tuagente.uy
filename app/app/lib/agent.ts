@@ -343,49 +343,6 @@ async function del<T>(base: string, path: string, cfg: PortalConfig): Promise<T>
   return res.json();
 }
 
-// The mark the portal puts on a ticket it creates itself when requesting a
-// connection. Without it, that request comes back through Approvals and the
-// portal sends the client to approve their own request -- a test client
-// described it as "asking for a quote and getting sent to sign it yourself".
-// It travels as an HTML comment: the markdown sanitizer never shows it.
-export const REQUEST_MARKER = "<!-- portal:request -->";
-// Tickets created before the rename still carry the old marker -- they live
-// in kanban.db, which nothing here ever rewrites -- so the reader keeps
-// accepting it too.
-const LEGACY_REQUEST_MARKER = "<!-- portal:pedido -->";
-/** Requests older than the marker are recognized by how the body starts. */
-export const REQUEST_PREFIX = "Pedido desde el portal.";
-
-/** Did the CLIENT request this ticket (and it's in our own queue), or is it
- *  the agent asking for permission? They're two different things: the
- *  client's own don't get approved and don't count toward the menu badge.
- *
- *  Lives here and not in every screen because it used to be copied in four
- *  places and they'd already drifted apart: the sidebar badge applied the new
- *  filter and Home didn't, so the menu said 2 and the home page said "3
- *  things waiting on your ok" on the very same screen. */
-export function isClientRequest(body: string | null | undefined): boolean {
-  const b = body ?? "";
-  return b.includes(REQUEST_MARKER) || b.includes(LEGACY_REQUEST_MARKER) || b.trimStart().startsWith(REQUEST_PREFIX);
-}
-
-/** Which connections the client has already requested and are still pending,
- *  by the catalog label the title was built with (`Conectar {label}`).
- *
- *  THE TITLE IS THE ONLY LINK: the ticket doesn't store the connection's id,
- *  so anyone answering "did I already ask for this?" has to read it from
- *  there. Lives here -- not in Connections -- because ever since Team also
- *  leaves the request, two screens read the same convention, and if they
- *  drift apart one of the two offers the client something they're already
- *  waiting on. */
-export function requestedConnections(tickets: Ticket[] | null | undefined): Set<string> {
-  return new Set(
-    (tickets ?? [])
-      .filter((t) => isClientRequest(t.body) && t.status !== "done" && t.status !== "archived")
-      .map((t) => (t.title ?? "").replace(/^Conectar\s+/i, "").trim().toLowerCase()),
-  );
-}
-
 /** The shape the `approval` skill gives a request: a markdown box ("if you
  *  approve / if you reject / why"). It's what tells a PROPOSAL apart from any
  *  other text from the agent. */
@@ -647,21 +604,6 @@ export const getApprovals = (c: PortalConfig) => get<{ approvals: any[] }>(c.ada
 export const approve = (c: PortalConfig, id: string, correction?: string) =>
   post<{ ok: boolean }>(c.adapter, `/portal/approvals/${id}/approve`, c,
      correction ? { correction } : undefined);
-export const getGoogleAuthUrl = (c: PortalConfig) =>
-  post<{ auth_url: string }>(c.adapter, "/portal/connections/google/auth-url", c);
-export const exchangeGoogleAuthCode = (c: PortalConfig, code: string) =>
-  post<{ ok: boolean }>(c.adapter, "/portal/connections/google/auth-code", c, { code });
-export const getWhatsAppPairStatus = (c: PortalConfig) =>
-  get<{ paired: boolean; pairing: boolean; has_qr: boolean }>(c.adapter, "/portal/connections/whatsapp/pair", c);
-export const startWhatsAppPairing = (c: PortalConfig) =>
-  post<{ ok?: boolean }>(c.adapter, "/portal/connections/whatsapp/pair/start", c);
-export const getWhatsAppPairQr = async (c: PortalConfig) => {
-  const res = await fetch(`${c.adapter}/portal/connections/whatsapp/pair/qr.png?t=${Date.now()}`, {
-    headers: headers(c),
-  });
-  if (!res.ok) throw await failure(res, "WhatsApp QR");
-  return res.blob();
-};
 export type Rejection = {
   ok: boolean;
   /** What state the ticket ended up in: `blocked` with an ordinary "no" (same
@@ -742,11 +684,6 @@ export const saveIdentity = (
     contact?: { channel: "email" | "none"; value?: string };
   },
 ) => post<{ ok: boolean }>(c.adapter, "/portal/identity", c, identity);
-/** Change what the agent can do with a connection. Client only. */
-export const savePermissions = (
-  c: PortalConfig, id: string, permissions: { read?: boolean; act?: boolean },
-) => post<{ ok: boolean; permissions: { read: boolean; act: boolean } }>(
-  c.adapter, `/portal/connections/${encodeURIComponent(id)}/permissions`, c, permissions);
 export const getActivity = (c: PortalConfig) => get<{ events: any[] }>(c.adapter, "/portal/activity", c);
 export const getFiles = (c: PortalConfig) => get<{ files: any[] }>(c.adapter, "/portal/files", c);
 export const getFileText = async (c: PortalConfig, path: string) => {
@@ -873,38 +810,6 @@ export const getSkillContent = (c: PortalConfig, name: string) =>
  *  on its own within a few minutes, nothing needs restarting. */
 export const saveSkill = (c: PortalConfig, name: string, content: string) =>
   post<{ ok: boolean }>(c.adapter, `/portal/skills/${encodeURIComponent(name)}`, c, { content });
-
-/** Which of the client's systems the agent is plugged into.
- *  The adapter reports PRESENCE, never values: no credential travels here. */
-export type Connection = {
-  id: string;
-  label: string;
-  group: "channel" | "system" | string;
-  purpose: string;
-  how: string;
-  effort?: "minutes" | "hours" | "days" | string;
-  who?: "client_only" | "assisted" | "us" | string;
-  warning?: string | null;
-  recommended?: boolean;
-  status: "connected" | "disconnected" | "blocked" | "ready" | string;
-  missing: { type: string; name: string }[];
-  missing_prerequisite: { type: string; name: string }[];
-  /** true if THIS client's flow needs it (adapter >=0.24). */
-  required?: boolean;
-  /** What the agent can do with this connection (adapter >=0.33). The client
-   *  decides it and it's enforced by the guard, not the prompt: the agent
-   *  can't change it (the file is mounted read-only on its side). */
-  permissions?: { read: boolean; act: boolean };
-  /** "google-oauth" = the portal connects it on its own with its dialog
-   *  (adapter >=0.25); with no setup flow, the button falls back to "Ask them
-   *  to connect it". */
-  setup_flow?: string | null;
-  /** "ready" status (adapter >=0.27): our half is there (the bot exists) but
-   *  the client never chatted. `link` is the t.me/… for their first message. */
-  link?: string | null;
-};
-export const getConnections = (c: PortalConfig) =>
-  get<{ available: boolean; connections: Connection[] }>(c.adapter, "/portal/connections", c);
 
 /** What the agent CAN'T do yet and could be turned on. The adapter computes it
  *  by PRESENCE (`active`), same as connections, and hides our own internals
@@ -1063,39 +968,6 @@ export const commentTicket = (c: PortalConfig, id: string, body: string, author?
 export type TicketStatus = "done" | "blocked" | "ready" | "archived";
 export const setTicketStatus = (c: PortalConfig, id: string, status: TicketStatus) =>
   post<{ ok: boolean }>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}/status`, c, { status });
-
-/** ONLY ONE PLACE CREATES CONNECTION REQUESTS. Connections and the hiring flow
- *  used to build them separately, with different bodies and a stray fetch on
- *  one side.
- *
- *  AND THEY'RE BORN BLOCKED, which is the part that matters. `POST
- *  /portal/tickets` creates them `ready` and already assigned, so the
- *  dispatcher picks them up within seconds even though the body says "don't
- *  do anything on your own": the agent finishes its run saying it's waiting
- *  on something, the engine reads that as `dependency_wait` -- which is not a
- *  sticky block -- returns it to `ready` and picks it up again. Measured on
- *  8/13 against a lab agent: 8 runs on t_dd0c0fa1 and 10 on another, ~US$0.007
- *  each, until the model happened to use the typed block. With the ticket
- *  blocked from the start (`hermes kanban block`, which does emit the sticky
- *  event) the worker leaves it alone: verified on t_276ddb2b, zero `claimed`
- *  in 4 minutes against an unblocked control that took off running at 6
- *  seconds.
- *
- *  Blocking is also where the client expects to see it: the approvals queue
- *  is the blocked tickets, and it shows up there under "What you asked for". */
-export async function createConnectionRequest(
-  c: PortalConfig, request: { title: string; body: string },
-) {
-  const r = await createTicket(c, {
-    title: request.title,
-    body: `${REQUEST_PREFIX} ${REQUEST_MARKER}\n\n${request.body}`,
-  });
-  // If it couldn't be blocked, the request still got recorded: the worst that
-  // happens is the agent picks it up, which is exactly what used to happen
-  // before.
-  if (r?.id) await setTicketStatus(c, r.id, "blocked").catch(() => {});
-  return r;
-}
 
 export type CronRun = {
   id: string; status: string; claimed_at: string;
@@ -1341,13 +1213,11 @@ export async function chatStream(
   return acc;
 }
 
-/** A connection's label by its id, to name it wherever the client needs it.
- *  Catalog ids (`email`, `google-workspace`) are ours; the client should never
- *  have to read them. If the catalog isn't at hand, it falls back to
- *  something readable instead of spitting out the id. */
-export function connectionLabel(id: string, connections?: Connection[] | null): string {
-  const c = connections?.find((x) => x.id === id);
-  if (c?.label) return c.label;
+/** A connection's label by its id, to name it wherever the client needs it
+ *  (a flow's `missing_connections`). Catalog ids (`email`, `google-workspace`)
+ *  are ours; the client should never have to read them, so an unknown one
+ *  falls back to something readable instead of the raw id. */
+export function connectionLabel(id: string): string {
   const KNOWN: Record<string, string> = {
     email: "el correo de la empresa",
     whatsapp: "WhatsApp",

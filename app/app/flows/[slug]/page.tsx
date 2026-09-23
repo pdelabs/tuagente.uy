@@ -13,14 +13,14 @@ import {
   RefreshCw, Workflow, Zap, type LucideIcon,
 } from "lucide-react";
 import {
-  createTicket, connectionLabel, getFlowDetail, getFlows, getJobs, loadConfig,
+  createTicket, getFlowDetail, getFlows, getJobs, loadConfig,
   type CronJob, type Flow, type FlowDetail, type FlowRun, type HttpError, type PortalConfig,
 } from "../../lib/agent";
 import { whenItHappened } from "../../lib/labels";
 import {
   crossTask, inFlight, realStatus, resumePauseQueue, useRuns, runOf,
 } from "../runs";
-import { FlowActions, StatusBanner, Runs, WhyItCouldNot } from "../FlowStatus";
+import { FlowActions, MissingConnection, StatusBanner, Runs, WhyItCouldNot } from "../FlowStatus";
 import Markdown from "../../lib/Markdown";
 import { EntityProvider } from "../../lib/EntityViewer";
 import { EntityChip } from "../../lib/entities";
@@ -196,27 +196,9 @@ export default function FlowDetailPage() {
           />
         </div>
 
-        {/* Same as the list: with name and reason, and the link points at the
-            specific card. The catalog is not fetched here (one more call for
-            a detail screen is not worth it): the label comes from the table
-            of known ones and the flow supplies the reason. */}
+        {/* Same notice as the list. */}
         {e.missingConnections.length > 0 && (
-          <div className="mb-5 rounded-lg border border-c-amber bg-c-amber/25 p-3">
-            <p className="text-[13px] font-semibold text-c-amber-ink">
-              Le falta {e.missingConnections.map((c) => connectionLabel(c)).join(" y ")}.
-            </p>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-c-amber-ink/85">
-              Hasta que esté conectada, este trabajo queda a medias: te dejo lo que puedo
-              y el resto espera.
-            </p>
-            <Link
-              href={`/app/connections?connection=${encodeURIComponent(e.missingConnections[0])}`}
-              className="mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
-            >
-              Conectar {connectionLabel(e.missingConnections[0])}
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+          <MissingConnection ids={e.missingConnections} className="mb-5" />
         )}
 
         <section className="mb-6">

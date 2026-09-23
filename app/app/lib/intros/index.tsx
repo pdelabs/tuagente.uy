@@ -15,7 +15,6 @@ import CronsIntro from "./crons";
 import ActivityIntro from "./activity";
 import FilesIntro from "./files";
 import UsageIntro from "./usage";
-import ConnectionsIntro from "./connections";
 import FlowsIntro from "./flows";
 import PostsIntro from "./posts";
 import InboxIntro from "./inbox";
@@ -35,7 +34,6 @@ export const INTROS: Record<string, ComponentType<IntroProps>> = {
   activity: ActivityIntro,
   files: FilesIntro,
   usage: UsageIntro,
-  connections: ConnectionsIntro,
   flows: FlowsIntro,
   posts: PostsIntro,
 };

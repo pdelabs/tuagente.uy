@@ -48,8 +48,6 @@ export const PARAM = {
   file: "file",
   /** /app/skills?skill=<name> */
   skill: "skill",
-  /** /app/connections?connection=<catalog id> */
-  connection: "connection",
   /** /app/tasks?scheduled=<cron id> */
   scheduled: "scheduled",
 } as const;

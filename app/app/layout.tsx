@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home, Images,
-  Inbox, LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Plug, Puzzle, Workflow,
+  Inbox, LayoutDashboard, LifeBuoy, LogOut, MessageSquare, Puzzle, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -71,13 +71,6 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   // Primary by Luis's decision (8/7): the showcase of what's been produced --
   // flow deliverables + visualizations, on a single tab.
   { key: "artifacts", path: "/app/artifacts", label: "Entregas", icon: LayoutDashboard },
-  // Conexiones left "Más" (8/8): it's the FIRST thing a new client needs --
-  // without their email and their spreadsheets the agent can't do anything --
-  // and it was hidden at the very bottom. A test client hunted for it across
-  // five tabs and her line was "it's like putting the light switch inside the
-  // closet". Half a dozen screens promise "the systems you connected to it":
-  // the place where you connect them can't be folded away.
-  { key: "connections", path: "/app/connections", label: "Conexiones", icon: Plug },
   // ACTIVIDAD WENT BACK UNDER "Más" (9/16, Luis). It came out of there on 8/13
   // with a good reason -- two blind-QA clients went hunting for it and one of
   // them found out THERE that her flows had failed -- and that reason is

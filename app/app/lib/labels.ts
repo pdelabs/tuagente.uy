@@ -379,7 +379,7 @@ const FAILURES: { re: RegExp; what: string; canDo: string; ours: boolean }[] = [
   {
     re: /401|403|unauthorized|forbidden|invalid.?(api.?)?key|authentication|credential|token expired|invalid_grant/i,
     what: "Una clave de las que usa tu agente dejó de servir, y sin eso no pudo entrar a buscar los datos.",
-    canDo: "Fijate en Conexiones si alguna quedó desconectada: reconectarla lo destraba.",
+    canDo: "Escribinos y la reconectamos: con eso se destraba.",
     ours: true,
   },
   {

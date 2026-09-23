@@ -7,7 +7,7 @@
 // flows and what they produce. The cron, the skills and the folders are the
 // HOW and stay below.
 //
-// Contract (adapter ≥0.29): GET {adapter}/portal/flows →
+// Contract (engine `server/flows.py`): GET /portal/flows →
 //   { available, flows: [{ slug, name, client_summary, trigger_type,
 //     trigger, status, missing_connections, last_run, results,
 //     results_total }] }
@@ -27,15 +27,14 @@ import {
   WifiOff, Workflow, Zap, type LucideIcon,
 } from "lucide-react";
 import {
-  connectionLabel, getConnections, getFlows, getJobs, getManifest, loadConfig,
-  type Connection, type CronJob, type Flow, type HttpError, type Manifest,
-  type PortalConfig,
+  getFlows, getJobs, getManifest, loadConfig,
+  type CronJob, type Flow, type HttpError, type Manifest, type PortalConfig,
 } from "../lib/agent";
 import {
   crossTask, inFlight, realStatus, sortByUrgency, summarizeFlows,
   resumePauseQueue, useRuns, runOf, type RealStatus,
 } from "./runs";
-import { FlowActions, StatusBanner, Runs, WhyItCouldNot } from "./FlowStatus";
+import { FlowActions, MissingConnection, StatusBanner, Runs, WhyItCouldNot } from "./FlowStatus";
 import { EntityProvider } from "../lib/EntityViewer";
 import { EntityChip } from "../lib/entities";
 import { ExampleCarousel, buildChatLink } from "../lib/flowExamples";
@@ -75,40 +74,10 @@ function fileName(path: string): string {
   return base.replace(/^\d{4}-\d{2}-\d{2}[-_ ]/, "") || base;
 }
 
-/** What this flow is missing, what it is called and what it is for. */
-function MissingConnection({ ids, connections }: {
-  ids: string[]; connections: Connection[] | null;
-}) {
-  const names = ids.map((id) => connectionLabel(id, connections));
-  const why = ids
-    .map((id) => connections?.find((c) => c.id === id)?.purpose)
-    .filter(Boolean) as string[];
-  return (
-    <div className="rounded-lg border border-c-amber bg-c-amber/25 p-3">
-      <p className="text-[13px] font-semibold text-c-amber-ink">
-        Le falta {names.length === 1 ? names[0] : names.join(" y ")}.
-      </p>
-      {why.length > 0 && (
-        <p className="mt-1 text-[12.5px] leading-relaxed text-c-amber-ink/85">
-          {why.join(" ")}
-        </p>
-      )}
-      <Link
-        href={`/app/connections?connection=${encodeURIComponent(ids[0])}`}
-        className="mt-2.5 inline-flex h-9 w-fit items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
-      >
-        Conectar {names[0]}
-        <ArrowRight className="h-4 w-4" />
-      </Link>
-    </div>
-  );
-}
-
-function FlowCard({ f, e, cfg, connections, posts, onChange }: {
+function FlowCard({ f, e, cfg, posts, onChange }: {
   f: Flow;
   e: RealStatus;
   cfg: PortalConfig;
-  connections: Connection[] | null;
   /** The agent has the Posteos tab: that is where this flow's work shows up. */
   posts: boolean;
   onChange: () => void;
@@ -148,16 +117,9 @@ function FlowCard({ f, e, cfg, connections, posts, onChange }: {
           the client connects the email and it fails again. */}
       <WhyItCouldNot cfg={cfg} e={e} name={f.name} onChange={onChange} />
 
-      {/* The missing connection, SECOND and separate: it is the one thing the
-          client can unblock on their own, but it is not a diagnosis. And with
-          NAME and REASON: "Conectar lo que falta" says neither what is
-          missing nor what for, and on reaching Conexiones the client got lost
-          among six cards not knowing which was theirs. The "what for" comes
-          from the catalog, which already has it written in plain words -- we
-          do not make it up here. */}
-      {e.missingConnections.length > 0 && (
-        <MissingConnection ids={e.missingConnections} connections={connections} />
-      )}
+      {/* The missing connection, SECOND and separate: it is not a diagnosis,
+          and it says WHICH one is missing -- "lo que falta" says nothing. */}
+      {e.missingConnections.length > 0 && <MissingConnection ids={e.missingConnections} />}
 
       {f.results.length > 0 && (
         <div>
@@ -296,8 +258,6 @@ export default function FlowsPage() {
   const [jobs, setJobs] = useState<CronJob[] | null>(null);
   const [error, setError] = useState<Failure | null>(null);
   const [loading, setLoading] = useState(false);
-  // Only so the missing connection can be named and its purpose said.
-  const [connections, setConnections] = useState<Connection[] | null>(null);
   // Which modules this agent has, to say where its flows leave their work.
   const [manifest, setManifest] = useState<Manifest | null>(null);
 
@@ -305,9 +265,6 @@ export default function FlowsPage() {
 
   useEffect(() => {
     if (!cfg) return;
-    getConnections(cfg)
-      .then((r) => setConnections(r.connections ?? []))
-      .catch(() => { /* without the catalog we fall back to the known labels */ });
     getManifest(cfg)
       .then(setManifest)
       .catch(() => { /* without it, Archivos: the tab every agent has */ });
@@ -385,7 +342,6 @@ export default function FlowsPage() {
               f={flow}
               e={status}
               cfg={cfg}
-              connections={connections}
               posts={Boolean(manifest?.modules?.posts)}
               onChange={reread}
             />

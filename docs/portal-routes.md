@@ -34,7 +34,6 @@ in their portal and that we'll take them there as soon as they enter).
 | Approvals | `/app/approvals` |
 | Artifacts | `/app/artifacts` |
 | Posts | `/app/posts` |
-| Connections | `/app/connections` |
 | Activity | `/app/activity` |
 | Files | `/app/files` |
 | Usage | `/app/usage` |
@@ -87,7 +86,6 @@ one.
 | A folder | `/app/files?folder=<path>` | `/app/files?folder=interno` | opens |
 | A file | `/app/files?file=<path>` | `/app/files?file=workspace/entregables/2026-08-12-instagram-post-trash-bags-20-off.md` | opens (with the `workspace/` prefix) |
 | A flow | `/app/flows/<slug>` | `/app/flows/revision-precios-proveedores` | opens · stale id |
-| A connection | `/app/connections?connection=<catalog id>` | `/app/connections?connection=whatsapp` | opens · stale id |
 | A system skill | `/app/skills?skill=<name>` | `/app/skills?skill=approval` | opens · stale id |
 | A scheduled task | `/app/tasks?scheduled=<cron id>` | `/app/tasks?scheduled=bb8485784d90` | opens |
 What's left **UNVERIFIED** inside rows that were otherwise tested:
@@ -137,8 +135,7 @@ Before that, this table's promise was false for the single most common
 case: with `?skill=approval` the highlighted row sat at 823px, the window
 measured 813, and `scrollY` stayed at **0** — the client landed at the very
 top and saw nothing highlighted. Three causes, all three fixed in
-`bringIntoView()` (`lib/routes.tsx`), which Connections and Approvals now
-use too:
+`bringIntoView()` (`lib/routes.tsx`), which Approvals now uses too:
 
 - **the smooth scroll never finished** (with `behavior: "instant"` the same
   `scrollIntoView` moves the page to 442): the portal carries
@@ -159,22 +156,6 @@ use too:
   the rare one. Timers there still run at ~1 per second, which is enough for
   this. The why is also in `bringIntoView()`'s own comment: if someone
   "fixes" it back to rAF, it breaks exactly the common case.
-
-`?connection=` says **three different things** depending on what it finds,
-and none of them overclaims. It used to always say the same thing — "You're
-here to connect X. It's the one missing for one of your flows" — and with
-that it invented two things: the product (with `?connection=doesnt-exist-xyz`
-it announced "You're here to connect doesnt exist xyz") and the need (with
-any real id, even when the one actually missing was a different one).
-
-- **It exists and isn't connected** → "You're here to connect X", and only
-  if the catalog marks it `required` does it add that one of the client's
-  flows needs it.
-- **It exists and is already connected** → it says so, in green, and marks
-  it below.
-- **It's not in the catalog** → a stale-link notice with the id in quotes
-  and the full list below. The raw id is NEVER humanized to pass it off as
-  a product name.
 
 A `/app/flows/<slug>` that doesn't exist does the same thing: a plain-spoken
 notice and the list of flows the agent actually has. It used to answer
@@ -339,6 +320,17 @@ never an error number, never a screen that says nothing.
 - A link to a specific thing **skips that tab's welcome screen**: whoever
   arrives via a link came to see one thing, not to be introduced to the
   module.
+
+## Retired: `/app/connections` and `?connection=`
+
+**Removed 23/9/2026.** Conexiones was a Hermes-adapter module: the catalog,
+Google's OAuth dialog, WhatsApp pairing and the per-connection permissions
+were all adapter endpoints, and the engine serves none of them (its manifest
+says `connections: false`). A flow that is missing a connection says which one
+on its own card, and that setting it up is ours; there is no screen to send the
+client to. The agent's `connection:<id>` and `permissions:<id>` marks no longer
+turn into cards either. A `/app/connections` link now lands on a route the
+portal does not have.
 
 ## Retired: `/app/team`, `?role=` and `?hire=`
 

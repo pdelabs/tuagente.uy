@@ -210,7 +210,7 @@ function urlOfThing(entity: Entity): string {
     return `/app/artifacts?${PARAM.artifact}=${enc(entity.id)}`;
   }
   if (entity.kind === "file") return `/app/files?${PARAM.file}=${enc(entity.path)}`;
-  return `/app/connections?${PARAM.connection}=${enc(entity.id)}`;
+  return `/app/posts?${PARAM.post}=${enc(entity.id)}`;
 }
 
 const THING_CLASS =
@@ -282,13 +282,12 @@ function Thing({ entity, text }: { entity: Entity; text?: string }) {
   );
 }
 
-/** The chip for an entity, whatever kind it is. Connections, permissions,
- *  capabilities and posts have their own chip (`entities.tsx`) — the first
- *  three are cards and the post is a link to its tab, where it is drawn at the
- *  size it is going out at; everything else opens in the viewer. */
+/** The chip for an entity, whatever kind it is. Capabilities and posts have
+ *  their own chip (`entities.tsx`) — the first is a card and the post is a
+ *  link to its tab, where it is drawn at the size it is going out at;
+ *  everything else opens in the viewer. */
 function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
-  if (entity.kind === "post"
-    || entity.kind === "connection" || entity.kind === "permissions" || entity.kind === "capability") {
+  if (entity.kind === "post" || entity.kind === "capability") {
     return <EntityChip entity={entity} label={text?.trim() || entity.id} />;
   }
   return <Thing entity={entity} text={text} />;
@@ -296,7 +295,7 @@ function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
 
 /* ── Components ───────────────────────────────────────────────────────────── */
 
-// The agent also names tickets, files and connections in prose, with no
+// The agent also names tickets and files in prose, with no
 // backticks. The \b sits INSIDE each alternative: if it were before the
 // optional /opt/data/ prefix, it would never match (`/` isn't a word
 // character) and the prefix would be left dangling as text next to the chip.
@@ -319,7 +318,6 @@ function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
 // letter and whose dot ends the match before the extension.
 const INLINE_ENTITY_RE = new RegExp(
   "(\\bt_[0-9a-f]{6,16}\\b" +
-  "|\\bconnection:[a-z0-9][a-z0-9-]*\\b" +
   "|\\bcapability:[a-z0-9][a-z0-9-]*\\b" +
   "|\\b\\d{4}-\\d{2}-\\d{2}-(?=[a-z0-9-]*[a-z])[a-z0-9][a-z0-9-]{0,39}\\b" +
   `|(?:/opt/data/)?\\b(?:workspace|entregables|entrada|interno)/[\\w./-]+\\.(?:${FILE_EXTENSIONS})\\b)`,
@@ -587,38 +585,15 @@ const rehypePlugins: Options["rehypePlugins"] = [
 
 /* ── What the portal writes TO THE AGENT ──────────────────────────────────── */
 
-/** The order the portal puts inside a ticket's body when the client requests a
- *  connection. IT CANNOT BE DELETED: it's the only thing keeping the agent
- *  from going off and connecting WhatsApp on its own (the ticket is born
- *  blocked, but the body is what gets read when someone unblocks it). And the
- *  client can't read it: it's written as an imperative in the second person,
- *  so the test client read it as an order AIMED AT HER -- "I was left not
- *  knowing if I was allowed to touch anything".
- *
- *  Exported so only one side writes it. Today `connections/page.tsx` and
- *  hiring each build it on their own; the real fix is having
- *  `createConnectionRequest` put it inside an HTML comment -- the same
- *  mechanism `REQUEST_MARKER` already uses, which the sanitizer hides -- and
- *  then this whole block goes away. Until then it's recognized by its first
- *  sentence, which is ugly and tied to a literal string: that's why it lives
- *  here instead of being spread around. */
-export const AGENT_INSTRUCTION =
-  "No hagas nada por tu cuenta con esto: avisale al equipo de tuagente " +
-  "que hay que conectarlo y dejá el ticket esperando.";
-
 /** Convention going forward: whatever sits between these marks is for the
  *  agent and the client never sees it. They go as an HTML comment so the
  *  agent -- which reads the raw body -- still gets them. */
 const AGENT_ONLY_BLOCK_RE = /<!--\s*para-el-agente\s*-->[\s\S]*?<!--\s*\/para-el-agente\s*-->/gi;
 
-// The whole paragraph, from the sentence that opens it to the blank line.
-const INSTRUCTION_PARAGRAPH_RE = /(?:^|\n)[ \t]*No hagas nada por tu cuenta con esto:[\s\S]*?(?=\n[ \t]*\n|$)/gi;
-
 function stripAgentOnlyContent(md: string): string {
-  if (!md.includes("<!--") && !md.includes("No hagas nada por tu cuenta")) return md;
+  if (!md.includes("<!--")) return md;
   return md
     .replace(AGENT_ONLY_BLOCK_RE, "")
-    .replace(INSTRUCTION_PARAGRAPH_RE, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
