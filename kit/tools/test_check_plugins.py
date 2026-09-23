@@ -864,6 +864,10 @@ ENGINE_CLIENT = ["social"]
 # read by `engine/core/flows.py` — which is why the frontmatter test below walks
 # two pools and not one.
 ENGINE_FLOWS = ["instagram", "mail"]
+# THE SIXTH SHAPE: a plugin of our engine that EVERY client has. `notify` mails
+# the owner what waits for them and what broke; nobody buys it, and it carries
+# `core/` and nothing else, like the third shape.
+ENGINE_SYSTEM = ["notify"]
 
 
 class TheKitsOwnRegistry(unittest.TestCase):
@@ -873,7 +877,7 @@ class TheKitsOwnRegistry(unittest.TestCase):
     def test_the_registry_is_the_five_defaults_plus_every_ported_skill(self):
         plugins = plugin_registry.registry(KIT)
         self.assertEqual(sorted(plugins),
-                         sorted(SYSTEM + CLIENT + CORE_ONLY + ENGINE_CLIENT + ENGINE_FLOWS))
+                         sorted(SYSTEM + CLIENT + CORE_ONLY + ENGINE_CLIENT + ENGINE_FLOWS + ENGINE_SYSTEM))
         for pid in SYSTEM:
             self.assertTrue(plugins[pid]["system"], pid)
         # A PLUGIN OF engine CARRIES `core/` AND NOTHING ELSE. The day one of
@@ -882,6 +886,9 @@ class TheKitsOwnRegistry(unittest.TestCase):
         # nothing on a Hermes agent can run it.
         for pid in CORE_ONLY:
             self.assertFalse(plugins[pid]["system"], pid)
+            self.assertEqual(sorted(plugins[pid]["surfaces"]), ["core"], pid)
+        for pid in ENGINE_SYSTEM:
+            self.assertTrue(plugins[pid]["system"], pid)
             self.assertEqual(sorted(plugins[pid]["surfaces"]), ["core"], pid)
         for pid in ENGINE_CLIENT:
             self.assertFalse(plugins[pid]["system"], pid)

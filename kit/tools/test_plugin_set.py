@@ -26,7 +26,7 @@ import plugin_registry
 import plugin_set
 
 SYSTEM_PLUGINS = {"kanban", "approval", "deliverable", "artifact", "flow",
-                  "capability"}
+                  "capability", "notify"}
 
 
 def agent(*bought):
