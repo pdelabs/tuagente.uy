@@ -252,11 +252,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // A Next `<Link>` to the tab you're already on doesn't fire popstate, so
   // screens would never learn the URL changed.
   useEffect(() => { notifyRouteChange(); }, [pathname]);
-  // HEADS UP: arriving via a link does NOT mark the welcome screen as seen.
-  // It used to, and the client whose first taste of the portal was a
-  // deliverable's link never got to see that tab's own welcome screen.
-  // Not showing it now is enough (`showIntro` already checks `withIntent`,
-  // which stays set as long as they're on that tab).
+  // A TAB THE CLIENT ALREADY USED DOES NOT INTRODUCE ITSELF. Arriving through
+  // a link to something in it (`withIntent`) used to only skip the welcome
+  // screen, on the reasoning that she would still want to see it later. QA
+  // (2026-09-23) read it the other way: she opened a file from Inicio, worked
+  // in Archivos, and the next time she tapped the tab its welcome screen was
+  // there «again» — the same on Actividad and Uso. Having used the tab is
+  // having met it.
+  useEffect(() => {
+    if (withIntent && currentModule && seen && !seen[currentModule.key]) dismiss(currentModule.key);
+  }, [withIntent, currentModule, seen]);
 
   // THE AGENT IS WHO KNOWS WHAT IT IS CALLED AND WHAT IT LOOKS LIKE; the
   // browser keeps a copy so the half dozen screens that have no manifest at
