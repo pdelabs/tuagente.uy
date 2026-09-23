@@ -208,15 +208,21 @@ function httpError(status: number, path: string, detail?: string): HttpError {
   return e;
 }
 
-/** The engine explains its 400s/409s in `{error}`: that text is worth more
- *  than the number. */
+/** The engine explains its 400s/409s in `{error: {message}}` (the older
+ *  adapter, `{error: "…"}`): that text is worth more than the number. Without
+ *  reading `.message`, every refused run-now read «No pude (409 at …)». */
 async function failure(res: Response, path: string): Promise<HttpError> {
-  let detail = "";
+  return httpError(res.status, path, await errorText(res));
+}
+
+/** The Spanish sentence an error response carries, or "". */
+async function errorText(res: Response): Promise<string> {
   try {
     const body = await res.json();
-    if (typeof body?.error === "string") detail = body.error;
+    if (typeof body?.error === "string") return body.error;
+    if (typeof body?.error?.message === "string") return body.error.message;
   } catch { /* no JSON body */ }
-  return httpError(res.status, path, detail);
+  return "";
 }
 
 /* ── What clock the business lives on ────────────────────────────────────────
@@ -734,6 +740,9 @@ export type Flow = {
   trigger: string;
   status: "active" | "paused" | "incomplete" | string;
   missing_connections: string[];
+  /** The same, as the client calls each one («el correo de la empresa»),
+   *  from the plugin that answers for it. What the screens show. */
+  missing_connection_labels: string[];
   last_run?: { at?: string | null; status?: string } | null;
   /** Id of the scheduled task that fires the flow; null on a flow that only
    *  runs when asked. Without it, the portal ties the flow to its task by the
@@ -950,14 +959,7 @@ export async function sessionChatStream(
       signal,
     },
   );
-  if (!res.ok || !res.body) {
-    let detail = `${res.status} at session chat`;
-    try {
-      const err = await res.json();
-      if (err?.error?.message) detail = err.error.message;
-    } catch { /* no JSON body */ }
-    throw new Error(detail);
-  }
+  if (!res.ok || !res.body) throw await failure(res, "session chat");
 
   const reader = res.body.getReader();
   const dec = new TextDecoder();
@@ -1032,7 +1034,9 @@ export async function chatStream(
     body: JSON.stringify({ messages, stream: true }),
     signal,
   });
-  if (!res.ok || !res.body) throw new Error(`${res.status} at chat`);
+  // A 409 is the conversation still working on the previous message: its
+  // sentence is what the client reads.
+  if (!res.ok || !res.body) throw await failure(res, "chat");
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let acc = "", buf = "", eventName = "";
@@ -1068,21 +1072,4 @@ export async function chatStream(
     }
   }
   return acc;
-}
-
-/** A connection's label by its id, to name it wherever the client needs it
- *  (a flow's `missing_connections`). Catalog ids (`email`, `google-workspace`)
- *  are ours; the client should never have to read them, so an unknown one
- *  falls back to something readable instead of the raw id. */
-export function connectionLabel(id: string): string {
-  const KNOWN: Record<string, string> = {
-    email: "el correo de la empresa",
-    whatsapp: "WhatsApp",
-    instagram: "la cuenta de Instagram",
-    slack: "Slack",
-    "google-workspace": "Google Planillas y Drive",
-    "gmail-lectura": "Gmail",
-    "auxiliary-models": "los modelos de IA auxiliares",
-  };
-  return KNOWN[id] ?? id.replace(/-/g, " ");
 }

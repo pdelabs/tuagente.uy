@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import {
   getActivity, getApprovals, getFiles, getFlows, getJobs,
-  getManifest, getPosts, getSessions, getTickets, loadConfig, connectionLabel,
+  getManifest, getPosts, getSessions, getTickets, loadConfig,
   type CronJob, type Flow, type HttpError,
   type Manifest, type PortalConfig, type Post, type Ticket,
 } from "../lib/agent";
@@ -413,8 +413,8 @@ function WhatItDoes({ flows, jobs }: { flows: Flow[]; jobs: CronJob[] | null }) 
                 <p className="min-w-0 text-[13px] leading-relaxed text-ink-soft">
                   <span className="font-semibold text-ink">{f.name}</span>
                   {" — "}
-                  {f.missing_connections.length > 0
-                    ? `Todavía no: espera que conectes ${enumerate(f.missing_connections.map(connectionLabel))}.`
+                  {f.missing_connection_labels.length > 0
+                    ? `Todavía no: espera que conectes ${enumerate(f.missing_connection_labels)}.`
                     : "Todavía no: le falta una conexión."}
                 </p>
               </li>
