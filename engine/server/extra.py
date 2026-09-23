@@ -68,22 +68,29 @@ def inventory():
     """What this agent has installed: the kit's skills and the plugins that bring them.
 
     THE NAMES ARE THE PORTAL'S, ONE EACH: `lib/agent.ts`'s `Inventory`. A skill
-    is `summary` — what `app/app/skills/page.tsx` draws — and the plugins are
-    `engine_plugins`, `{name, summary}`. Both used to travel twice, under the
-    plan's names too, "so either works"; the other name was read by nobody.
+    is `label` and `summary` — what `app/app/skills/page.tsx` draws — and the
+    plugins are `engine_plugins`, `{name, summary}`.
+
+    EVERYTHING HERE IS THE OWNER'S TEXT, NEVER THE MODEL'S. `summary` was the
+    skill's `description`, and the QA client read «Comments» and «Inbox» under
+    «Comunes del sistema», each over a line of instructions for the model —
+    `fetch_comments`, «lee marca/brand.md», «cuando el cliente te pida». Now it
+    is the frontmatter's `title` and `client_summary`, and a plugin's
+    `client_copy` instead of its English `description`.
     """
     return {
         "skills": [
             {
                 "name": skill.name,
-                "summary": skill.description,
+                "label": skill.title,
+                "summary": skill.client_summary,
                 "source": "kit",
                 "editable": False,
             }
             for skill in skills.index().values()
         ],
         "engine_plugins": [
-            {"name": plugin.id, "summary": plugin.manifest["description"]}
+            {"name": plugin.id, "summary": plugin.manifest["client_copy"]}
             for plugin in plugins.enabled()
         ],
         "mcp": [],

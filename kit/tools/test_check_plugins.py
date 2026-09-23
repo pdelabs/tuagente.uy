@@ -57,7 +57,8 @@ def write(root, folder, data, skills=None, text=None):
     for name in skills:
         skill = where / "skills" / name
         skill.mkdir(parents=True)
-        (skill / "SKILL.md").write_text(f"---\nname: {name}\n---\n", encoding="utf-8")
+        (skill / "SKILL.md").write_text(
+            f"---\nname: {name}\ntitle: Prueba\nclient_summary: Una línea.\n---\n", encoding="utf-8")
     return where
 
 
@@ -73,7 +74,8 @@ def flow(where, rel):
 def kit_skill(root, name):
     skill = Path(root) / "skills" / name
     skill.mkdir(parents=True)
-    (skill / "SKILL.md").write_text(f"---\nname: {name}\n---\n", encoding="utf-8")
+    (skill / "SKILL.md").write_text(
+        f"---\nname: {name}\ntitle: Prueba\nclient_summary: Una línea.\n---\n", encoding="utf-8")
 
 
 def capabilities(root, *entries):

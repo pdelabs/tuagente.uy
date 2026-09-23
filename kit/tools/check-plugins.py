@@ -170,6 +170,47 @@ def check_requires(root: Path, plugins: dict) -> list[str]:
     return bad
 
 
+# What the OWNER reads of a skill, in its frontmatter next to what the model
+# reads (`name`, `description`). The engine's Habilidades serves these two and
+# nothing else (`engine/server/extra.py`), and loads none of a skill without
+# them (`engine/core/tools/skills.py`).
+OWNER_KEYS = ("title", "client_summary")
+
+
+def frontmatter_keys(skill_md: Path) -> dict[str, str]:
+    """The top-level `key: value` lines between the two `---`. Enough for a
+    presence check; the engine parses the real thing."""
+    lines = skill_md.read_text().splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    out = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        key, sep, value = line.partition(":")
+        if sep and key and not key.startswith((" ", "\t")):
+            out[key.strip()] = value.strip().strip('"')
+    return out
+
+
+def check_owner_copy(root: Path, plugins: dict) -> list[str]:
+    """Every declared skill has a Spanish title and a line for the owner.
+
+    Without them the QA client (2026-09-23) read «Comments» and «Inbox» in
+    Habilidades, each over the instructions written for the model.
+    """
+    bad = []
+    for pid, data in sorted(plugins.items()):
+        for name in data["surfaces"].get("skills") or []:
+            skill_md = root / "plugins" / pid / "skills" / name / "SKILL.md"
+            keys = frontmatter_keys(skill_md)
+            for key in OWNER_KEYS:
+                if not keys.get(key):
+                    bad.append(f"plugins/{pid}/skills/{name}/SKILL.md: no `{key}` in its "
+                               f"frontmatter — the owner's name and line for the skill")
+    return bad
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Whether the plugin registry is whole: ids, versions, dependencies, surfaces.")
@@ -205,6 +246,7 @@ def main() -> int:
     except SystemExit as exc:
         print(f"FAIL: {exc}")
         return 1
+    bad += check_owner_copy(root, plugins)
     if bad:
         for line in bad:
             print(f"FAIL: {line}")
@@ -224,6 +266,7 @@ def main() -> int:
           "in connections/catalog.json and compose/config.base.yaml.")
     print("      capabilities/catalog.json installs only ids that exist, "
           "each from the home it lives in.")
+    print("      every skill has a title and a client_summary for the owner.")
     print("PASS")
     return 0
 

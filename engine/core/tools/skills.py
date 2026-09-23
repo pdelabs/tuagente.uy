@@ -15,8 +15,16 @@ from .. import plugins
 
 @dataclass(frozen=True)
 class Skill:
+    """One SKILL.md. Two audiences, two pairs of fields: `name` and
+    `description` are the MODEL's — the id it calls and when to use it —, and
+    `title` and `client_summary` are the OWNER's, what Habilidades shows. Both
+    pairs are required frontmatter: a skill with no owner line is a skill whose
+    model-facing instructions end up on her screen."""
+
     name: str
     description: str
+    title: str
+    client_summary: str
     body: str
 
 
@@ -26,7 +34,8 @@ def index() -> dict[str, Skill]:
     for plugin in plugins.enabled():
         for skill_dir in plugin.skill_dirs:
             post = frontmatter.load(skill_dir / "SKILL.md")
-            skill = Skill(post["name"], post["description"], post.content)
+            skill = Skill(post["name"], post["description"], post["title"],
+                          post["client_summary"], post.content)
             found[skill.name] = skill
     return found
 
