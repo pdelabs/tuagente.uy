@@ -10,7 +10,6 @@ import HomeIntro from "./home";
 import ChatIntro from "./chat";
 import PipelineIntro from "./pipeline";
 import ApprovalsIntro from "./approvals";
-import CronsIntro from "./crons";
 import ActivityIntro from "./activity";
 import FilesIntro from "./files";
 import UsageIntro from "./usage";
@@ -28,7 +27,6 @@ export const INTROS: Record<string, ComponentType<IntroProps>> = {
   kanban: PipelineIntro,
   inbox: InboxIntro,
   approvals: ApprovalsIntro,
-  crons: CronsIntro,
   activity: ActivityIntro,
   files: FilesIntro,
   usage: UsageIntro,

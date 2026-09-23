@@ -289,30 +289,6 @@ export function taskStatus(status: string | null | undefined): { label: string; 
   return COLUMN_LABEL[columnForTask(s)];
 }
 
-/** How a SCHEDULED task (a cron) is doing, as a single banner.
- *
- *  "ACTIVE" IN GREEN ISN'T THE TRUTH IF THE LAST RUN FAILED. It's the worst
- *  bug the blind QA pass found -- the vet clinic had two jobs with the green
- *  banner and both had failed -- and on /app/tasks it was still alive with
- *  both halves stuck together: the green "Activa" chip next to the coral
- *  "falló" chip, on the same task, each one saying something different.
- *  Same criterion as a flow's banner (`flows/runs.ts`): running -> paused ->
- *  failed -> active. */
-export function scheduledStatus(
-  { running, paused, failed }: { running: boolean; paused: boolean; failed: boolean },
-): { label: string; tone: Tone; countsAsFailure: boolean } {
-  // `countsAsFailure` is what avoids the two halves: when the banner ALREADY
-  // says it failed, the screen doesn't repeat the coral chip next to it; when
-  // it says something else (paused, running), the failure still gets shown
-  // separately and isn't lost.
-  if (running) return { label: "Corriendo", tone: "violet", countsAsFailure: false };
-  // Paused wins over the failure: it's the first thing that explains why it
-  // isn't running. That the last run failed still gets said alongside it.
-  if (paused) return { label: "Pausada", tone: "amber", countsAsFailure: false };
-  if (failed) return { label: "La última vez falló", tone: "coral", countsAsFailure: true };
-  return { label: "Activa", tone: "green", countsAsFailure: false };
-}
-
 /* ── Why it couldn't ─────────────────────────────────────────────────────── */
 
 /** A failure told in a way the client can tell what happened and what to do.
@@ -761,10 +737,6 @@ export function greetingOfTheDay(ms = Date.now()): string {
 // screens of the same program tell me two different days. Which one do I
 // believe?" The one that runs. This function is the one that puts it into
 // words.
-//
-// (There's an older, private copy in `app/app/tasks/page.tsx::readableCron`,
-// owned by someone else today. TODO: have that one graduate to this one so
-// there's just the one.)
 
 const WEEKDAY_PLURALS = ["domingos", "lunes", "martes", "miércoles", "jueves", "viernes", "sábados"];
 const pad2 = (n: number) => String(n).padStart(2, "0");

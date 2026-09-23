@@ -46,8 +46,6 @@ export const PARAM = {
   file: "file",
   /** /app/skills?skill=<name> */
   skill: "skill",
-  /** /app/tasks?scheduled=<cron id> */
-  scheduled: "scheduled",
 } as const;
 
 /** `?p=` (the request the chat starts with) also counts as arriving with an

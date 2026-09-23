@@ -37,7 +37,6 @@ in their portal and that we'll take them there as soon as they enter).
 | Files | `/app/files` |
 | Usage | `/app/usage` |
 | Skills | `/app/skills` |
-| Scheduled tasks — URL-only, not in the nav on purpose: Flows replaced it as the machine-facing view, the route stays alive for us (`app/app/layout.tsx`) | `/app/tasks` |
 
 Bare `/app` redirects to `/app/home`.
 
@@ -85,7 +84,6 @@ one.
 | A file | `/app/files?file=<path>` | `/app/files?file=workspace/entregables/2026-08-12-instagram-post-trash-bags-20-off.md` | opens (with the `workspace/` prefix) |
 | A flow | `/app/flows/<slug>` | `/app/flows/revision-precios-proveedores` | opens · stale id |
 | A system skill | `/app/skills?skill=<name>` | `/app/skills?skill=approval` | opens · stale id |
-| A scheduled task | `/app/tasks?scheduled=<cron id>` | `/app/tasks?scheduled=bb8485784d90` | opens |
 What's left **UNVERIFIED** inside rows that were otherwise tested:
 
 - `?folder=entregables` (`interno` was tested, which is the hard case, not
@@ -177,7 +175,7 @@ afternoon of 8/12. Before that it didn't: measured in the lab, `scrollY` at
 would open the link to the request waiting on their own approval and land
 looking at someone else's request, with its own Approve/Reject pair in
 front. The other details don't need this because they open in a modal
-(`?task=`, `?scheduled=`, `?file=`), which appears centered
+(`?task=`, `?file=`), which appears centered
 with the background locked.
 
 ## `?thread=` — and why `?task=` still works for a mail
@@ -318,6 +316,13 @@ never an error number, never a screen that says nothing.
 - A link to a specific thing **skips that tab's welcome screen**: whoever
   arrives via a link came to see one thing, not to be introduced to the
   module.
+
+## Retired: `/app/tasks` and `?scheduled=`
+
+**Removed 23/9/2026.** The operator console over Hermes' cron store: its
+detail came from `/portal/crons/{id}`, which the engine does not serve (its
+manifest says `crons: false`). It was never in the nav; Flows is where a
+scheduled job is seen and touched.
 
 ## Retired: `/app/artifacts` and `?artifact=`
 

@@ -34,8 +34,7 @@ import {
 // (except "home", which is ours and doesn't depend on what the agent
 // exposes). `sec` = lives under "Más": the workshop views (files, usage,
 // skills…). The main nav is what the client uses daily: their flows, their
-// chat, their in-progress work. "Tareas" (crons) left the nav: it was the
-// machine-facing view that Flujos replaces (the route is still alive for us).
+// chat, their in-progress work.
 // Modules the agent declares but the portal does NOT show yet. It's a switch,
 // not a deletion: the screen, its route and its welcome screen stay whole,
 // and removing the key from here brings them back to the nav.

@@ -902,22 +902,6 @@ export type TicketStatus = "done" | "blocked" | "ready" | "archived";
 export const setTicketStatus = (c: PortalConfig, id: string, status: TicketStatus) =>
   post<{ ok: boolean }>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}/status`, c, { status });
 
-export type CronRun = {
-  id: string; status: string; claimed_at: string;
-  started_at: string | null; finished_at: string | null; error: string | null;
-};
-export type CronDetail = {
-  job: {
-    id: string; name: string; prompt: string; script: string;
-    schedule_display: string; enabled: boolean; state: string; model: string;
-    deliver: string; last_status: string | null; last_error: string | null;
-    next_run_at: string | null;
-  };
-  runs: CronRun[];
-};
-export const getCronDetail = (c: PortalConfig, id: string) =>
-  get<CronDetail>(c.adapter, `/portal/crons/${encodeURIComponent(id)}`, c);
-
 // ── Agent (:8642) ──
 
 /** A scheduled task, exactly as the gateway publishes it in `/api/jobs`.
