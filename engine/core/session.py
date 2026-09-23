@@ -5,6 +5,8 @@ translates it into the portal's two dialects. Nothing above this module knows
 what Pydantic AI calls its events.
 """
 
+import asyncio
+import logging
 import secrets
 import time
 from collections.abc import AsyncIterator, Callable
@@ -22,6 +24,8 @@ from pydantic_ai.messages import (
 
 from . import config, db, delegation
 from .agent import Deps, get_agent
+
+log = logging.getLogger(__name__)
 
 # EXTENSION POINT — transforms applied to the agent's text BEFORE it is
 # persisted and before the client is told the message closed. Each hook is
@@ -113,6 +117,11 @@ def failure_message(reason: str) -> str:
     return f"No pude responder: {reason}"
 
 
+# What the conversation says when the turn was cut from outside — the process
+# shutting down under it. Read by the client, next to her unanswered message.
+CUT = "No pude terminar: me apagaron en el medio. Mandame el mensaje de nuevo."
+
+
 def one_line(exc: BaseException) -> str:
     """Why the turn broke, in one line. The class name only when there is no
     message to read, which is the one case where it is the whole reason."""
@@ -196,6 +205,67 @@ async def run_turn(
         db.append_event("error", failed, "error", session_id)
         yield Failed(failed)
         raise
+    except asyncio.CancelledError:
+        # Not an `Exception`, so the branch above never saw it, and a turn
+        # cancelled mid-flight left the same silence it was written to end.
+        # Since `start_turn` a closed connection no longer cancels anything;
+        # what still does is the process going down, and the client should
+        # read that too.
+        db.add_message(session_id, "assistant", CUT)
+        db.touch_session(session_id)
+        db.append_event("error", CUT, "error", session_id)
+        raise
+
+
+# The chat turns in flight, by session. A turn outlives the request that
+# started it (`start_turn`), so this is the only place that knows one is still
+# going: the conversation's page reads it to keep saying «trabajando».
+_turns: dict[str, asyncio.Task] = {}
+
+
+def running(session_id: str) -> bool:
+    """Whether a chat turn of this session is still working."""
+    return session_id in _turns
+
+
+def start_turn(session_id: str, message: str) -> AsyncIterator[Event]:
+    """A chat turn that belongs to the conversation, not to the connection.
+
+    MEASURED ON THE QA AGENT (2026-09-23). The client asked for a post, the
+    face delegated it, and while the creator worked (four minutes) she went to
+    look at Flujos: the portal aborts the stream when the chat unmounts. The
+    turn was the response's body iterator, so it died with the connection —
+    at the next frame it tried to send, the creator's «terminé», which is why
+    the post landed in Posteos and the face's closing message never existed.
+    No reply, no error, no «trabajando» when she came back.
+
+    So the turn runs as its own task and the response only FOLLOWS it through a
+    queue. A consumer that goes away stops reading; the turn finishes, persists
+    its answer and writes its events whether anybody is watching or not — the
+    same way a flow's run already did.
+    """
+    queue: asyncio.Queue[Event | None] = asyncio.Queue()
+
+    async def drive() -> None:
+        try:
+            async for event in run_turn(session_id, message):
+                queue.put_nowait(event)
+        except Exception:
+            # `run_turn` already wrote the client her line and the `error`
+            # event. The stack used to reach uvicorn's log through the request;
+            # the request is not what runs this any more.
+            log.exception("session %s: the turn broke", session_id)
+        finally:
+            _turns.pop(session_id, None)
+            queue.put_nowait(None)
+
+    _turns[session_id] = asyncio.create_task(drive())
+    return follow(queue)
+
+
+async def follow(queue: asyncio.Queue) -> AsyncIterator[Event]:
+    while (event := await queue.get()) is not None:
+        yield event
 
 
 async def stream_run(

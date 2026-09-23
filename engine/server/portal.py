@@ -33,6 +33,13 @@ router = APIRouter()
 # Read by the client: the portal shows `error.message` on the tab she is on.
 NO_FILE = "No hay ningún archivo {path} en el espacio de trabajo."
 BAD_UPLOAD = "No pude leer el archivo: lo que llegó no es base64."
+# A second message while the first is still being worked: a turn outlives the
+# connection now (`session.start_turn`), and two turns on one session would
+# each save a history without the other's.
+BUSY = (
+    "Todavía estoy trabajando en tu mensaje anterior de esta conversación."
+    " Cuando termine te lo dejo acá; después mandame este de nuevo."
+)
 
 
 def iso(ts: float) -> str:
@@ -76,7 +83,9 @@ async def chat_stream(request: Request):
     if not messages or messages[-1]["role"] != "user":
         raise HTTPException(400, "the last message has to be the client's")
     session_id = session.match_session(messages[:-1]) or session.ensure_session()
-    events = session.run_turn(session_id, messages[-1]["content"])
+    if session.running(session_id):
+        raise HTTPException(409, BUSY)
+    events = session.start_turn(session_id, messages[-1]["content"])
     return StreamingResponse(
         sse.openai_dialect(events), media_type="text/event-stream", headers=sse.HEADERS
     )
@@ -89,7 +98,9 @@ async def session_chat_stream(session_id: str, request: Request):
     if not db.session_exists(session_id):
         raise HTTPException(400, f"there is no conversation {session_id}")
     message = (await request.json())["message"]
-    events = session.run_turn(session_id, message)
+    if session.running(session_id):
+        raise HTTPException(409, BUSY)
+    events = session.start_turn(session_id, message)
     return StreamingResponse(
         sse.session_dialect(events, session_id),
         media_type="text/event-stream",

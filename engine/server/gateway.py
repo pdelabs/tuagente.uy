@@ -9,7 +9,7 @@ live with the flows in `server/flows.py`.
 
 from fastapi import APIRouter, HTTPException, Request
 
-from core import db
+from core import db, session
 
 router = APIRouter()
 
@@ -46,6 +46,11 @@ def messages(session_id: str):
         # What the conversation is called, for the one the portal opens WITHOUT
         # having it in its list: a flow's run, reached from the flow's page.
         "title": db.session_title(session_id),
+        # Whether a turn of this conversation is still working. It outlives the
+        # stream that started it (`session.start_turn`), so a client who left
+        # and came back finds her message with no answer under it YET, and this
+        # is what says the answer is on its way.
+        "running": session.running(session_id),
         "data": [
             {"id": str(row["id"]), "role": row["role"], "content": row["content"]}
             for row in db.messages(session_id)

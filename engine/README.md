@@ -934,6 +934,17 @@ line, `No pude responder: <reason>`, persisted, written to Activity as an
 `error` event and streamed in both dialects; then the exception goes on to the
 log with its stack.
 
+**A turn belongs to the conversation, not to the connection** (`session.start_turn`).
+It runs as its own task and the stream only follows it, so a client who leaves
+the chat mid-turn — the portal aborts the stream when the chat unmounts — finds
+the answer there when she comes back; while it is still working,
+`GET /api/sessions/{id}/messages` says `"running": true`, and a second message
+to that conversation is a 409 that says why. Measured on the QA agent
+(2026-09-23): the turn WAS the response body, died at the next frame it tried
+to send, and the post landed in Posteos with no closing message and no error.
+A turn cancelled under the engine (a shutdown) persists one line saying so.
+`tests/test_detached_turn.py` checks the three, with no model.
+
 ## Files
 
 `GET /portal/files` lists the workspace (`path`, `size`, `mtime`) and
