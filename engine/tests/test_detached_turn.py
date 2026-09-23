@@ -66,6 +66,7 @@ async def main():
             await asyncio.sleep(0.1)
         out["running_after"] = session.running(sid)
         out["messages"] = session.display_messages(sid)
+        db.write("DELETE FROM events WHERE session_id = ?", (sid,))
         db.delete_session(sid)
 
     with agent.override(model=FunctionModel(stream_function=hanging)):
@@ -76,6 +77,7 @@ async def main():
         async for _ in events:
             pass
         out["cancelled"] = session.display_messages(sid)
+        db.write("DELETE FROM events WHERE session_id = ?", (sid,))
         db.delete_session(sid)
     out["cut"] = session.CUT
     out["answer"] = ANSWER

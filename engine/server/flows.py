@@ -81,6 +81,10 @@ def card(flow: flows.Flow, results_shown: int = RESULTS_LISTED) -> dict:
         "trigger": flow.trigger_detail,
         "status": "incomplete" if flow.status == "active" and missing else flow.status,
         "missing_connections": missing,
+        # The same, as the client calls each one («el correo de la empresa»),
+        # from the plugin that answers for it: the portal's own dictionary
+        # (`connectionLabel`) did not know `instagram` and showed the id.
+        "missing_connection_labels": [plugins.connection_label(c) for c in missing],
         "last_run": (
             {"at": iso(last["finished_at"] or last["started_at"]), "status": last["status"]}
             if last else None
