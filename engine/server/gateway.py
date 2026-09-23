@@ -1,4 +1,11 @@
-"""What the portal calls the `endpoint` base: Hermes's native gateway surface."""
+"""What the portal calls the `endpoint` base (`/api/*`): the client's
+conversations — list, read, rename, delete.
+
+The same app answers the `adapter` base (`/portal/*`, `server/portal.py`); the
+two bases are one container on two ports, and the split is only the portal's
+(`lib/agent.ts`'s `endpoint` and `adapter`). The flows' tasks, `/api/jobs*`,
+live with the flows in `server/flows.py`.
+"""
 
 from fastapi import APIRouter, HTTPException, Request
 

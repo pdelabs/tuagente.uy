@@ -103,8 +103,9 @@ MODULES = {
     "crons": False,
     # Flows are the engine's own (core/flows.py, core/scheduler.py,
     # server/flows.py), not a plugin's: what runs on its own is the engine's
-    # clock. `crons` stays off — the portal's Crons tab is a view of Hermes'
-    # job store, and there is no job store here.
+    # clock. `crons` stays off — on this engine a scheduled task IS a flow
+    # (its FLOW.md is the schedule), so there is no second list of tasks for a
+    # Crons tab to draw, and the Flows tab already pauses, resumes and runs each.
     "flows": True,
     "connections": False,
     "capabilities": False,
