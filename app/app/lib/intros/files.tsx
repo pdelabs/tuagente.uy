@@ -290,7 +290,7 @@ export default function FilesIntro({ onOk }: IntroProps) {
       note={canUpload === null
         ? undefined
         : canUpload
-          ? "Le podés dejar archivos; editar o borrar los suyos, no."
+          ? "Le podés dejar archivos, y corregir los tuyos y el borrador de tu negocio; lo demás es de tu agente."
           : "Solo lectura: desde acá no se modifica nada."}
     >
       <style>{CSS}</style>
