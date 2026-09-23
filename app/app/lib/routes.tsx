@@ -52,6 +52,29 @@ export const PARAM = {
  *  intention: it's not a detail, but it hides the welcome screen just the same. */
 export const PARAM_CHAT_REQUEST = "p";
 
+// The conversation the client was last in, so arriving at Chat with nothing
+// in the URL lands there and not on a blank «Nueva conversación». A
+// CONVENIENCE, NOT THE SOURCE: `?conversation=` says what is open; this only
+// fills it. Here and not in the Chat module because onboarding writes it too:
+// its closing line promises «Esta charla te espera en el chat». Under the
+// `tuagente_` prefix, so a change of agent wipes it (`forgetAgent`).
+const LAST_CONVERSATION_KEY = "tuagente_chat_last";
+
+export function rememberConversation(id: string | null) {
+  try {
+    if (id) localStorage.setItem(LAST_CONVERSATION_KEY, id);
+    else localStorage.removeItem(LAST_CONVERSATION_KEY);
+  } catch { /* private mode: the URL still works */ }
+}
+
+export function lastConversation(): string | null {
+  try {
+    return localStorage.getItem(LAST_CONVERSATION_KEY);
+  } catch {
+    return null;
+  }
+}
+
 const DETAILS: string[] = [...Object.values(PARAM), PARAM_CHAT_REQUEST];
 
 /** Does this URL point at something concrete (and not a tab's home screen)?

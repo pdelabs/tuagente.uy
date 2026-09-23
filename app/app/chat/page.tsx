@@ -13,11 +13,12 @@ import {
 } from "lucide-react";
 import {
   loadConfig, chatStream, sessionChatStream, getActivity, getSessions, getSessionMessages,
-  uploadFile, type HttpError, type PortalConfig, type ChatMessage,
+  newSessionOf, sessionIds, uploadFile, type HttpError, type PortalConfig, type ChatMessage,
 } from "../lib/agent";
 import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
 import {
-  CopyLink, PARAM, PARAM_CHAT_REQUEST, openInRoute, replaceInRoute, useRouteParam,
+  CopyLink, PARAM, PARAM_CHAT_REQUEST, lastConversation, openInRoute, rememberConversation,
+  replaceInRoute, useRouteParam,
 } from "../lib/routes";
 import { EntityProvider } from "../lib/EntityViewer";
 import Markdown from "../lib/Markdown";
@@ -47,28 +48,6 @@ type Msg = {
 
 const THINKING = "_thinking";
 
-// The conversation the client was last in, so coming back to Chat lands there
-// and not on a blank «Nueva conversación». A CONVENIENCE, NOT THE SOURCE: the
-// URL (`?conversation=`) says what is open; this only fills the URL when the
-// client arrives at Chat with nothing in it. Under the `tuagente_` prefix, so
-// a change of agent wipes it with everything else (`forgetAgent`).
-const LAST_CONVERSATION_KEY = "tuagente_chat_last";
-
-function rememberConversation(id: string | null) {
-  try {
-    if (id) localStorage.setItem(LAST_CONVERSATION_KEY, id);
-    else localStorage.removeItem(LAST_CONVERSATION_KEY);
-  } catch { /* private mode: the URL still works */ }
-}
-
-function lastConversation(): string | null {
-  try {
-    return localStorage.getItem(LAST_CONVERSATION_KEY);
-  } catch {
-    return null;
-  }
-}
-
 /** A conversation as the engine has it: its name, its turns, and whether a
  *  turn of it is still working. */
 async function fetchThread(c: PortalConfig, id: string) {
@@ -81,26 +60,6 @@ async function fetchThread(c: PortalConfig, id: string) {
       .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
       .map((m): Msg => ({ role: m.role as "user" | "assistant", content: m.content as string })),
   };
-}
-
-/** Which session a NEW conversation's first turn landed in.
- *
- *  `/portal/chat/stream` (the OpenAI dialect) carries no session id back, so
- *  without this a new conversation never got a URL: the header said «Nueva
- *  conversación» over a conversation with ten messages, a reload lost it, and
- *  leaving Chat and coming back showed a blank one. The engine writes the
- *  first user message as the session's preview (`core/session.py`,
- *  `run_turn`), and the session this turn just touched is the most recently
- *  active one with that preview.
- *
- *  PENDING: the engine should send the session id in that dialect; then this
- *  goes. */
-function sessionOfFirstTurn(list: SessionSummary[], firstMessage: string): string | null {
-  const preview = firstMessage.trim().slice(0, 200);
-  const match = list
-    .filter((s) => (s.preview ?? "").trim() === preview)
-    .sort((a, b) => b.last_active - a.last_active)[0];
-  return match?.id ?? null;
 }
 
 // What the agent is doing, in the client's words. The tool's raw name is
@@ -460,9 +419,10 @@ export default function ChatPage() {
   // the next message got written into A. Verified via the API. The guard has
   // to protect the send, not hide the navigation.
   const activeIdRef = useRef<string | null | undefined>(undefined);
-  // The id a new conversation just learned it has (`sessionOfFirstTurn`). The
-  // URL gets it, and the thread on screen IS that conversation already:
-  // reloading it would only flash a spinner and drop the tool trails.
+  // The id a new conversation just learned it has (`newSessionOf`), usually
+  // while its first turn is still streaming. The URL gets it, and the thread
+  // on screen IS that conversation already: reloading it would only flash a
+  // spinner, drop the tool trails and — mid-send — abort the stream.
   const adoptedRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -575,14 +535,72 @@ export default function ChatPage() {
 
     const tools: string[] = [];
     const startedAt = Date.now();
-    // A new conversation's id, learned once its first turn is over -- or
-    // stopped: the engine keeps what was said up to the stop.
-    let adopt: string | null = null;
+
+    // WHICH CONVERSATION THIS TURN IS IN. An open one knows; a new one learns
+    // it right after the engine accepts the turn — not when the turn is over.
+    // Measured on the QA agent (2026-09-23): Posteos' «Arreglar esta imagen»
+    // opened a new conversation whose turn ran over three minutes, and for all
+    // of them the URL had no `?conversation=` and the list had no row for it.
+    let sid: string | null = activeId;
+    let before: Set<string> | null = null;
+    // The engine took the turn: from here on it runs to the end whatever
+    // happens to this stream (`start_turn`, turns run detached).
+    let accepted = false;
+    const first = history.find((m) => m.role === "user")?.content ?? text;
+    const adopt = (id: string) => {
+      sid = id;
+      if (!isCurrent()) return;
+      adoptedRef.current = id;
+      replaceInRoute({ [PARAM.conversation]: id });
+      refreshSessions(cfg);
+    };
+    const identify = async () => {
+      if (sid || !before) return;
+      const id = await newSessionOf(cfg, before, first).catch(() => null);
+      if (id && !sid) adopt(id);
+    };
+    // The session is written before the stream's first byte, but the listing
+    // is a second request racing it: a few tries, a second apart.
+    const identifySoon = async () => {
+      for (let i = 0; i < 8 && !sid && isCurrent(); i++) {
+        await identify();
+        if (!sid) await new Promise((r) => setTimeout(r, 1_000));
+      }
+    };
+
+    // THE STREAM IS NOT THE ONLY WITNESS. The same QA run sat on «Pidiéndole
+    // el trabajo a un ayudante…» for four minutes after the engine had
+    // finished, and the answer only showed up after leaving Chat and coming
+    // back. So while it streams, the thread is read too; two reads in a row
+    // saying the turn is over and the stream still open means the stream
+    // went stale: it is dropped and the thread shows what the engine kept.
+    let stale = false;
+    let overReads = 0;
+    const watchdog = setInterval(() => {
+      if (!sid) return;
+      fetchThread(cfg, sid)
+        .then(({ running }) => {
+          overReads = running ? 0 : overReads + 1;
+          if (overReads >= 2 && !stale) { stale = true; ac.abort(); }
+        })
+        .catch(() => { /* the next tick asks again */ });
+    }, 5_000);
+
+    /** The turn goes on without this stream: show what the engine has and
+     *  keep reading it while it works (the `working` poll below). */
+    const followThread = async () => {
+      if (!sid) await identify();
+      if (!sid || !isCurrent()) return false;
+      const thread = await fetchThread(cfg, sid).catch(() => null);
+      if (!isCurrent()) return true;
+      if (thread) setMsgs(thread.turns);
+      setWorking(thread ? thread.running : true);
+      return true;
+    };
+
     const settle = async () => {
-      const list = await refreshSessions(cfg);
-      if (activeId || !list) return;
-      const first = history.find((m) => m.role === "user")?.content ?? text;
-      adopt = sessionOfFirstTurn(list, first);
+      await refreshSessions(cfg);
+      await identify();
     };
     const apply = (content: string) => {
       if (!isCurrent()) return;
@@ -618,6 +636,7 @@ export default function ChatPage() {
         const segments: string[] = [""];
         const render = () => paint(segments.filter((s) => s.trim()).join("\n\n"));
         await sessionChatStream(cfg, activeId, text, {
+          onOpen: () => { accepted = true; },
           onMessageStart: () => {
             if (segments[segments.length - 1].trim()) segments.push("");
           },
@@ -640,13 +659,16 @@ export default function ChatPage() {
           },
         }, ac.signal);
       } else {
+        // What was there before this send: the new conversation is the one
+        // that wasn't (`newSessionOf`).
+        before = await sessionIds(cfg);
         // New conversation: the gateway also reports tools, but through a
         // different event. Without this the trace and the gesture would
         // stay on "Pensando" [Thinking] for the whole answer.
         await chatStream(cfg, history, paint, (tool) => {
           if (tools[tools.length - 1] !== tool) tools.push(tool);
           setLiveTools([...tools]);
-        }, ac.signal);
+        }, ac.signal, () => { accepted = true; identifySoon(); });
       }
       flush();
       if (isCurrent()) {
@@ -666,6 +688,14 @@ export default function ChatPage() {
           setMsgs((ms) => (ms[ms.length - 1]?.content.trim() ? ms : ms.slice(0, -1)));
         }
         await settle();
+        // Stale, or «Detener»: either way the engine's turn is not this
+        // stream's to stop, so the thread says where it really is.
+        if (accepted) await followThread();
+      } else if (accepted && !(e as HttpError).status && await followThread()) {
+        // The connection broke mid-turn (no HTTP status: the network, not
+        // the engine). The turn is fine and keeps going: saying «No pude
+        // enviar tu mensaje» and putting it back in the box would invite
+        // sending it twice.
       } else if (isCurrent()) {
         setMsgs(base);
         setInput(text);
@@ -691,6 +721,7 @@ export default function ChatPage() {
         }
       }
     } finally {
+      clearInterval(watchdog);
       abortRef.current = null;
       // If the client already changed conversation, the `activeId` effect
       // already cleaned this up: we don't stomp on it again.
@@ -699,13 +730,6 @@ export default function ChatPage() {
         setSending(false);
         setLiveTools([]);
       }
-    }
-    // After the send is released, not inside it: a URL change while
-    // `sendingRef` is still up reads as "the client navigated away" and
-    // aborts. Replace and not push: it is the same conversation, now named.
-    if (adopt && isCurrent()) {
-      adoptedRef.current = adopt;
-      replaceInRoute({ [PARAM.conversation]: adopt });
     }
   };
 
