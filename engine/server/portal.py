@@ -117,11 +117,14 @@ def files():
         if not path.is_file() or any(part.startswith(".") for part in path.parts):
             continue
         stat = path.stat()
+        relative = str(path.relative_to(root))
         listed.append({
-            "path": str(path.relative_to(root)),
+            "path": relative,
             "size": stat.st_size,
             # Epoch seconds: what the Files tab, Inicio and Activity read.
             "mtime": int(stat.st_mtime),
+            # What the portal offers to edit: the same rule `PUT` enforces.
+            "editable": editable(relative),
         })
     return {"files": listed}
 
@@ -172,6 +175,56 @@ def file_bytes(path: str):
     return FileResponse(
         target, media_type=media_type(target), headers={"X-Content-Type-Options": "nosniff"}
     )
+
+
+# WHAT THE OWNER MAY EDIT FROM ARCHIVOS, and nothing else. Her own uploads
+# (`entrada/`, where `/portal/upload` puts them) and the files the agent writes
+# FOR her to correct — the business draft, whose note says «corregí lo que no
+# sea así» and which QA could not correct (2026-09-23). Everything else is the
+# agent's work: a deliverable edited behind its back is a file that no longer
+# says what the agent thinks it said, and memory or flows edited by hand are
+# the agent's state changed with nobody noticing. A new file joins by name here.
+EDITABLE_PREFIXES = ("entrada/",)
+EDITABLE_FILES = ("negocio/borrador.md",)
+NOT_EDITABLE = "{path} es de tu agente: desde acá se puede leer, no editar."
+NOT_TEXT = "{path} no es un archivo de texto: descargalo y editalo con su programa."
+
+
+def editable(relative: str) -> bool:
+    return relative in EDITABLE_FILES or relative.startswith(EDITABLE_PREFIXES)
+
+
+@router.put("/portal/files/{path:path}")
+async def edit_file(path: str, request: Request):
+    """The owner's edit of a text file, raw UTF-8 body, replacing it whole.
+
+    Only a file that is already there (this edits, it does not create: new
+    files come in through `/portal/upload`), that `editable` allows, and whose
+    old and new contents are both text — an .xlsx in `entrada/` saved as text
+    would be a broken spreadsheet. The rule is read on the RESOLVED path, so a
+    `../` or a symlink out of `entrada/` is judged by where it lands.
+
+    NO STAMP ON THE FILE. What she saved is what she reads back: the endpoint
+    does not rewrite the draft's note to «corregido por vos», because a line
+    she did not type appearing in her own edit is a surprise, and the face
+    already reads everything in the draft as possibly hers (`instructions.md`).
+    """
+    try:
+        target = under(config.WORKSPACE, path)
+    except ValueError:
+        raise HTTPException(404, NO_FILE.format(path=path)) from None
+    if not target.is_file():
+        raise HTTPException(404, NO_FILE.format(path=path))
+    relative = str(target.relative_to(config.WORKSPACE.resolve()))
+    if not editable(relative):
+        raise HTTPException(403, NOT_EDITABLE.format(path=relative))
+    try:
+        target.read_bytes().decode("utf-8")
+        text = (await request.body()).decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(400, NOT_TEXT.format(path=relative)) from None
+    target.write_text(text)
+    return {"ok": True, "path": relative, "bytes": len(text.encode())}
 
 
 @router.post("/portal/upload")
