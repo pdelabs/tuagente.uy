@@ -6,7 +6,8 @@
 // decorative icon, and NO plugins/MCP section.
 //
 // Contract (engine `server/extra.py`): GET /portal/inventory →
-//   { skills: [{ name, summary, source, category? }] }
+//   { skills: [{ name, label, summary, source, category? }] }
+//   `label` is the owner's name for the skill, `summary` the owner's line.
 //   (it also returns the plugins and `mcp`; this page draws neither)
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -75,39 +76,6 @@ function summarize(raw?: string): string | null {
   return cut ? `${s}…` : s;
 }
 
-// English function words that don't exist in rioplatense Spanish. Two of
-// them together don't come out of text written in Montevideo.
-const ENGLISH_WORDS =
-  /\b(the|and|or|when|with|from|your|you|use|used|using|create|creates|read|edit|write|writes|extract|convert|merge|split|fill|secure|into|file|files|document|documents|template|templates|spreadsheet|spreadsheets|scan|scans|text|image|images|tool|tools)\b/gi;
-
-/** Is this summary written for the CLIENT, or is it the engine's own spec sheet?
- *
- *  A skill has two audiences and a single file: `description` tells THE
- *  AGENT when to use it and, on a skill nobody wrote a client line for, that
- *  is what reaches this screen -- "Extract text from PDFs/scans (pymupdf,
- *  marker-pdf)", the showcase of what the agent can do written for whoever
- *  programmed it.
- *
- *  Two signals from the data itself, none of them invented here:
- *
- *  1. `label`, the frontmatter's `title` in plain rioplatense, written
- *     together with the client line: when an agent sends titles at all, a
- *     skill without one has no client line. When it sends none, this signal
- *     says nothing and is skipped.
- *  2. English.
- *
- *  Translating by hand here would mean inventing a dictionary that drifts out
- *  of sync with the kit on the very first change. What's missing on the
- *  agent's side goes as a request to the kit; in the meantime, the card shows
- *  the name and stays quiet. */
-function writtenForClient(
-  s: { summary: string | null; label: string }, adapterHasTitles: boolean,
-): boolean {
-  if (!s.summary) return false;
-  if (adapterHasTitles && !s.label) return false;
-  return (s.summary.match(ENGLISH_WORDS) ?? []).length < 2;
-}
-
 type Skill = {
   name: string;         // raw: it's the `?skill=` key
   displayName: string;  // readable
@@ -159,8 +127,6 @@ export default function SkillsPage() {
     const raw = Array.isArray(data?.skills) ? data!.skills : [];
     const clean = raw.filter(
       (s): s is InventoryItem => Boolean(s) && typeof s?.name === "string" && s.name.trim() !== "");
-    // Does this agent send plain-Spanish titles at all? See `writtenForClient`.
-    const adapterHasTitles = clean.some((s) => (s.label || "").trim() !== "");
     return clean
       // `sin-…` ONES ARE NOT SKILLS: THEY ARE THE LACK OF ONE. `sin-busqueda-web`
       // and `sin-imagenes` are the instructions the agent reads when asked for
@@ -170,12 +136,14 @@ export default function SkillsPage() {
       // flagged as written for whoever programmed it.
       .filter((s) => !(norm(String(s.source ?? "")) === "kit" && /^sin-/.test(s.name)))
       .map((s) => {
+        // Both are the OWNER's text: the skill's `title` and its
+        // `client_summary`, never the model's `description` -- which is what
+        // used to reach this screen and had to be sniffed out as English.
         const label = (s.label || "").trim();
-        const summary = summarize(s.summary);
         return {
         name: s.name,
         displayName: label || humanize(s.name),
-        summary: writtenForClient({ summary, label }, adapterHasTitles) ? summary : null,
+        summary: summarize(s.summary),
         source: norm(String(s.source ?? "")),
         category: typeof s.category === "string" ? s.category.trim() : "",
         };
