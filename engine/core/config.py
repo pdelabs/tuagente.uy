@@ -80,14 +80,18 @@ OTEL_INCLUDE_CONTENT = os.environ.get("CORE_OTEL_INCLUDE_CONTENT", "0") == "1"
 COMPACT_AT = float(os.environ.get("CORE_COMPACT_AT", "0.6"))
 COMPACT_AT_TOKENS = int(os.environ.get("CORE_COMPACT_AT_TOKENS", "60000"))
 
-# What the portal draws BEFORE any plugin is loaded: the four tabs the engine
-# itself answers. Everything else is off until a plugin flips it with
+# What the portal draws BEFORE any plugin is loaded: what the engine itself
+# answers. Everything else is off until a plugin flips it with
 # `engine.module(...)` — `approvals` is the `approval` plugin's — and what the
 # manifest publishes is `plugins.modules()`, the two put together. A module
 # declared and not answering is a portal-check failure.
 MODULES = {
     "chat": True,
     "files": True,
+    # `POST /portal/upload` (server/portal.py). The portal shows the Files
+    # tab's upload button, and the drop zone, only when this is on: the route
+    # answered for weeks behind a button nobody could see.
+    "upload": True,
     "activity": True,
     "approvals": False,
     "usage": True,

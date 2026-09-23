@@ -940,6 +940,10 @@ there is a 404, in Spanish.
 python3 engine/tests/test_files.py      # free, a second
 ```
 
+`POST /portal/upload` writes into `entrada/`, and `upload` is one of the
+engine's own modules (`core/config.py`'s `MODULES`): the portal hides the
+Files tab's upload button without it.
+
 ## Gates
 
 From `docs/engine-plan.md`. Wave 1 owns none of them outright; what it had to
