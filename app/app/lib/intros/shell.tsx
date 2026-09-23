@@ -36,8 +36,8 @@ export function IntroPage({ children, onOk, cta = "Empezar", note }: {
 /** THE FRAME AROUND ILLUSTRATIONS. Every mockup goes inside this.
  *
  *  WHY IT EXISTS. A test client went into Connections, saw the green
- *  checkmarks the welcome screen drew next to Telegram, her company's email
- *  and her spreadsheets, and walked away convinced she already had everything
+ *  checkmarks the welcome screen drew next to a messaging channel, her
+ *  company's email and her spreadsheets, and walked away convinced she already had everything
  *  plugged in. She had nothing. The illustration used the same hairline, the
  *  same white and the same tonal colors as the real screen: there was no way
  *  for her to tell. "It's obviously an example" isn't a defense -- it wasn't one.

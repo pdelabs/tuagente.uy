@@ -7,7 +7,7 @@ order in it is the order everything happens in.
 A plugin that has something to add to THIS engine declares `surfaces.core` in
 its `plugin.json` — a directory holding `plugin.py` and, if the mechanism needs
 words, an `instructions.md`. `load()` imports that file and calls
-`register(engine)`, and the object it hands over has eight verbs that ADD
+`register(engine)`, and the object it hands over has eleven verbs that ADD
 something and no more:
 
     engine.toolset(ts)          a toolset the agent gets
@@ -23,6 +23,9 @@ something and no more:
                                 tool (`core/session.py`'s DEFERRED_HANDLER)
     engine.subagent(sub, label) a delegate the face can hand work to, and the
                                 Spanish name the client reads it under
+    engine.watcher(name, fn)    what fires an `event` flow (`core/watchers.py`)
+    engine.ticker(name, fn)     code on the clock with no flow and no model
+    engine.notifier(name, send) a way to reach the owner (`core/notify.py`)
 
 plus five that hand a plugin what it needs to BUILD one, and three attributes
 that make its `Agent(...)` fit this engine:
@@ -286,6 +289,18 @@ class Engine:
         (`event: <name>`) runs when it returns something, with that text in its
         prompt. `core/watchers.py` is the why."""
         watchers.register(name, fn, every)
+
+    def ticker(self, name: str, fn: Callable[[], None], every: int = 60) -> None:
+        """Code the clock calls every `every` seconds, with no flow and no
+        model behind it. `core/watchers.py` says when that is the right tool."""
+        watchers.register_ticker(name, fn, every)
+
+    def notifier(self, name: str, send: Callable[[str, str, str, str | None], None]) -> None:
+        """A way to reach the owner (`core/notify.py`): `send(to, subject,
+        text, link)`, raising when it did not send."""
+        from . import notify
+
+        notify.register(name, send)
 
     def provide(self, name: str, obj: Any) -> None:
         """Offer an object to the plugins that load after this one."""

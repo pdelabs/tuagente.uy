@@ -32,15 +32,17 @@ export type Manifest = {
    *  (adapter 0.32+). The agent has always sent it; the portal only started
    *  reading it when Posts needed an account name to sign the feed with. */
   company?: string | null;
-  /** Where the agent notifies: `telegram`, `email` or `none` -- whatever the
+  /** Where the agent notifies: `email` or `none` -- whatever the
    *  client answered at onboarding. Absent on older adapters and on anyone who
    *  never got around to answering; `"none"` is an explicit answer ("not right
    *  now") and it's the one that makes the portal offer it again. */
   notify_channel?: string | null;
-  /** Telegram bot handle, without the @ (adapter 0.35+). Onboarding used to say
-   *  "send me a hello" and never where: without this the step is impossible to
-   *  complete unless the client already knows the handle. null if it has no bot. */
-  telegram_bot?: string | null;
+  /** The channels this agent can actually notify through, today `[]` or
+   *  `["email"]`. It's what onboarding offers: a channel the agent can't send
+   *  through isn't an option, it's a promise nobody keeps. Email goes out from
+   *  our domain, so it only needs the client's address -- not the company's
+   *  inbox connected. Absent reads as empty. */
+  notify_channels?: string[];
   /** WHAT CLOCK THE BUSINESS LIVES ON. DOES NOT EXIST YET: it's item 4 of
    *  `docs/PENDING.md` ("The agent's declared timezone"), declared here so
    *  that the day the adapter publishes it the portal can use it without
@@ -713,8 +715,6 @@ export const getGoogleAuthUrl = (c: PortalConfig) =>
   post<{ auth_url: string }>(c.adapter, "/portal/connections/google/auth-url", c);
 export const exchangeGoogleAuthCode = (c: PortalConfig, code: string) =>
   post<{ ok: boolean }>(c.adapter, "/portal/connections/google/auth-code", c, { code });
-export const activateTelegramPairing = (c: PortalConfig, code: string) =>
-  post<{ ok: boolean }>(c.adapter, "/portal/connections/telegram/pairing", c, { code });
 export const getWhatsAppPairStatus = (c: PortalConfig) =>
   get<{ paired: boolean; pairing: boolean; has_qr: boolean }>(c.adapter, "/portal/connections/whatsapp/pair", c);
 export const startWhatsAppPairing = (c: PortalConfig) =>
@@ -803,10 +803,7 @@ export const saveIdentity = (
     company?: string;
     url?: string;
     /** Where the agent notifies. The notification is sent by IT, not us. */
-    contact?: { channel: "telegram" | "email" | "none"; value?: string };
-    /** A PNG capture (bare base64) of the mascot at naming time: the agent
-     *  saves it and one of our tools uploads it as the Telegram bot's photo. */
-    avatar_png?: string;
+    contact?: { channel: "email" | "none"; value?: string };
   },
 ) => post<{ ok: boolean }>(c.adapter, "/portal/identity", c, identity);
 /** Change what the agent can do with a connection. Client only. */
@@ -1417,7 +1414,6 @@ export function connectionLabel(id: string, connections?: Connection[] | null): 
   if (c?.label) return c.label;
   const KNOWN: Record<string, string> = {
     email: "el correo de la empresa",
-    telegram: "Telegram",
     whatsapp: "WhatsApp",
     slack: "Slack",
     "google-workspace": "Google Planillas y Drive",

@@ -8,12 +8,11 @@
 import {
   CalendarDays, Hash, Mail, Plug, Sparkles, type LucideIcon,
 } from "lucide-react";
-import { LogoGmail, LogoGoogle, LogoTelegram, LogoWhatsApp } from "./Logos";
+import { LogoGmail, LogoGoogle, LogoWhatsApp } from "./Logos";
 
 const SIZE = { sm: "h-9 w-9", md: "h-10 w-10" };
 
 const BRANDS: Record<string, (p: { className?: string }) => JSX.Element> = {
-  "telegram": LogoTelegram,
   "whatsapp": LogoWhatsApp,
   "google-workspace": LogoGoogle,
   "gmail-lectura": LogoGmail,

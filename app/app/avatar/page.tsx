@@ -1,8 +1,8 @@
 "use client";
 
 // Utility page (not linked): the agent's agentito, alone, at 640×640.
-// Exists to photograph it with headless Chrome and generate the bot's avatar
-// PNG when the naming happened before automatic capture existed.
+// Exists to photograph it with headless Chrome and get the agent's face as a
+// PNG, for wherever a profile photo is needed.
 //
 // RIVE, not the static SVG: the static one is a simplified version (no
 // glasses or accessories) and the photo came out "similar but not him" —
@@ -50,9 +50,9 @@ export default function AvatarPage() {
     <div
       id="avatar-ready"
       // OPAQUE BACKGROUND, mandatory: without this the PNG comes out
-      // transparent and Telegram crushes it against BLACK — the face ends up
-      // cropped over a black square. It's the same #FBFAFF that composes the
-      // naming capture, so both paths give the same photo.
+      // transparent, and a profile photo with no alpha support crushes it
+      // against BLACK — the face ends up cropped over a black square. It's
+      // the portal's own #FBFAFF.
       style={{
         width: 640, height: 640, display: "grid", placeItems: "center",
         background: "#FBFAFF",

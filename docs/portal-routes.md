@@ -1,7 +1,7 @@
 # Portal routes — the URL contract
 
 What shape every address of the client's portal has, so **the agent can
-quote them** when it notifies over Telegram or email, and so the client can
+quote them** when it notifies by email, and so the client can
 share them, go back with the browser button and refresh without losing
 sight of what they were looking at.
 
@@ -87,7 +87,7 @@ one.
 | A folder | `/app/files?folder=<path>` | `/app/files?folder=interno` | opens |
 | A file | `/app/files?file=<path>` | `/app/files?file=workspace/entregables/2026-08-12-instagram-post-trash-bags-20-off.md` | opens (with the `workspace/` prefix) |
 | A flow | `/app/flows/<slug>` | `/app/flows/revision-precios-proveedores` | opens · stale id |
-| A connection | `/app/connections?connection=<catalog id>` | `/app/connections?connection=telegram` | opens · stale id |
+| A connection | `/app/connections?connection=<catalog id>` | `/app/connections?connection=whatsapp` | opens · stale id |
 | A system skill | `/app/skills?skill=<name>` | `/app/skills?skill=approval` | opens · stale id |
 | A scheduled task | `/app/tasks?scheduled=<cron id>` | `/app/tasks?scheduled=bb8485784d90` | opens |
 What's left **UNVERIFIED** inside rows that were otherwise tested:
@@ -293,7 +293,7 @@ to close). It copies the address of the thing, without the hash.
 - **Inside the portal's own chat it isn't needed.** The agent's markdown
   already turns `t_80ff7609`, `art_…` and file paths into chips that open
   the thing right there. A raw link there is worse.
-- **Outside the portal, yes** — Telegram, email, a comment read from a
+- **Outside the portal, yes** — an email, a comment read from a
   phone: there the link is the only way for "I left you the report" to be
   something you can open with one tap.
 - **One link per notice**, the one for the actual thing. Sending the tab

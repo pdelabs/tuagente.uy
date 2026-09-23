@@ -15,7 +15,6 @@ its manifest already said.
 
 import base64
 import binascii
-import json
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -23,25 +22,16 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
-from core import config, db, plugins, session
+from core import config, db, identity, notify, plugins, session
 from core.tools.workspace import under
 
 from . import sse
 
 router = APIRouter()
 
-# The agent dir is a read-only mount (the SOUL and the seed identity), so what
-# the client changes from the portal lands in /state and wins when it is there.
-IDENTITY_SEED = config.AGENT_DIR / "identity.json"
-IDENTITY_LIVE = config.STATE_DIR / "identity.json"
-
 # Read by the client: the portal shows `error.message` on the tab she is on.
 NO_FILE = "No hay ningún archivo {path} en el espacio de trabajo."
 BAD_UPLOAD = "No pude leer el archivo: lo que llegó no es base64."
-
-
-def identity() -> dict:
-    return json.loads((IDENTITY_LIVE if IDENTITY_LIVE.exists() else IDENTITY_SEED).read_text())
 
 
 def iso(ts: float) -> str:
@@ -50,7 +40,7 @@ def iso(ts: float) -> str:
 
 @router.get("/portal/manifest")
 def manifest():
-    who = identity()
+    who = identity.load()
     return {
         "agent": who["name"],
         "adapter_version": config.ADAPTER_VERSION,
@@ -59,15 +49,14 @@ def manifest():
         "look": who.get("look"),
         "company": who.get("company"),
         "notify_channel": who.get("contact", {}).get("channel"),
-        "telegram_bot": None,
+        "notify_channels": notify.available(),
         "timezone": config.TIMEZONE,
     }
 
 
 @router.post("/portal/identity")
 async def save_identity(request: Request):
-    who = identity() | await request.json()
-    IDENTITY_LIVE.write_text(json.dumps(who, ensure_ascii=False))
+    identity.save(identity.load() | await request.json())
     return {"ok": True}
 
 

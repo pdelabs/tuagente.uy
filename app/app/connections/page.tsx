@@ -30,9 +30,9 @@ import {
   ArrowRight, Check, Clock, ExternalLink, Link2, Plug, RefreshCw, TriangleAlert,
 } from "lucide-react";
 import {
-  activateTelegramPairing, requestedConnections, createConnectionRequest,
+  requestedConnections, createConnectionRequest,
   exchangeGoogleAuthCode, getConnections, getGoogleAuthUrl, getTickets,
-  saveIdentity, loadConfig,
+  loadConfig,
   type Connection, type PortalConfig,
 } from "../lib/agent";
 import { ConnectionLogo } from "../lib/ConnectionLogo";
@@ -66,10 +66,9 @@ const WHO: Record<string, string> = {
  *
  *  The catalog says whose job it is when everything's in place; the status
  *  says whether there's actually something the client can press right now.
- *  Telegram comes marked `client_only` -- "You can do it yourself" -- and on
- *  an agent with no bot the card's only button is "Ask them to connect it":
- *  the line was dumping a job on the client that the portal doesn't let them
- *  do. If there's no self-service path, it doesn't claim there is one either. */
+ *  A connection can come marked `client_only` -- "You can do it yourself" --
+ *  while the card's only button is "Ask them to connect it": the line was
+ *  dumping a job on the client that the portal doesn't let them do. If there's no self-service path, it doesn't claim there is one either. */
 function whoForReal(c: Connection): string | undefined {
   const canAlone = Boolean(c.setup_flow) || Boolean(c.link) || c.status === "ready";
   const who = c.who === "client_only" && !canAlone && c.status !== "connected"
@@ -183,78 +182,6 @@ function GoogleDialog({ cfg, connection, onClose, onConnected }: {
   );
 }
 
-/** Telegram "ready": open the chat + paste the activation code right here. */
-function TelegramReady({ c, cfg, onActivated }: {
-  c: Connection; cfg: PortalConfig | null; onActivated: () => void;
-}) {
-  const [code, setCode] = useState("");
-  const [activating, setActivating] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-
-  const activate = async () => {
-    if (!cfg || !code.trim()) return;
-    setActivating(true);
-    setErr(null);
-    try {
-      const d = await activateTelegramPairing(cfg, code);
-      if (!d.ok) throw new Error("No se pudo activar Telegram.");
-      setDone(true);
-      // There's now a way to notify them: let the manifest know, so the
-      // "still no channel" banner stops showing. Onboarding records it when
-      // pairing happens there; the same thing happens here and nobody was
-      // recording it, so a client who turned it on from this screen was left
-      // with the reminder stuck on forever.
-      saveIdentity(cfg, { contact: { channel: "telegram", value: "portal" } })
-        .catch(() => { /* old or down adapter: Telegram stayed as it was */ });
-      onActivated();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setActivating(false);
-    }
-  };
-
-  if (done) {
-    return (
-      <p className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-c-green-ink">
-        <Check className="h-4 w-4" /> ¡Activado! Mandale otro mensaje y ya te contesta.
-      </p>
-    );
-  }
-
-  return (
-    <div className="mt-1 flex flex-col gap-2">
-      <a
-        href={c.link!}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg bg-primary px-3.5 text-sm font-semibold text-white transition hover:bg-primary-dark"
-      >
-        <ExternalLink className="h-4 w-4" />
-        Abrir el chat
-      </a>
-      <p className="text-[12px] leading-snug text-ink-soft">
-        Mandale un hola. ¿Te contestó con un código? Pegalo acá:
-      </p>
-      <div className="flex gap-2">
-        <input
-          value={code}
-          onChange={(e) => { setCode(e.target.value); setErr(null); }}
-          onKeyDown={(e) => e.key === "Enter" && activate()}
-          placeholder="Código"
-          maxLength={16}
-          className={`${inputCls} w-36 font-mono uppercase`}
-        />
-        <Btn size="sm" onClick={activate} disabled={!code.trim() || activating}>
-          {activating ? "Activando…" : "Activar"}
-        </Btn>
-      </div>
-      {err && <p className="text-[12px] font-medium text-c-coral-ink">{err}</p>}
-    </div>
-  );
-}
-
 function StatusChip({ status }: { status: string }) {
   if (status === "connected")
     return (
@@ -297,7 +224,7 @@ export default function ConnectionsPage() {
   // the flow that needs it: without this they land on a screen with six
   // cards and none of them says which one was theirs.
   //
-  // It now travels via query (`?connection=telegram`), like the rest of the
+  // It now travels via query (`?connection=whatsapp`), like the rest of the
   // portal. It used to travel via hash `#c=` so as not to clash with the
   // magic link; the problem is that the hash is EXACTLY where the credential
   // arrives, so sharing that URL meant sharing the key. The hash is still
@@ -471,14 +398,6 @@ export default function ConnectionsPage() {
           </>
         )}
       </div>
-
-      {/* "Ready": the bot exists, only its first message is missing -- one
-          click and done. If the bot replies with a code (pairing), it gets
-          pasted right here: being authenticated in the portal + having the
-          DM is the double proof. */}
-      {c.status === "ready" && c.link && (
-        <TelegramReady c={c} cfg={cfg} onActivated={load} />
-      )}
 
       {/* Permissions only make sense once the connection exists: before
           connecting it there's nothing to limit. */}

@@ -288,9 +288,35 @@ def wants_a_look(flow: Flow, now: float) -> bool:
     return now - _looked.get(flow.slug, 0) >= watchers.WATCHERS[flow.event].every
 
 
+_ticked: dict[str, float] = {}
+_ticking: set[str] = set()
+_tick_errors: dict[str, str] = {}
+
+
+async def call_ticker(name: str) -> None:
+    """One call of a plugin's ticker (`core/watchers.py`). Its failure is the
+    plugin's, logged once per distinct reason: a mail service that is down for
+    an hour is one stack in the log, not a hundred and twenty."""
+    _ticking.add(name)
+    try:
+        _ticked[name] = time.time()
+        await asyncio.to_thread(watchers.TICKERS[name].fn)
+        _tick_errors.pop(name, None)
+    except Exception as exc:
+        reason = session.one_line(exc)
+        if _tick_errors.get(name) != reason:
+            _tick_errors[name] = reason
+            log.exception("ticker %s broke", name)
+    finally:
+        _ticking.discard(name)
+
+
 async def tick() -> None:
     now = time.time()
     db.forget_quiet_runs(now - config.FLOWS_QUIET_RUN_DAYS * 86400)
+    for name, ticker in watchers.TICKERS.items():
+        if name not in _ticking and now - _ticked.get(name, 0) >= ticker.every:
+            asyncio.create_task(call_ticker(name))
     for flow in flows.read_all():
         if flow.status != "active":
             continue
