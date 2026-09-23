@@ -67,27 +67,23 @@ def usage():
 def inventory():
     """What this agent has installed: the kit's skills and the plugins that bring them.
 
-    Each skill travels under both names. The plan's contract table says
-    `description`; `app/app/skills/page.tsx` reads `summary`. Same as `files`'
-    `mtime`/`modified`: serving both costs a key and saves a blank screen.
+    THE NAMES ARE THE PORTAL'S, ONE EACH: `lib/agent.ts`'s `Inventory`. A skill
+    is `summary` — what `app/app/skills/page.tsx` draws — and the plugins are
+    `engine_plugins`, `{name, summary}`. Both used to travel twice, under the
+    plan's names too, "so either works"; the other name was read by nobody.
     """
     return {
         "skills": [
             {
                 "name": skill.name,
-                "description": skill.description,
                 "summary": skill.description,
                 "source": "kit",
                 "editable": False,
             }
             for skill in skills.index().values()
         ],
-        "plugins": [
-            {
-                "id": plugin.id,
-                "version": plugin.manifest["version"],
-                "description": plugin.manifest["description"],
-            }
+        "engine_plugins": [
+            {"name": plugin.id, "summary": plugin.manifest["description"]}
             for plugin in plugins.enabled()
         ],
         "mcp": [],

@@ -120,10 +120,8 @@ def files():
         listed.append({
             "path": str(path.relative_to(root)),
             "size": stat.st_size,
-            # `mtime` in epoch seconds is what `app/app/files/page.tsx` reads;
-            # `modified` is the name the plan's table uses. Both travel.
+            # Epoch seconds: what the Files tab, Inicio and Activity read.
             "mtime": int(stat.st_mtime),
-            "modified": iso(stat.st_mtime),
         })
     return {"files": listed}
 

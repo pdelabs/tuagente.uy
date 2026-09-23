@@ -881,8 +881,9 @@ export type InventoryItem = {
 };
 export type Inventory = {
   skills: InventoryItem[];
-  /** The ENGINE's plugins (`hermes plugins list`), which are not the kit's
-   *  plugins -- hence the name (adapter 0.40+, `plugins` before that). */
+  /** The plugins the ENGINE loaded (`CORE_PLUGINS`): `name` is the plugin's
+   *  id and `summary` its manifest's description. The only name the engine
+   *  sends -- it no longer repeats them as `plugins`. */
   engine_plugins: { name: string; summary: string }[];
   mcp: { name: string; detail: string }[];
 };
