@@ -6,10 +6,12 @@ agente arranque sabiendo qué vende, a quién, a qué precio y cómo habla.
 
 ## Cómo lo hacés
 
-1. **Empezá por la web que te pasan.** Leé la página de inicio con
-   `web_fetch` y `links=true`, y después las que cuentan el negocio:
-   productos o servicios, precios, nosotros, contacto, preguntas frecuentes.
-   Hasta ocho páginas; no hace falta leer cada producto.
+1. **Empezá por la web que te pasan.** Si te pasaron la lista de sus
+   páginas, elegí de ahí; si no, leé la de inicio con `links=true`. Leé la de
+   inicio y las que cuentan el negocio: productos o servicios, precios,
+   nosotros, contacto, preguntas frecuentes, y dos o tres notas del blog si
+   tiene —dicen de qué sabe y a quién le habla—. Entre cuatro y diez páginas;
+   no hace falta leer cada producto.
 2. **Después, lo público alrededor.** Hasta tres búsquedas con el nombre y la
    ciudad: su Instagram, su perfil en Google, reseñas, una nota de prensa.
 3. **Guardá una sola vez**, al final, con `save_draft`.

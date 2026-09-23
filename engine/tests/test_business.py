@@ -14,6 +14,10 @@ nothing behind it (`kit/plugins/business/`).
   c. ONCE PER WEBSITE — the first look runs it with the name and the site, the
      next ones do not, and a new site runs it again.
   d. A FAILURE IS ONE LINE AND NO RETRY — the mark goes in before the run.
+  e. THE DRAFT HAS TO HAVE READ THE SITE — one page of a site with more is
+     sent back once with the site's pages, and the second save goes through.
+  f. THE SITE'S PAGES ARE CODE'S — the sitemap's, or the home's raw links
+     (menus included): same site only, one spelling each, no assets.
 
 WHERE IT POINTS. `CORE_CONTAINER`; the default is the lab's `tuagente-core`.
 """
@@ -31,8 +35,10 @@ from datetime import datetime
 sys.path.insert(0, "/opt/kit/plugins/business/core")
 
 import business_draft
+import business_site
 import business_watch
 import researcher
+from pydantic_ai import ModelRetry
 
 from core import config, db, identity
 
@@ -62,14 +68,45 @@ def events():
         "SELECT kind, label, status FROM events WHERE id > ? AND kind = 'business.researched' ORDER BY id",
         (first_event,))]
 
+site_pages = ["https://x.uy/", "https://x.uy/precios", "https://x.uy/nosotros", "https://x.uy/blog/una"]
+async def fake_pages(url):
+    return list(site_pages)
+real_pages = business_site.pages
+business_site.pages = fake_pages
+
 try:
     # a.
     tool = business_draft.toolset().tools["save_draft"]
-    tool.function(None, summary="Una ferretería de barrio.", offer=["Herramientas", "Pinturas"],
+    asyncio.run(tool.function(None, summary="Una ferretería de barrio.", offer=["Herramientas", "Pinturas"],
                   customers="", prices=[], where_and_when=["Av. Italia 1234"], channels=["https://x.uy"],
                   voice="Cercano, de vos.", edge="", questions=["¿Hacen envíos?"],
-                  sources=["https://x.uy", "https://x.uy/contacto"])
+                  sources=["https://x.uy", "https://x.uy/contacto", "https://x.uy/precios/"]))
     out["draft"] = draft.read_text()
+
+    # e.
+    draft.unlink()
+    args = dict(summary="s", offer=[], customers="", prices=[], where_and_when=[], channels=[],
+                voice="", edge="", questions=[], sources=["https://otra.uy/"])
+    site_pages = ["https://otra.uy/", "https://otra.uy/precios", "https://otra.uy/nosotros"]
+    try:
+        asyncio.run(tool.function(None, **args))
+        out["first"] = "saved"
+    except ModelRetry as exc:
+        out["first"] = str(exc)
+    out["first_wrote"] = draft.exists()
+    asyncio.run(tool.function(None, **args))
+    out["second_wrote"] = draft.exists()
+
+    # f.
+    business_site.pages = real_pages
+    async def fake_get(url, accept):
+        if url.endswith("/sitemap.xml"):
+            return None
+        return ('<nav><a href="/servicios">S</a><a href="/precios/">P</a></nav>'
+                '<a href="https://www.x.uy/blog?utm=1#top">B</a><a href="/logo.png">L</a>'
+                '<a href="https://otro.com/">O</a><a href="mailto:a@x.uy">M</a>')
+    business_site.get = fake_get
+    out["pages"] = asyncio.run(business_site.pages("https://x.uy/"))
 
     # b.
     db.write("DELETE FROM business_marks")
@@ -169,6 +206,19 @@ def main() -> int:
     if len(errors) != 1 or "la web no contestó" not in errors[0]["label"]:
         problems.append(f"the Activity lines are {r['events']!r}")
     failures += judge("d. a failure is one line and no retry", problems)
+
+    problems = []
+    if "Leíste 1 de las 3 páginas de otra.uy" not in r["first"] or "https://otra.uy/precios" not in r["first"]:
+        problems.append(f"one page of three was not sent back: {r['first'][:160]!r}")
+    if r["first_wrote"]:
+        problems.append("the refused draft was written anyway")
+    if not r["second_wrote"]:
+        problems.append("the second save did not go through")
+    failures += judge("e. the draft has to have read the site", problems)
+
+    want = ["https://x.uy/", "https://x.uy/servicios", "https://x.uy/precios", "https://www.x.uy/blog"]
+    problems = [] if r["pages"] == want else [f"the map is {r['pages']!r}"]
+    failures += judge("f. the site's pages are code's", problems)
 
     print("BUSINESS: " + ("PASS" if not failures else "FAIL"))
     return 1 if failures else 0

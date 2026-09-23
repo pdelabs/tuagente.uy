@@ -15,7 +15,8 @@ confirmed by the owner. The face reads it as background, never as her word
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from pydantic_ai import FunctionToolset, RunContext
+import business_site
+from pydantic_ai import FunctionToolset, ModelRetry, RunContext
 
 from core import config, identity
 
@@ -43,6 +44,19 @@ SECTIONS = (
 NOT_FOUND = "No lo encontré publicado."
 SAVED = "Guardé el borrador en {path}."
 
+# THE DRAFT HAS TO HAVE READ THE SITE, and it is checked here because the prose
+# alone did not do it (`business_site.py`). ONE REFUSAL per site and process:
+# the second save goes through, because a site whose other pages are a shop's
+# two hundred products has nothing more to say, and a researcher stuck between
+# a rule and a site that cannot satisfy it is a draft that never lands.
+MIN_PAGES = 3
+READ_MORE = (
+    "Leíste {read} de las {total} páginas de {site}. Antes de guardar, leé las"
+    " que cuentan el negocio —servicios, precios, nosotros, contacto, preguntas"
+    " frecuentes, y dos o tres notas del blog si tiene—. Estas son:\n{pages}"
+)
+_refused: set[str] = set()
+
 
 def render(parts: dict, when: datetime) -> str:
     sources = parts.get("sources") or []
@@ -64,7 +78,7 @@ def toolset() -> FunctionToolset:
     ts = FunctionToolset()
 
     @ts.tool
-    def save_draft(
+    async def save_draft(
         ctx: RunContext,
         summary: str,
         offer: list[str],
@@ -95,6 +109,16 @@ def toolset() -> FunctionToolset:
             questions: 3 to 6 things the agent needs to know that are not published.
             sources: every URL you read, in order.
         """
+        if sources:
+            site = business_site.host(sources[0])
+            listed = await business_site.pages(sources[0])
+            read = {business_site.canonical(s) for s in sources if business_site.host(s) == site}
+            if len(read) < min(MIN_PAGES, len(listed)) and site not in _refused:
+                _refused.add(site)
+                raise ModelRetry(READ_MORE.format(
+                    read=len(read), total=len(listed), site=site,
+                    pages="\n".join(f"- {p}" for p in listed[:30]),
+                ))
         parts = {
             "summary": summary, "offer": offer, "customers": customers, "prices": prices,
             "where_and_when": where_and_when, "channels": channels, "voice": voice,

@@ -20,6 +20,7 @@ from pydantic_ai.usage import UsageLimits
 from pydantic_ai_harness.subagents import SubAgent
 
 import business_draft
+import business_site
 
 HERE = Path(__file__).resolve().parent
 PROSE = HERE / "researcher.md"
@@ -43,7 +44,8 @@ LIMITS = UsageLimits(request_limit=30)
 # The task when nobody asked: onboarding left a website. Spanish, the model's.
 TASK = (
     "Investigá el negocio «{company}». Su web es {url}. Dejá el borrador con"
-    " `save_draft`."
+    " `save_draft`.\n\nEstas son las páginas de la web (las encontré yo, del"
+    " sitemap o del menú):\n{pages}"
 )
 
 _agent: Agent | None = None
@@ -70,8 +72,10 @@ async def run(company: str, url: str) -> str:
     it: the model's HTTP client lives there)."""
     from core import config
 
+    listed = await business_site.pages(url)
     result = await _agent.run(
-        TASK.format(company=company or url, url=url),
+        TASK.format(company=company or url, url=url,
+                    pages="\n".join(f"- {p}" for p in listed[:40])),
         deps=_deps(workspace=config.WORKSPACE, session_id=f"business-{NAME}"),
         usage_limits=LIMITS,
     )
