@@ -35,8 +35,8 @@
 //
 // FIXING ONE SLIDE GOES THROUGH THE CHAT, never through a call of this tab's
 // own: the portal talks to the agent by talking to the agent. «Arreglar esta
-// imagen» writes «Arreglá la lámina N del posteo «<id>»: <what the client
-// says>» and opens `/app/chat?p=…`, and that param SENDS the message on
+// imagen» writes «Arreglá la lámina N del posteo «<title>» (<id>): <what the
+// client says>» and opens `/app/chat?p=…`, and that param SENDS the message on
 // arrival (`app/app/chat/page.tsx`) instead of leaving it in the box — which
 // is why the sentence is finished HERE, in one line of input, and not left
 // hanging on a colon for the client to complete in a screen they have just
@@ -501,9 +501,11 @@ function DownloadImage({ cfg, id, name, as }: {
 
 /* ── One slide: its brief, and asking for it to be fixed ─────────────────── */
 
-/** The sentence that travels to the chat. The id and the number are in it
- *  because they are what the creator's tool needs, and the rest are the
- *  client's own words: what is wrong is the one thing the portal cannot know. */
+/** The sentence that travels to the chat. It leads with the post's NAME,
+ *  because the owner reads it in her own conversation, and carries the id in
+ *  brackets because it is what the creator's tool takes; the number is the
+ *  slide, and the rest are the client's own words: what is wrong is the one
+ *  thing the portal cannot know. */
 // THE CLIENT'S DOUBLE QUOTES BECOME « ». A `"` in what she typed travels into
 // the agent's delegation to the creator, and inside that tool call's JSON an
 // unescaped quote ENDS the text: on our own agent the creator received «Saca
@@ -514,8 +516,8 @@ function DownloadImage({ cfg, id, name, as }: {
 const guillemets = (text: string) =>
   text.replace(/"([^"]*)"/g, "«$1»").replace(/"/g, "”");
 
-const fixRequest = (id: string, number: number, what: string) =>
-  `Arreglá la lámina ${number} del posteo «${id}»: ${guillemets(what)}`;
+const fixRequest = (post: Post, number: number, what: string) =>
+  `Arreglá la lámina ${number} del posteo «${titleOf(post)}» (${post.id}): ${guillemets(what)}`;
 
 // The primary button as a LINK: `Btn` only draws a <button>, and this one has
 // to be an <a> so middle-click and "open in a new tab" keep working — the same
@@ -528,8 +530,10 @@ const ASK_LINK =
 
 /** The sentence that travels to the chat. Finished, because `?p=` SENDS it on
  *  arrival: the client does not land in the chat with half a request to
- *  complete. The id is in it because it is what the agent's tool takes. */
-const publishRequest = (id: string) => `Publicá en Instagram el posteo «${id}»`;
+ *  complete. By its name, and the id in brackets because it is what the
+ *  agent's tool takes. */
+const publishRequest = (post: Post) =>
+  `Publicá en Instagram el posteo «${titleOf(post)}» (${post.id})`;
 
 /** «Publicar en Instagram» — and it is a LINK to the chat, not a call of this
  *  tab's own. The portal talks to the agent by talking to the agent: the face
@@ -541,7 +545,7 @@ const publishRequest = (id: string) => `Publicá en Instagram el posteo «${id}�
  *  "open in a new tab" keep working. */
 function PublishLink({ post }: { post: Post }) {
   return (
-    <Link href={buildChatLink(publishRequest(post.id))} className={ASK_LINK}>
+    <Link href={buildChatLink(publishRequest(post))} className={ASK_LINK}>
       <Instagram className="h-3.5 w-3.5" />
       Publicar en Instagram
     </Link>
@@ -616,7 +620,7 @@ function FixSlide({ post, number }: { post: Post; number: number }) {
   const router = useRouter();
   const field = useId();
   const ask = what.trim();
-  const href = ask ? buildChatLink(fixRequest(post.id, number, ask)) : null;
+  const href = ask ? buildChatLink(fixRequest(post, number, ask)) : null;
 
   if (!open) {
     return (

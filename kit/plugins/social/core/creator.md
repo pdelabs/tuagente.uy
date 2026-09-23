@@ -63,8 +63,9 @@ posteo con `save_post` para cambiarle el texto**: `save_post` es para uno
 nuevo, y pasarle las imágenes de un posteo que ya está guardado es perderlas.
 
 **Si lo que te piden es arreglar una lámina, nada de lo de arriba corre.** El
-pedido te va a llegar así: «Arreglá la lámina N del posteo «X»: qué está mal».
-Hacé esto y sólo esto:
+pedido te va a llegar así: «Arreglá la lámina N del posteo «nombre» (X): qué
+está mal», donde X es el id del posteo, como `2026-09-21-tema`. Hacé esto y
+sólo esto:
 
 1. Leé `posteos/X/post.json`. En `prompts` está el brief con el que se hizo
    cada lámina, en el mismo orden que las imágenes: el de la lámina N es el que
