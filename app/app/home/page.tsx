@@ -27,10 +27,11 @@ import {
 } from "lucide-react";
 import {
   getActivity, getApprovals, getFiles, getFlows, getJobs,
-  getManifest, getSessions, getTickets, loadConfig,
+  getManifest, getPosts, getSessions, getTickets, loadConfig, connectionLabel,
   type CronJob, type Flow, type HttpError,
-  type Manifest, type PortalConfig, type Ticket,
+  type Manifest, type PortalConfig, type Post, type Ticket,
 } from "../lib/agent";
+import { PARAM } from "../lib/routes";
 // The SAME flow ↔ scheduled-task match that Flows uses: if each screen
 // picked its own, we'd be back to two answers for "when does it run?".
 import { crossTask } from "../flows/runs";
@@ -40,7 +41,7 @@ import {
   BOARD_COLUMNS, learnUtcOffset, cronCadence, columnForTask, whenItRuns, timeOf,
   momentOf, greetingOfTheDay, type TaskColumn, type Tone,
 } from "../lib/labels";
-import { isForTheFeed, plainLabel } from "../lib/events";
+import { isForTheFeed, plainLabel, postTitle } from "../lib/events";
 import { agentDisplayName } from "../lib/onboarding";
 import { AgentitoAnimated, loadAgentLook } from "../lib/agentito";
 import type { AgentitoState } from "../lib/AgentitoRive";
@@ -48,6 +49,9 @@ import type { AgentitoState } from "../lib/AgentitoRive";
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
 const REFRESH_MS = 60_000;
 const DELIVERABLES = "entregables/"; // what the agent produces FOR the client
+// What the business plugin writes from the client's website
+// (`kit/plugins/business/core/business_draft.py`, `DRAFT`).
+const BUSINESS_DRAFT = "negocio/borrador.md";
 
 type Approval = {
   id: string; title: string; summary?: string; created_at: string | number;
@@ -375,7 +379,11 @@ function engineSchedule(f: Flow, jobs: CronJob[] | null): string | null {
 /** "What does this thing do for me?" — the question the portal didn't
  *  answer on any screen. Built from the client's flows and their own text. */
 function WhatItDoes({ flows, jobs }: { flows: Flow[]; jobs: CronJob[] | null }) {
-  const active = flows.filter((f) => f.status !== "paused").slice(0, 4);
+  // What works first: the ones waiting on a connection go last.
+  const active = flows
+    .filter((f) => f.status !== "paused")
+    .sort((a, b) => Number(a.status === "incomplete") - Number(b.status === "incomplete"))
+    .slice(0, 4);
   if (active.length === 0) {
     return (
       <Card>
@@ -393,6 +401,25 @@ function WhatItDoes({ flows, jobs }: { flows: Flow[]; jobs: CronJob[] | null }) 
     <Section title="Qué hace por vos" icon={Workflow} href="/app/flows" viewLabel="Ver todos">
       <ul className="flex flex-col gap-2">
         {active.map((f) => {
+          // A FLOW MISSING A CONNECTION DOES NOT PROMISE. «Miro la casilla
+          // cada cinco minutos» over a flow with no mailbox connected was
+          // this screen telling the owner something that isn't happening:
+          // the flow runs, finds nothing to read, and says so in Activity.
+          // Its name stays, with what it is waiting for.
+          if (f.status === "incomplete") {
+            return (
+              <li key={f.slug} className="flex gap-2">
+                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-ink-soft/40" />
+                <p className="min-w-0 text-[13px] leading-relaxed text-ink-soft">
+                  <span className="font-semibold text-ink">{f.name}</span>
+                  {" — "}
+                  {f.missing_connections.length > 0
+                    ? `Todavía no: espera que conectes ${enumerate(f.missing_connections.map(connectionLabel))}.`
+                    : "Todavía no: le falta una conexión."}
+                </p>
+              </li>
+            );
+          }
           const runs = engineSchedule(f, jobs);
           // A scheduled job ALWAYS has the declared cadence stripped, even
           // when we couldn't read the scheduled tasks: not being able to
@@ -450,6 +477,7 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   const [events, setEvents] = useState<Slot<Event[]>>({ t: "loading" });
   const [files, setFiles] = useState<Slot<FileEntry[]>>({ t: "loading" });
   const [flows, setFlows] = useState<Slot<Flow[]>>({ t: "loading" });
+  const [posts, setPosts] = useState<Slot<Post[]>>({ t: "loading" });
   // The engine's scheduled tasks: the only ones that know when each job
   // truly runs. See `engineSchedule`.
   const [jobs, setJobs] = useState<Slot<CronJob[]>>({ t: "loading" });
@@ -465,6 +493,7 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
       setEvents({ t: "loading" });
       setFiles({ t: "loading" });
       setFlows({ t: "loading" });
+      setPosts({ t: "loading" });
       setJobs({ t: "loading" });
       setChats({ t: "loading" });
     }
@@ -526,6 +555,8 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
             () => getFiles(cfg).then((r) => arr<FileEntry>(r?.files)), setFiles),
           request(on("flows"), "tus trabajos",
             () => getFlows(cfg).then((r) => arr<Flow>(r?.flows)), setFlows),
+          request(on("posts"), "los posteos",
+            () => getPosts(cfg).then((r) => arr<Post>(r?.posts)), setPosts),
           // When each job runs. Comes from the native gateway, not the
           // adapter: doesn't depend on any manifest module, but with no
           // flows there's nothing to match it against.
@@ -593,13 +624,50 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
       .slice(0, 5);
   }, [events]);
 
-  const deliverables = useMemo(() => {
-    if (files.t !== "ready") return null;
-    return files.data
-      .filter((f) => (f.path || "").replace(/^\/+/, "").startsWith(DELIVERABLES))
-      .sort((a, b) => toMs(b.mtime) - toMs(a.mtime))
-      .slice(0, 3);
-  }, [files]);
+  // WHAT IT LEFT READY, AS THINGS AND NOT AS LOG LINES. The QA client's agent
+  // had made a post and read her website into a draft of her business, and
+  // Home only mentioned them as two lines of «Qué estuvo haciendo» among
+  // eight: the work was done and the first screen didn't hand it over. Each
+  // item opens the thing itself.
+  const ready = useMemo(() => {
+    const items: { key: string; label: string; hint: string; href: string; ms: number }[] = [];
+    if (posts.t === "ready") {
+      for (const p of [...posts.data].sort((a, b) => toMs(b.created_at) - toMs(a.created_at)).slice(0, 2)) {
+        items.push({
+          key: `post-${p.id}`,
+          label: `Posteo «${postTitle(p.slug || p.id)}»`,
+          hint: p.published ? "publicado" : "para revisar",
+          href: `/app/posts?${PARAM.post}=${encodeURIComponent(p.id)}`,
+          ms: toMs(p.created_at),
+        });
+      }
+    }
+    if (files.t === "ready") {
+      const draft = files.data.find((f) => (f.path || "").replace(/^\/+/, "") === BUSINESS_DRAFT);
+      if (draft) {
+        items.push({
+          key: "business-draft",
+          label: "El borrador de tu negocio",
+          hint: "para corregir",
+          href: `/app/files?${PARAM.file}=${encodeURIComponent(BUSINESS_DRAFT)}`,
+          ms: toMs(draft.mtime),
+        });
+      }
+      for (const f of files.data
+        .filter((x) => (x.path || "").replace(/^\/+/, "").startsWith(DELIVERABLES))
+        .sort((a, b) => toMs(b.mtime) - toMs(a.mtime))
+        .slice(0, 3)) {
+        items.push({
+          key: f.path,
+          label: deliverableName(f.path),
+          hint: "",
+          href: `/app/files?${PARAM.file}=${encodeURIComponent(f.path)}`,
+          ms: toMs(f.mtime),
+        });
+      }
+    }
+    return items.sort((a, b) => b.ms - a.ms).slice(0, 5);
+  }, [posts, files]);
 
   /** "last activity 5 min ago", counting EVERYTHING the agent did: the
    *  kanban, the runs, and the conversations.
@@ -720,6 +788,36 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
           {approvals.t === "loading" && <Skeleton rows={2} />}
           {approvals.t === "ready" && <NeedsAttention pending={approvals.data} />}
 
+          {/* 1.2 · What it left ready for you: the post, the draft, the
+              deliverable — each one opens. */}
+          {ready.length > 0 && (
+            <Section
+              title="Te dejó listo"
+              icon={FolderOpen}
+              href={ready[0].href.startsWith("/app/posts") ? "/app/posts" : "/app/files"}
+              viewLabel={ready[0].href.startsWith("/app/posts") ? "Ver los posteos" : "Ver archivos"}
+            >
+              <ul className="-my-1">
+                {ready.map((it) => (
+                  <li key={it.key}>
+                    <Link
+                      href={it.href}
+                      className="-mx-2 flex items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-black/[0.03]"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">
+                        {it.label}
+                      </span>
+                      <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-soft">
+                        {[it.hint, ago(it.ms)].filter(Boolean).join(" · ")}
+                      </span>
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-soft/50" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
           {/* 1.5 · WHAT IT DOES FOR YOU. This was missing and it was the
               first thing a new client looks for: "no screen says what this
               thing does for ME". We didn't make it up: these are their
@@ -773,27 +871,6 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
                   ))}
                 </ul>
               )}
-            </Section>
-          )}
-
-          {/* 4 · The last thing it produced */}
-          {files.t === "loading" && <Skeleton rows={3} />}
-          {deliverables && deliverables.length > 0 && (
-            <Section title="Archivos nuevos para vos" icon={FolderOpen} href="/app/files" viewLabel="Ver archivos">
-              <ul className="-my-1">
-                {deliverables.map((f) => (
-                  <li key={f.path} className="flex items-center gap-2 py-1.5">
-                    <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
-                      {deliverableName(f.path)}
-                    </span>
-                    {ago(f.mtime) && (
-                      <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-soft">
-                        {ago(f.mtime)}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
             </Section>
           )}
 

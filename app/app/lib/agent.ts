@@ -1078,6 +1078,7 @@ export function connectionLabel(id: string): string {
   const KNOWN: Record<string, string> = {
     email: "el correo de la empresa",
     whatsapp: "WhatsApp",
+    instagram: "la cuenta de Instagram",
     slack: "Slack",
     "google-workspace": "Google Planillas y Drive",
     "gmail-lectura": "Gmail",
