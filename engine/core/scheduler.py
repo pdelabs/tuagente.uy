@@ -325,6 +325,46 @@ def wants_a_look(flow: Flow, now: float) -> bool:
     return now - _looked.get(flow.slug, 0) >= watchers.WATCHERS[flow.event].every
 
 
+# How long a POKED flow waits for the next message before its run starts: the
+# settle, shortened for a push. Three messages typed in a row land a second or
+# two apart; a run that started on the first would answer «hola» and miss the
+# question under it.
+POKE_SETTLE = 4
+
+# The settle look each poked flow has scheduled, so a new poke moves it back.
+_settles: dict[str, asyncio.TimerHandle] = {}
+
+
+def poke(event: str) -> None:
+    """Something arrived for the watcher `event` RIGHT NOW — a webhook said so.
+    Look at once, and look again `POKE_SETTLE` seconds after the LAST poke.
+
+    It is the same mechanism, not a second one: the look that finds something
+    leaves it waiting (`watch`), and the quiet look after it runs — only
+    seconds later instead of on the next 30-second tick. Every poke pushes the
+    settle back, so a burst is one run. Called on the engine's loop.
+    """
+    loop = asyncio.get_running_loop()
+    for flow in flows.read_all():
+        if (flow.trigger != "event" or flow.event != event or flow.status != "active"
+                or waiting_for_a_connection(flow)):
+            continue
+        if flow.slug not in _looking:
+            asyncio.create_task(watch(flow))
+        if flow.slug in _settles:
+            _settles.pop(flow.slug).cancel()
+        _settles[flow.slug] = loop.call_later(POKE_SETTLE, settle, flow.slug)
+
+
+def settle(slug: str) -> None:
+    """The quiet look a poke scheduled. If a look is already running, the next
+    tick is the settle, as it always was."""
+    _settles.pop(slug, None)
+    flow = flows.read(slug)
+    if flow is not None and slug not in _looking:
+        asyncio.create_task(watch(flow))
+
+
 _ticked: dict[str, float] = {}
 _ticking: set[str] = set()
 _tick_errors: dict[str, str] = {}
