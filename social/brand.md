@@ -44,11 +44,16 @@ Everything verifiable against the landing (`app/page.tsx`):
 - Lo bautizás vos: nombre y cara (el dado).
 - Cada trabajo es un plugin escrito con tu proceso adentro, con su "nunca".
 - Portal: ves qué hizo, qué espera tu ok, qué produjo. Lo frenás con un botón.
-- Lo que sale para afuera (mail, posteo, presupuesto) espera tu aprobación.
-- El diagnóstico sale **USD 200** y se descuenta si seguís. Es el único precio
-  que existe: setup y mensual "se cotizan en el diagnóstico". Never post any
-  other number.
-- Corre sobre Hermes (Nous Research), open source.
+- Contesta solo los mensajes de WhatsApp e Instagram, con tus reglas; lo que
+  no sabe o no le toca (un precio que no publicaste, un reclamo) te lo deja a
+  vos con una nota. Lo que te compromete (un mail, un posteo, un presupuesto)
+  espera tu ok.
+- Precio (desde el 24/09/2026): **USD 90 por mes**, sin costo de alta, con el
+  agente y los mensajes de WhatsApp e Instagram incluidos. Cada trabajo que le
+  sumes se agrega al mensual. Lo que hay que escribir a medida se cotiza: se
+  paga una vez y **la mitad te vuelve como descuento en el mensual**. La
+  cotización es gratis. Never post any other number.
+- Corre sobre nuestro propio motor, hecho para esto.
 - Hecho en Montevideo por pdelabs. Somos nuestro propio cliente: Mr. Wobbles.
 - Conexiones listas hoy: Telegram, correo, Google Planillas/Drive/Agenda/Docs,
   Slack, WhatsApp. Anything else is "lo escribimos a medida".
@@ -147,7 +152,7 @@ Pinned, whatever the look:
   in `photo` it is the photograph alone, with no band; in `object` it is the
   object alone, bigger. Never the hook, never the close, never more than one.
 - **One number slide per carousel, optional:** when the idea IS a number
-  («23:00», «24 h», «USD 200»), a middle slide can be that number alone, as
+  («23:00», «24 h», «USD 90»), a middle slide can be that number alone, as
   large as the image allows, with one short line under it. Same block, and
   the two lines of text are the number and the line.
 - **Formats:** carousel of 3 to 6 slides (default), first is the hook, last
@@ -281,8 +286,9 @@ Cierre con una sola acción: "Escribinos" / "Link en la bio" / "tuagente.uy".
 - CTA per pillar: jobs and control → "Escribinos y te decimos si ya lo
   tenemos escrito"; sin humo → "El artículo completo está en el blog, link en
   la bio"; bautismo and own-client → "tuagente.uy".
-- The diagnóstico (USD 200, se descuenta) may appear in the caption of a CTA
-  post, never on the image unless the post is about pricing.
+- The price (USD 90 por mes, sin alta, WhatsApp e Instagram incluidos) may
+  appear in the caption of a CTA post, never on the image unless the post is
+  about pricing. There is no paid diagnóstico any more: the cotización is free.
 
 ## Assumptions to confirm with Luis
 
