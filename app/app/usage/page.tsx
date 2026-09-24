@@ -29,10 +29,9 @@ import { Wallet, RefreshCw } from "lucide-react";
 import { loadConfig, getUsage, type HttpError, type PortalConfig, type Usage } from "../lib/agent";
 import { Card, EmptyState, ErrorState, IconBtn, PageHeader, SUPPORT, Spinner } from "../lib/ui";
 import { timeOf } from "../lib/labels";
+import { useChanges } from "../lib/live";
 
 type Failure = { status?: number; message: string };
-
-const REFRESH_MS = 60_000;
 
 const cf = new Intl.NumberFormat("es-UY", {
   style: "currency",
@@ -93,11 +92,8 @@ export default function UsagePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    if (!cfg) return;
-    const t = setInterval(() => load(true), REFRESH_MS);
-    return () => clearInterval(t);
-  }, [cfg, load]);
+  // Every turn writes what it cost (`turn_usage`): the numbers move when one ends.
+  useChanges(["usage"], () => load(true));
 
   const body = () => {
     if (err && usage === null) {

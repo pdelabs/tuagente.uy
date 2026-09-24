@@ -128,7 +128,7 @@ function BoardDemo() {
 
 export default function PipelineIntro({ onOk }: IntroProps) {
   return (
-    <IntroPage onOk={onOk} cta="Ver el tablero" note="Se actualiza solo cada 30 s.">
+    <IntroPage onOk={onOk} cta="Ver el tablero" note="Se actualiza solo mientras lo mirás.">
       <BoardDemo />
 
       <div className="mt-6 max-w-2xl">

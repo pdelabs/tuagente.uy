@@ -79,6 +79,7 @@ import {
 } from "../lib/agent";
 import { imageMime } from "../lib/entities";
 import { PARAM, closeInRoute, openInRoute, urlFor, useRouteParam } from "../lib/routes";
+import { useChanges } from "../lib/live";
 import { buildChatLink } from "../lib/flowExamples";
 import { moment, whenItHappened } from "../lib/labels";
 import {
@@ -92,7 +93,6 @@ import {
 // to 600 and no further, which is where the image stops being a poster.
 const FEED = "mx-auto w-full max-w-[502px] px-4 py-6";
 const DETAIL = "mx-auto w-full max-w-[632px] px-4 py-6";
-const REFRESH_MS = 60_000;
 
 /* ── Words ───────────────────────────────────────────────────────────────── */
 
@@ -1110,8 +1110,6 @@ export default function PostsPage() {
       // Only a fallback for the account's name; the feed doesn't wait for it.
       .then(setManifest)
       .catch(() => setManifest(null));
-    const id = setInterval(() => load(true), REFRESH_MS);
-    return () => clearInterval(id);
   }, [cfg, load]);
 
   // The detail is ASKED FOR, not taken from the list: a shared link has to
@@ -1126,6 +1124,17 @@ export default function PostsPage() {
       .catch((e: HttpError) => { if (alive) setDetailErr(e.message); });
     return () => { alive = false; };
   }, [cfg, openId]);
+
+  // A post the agent saved, fixed or published: the feed and the open post
+  // move without a reload. The detail is re-read in place, never blanked.
+  const openRef = useRef(openId);
+  openRef.current = openId;
+  useChanges(["posts"], () => {
+    load(true);
+    const id = openRef.current;
+    if (!cfg || !id) return;
+    getPost(cfg, id).then((p) => { if (openRef.current === id) setDetail(p); }).catch(() => {});
+  });
 
   const flowName = useCallback(
     (slug: string | null) => (slug ? flows?.find((f) => f.slug === slug)?.name ?? null : null),

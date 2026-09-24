@@ -34,8 +34,7 @@ import {
   CopyLink, PARAM, openInRoute, closeInRoute, bringIntoView, useRouteParam,
 } from "../lib/routes";
 import Markdown from "../lib/Markdown";
-
-const REFRESH_MS = 30_000;
+import { useChanges } from "../lib/live";
 
 type Approval = {
   id: string;
@@ -399,9 +398,9 @@ export default function ApprovalsPage() {
   useEffect(() => {
     if (!cfg) return;
     load(cfg);
-    const t = setInterval(() => load(cfg), REFRESH_MS); // silent refresh
-    return () => clearInterval(t);
   }, [cfg, load]);
+  // Silent refresh, the moment the agent asks or another tab decides.
+  useChanges(["approvals"], () => { if (cfg) load(cfg); });
 
   useEffect(() => {
     if (!cfg) return;

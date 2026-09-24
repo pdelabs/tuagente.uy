@@ -45,6 +45,7 @@ import {
   type PortalConfig,
 } from "../lib/agent";
 import { EntityProvider } from "../lib/EntityViewer";
+import { useChanges } from "../lib/live";
 import { useOpenEntity } from "../lib/entities";
 import { loadAgentName } from "../lib/onboarding";
 import { readableFileName } from "../lib/names";
@@ -67,7 +68,6 @@ type ActivityEvent = AgentEvent;
 type Group = "ok" | "error" | "progress" | "none";
 type RangeKey = "today" | "7d" | "30d" | "all";
 
-const REFRESH_MS = 30_000;
 const PAGE_SIZE = 30; // events per batch
 const WRAP = "mx-auto max-w-4xl px-6 py-6 md:px-8";
 
@@ -453,10 +453,11 @@ function ActivityBody({ cfg }: { cfg: PortalConfig }) {
   useEffect(() => { loadTickets(); }, [loadTickets]);
   useEffect(() => { loadExtras(); }, [loadExtras]);
 
-  useEffect(() => {
-    const t = setInterval(() => { load(true); loadExtras(); }, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [load, loadExtras]);
+  // The feed and what it is stitched with (files, conversations, flows,
+  // posts' titles) move the moment the agent does something; the ticket
+  // links, when a task does.
+  useChanges(["activity", "files", "chat", "flows", "posts"], () => { load(true); loadExtras(); });
+  useChanges(["tickets"], loadTickets);
 
   const refresh = useCallback(
     () => { load(true); loadTickets(); loadExtras(); },

@@ -21,6 +21,7 @@ import {
   replaceInRoute, useRouteParam,
 } from "../lib/routes";
 import { EntityProvider } from "../lib/EntityViewer";
+import { useChanges } from "../lib/live";
 import Markdown from "../lib/Markdown";
 import { loadAgentName } from "../lib/onboarding";
 import { AgentitoAnimated, AgentitoAvatar, loadAgentLook } from "../lib/agentito";
@@ -412,6 +413,29 @@ export default function ChatPage() {
     }, 3_000);
     return () => clearInterval(t);
   }, [cfg, activeId, working, sending, refreshSessions]);
+
+  // A CONVERSATION MOVES WITHOUT THIS TAB: another tab (or device) wrote in
+  // it, started a new one, renamed or deleted one. The list is re-read, and
+  // so is the open thread when this tab is not the one talking in it -- a
+  // turn it finds running hands over to the watch above. Not while a message
+  // is being edited: the turns under the client's cursor do not move.
+  useChanges(["chat"], () => {
+    if (!cfg) return;
+    refreshSessions(cfg);
+    if (!activeId || sendingRef.current || working || editingIdx !== null) return;
+    const seq = openSeq.current;
+    fetchThread(cfg, activeId)
+      .then(({ turns, running }) => {
+        if (openSeq.current !== seq || sendingRef.current) return;
+        // This tab's own turn lands here too (its `respuesta`): a turn that
+        // reads the same keeps what only the live stream had -- the tools it
+        // used, what it noted.
+        setMsgs((prev) => turns.map((t, i) =>
+          prev[i]?.role === t.role && prev[i]?.content === t.content ? prev[i] : t));
+        setWorking(running);
+      })
+      .catch(() => { /* the next change asks again */ });
+  });
 
   // Which conversation is on screen. Without this, the "a send is in flight"
   // guard swallowed conversation CHANGES: hitting back while the agent was

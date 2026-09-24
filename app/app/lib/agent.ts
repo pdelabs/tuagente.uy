@@ -650,6 +650,12 @@ export const saveIdentity = (
   },
 ) => post<{ ok: boolean }>(c.adapter, "/portal/identity", c, identity);
 export const getActivity = (c: PortalConfig) => get<{ events: any[] }>(c.adapter, "/portal/activity", c);
+/** What changed since the cursor `since`: the one request the portal polls
+ *  (`lib/live.ts`). `kinds` are the event kinds written after it; `sessions`
+ *  a stamp of the conversation list, which moves without an event. */
+export type Changes = { last: number; kinds: string[]; sessions: string };
+export const getChanges = (c: PortalConfig, since: number | null) =>
+  get<Changes>(c.adapter, since === null ? "/portal/changes" : `/portal/changes?since=${since}`, c);
 export const getFiles = (c: PortalConfig) => get<{ files: any[] }>(c.adapter, "/portal/files", c);
 export const getFileText = async (c: PortalConfig, path: string) => {
   const res = await fetch(`${c.adapter}/portal/files/${encodeURIComponent(path)}`, { headers: headers(c) });
