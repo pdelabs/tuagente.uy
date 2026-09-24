@@ -20,7 +20,17 @@ a plugin cannot reach into the engine's turn anyway: it gets the seven verbs
 and `engine.capability()` is the one that owns "anything that wants the run's
 result".
 
+ONLY THE OWNER'S CHAT. Measured on our own agent (2026-09-24): 243 of its 307
+extractions ran on FLOW runs, whose prompt is the flow's own instructions and,
+on an event flow, a stranger's DM or e-mail. Not one of them wrote anything
+worth keeping, and every one was a door for a third party to write a line the
+face would then read as background about its owner. So a run of a `flow`
+session is skipped before any model call, and so is a chat turn whose run
+called a tool that brings outside text in (`EXTERNAL` below): the owner's
+words are still there, but so is somebody else's, next to them.
+
 WHAT IT SKIPS, and each one is a measured shape and not a precaution:
+  - a run of a flow, or one that read outside text (above);
   - a run with no prompt (`ctx.prompt is None`) — that is a run RESUMED after
     an approval, whose only new content is a tool result the client already
     answered in the Approvals page;
@@ -45,10 +55,23 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.tools import RunContext
 from pydantic_ai_harness.memory import MemoryStore
 
+from pydantic_ai.messages import ModelResponse, ToolCallPart
+
 from core import config, db, turn_usage
 
 # Under this many characters a client turn is an acknowledgement, not a fact.
 MIN_CHARS = 30
+
+# Where a line came from, on the line itself: the consolidation keeps it, and a
+# reader of the notebook can tell what the owner said from what a sub-agent
+# noted for itself.
+ORIGIN = "chat"
+
+# THE TOOLS THAT BRING SOMEBODY ELSE'S TEXT INTO THE TURN: a mailbox, the
+# account's comments and DMs (the `mail` and `instagram` plugins), and the web.
+# Names and not a flag on the toolset because they are the ones that exist; a
+# plugin that adds another reader adds its name here.
+EXTERNAL = {"fetch_mail", "fetch_comments", "fetch_messages", "web_fetch", "web_search"}
 
 # The extraction answers with a handful of one-line entries; 1024 tokens is
 # above anything it has to write and keeps the turn's tail cheap.
@@ -71,6 +94,10 @@ INSTRUCTIONS = (
     "Tampoco anotás: lo que ya está en el cuaderno, lo que el cliente pidió"
     " dejar afuera, el pedido de este turno («me pidió un informe») ni nada que"
     " haya dicho el agente y el cliente no haya confirmado.\n"
+    "Tampoco anotás lo que el cliente dicta para un trabajo: el tema o el texto"
+    " de un posteo, lo que tiene que decir un mail, una idea para una pieza."
+    " «Hacé un posteo sobre que no abrimos los domingos» es un pedido, no un"
+    " hecho ni una preferencia.\n"
     "Cada entrada es UNA línea en español, que se entienda sola dentro de un"
     " año, sin la conversación al lado.\n"
     "Escribila hablándole al cliente, de vos, porque él la lee en sus"
@@ -99,7 +126,7 @@ _extractor: Agent | None = None
 
 
 def extractor() -> Agent:
-    """The same model, no tools, no memory of its own.
+    """The notebook's model (`CORE_MEMORY_MODEL`), no tools, no memory of its own.
 
     Built on first use and therefore long after `core/tracing.py` ran
     `Agent.instrument_all` at startup — which is not what makes it traced:
@@ -110,7 +137,7 @@ def extractor() -> Agent:
     global _extractor
     if _extractor is None:
         _extractor = Agent(
-            config.MODEL,
+            config.MEMORY_MODEL,
             instructions=INSTRUCTIONS,
             output_type=list[Entry],
             model_settings=MODEL_SETTINGS,
@@ -140,9 +167,20 @@ def turn(prompt: str, answer: str, notebook: str) -> str:
 
 
 def line(entry: Entry) -> str:
-    """The line as it lands in the notebook. Dated, because a fact expires."""
+    """The line as it lands in the notebook. Dated, because a fact expires, and
+    with where it came from."""
     stamp = datetime.now(ZoneInfo(config.TIMEZONE)).strftime("%d/%m/%Y")
-    return f"- {stamp} · {entry.kind}: {entry.text.strip()}"
+    return f"- {stamp} · {entry.kind} · {ORIGIN}: {entry.text.strip()}"
+
+
+def read_outside(result: AgentRunResult[Any]) -> bool:
+    """Whether this run called a tool that brings somebody else's text in."""
+    return any(
+        isinstance(part, ToolCallPart) and part.tool_name in EXTERNAL
+        for message in result.new_messages()
+        if isinstance(message, ModelResponse)
+        for part in message.parts
+    )
 
 
 @dataclass
@@ -157,6 +195,8 @@ class Extraction(AbstractCapability):
         if not isinstance(prompt, str) or not isinstance(answer, str):
             return result
         if len(prompt.strip()) < MIN_CHARS:
+            return result
+        if db.session_kind(ctx.deps.session_id) == "flow" or read_outside(result):
             return result
 
         current = await self.store.read(self.path, max_chars=MAX_NOTEBOOK)

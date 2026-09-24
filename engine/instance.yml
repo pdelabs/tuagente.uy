@@ -17,6 +17,7 @@ services:
     env_file: ./instances/${INSTANCE}/secrets.env
     environment:
       CORE_MODEL: ${CORE_MODEL:-openrouter:openai/gpt-6-luna}
+      CORE_MEMORY_MODEL: ${CORE_MEMORY_MODEL:-}
       CORE_CORS_ORIGINS: ${CORE_CORS_ORIGINS:-http://localhost:8090,http://127.0.0.1:8090}
       # WHAT EVERY AGENT HAS, and nothing a client buys: the board, the gate,
       # deliverables, memory, the owner's notices and the business draft. What

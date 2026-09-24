@@ -12,6 +12,16 @@ MODEL = os.environ.get("CORE_MODEL", "openrouter:openai/gpt-6-luna")
 # spend, not what it does. 8192 is above anything a turn of this agent writes.
 MODEL_SETTINGS = {"max_tokens": 8192}
 
+# THE NOTEBOOK'S MODEL (`kit/plugins/memory/`): the extraction after an owner's
+# turn and the nightly tidy of every notebook. Two tool-less calls with a short
+# structured answer, so a separate knob: a cheaper model can take them without
+# touching the one that talks to the client. Unset means the main model, and the
+# main model IS the cheap tier today (gpt-6-luna, US$0.10/0.50 per M on
+# OpenRouter, 2026-09-24): `qwen/qwen3.7-flash` is a third of that, but it is
+# unmeasured on our Spanish and our structured output, for a call that costs a
+# tenth of a cent either way.
+MEMORY_MODEL = os.environ.get("CORE_MEMORY_MODEL") or MODEL
+
 # The client's key. Missing it is fatal on purpose: an engine with no auth is
 # not an engine we would ever hand to a client.
 API_KEY = os.environ["API_SERVER_KEY"]
