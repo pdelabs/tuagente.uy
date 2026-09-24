@@ -123,9 +123,9 @@ export function ArticleLayout({ slug, children }: { slug: string; children: Reac
             ¿Querés ver esto funcionando en tu empresa?
           </h2>
           <p className="mx-auto mt-3 max-w-md text-white/80">
-            Arrancá por el diagnóstico: USD 200, una llamada y un informe con el trabajo que
-            conviene sacarte de encima primero, cuánto te devuelve y qué sale. Si seguís, se
-            descuentan.
+            Contanos qué te come las horas y te cotizamos gratis. Son USD 90 por mes, sin costo
+            de alta, con WhatsApp e Instagram adentro. Si el primer mes no hizo lo que te
+            dijimos, ese mes no lo pagás.
           </p>
           <a
             href={WHATSAPP}
@@ -133,7 +133,7 @@ export function ArticleLayout({ slug, children }: { slug: string; children: Reac
             rel="noopener noreferrer"
             className="mt-6 inline-flex items-center gap-2 rounded-pill bg-white px-7 py-3.5 text-sm font-extrabold text-primary shadow-lift transition hover:-translate-y-0.5"
           >
-            Quiero el diagnóstico <ArrowRight size={16} />
+            Pedí tu cotización gratis <ArrowRight size={16} />
           </a>
         </div>
 

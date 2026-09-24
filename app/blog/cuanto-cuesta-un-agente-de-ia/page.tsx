@@ -16,9 +16,8 @@ export default function Page() {
     <ArticleLayout slug={post.slug}>
       <P>
         Es la primera pregunta de toda reunión y la que casi nadie responde en su página. Vamos a
-        contestarla en serio, que no es lo mismo que contestarla con un número solo: lo que
-        contratás son <B>tres cosas</B>, cada una se paga distinto, y hay una que no se puede
-        cotizar antes de mirar tu caso — te vamos a decir exactamente por qué.
+        contestarla en serio: hay <B>un número publicado</B>, el mensual, y hay cosas que no se
+        pueden cotizar antes de mirar tu caso — te vamos a decir exactamente por qué.
       </P>
       <P>
         Un aviso antes de los números: no vendemos “packs” ni horas de consultoría. Vendemos{" "}
@@ -27,54 +26,61 @@ export default function Page() {
         agente con tu proceso adentro.
       </P>
 
-      <H2>Las tres cosas que se pagan</H2>
+      <H2>Lo que se paga</H2>
       <Ul>
         <li>
-          <B>El diagnóstico:</B> USD 200, una sola vez, y se descuentan si seguís. Es lo único que
-          está publicado con número, y más abajo está por qué.
+          <B>El mensual: USD 90 por mes, sin costo de alta.</B> Trae tu agente con su portal y los
+          mensajes de WhatsApp e Instagram: contesta solo, con tus reglas, y lo que no sabe o no le
+          toca —un precio que no publicaste, un reclamo— te lo deja a vos con una nota. Los
+          modelos, el hosting, los ajustes y el soporte van adentro. Sin permanencia.
         </li>
         <li>
-          <B>El plugin:</B> se paga una vez, cuando lo escribimos. El primero viene con el agente
-          armado, instalado y conectado; los que sumes después salen bastante menos, porque lo
-          pesado ya está hecho.
+          <B>Cada trabajo que le sumes:</B> posteos, facturas a la planilla, presupuestos y
+          seguimiento, transcribir reuniones. Cada uno se agrega al mensual, y qué sale te lo
+          cotizamos gratis.
         </li>
         <li>
-          <B>El mantenimiento:</B> todos los meses. Cubre los modelos que el agente consume
-          pensando, el hosting donde vive, los ajustes que le pedís y el soporte. Sin permanencia.
+          <B>Lo que hay que escribir a medida:</B> si tu empresa necesita algo que no existe, se
+          cotiza y se paga una vez. La mitad de lo que pagás por ese armado te vuelve como
+          descuento en el mensual, en los primeros meses.
         </li>
       </Ul>
 
-      <H2>El diagnóstico: USD 200, y se descuentan</H2>
+      <H2>La cotización es gratis</H2>
       <P>
-        No hacemos demos gratis — una demo gratis es una presentación de ventas con tu logo puesto
-        arriba. Hacemos un <B>diagnóstico</B>: una llamada y un informe escrito con qué trabajo
-        tuyo conviene sacarte de encima primero, cuántas horas o cuánta plata te devuelve, qué
-        plugin hay que escribir para eso y qué sale todo. Sale <B>USD 200, una sola vez</B>, y si
-        seguís se descuentan. El informe es tuyo aunque no sigas, incluso si la conclusión honesta
-        es que todavía no te conviene.
+        No te cobramos por mirar tu caso. Nos contás el trabajo que te come las horas —por
+        WhatsApp, o con el teardown gratis de la página principal— y te decimos qué conviene
+        sacarte de encima primero, si ya lo tenemos escrito o hay que escribirlo, y cuánto queda
+        el mensual. Si la conclusión honesta es que todavía no te conviene, también te lo decimos.
+      </P>
+      <P>
+        Y el riesgo del primer mes lo corremos nosotros: <B>si el primer mes no hizo lo que te
+        dijimos, ese mes no lo pagás.</B>
       </P>
 
-      <H2>El plugin: por qué se cotiza y no se publica</H2>
+      <H2>Los trabajos: por qué se cotizan y no se publican</H2>
       <P>
-        La variable real de un plugin no es “cuánta IA lleva”: es <B>cuánto hay que escribir y
-        cuánto hay que conectar</B>. Contestar el WhatsApp de la noche con una lista de precios
-        que ya está en una planilla de Google no cuesta lo mismo que hacerlo contra un sistema de
-        gestión de 2009 que solo entiende el contador y que no tiene API.
+        La variable real de un trabajo no es “cuánta IA lleva”: es <B>cuánto hay que escribir y
+        cuánto hay que conectar</B>. Pasar las facturas a una planilla de Google que ya existe no
+        cuesta lo mismo que hacerlo contra un sistema de gestión de 2009 que solo entiende el
+        contador y que no tiene API.
       </P>
       <Callout>
         Cualquiera te puede tirar un número antes de mirar tu proceso. Después ese número se cobra
         igual — y la diferencia la pagás vos en un plugin que hace la mitad de lo que necesitabas.
       </Callout>
       <P>
-        Por eso lo que cotizamos en el diagnóstico es esto, con tu caso adelante: qué mira el
-        plugin, qué decide solo, qué te pregunta antes de actuar, qué <B>nunca</B> hace, y contra
-        qué sistemas tuyos tiene que hablar. Recién ahí hay un precio, y ese precio no se mueve
-        después.
+        Por eso lo que cotizamos es esto, con tu caso adelante: qué mira el plugin, qué decide
+        solo, qué te pregunta antes de actuar, qué <B>nunca</B> hace, y contra qué sistemas tuyos
+        tiene que hablar. Recién ahí hay un precio, y ese precio no se mueve después. Si hay que
+        escribir algo a medida, lo pagás una vez, y la mitad de lo que pagás por el armado te
+        vuelve en el mensual.
       </P>
 
       <H2>El mensual: qué estás pagando de verdad</H2>
       <P>
-        Acá va el número que nadie publica, así que lo publicamos nosotros. Un agente andando con
+        Son USD 90 por mes. Y acá va el número que nadie publica, así que lo publicamos nosotros.
+        Un agente andando con
         uso real de una empresa chica —contestando, leyendo, resumiendo, armando planillas todos
         los días— <B>consume entre US$ 4 y US$ 10 por mes de modelos</B>. Está medido en los
         agentes que tenemos corriendo, no estimado.
@@ -85,6 +91,10 @@ export default function Page() {
         cuesta plata de verdad en el mensual no es el modelo — es todo lo demás:
       </P>
       <Ul>
+        <li>
+          <B>Los mensajes:</B> el WhatsApp y el Instagram contestados solos, sin cargo por
+          mensaje.
+        </li>
         <li>
           <B>El hosting:</B> la máquina donde vive tu agente, prendida siempre, aislada de la de
           cualquier otro cliente y con su propia clave.
@@ -126,19 +136,21 @@ export default function Page() {
       </Ul>
       <Callout>
         A nadie se lo contrata por lo que sale, sino por lo que te saca de encima. La pregunta útil
-        no es si el plugin es caro: es cuántas horas por semana te devuelve y cuánto vale tu hora.
+        no es si es caro: es cuántas horas por semana te devuelve y cuánto vale tu hora.
       </Callout>
 
-      <H2>Empezás con uno</H2>
+      <H2>Empezás con poco</H2>
       <P>
-        Un agente, un plugin: el trabajo que más te duele hoy. Lo ves andar un mes, medís si te
-        devolvió horas de verdad, y recién ahí pedís el segundo. No hay que decidir todo el día
-        cero, que es justo el día en que menos sabés qué necesitás.
+        El agente contestando tu WhatsApp y tu Instagram y, si hace falta, un trabajo más: el que
+        más te duele hoy. Lo ves andar un mes, medís si te devolvió horas de verdad, y recién ahí
+        le sumás el que sigue. No hay que decidir todo el día cero, que es justo el día en que
+        menos sabés qué necesitás.
       </P>
       <P>
-        Y si el mes no te devolvió nada, dejás de pagar el mensual. Sin permanencia y sin
-        explicaciones — es la única prueba que importa, y nos pone el riesgo del lado nuestro, que
-        es donde tiene que estar.
+        Si el primer mes no hizo lo que te dijimos, ese mes no lo pagás. Y después, si un mes no
+        te devolvió nada, dejás de pagar el mensual. Sin permanencia y sin explicaciones — es la
+        única prueba que importa, y nos pone el riesgo del lado nuestro, que es donde tiene que
+        estar.
       </P>
 
       <H2>Cuándo NO te conviene (sí, en serio)</H2>
@@ -163,10 +175,10 @@ export default function Page() {
         </li>
       </Ul>
       <P>
-        El diagnóstico está publicado con número en la{" "}
+        El mensual está publicado con número en la{" "}
         <a href="/#planes" className="font-semibold text-primary underline decoration-2 underline-offset-2 hover:text-primary-dark">página principal</a>;
-        lo que no publicamos es el plugin y el mensual, y ya sabés por qué. Si los números te
-        cierran, el siguiente paso es el diagnóstico con tu caso adentro. Y si todavía no te queda
+        lo que no publicamos es el precio de cada trabajo, y ya sabés por qué. Si los números te
+        cierran, el siguiente paso es contarnos tu caso: la cotización es gratis. Y si todavía no te queda
         claro qué es exactamente lo que estarías contratando, empezá por{" "}
         <PostLink slug="que-es-un-agente-de-ia">qué es un agente de IA</PostLink>.
       </P>

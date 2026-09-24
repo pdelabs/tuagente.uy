@@ -12,7 +12,7 @@ export const POSTS: Post[] = [
     slug: "cuanto-cuesta-un-agente-de-ia",
     title: "¿Cuánto cuesta un agente de IA en Uruguay? Números reales, sin vueltas",
     description:
-      "Se pagan tres cosas: el diagnóstico de USD 200, el plugin que te escribimos y el mensual que lo mantiene vivo. Qué cubre cada una, cuánto consume de modelos un agente de verdad (entre US$ 4 y 10 por mes) y cómo se compara con un sueldo, con una agencia y con un chatbot.",
+      "USD 90 por mes, sin costo de alta, con los mensajes de WhatsApp e Instagram adentro; cada trabajo que le sumes se agrega al mensual y se cotiza gratis. Qué cubre cada cosa, cuánto consume de modelos un agente de verdad (entre US$ 4 y 10 por mes) y cómo se compara con un sueldo, con una agencia y con un chatbot.",
     date: "2026-08-30",
     dateHuman: "30 de agosto de 2026",
     readingMin: 7,

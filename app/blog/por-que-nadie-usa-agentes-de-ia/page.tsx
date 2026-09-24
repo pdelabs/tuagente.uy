@@ -142,7 +142,7 @@ export default function Page() {
         incluidos — está explicado sin humo en{" "}
         <PostLink slug="que-es-un-agente-de-ia">qué es un agente de IA</PostLink> y en{" "}
         <PostLink slug="agente-de-ia-vs-chatbot">agente vs chatbot</PostLink>. Y si ya sabés cuál
-        es la tarea que te come las horas, mejor: contánosla, que el diagnóstico arranca por ahí.
+        es la tarea que te come las horas, mejor: contánosla, que la cotización es gratis y arranca por ahí.
       </P>
     </ArticleLayout>
   );
