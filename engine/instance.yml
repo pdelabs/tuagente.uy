@@ -18,7 +18,13 @@ services:
     environment:
       CORE_MODEL: ${CORE_MODEL:-openrouter:openai/gpt-6-luna}
       CORE_CORS_ORIGINS: ${CORE_CORS_ORIGINS:-http://localhost:8090,http://127.0.0.1:8090}
-      CORE_PLUGINS: ${CORE_PLUGINS:-kanban,approval,memory,image,instagram,social,mail,notify,business}
+      # WHAT EVERY AGENT HAS, and nothing a client buys: the board, the gate,
+      # deliverables, memory, the owner's notices and the business draft. What
+      # a client bought is theirs to declare, in their `instance.env`
+      # (`CORE_PLUGINS=...`, the whole list, in load order) — the old default
+      # carried mail and Instagram, and a fresh client got two flows asking
+      # for connections nobody sold them (blind QA, 2026-09-23).
+      CORE_PLUGINS: ${CORE_PLUGINS:-kanban,approval,deliverable,memory,notify,business}
       PORTAL_URL: ${PORTAL_URL:-http://localhost:8090}
       TZ: America/Montevideo
       CORE_OTEL_ENDPOINT: ${CORE_OTEL_ENDPOINT:-}

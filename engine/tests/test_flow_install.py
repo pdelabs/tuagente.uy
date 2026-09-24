@@ -18,6 +18,8 @@ every plugin's `surfaces.flows` goes through.
   f. A FLOW WE NO LONGER SHIP IS RETIRED ONLY IF UNTOUCHED — `SUPERSEDED`
      deletes the copy that hashes to what we shipped, and its folder, and
      leaves an edited one.
+  g. A PLUGIN THIS AGENT DOES NOT RUN TAKES ITS UNTOUCHED FLOWS WITH IT —
+     plugins are per instance; an edited copy stays.
 
 WHERE IT POINTS. `CORE_CONTAINER` moves it onto a second instance; the default
 is the main compose's `tuagente-core`. It cleans up the slugs it wrote.
@@ -38,7 +40,7 @@ from core import config, flows, plugins
 
 out = {}
 SLUGS = ["prueba-nuevo", "prueba-editado", "prueba-viejo", "prueba-viejo-editado",
-         "prueba-retirado", "prueba-retirado-editado"]
+         "prueba-retirado", "prueba-retirado-editado", "prueba-ausente", "prueba-ausente-editado"]
 
 
 def body(name):
@@ -119,6 +121,26 @@ try:
     out["retired"] = not (flows.root() / "prueba-retirado").exists()
     out["retired_edited"] = "suyo" in (text("prueba-retirado-editado") or "")
     shutil.rmtree(root)
+
+    # (g) a kit with one plugin this agent does not run.
+    kit = Path(tempfile.mkdtemp())
+    gone = kit / "prueba-ausente"
+    for slug in ("prueba-ausente", "prueba-ausente-editado"):
+        (gone / "flows" / slug).mkdir(parents=True)
+        (gone / "flows" / slug / "FLOW.md").write_text(body(slug))
+    (gone / "plugin.json").write_text(json.dumps({"surfaces": {"flows": [
+        "flows/prueba-ausente", "flows/prueba-ausente-editado"]}}))
+    put("prueba-ausente", body("prueba-ausente"))
+    put("prueba-ausente-editado", body("prueba-ausente-editado") + "\n2. suyo\n")
+    real_kit = config.KIT_PLUGINS
+    config.KIT_PLUGINS = kit
+    try:
+        plugins.retire_uninstalled_flows()
+    finally:
+        config.KIT_PLUGINS = real_kit
+    out["absent_retired"] = not (flows.root() / "prueba-ausente").exists()
+    out["absent_edited"] = "suyo" in (text("prueba-ausente-editado") or "")
+    shutil.rmtree(kit)
     print(json.dumps(out, ensure_ascii=False))
 finally:
     clean()
@@ -162,6 +184,9 @@ def main() -> int:
         problems.append("a second load moved something")
     failures += judge("f. a flow we no longer ship is retired only if untouched", problems)
 
+    failures += judge("g. a plugin not run here takes its untouched flows",
+                      ([] if r["absent_retired"] else ["the untouched copy stayed"])
+                      + ([] if r["absent_edited"] else ["the edited copy went"]))
     print("FLOW INSTALL: " + ("PASS" if not failures else "FAIL"))
     return 1 if failures else 0
 

@@ -43,7 +43,8 @@ folder:
 
 ```
 engine/instances/<name>/
-  instance.env      INSTANCE=<name>, PORT_GATEWAY, PORT_ADAPTER, CORE_OTEL_* (committed)
+  instance.env      INSTANCE=<name>, PORT_GATEWAY, PORT_ADAPTER, CORE_PLUGINS (what
+                    the client bought, on top of the system set), CORE_OTEL_* (committed)
   secrets.env       API_SERVER_KEY, OPENROUTER_API_KEY (gitignored)
   agent/            SOUL.md, identity.json (committed: the agent's configuration)
   workspace/        the agent's files, e.g. marca/brand.md (gitignored)

@@ -426,6 +426,40 @@ def retire_flows(plugin: Plugin) -> None:
               flush=True)
 
 
+def retire_uninstalled_flows() -> None:
+    """The curated flows of a plugin this agent does not run, when untouched.
+
+    PLUGINS ARE PER INSTANCE (`CORE_PLUGINS` in its `instance.env`), and a flow
+    stays in the workspace after its plugin leaves: blind QA (2026-09-24) found
+    a client whose instance had dropped `mail` and `instagram` still showing
+    both flows, asking for connections nobody sold her — and a scheduled one
+    would run with none of its tools. So a copy that is byte for byte the one
+    the kit ships goes, and an edited one stays, with a line in the log: the
+    same rule as `SUPERSEDED`, because the file is the client's once she has
+    touched it.
+    """
+    enabled = set(config.PLUGINS)
+    for manifest_path in sorted(config.KIT_PLUGINS.glob("*/plugin.json")):
+        plugin_id = manifest_path.parent.name
+        if plugin_id in enabled:
+            continue
+        manifest = json.loads(manifest_path.read_text())
+        for folder in manifest.get("surfaces", {}).get("flows") or []:
+            source = manifest_path.parent / folder / flows.FLOW_FILE
+            installed = flows.file_of(source.parent.name)
+            if not installed.is_file() or not source.is_file():
+                continue
+            if installed.read_bytes() != source.read_bytes():
+                print(f"{plugin_id}: not installed here, but workspace/flows/"
+                      f"{installed.parent.name}/ was edited, so it stays", flush=True)
+                continue
+            installed.unlink()
+            if not any(installed.parent.iterdir()):
+                installed.parent.rmdir()
+            print(f"{plugin_id}: not installed here, so its untouched workspace/flows/"
+                  f"{installed.parent.name}/ is gone", flush=True)
+
+
 def install_flows(plugin: Plugin) -> None:
     upgraded = getattr(plugin.module, "UPGRADED", {})
     for folder in plugin.manifest["surfaces"].get("flows") or []:
@@ -496,6 +530,7 @@ def load() -> list:
         retire_flows(plugin)
         install_flows(plugin)
         _loaded.append(plugin)
+    retire_uninstalled_flows()
     if _engine.delegates:
         _engine.capability(
             SubAgents(
