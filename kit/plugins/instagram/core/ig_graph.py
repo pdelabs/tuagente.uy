@@ -68,9 +68,9 @@ messages` takes a JSON body — `{"recipient": {"id": IGSID}, "message": {"text"
 …}}` — and the token as a Bearer header, which is how Meta documents it. And it
 only works INSIDE THE 24-HOUR WINDOW: an app may answer a person up to 24 hours
 after that person's last message, and every new message of theirs starts it
-again. Past it the send fails, so the window is checked before the call and it
-is on the approval card, because a request the client sits on until tomorrow is
-a request that cannot be carried out.
+again. Past it the send fails, so the window is checked before the call and
+the listing says how much of it is left, so the threads about to close are
+answered first.
 """
 
 import logging

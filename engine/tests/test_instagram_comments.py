@@ -13,23 +13,27 @@ is one public thing on a real account and cannot be run twice.
      says. Ours are never new and never carry an id.
   b. AND THE SECOND TICK HAS NOTHING TO SAY — «Sin comentarios nuevos.», one
      line, so a run that found nothing costs a cent and ends.
-  c. AN ANSWER GOES OUT AS A REPLY TO THAT COMMENT — `POST /{comment-id}/
-     replies` with the text, and it is written into Activity. The client's
-     correction REPLACES the text, the way a caption's does. AND WHEN THE
-     COMMENT IS A LEAD WITH A TICKET, the answer lands on it and closes it: the
-     code that sent it writes it, so a thread cannot stay «waiting» after it
-     was answered.
+  c. AN ANSWER GOES OUT AS A REPLY TO THAT COMMENT, THE MOMENT IT IS CALLED —
+     `POST /{comment-id}/replies` with the text, no yes in between (24/9/2026),
+     and the Activity line carries the handle AND THE WORDS, because nobody
+     read them before they went out. WHEN THE COMMENT IS A LEAD WITH A TICKET,
+     the answer lands on it and closes it. AND A COMMENT GETS ONE ANSWER: the
+     same id a second time sends nothing and says what already went out.
   d. SPAM IS HIDDEN AND NOT DELETED — `POST /{comment-id}` with `hide=true`.
   e. A COMMENT THE AGENT NEVER SAW IS REFUSED — both tools, in Spanish, before
      anything leaves: the id comes from the model and the model can be wrong.
-  f. THE CARD IS THE COMMENT AND THE DRAFT — the post's permalink and its first
-     slide when the post is one of ours, then the comment, then the answer as
-     the LAST block, which is what the portal preloads into the correction box.
+  f. THE HIDE CARD IS THE POST AND THE COMMENT — the post's permalink and its
+     first slide when the post is one of ours, then the comment.
   g. THE CREATOR READS THE NUMBERS — the last posts with their reach, saves,
      likes and comments, which is what it is supposed to choose a topic from.
   h. AND THE TOKEN RENEWS ITSELF — the first tick refreshes (nothing is known
      about the expiry yet), the new token is stored, THE NEXT CALL USES IT, and
      a second tick right afterwards does nothing because it is not due.
+  i. WHAT STOPS FOR THE CLIENT IS HIDING AND NOTHING ELSE — the plugin's
+     `register()` against a recording engine: `hide_comment` is the one tool in
+     a toolset the engine reads as gated (`core.plugins.gated`, the same walk
+     the engine does), `reply_comment` and `send_message` are plain, and the
+     approval hooks it provides are the hide card's and no other.
 
 IT CLEANS UP AFTER ITSELF: the rows it wrote in `instagram_seen` and
 `instagram_account`, the throwaway post and the events are gone by the end,
@@ -58,7 +62,7 @@ MEDIA = "18000000000000001"
 PERMALINK = "https://www.instagram.com/p/PRUEBA123/"
 HEAD = "Una ferretería que contesta a las once de la noche."
 DRAFT = "Te cuento: el diagnóstico sale USD 200 y sale con vos."
-CORRECTION = "Sí, se puede. El diagnóstico sale USD 200."
+SECOND = "Sí, se puede. Escribinos por mensaje y te contamos."
 
 INSIDE = r"""
 import json, shutil, sys, types
@@ -78,7 +82,7 @@ from PIL import Image
 from core import config, db
 
 (SESSION, MINE, USER, SEED_TOKEN, NEW_TOKEN, POST_ID, MEDIA, PERMALINK,
- HEAD, DRAFT, CORRECTION) = sys.argv[1:12]
+ HEAD, DRAFT, SECOND) = sys.argv[1:12]
 
 CAPTION = HEAD + "\nLa segunda línea del pie, que no se ve en la tarjeta."
 SIXTY_DAYS = 5184000
@@ -131,6 +135,7 @@ SINGLE = {
 NUMBERS = {"reach": 320, "saved": 12, "likes": 18, "comments": 3, "shares": 2}
 
 calls = []
+out = {}
 
 
 def handle(request):
@@ -169,7 +174,42 @@ numbers = {name: tool.function for name, tool in ig_tools.performance().tools.it
 ctx = types.SimpleNamespace(deps=types.SimpleNamespace(session_id=SESSION))
 NOTE = ig_tools.ApprovalNote(what="x", if_approved="x", if_rejected="x", why="x")
 
-out = {}
+# (i) what the plugin registers, against an engine that only writes it down.
+# `core.plugins.gated` is the engine's own answer to «does this stop a run».
+import plugin as ig_plugin
+from core import plugins as core_plugins
+
+
+class Recording:
+    def __init__(self):
+        self.toolsets, self.shared = [], {}
+
+    def toolset(self, ts):
+        self.toolsets.append(ts)
+
+    def provide(self, name, obj):
+        self.shared[name] = obj
+
+    def use(self, name, default=None):
+        return self.shared.get(name, default)
+
+    def watcher(self, *args, **kwargs):
+        pass
+
+
+def names(ts):
+    inner = getattr(ts, "wrapped", ts)
+    return sorted(inner.tools)
+
+
+recorded = Recording()
+ig_plugin.register(recorded)
+out["registered"] = {
+    "gated": sorted(n for ts in recorded.toolsets if core_plugins.gated(ts) for n in names(ts)),
+    "plain": sorted(n for ts in recorded.toolsets if not core_plugins.gated(ts) for n in names(ts)),
+    "approval_hooks": sorted(k for k in recorded.shared if k.startswith("approval.")),
+}
+
 post = config.WORKSPACE / "posteos" / POST_ID
 try:
     import os
@@ -205,10 +245,9 @@ try:
         "SELECT comment_id, media_id, username, is_reply, permalink, post_line, text"
         " FROM instagram_seen ORDER BY comment_id")]
 
-    # (f) the card, before the answer goes anywhere.
-    title, body = ig_tools.reply_card({"comment_id": "c_pregunta", "text": DRAFT})
+    # (f) the hide card, which is the one card left.
+    title, body = ig_tools.hide_card({"comment_id": "c_pregunta"})
     out["card"] = {"title": title, "body": body}
-    out["hide_card"] = list(ig_tools.hide_card({"comment_id": "c_spam"}))
 
     # A lead's ticket, the way the skill has the face open one: the answer has
     # to land on it and close it.
@@ -218,20 +257,23 @@ try:
         source="instagram", source_ref="c_pregunta", session_id=SESSION)
     out["lead"] = lead
 
-    # (c) the answer, and the correction that replaces it.
-    out["replied"] = gated["reply_comment"](ctx, "c_pregunta", DRAFT, NOTE)
+    # (c) the answer, straight out; a second one to another comment; and the
+    # same comment again, which must send nothing.
+    out["replied"] = tools["reply_comment"](ctx, "c_pregunta", DRAFT)
     out["lead_after"] = dict(board_store.row_of(lead))
     out["lead_comments"] = board_store.comments(lead)
-    out["corrected"] = gated["reply_comment"](
-        ctx, "c_respuesta", DRAFT, NOTE, client_correction=CORRECTION)
+    out["second"] = tools["reply_comment"](ctx, "c_respuesta", SECOND)
+    out["again"] = tools["reply_comment"](ctx, "c_pregunta", "Otra respuesta más.")
+    out["marks"] = {r["id"]: r["mark"] for r in db.query(
+        "SELECT id, mark FROM instagram_marks WHERE kind = 'replied'")}
     # (d) the spam.
     out["hidden"] = gated["hide_comment"](ctx, "c_spam", NOTE)
 
     # (e) something the agent never saw.
-    for name, args in (("reply_comment", ("c_inventado", DRAFT, NOTE)),
-                       ("hide_comment", ("c_inventado", NOTE))):
+    for name, call in (("reply_comment", lambda: tools["reply_comment"](ctx, "c_inventado", DRAFT)),
+                       ("hide_comment", lambda: gated["hide_comment"](ctx, "c_inventado", NOTE))):
         try:
-            gated[name](ctx, *args)
+            call()
             out[f"unknown_{name}"] = ""
         except Exception as exc:
             out[f"unknown_{name}"] = f"{type(exc).__name__}: {exc}"
@@ -249,6 +291,7 @@ finally:
         db.write("DELETE FROM tickets WHERE id = ?", (ticket["id"],))
     shutil.rmtree(post, ignore_errors=True)
     db.write("DELETE FROM instagram_seen WHERE comment_id LIKE 'c_%'", ())
+    db.write("DELETE FROM instagram_marks WHERE kind = 'replied' AND id LIKE 'c_%'", ())
     db.write("DELETE FROM instagram_account", ())
     db.write("DELETE FROM events WHERE session_id = ?", (SESSION,))
 """
@@ -264,7 +307,7 @@ def main() -> int:
     print(f"container: {CONTAINER}")
     done = subprocess.run(
         ["docker", "exec", CONTAINER, "python3", "-c", INSIDE, SESSION, MINE, USER,
-         SEED_TOKEN, NEW_TOKEN, POST_ID, MEDIA, PERMALINK, HEAD, DRAFT, CORRECTION],
+         SEED_TOKEN, NEW_TOKEN, POST_ID, MEDIA, PERMALINK, HEAD, DRAFT, SECOND],
         capture_output=True, text=True,
     )
     if done.returncode != 0:
@@ -317,29 +360,34 @@ def main() -> int:
     problems = []
     replies = [c for c in calls if c["path"].endswith("/replies")]
     if len(replies) != 2:
-        problems.append(f"{len(replies)} replies went out for two answers")
+        problems.append(f"{len(replies)} replies went out for two answers and one repeat")
     else:
         if replies[0]["path"] != "/v21.0/c_pregunta/replies":
             problems.append(f"it answered {replies[0]['path']}")
         if replies[0]["form"].get("message") != DRAFT:
             problems.append(f"what went out is {replies[0]['form'].get('message')!r}")
-        if replies[1]["form"].get("message") != CORRECTION:
-            problems.append("the client's correction did not replace the text: "
-                            f"{replies[1]['form'].get('message')!r}")
-    if "@juan.perez" not in measured["replied"]:
+        if replies[1]["form"].get("message") != SECOND:
+            problems.append(f"the second answer went out as {replies[1]['form'].get('message')!r}")
+    if "@juan.perez" not in measured["replied"] or "salió" not in measured["replied"]:
         problems.append(f"the tool answered {measured['replied']!r}")
     kinds = [event["kind"] for event in measured["events"]]
-    if kinds.count("comment.replied") != 2:
-        problems.append(f"Activity has {kinds.count('comment.replied')} comment.replied")
-    elif "@juan.perez" not in measured["events"][0]["label"]:
-        problems.append(f"the event reads {measured['events'][0]['label']!r}")
+    replied = [e for e in measured["events"] if e["kind"] == "comment.replied"]
+    if len(replied) != 2:
+        problems.append(f"Activity has {len(replied)} comment.replied")
+    elif replied[0]["label"] != f"Le contesté a @juan.perez: «{DRAFT}»":
+        problems.append(f"the event reads {replied[0]['label']!r}")
+    # One answer per comment: the repeat sends nothing and quotes what went out.
+    if "ya lo contestaste" not in measured["again"] or DRAFT not in measured["again"]:
+        problems.append(f"the repeat answered {measured['again']!r}")
+    if measured["marks"] != {"c_pregunta": DRAFT, "c_respuesta": SECOND}:
+        problems.append(f"the replied marks are {measured['marks']}")
     if measured["lead_after"]["status"] != "done":
         problems.append(f"the lead's ticket is {measured['lead_after']['status']!r} "
                         "after being answered")
     answers = [c for c in measured["lead_comments"] if c["author"] == "agente"]
     if not any(DRAFT in c["body"] for c in answers):
         problems.append("what was answered is not on the lead's ticket")
-    failures += judge("c. the answer goes out under that comment", problems)
+    failures += judge("c. the answer goes out under that comment, once, no yes", problems)
 
     # (d) the spam
     problems = []
@@ -367,26 +415,18 @@ def main() -> int:
         problems.append("the unknown id still reached Instagram")
     failures += judge("e. a comment the agent never saw is refused", problems)
 
-    # (f) the card
+    # (f) the hide card
     problems = []
     card = measured["card"]
     body = card["body"]
-    if "@juan.perez" not in card["title"]:
+    if "@juan.perez" not in card["title"] or "Ocultar" not in card["title"]:
         problems.append(f"the title is {card['title']!r}")
-    for wanted in (PERMALINK, "¿Cuánto sale?", HEAD, DRAFT):
+    for wanted in (PERMALINK, "¿Cuánto sale?", HEAD):
         if wanted not in body:
             problems.append(f"the card does not carry {wanted!r}")
     if f"](/portal/posts/{POST_ID}/01.png)" not in body:
         problems.append("the post's first slide is not on the card")
-    lines = body.splitlines()
-    last_row = max((i for i, line in enumerate(lines) if line.strip().startswith("|")),
-                   default=-1)
-    draft_at = max((i for i, line in enumerate(lines) if DRAFT in line), default=-1)
-    if not last_row < draft_at:
-        problems.append("the answer is not the card's editable tail")
-    if len(measured["hide_card"][1].splitlines()) < 3:
-        problems.append("the hide card says nothing about the comment")
-    failures += judge("f. the card is the comment and the draft", problems)
+    failures += judge("f. the hide card is the post and the comment", problems)
 
     # (g) the numbers
     problems = []
@@ -415,6 +455,18 @@ def main() -> int:
     if set(after) != {NEW_TOKEN}:
         problems.append(f"the calls after the refresh used {set(after)}")
     failures += judge("h. the token renews itself and the next call uses it", problems)
+
+    # (i) what pauses
+    problems = []
+    registered = measured["registered"]
+    if registered["gated"] != ["hide_comment"]:
+        problems.append(f"what stops for the client is {registered['gated']}")
+    for name in ("reply_comment", "send_message", "fetch_comments", "fetch_messages"):
+        if name not in registered["plain"]:
+            problems.append(f"{name} is not a plain tool on the face")
+    if registered["approval_hooks"] != ["approval.render.hide_comment"]:
+        problems.append(f"the approval hooks provided are {registered['approval_hooks']}")
+    failures += judge("i. hiding pauses, answering does not", problems)
 
     print("INSTAGRAM COMMENTS: PASS" if not failures else "INSTAGRAM COMMENTS: FAIL")
     return 1 if failures else 0
