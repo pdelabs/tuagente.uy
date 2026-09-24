@@ -1,0 +1,47 @@
+{
+  "id": "whatsapp",
+  "version": "1.0.0",
+  "description": "The company's own WhatsApp number, linked as a device through a small whatsmeow bridge in the same container: every chat is a Bandeja ticket, the agent answers what is its to answer the moment it arrives, and steps aside while the owner answers from her phone",
+  "client_copy": "Contesta los mensajes de tu WhatsApp que puede contestar solo, te deja en la Bandeja los que tenés que ver vos, y si contestás vos desde tu teléfono, no se mete.",
+  "_comment": [
+    "THE NUMBER LIVES IN A SECOND PROCESS, NOT HERE. `engine/whatsapp-bridge/`",
+    "is a small Go program over whatsmeow, built into the engine's image and",
+    "started by the entrypoint ONLY when this plugin is in CORE_PLUGINS. It",
+    "listens on loopback, keeps whatsmeow's store on the state volume",
+    "(/state/whatsapp/whatsapp.db) and PUSHES every event to",
+    "/internal/whatsapp/events, which pokes the flow so a reply is seconds away.",
+    "",
+    "LINKED AS A DEVICE, NOT THE BUSINESS API: the owner scans a QR from the",
+    "portal with her own WhatsApp, like WhatsApp Web. That is why the bridge is",
+    "careful: it never enumerates contacts or pictures, it only answers inbound,",
+    "one send at a time, and a `rate-overlimit` pauses that kind of call for",
+    "thirty minutes instead of retrying through it.",
+    "",
+    "ANSWERS GO OUT WITHOUT THE CLIENT'S YES (Luis, 24/9/2026, for every",
+    "channel), and what is not the agent's to answer is decided by",
+    "`skills/whatsapp` and goes to the board instead. When the OWNER answers a",
+    "chat from her phone, that chat is hers for WHATSAPP_TAKEOVER_MINUTES (120)",
+    "and the code will not send into it.",
+    "",
+    "IT REQUIRES `kanban`: each chat is one Bandeja ticket, source=whatsapp and",
+    "the chat's phone JID as source_ref, opened and written by code."
+  ],
+  "requires": {
+    "plugins": [
+      "kanban"
+    ],
+    "connections": [
+      "whatsapp"
+    ]
+  },
+  "surfaces": {
+    "skills": [
+      "whatsapp"
+    ],
+    "flows": [
+      "flows/whatsapp"
+    ],
+    "core": "core/"
+  },
+  "system": false
+}

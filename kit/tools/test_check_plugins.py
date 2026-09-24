@@ -576,7 +576,7 @@ class TheFlowsSurface(unittest.TestCase):
             write(tmp, "alpha", manifest("alpha"))
             self.assertEqual(plugin_registry.flow_sources(["alpha"], Path(tmp)), {})
 
-    def test_the_kits_seventeen_curated_flows_all_have_an_owner(self):
+    def test_the_kits_eighteen_curated_flows_all_have_an_owner(self):
         """The real files: every FLOW.md under plugins/ is declared by one.
 
         A FLOW.md sitting in a plugin that does not declare it is a flow nobody
@@ -591,12 +591,13 @@ class TheFlowsSurface(unittest.TestCase):
         client who publishes, and nobody publishes yet. FIFTEEN UNTIL
         16/9/2026, when the two plugins of `docs/inbox-plan.md` each brought
         the clock that makes them happen: `comentarios-instagram` and
-        `bandeja-de-entrada`.
+        `bandeja-de-entrada`. SEVENTEEN UNTIL 24/9/2026, when `whatsapp` brought
+        the flow that answers the client's own number.
         """
         declared = plugin_registry.flow_sources(None, KIT)
         on_disk = sorted(p.parent for p in KIT.glob("plugins/*/*/*/FLOW.md"))
         self.assertEqual(sorted(declared.values()), on_disk)
-        self.assertEqual(len(declared), 17)
+        self.assertEqual(len(declared), 18)
 
     def test_each_of_them_carries_the_frontmatter_ITS_OWN_ENGINE_READS(self):
         """TWO SHAPES, AND WHICH ONE A FLOW IS IN IS NOT A GUESS.
@@ -865,7 +866,7 @@ ENGINE_CLIENT = ["social"]
 # THEIR FLOW.md IS THE ENGINE'S SHAPE AND NOT HERMES' — `trigger:` and `cron:`,
 # read by `engine/core/flows.py` — which is why the frontmatter test below walks
 # two pools and not one.
-ENGINE_FLOWS = ["instagram", "mail"]
+ENGINE_FLOWS = ["instagram", "mail", "whatsapp"]
 # THE SIXTH SHAPE: a plugin of our engine that EVERY client has. `notify` mails
 # the owner what waits for them and what broke, `business` reads the business
 # and leaves its draft; nobody buys them, and they carry
@@ -1100,7 +1101,7 @@ class TheKitsOwnRegistry(unittest.TestCase):
         self.assertEqual(
             sorted(sources),
             sorted((set(SYSTEM + PORTED) - {"kanban", "flow"})
-                   | {"lower-thirds", "news-copy", "post", "comments", "inbox"}))
+                   | {"lower-thirds", "news-copy", "post", "comments", "inbox", "whatsapp"}))
         registry = plugin_registry.registry(KIT)
         for name, where in sources.items():
             owner = next(pid for pid, data in registry.items()
