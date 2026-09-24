@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Bot, Clock } from "lucide-react";
 import { POSTS } from "./posts";
+import { GUARANTEE, MONTHLY } from "../pricing";
 
 export const SITE = "https://tuagente.uy";
 export const WHATSAPP = "https://wa.me/59899002835";
@@ -123,9 +124,8 @@ export function ArticleLayout({ slug, children }: { slug: string; children: Reac
             ¿Querés ver esto funcionando en tu empresa?
           </h2>
           <p className="mx-auto mt-3 max-w-md text-white/80">
-            Contanos qué te come las horas y te cotizamos gratis. Son USD 90 por mes, sin costo
-            de alta, con WhatsApp e Instagram adentro. Si el primer mes no hizo lo que te
-            dijimos, ese mes no lo pagás.
+            Contanos qué te come las horas y te cotizamos gratis. Son {MONTHLY} por mes, sin
+            costo de alta, con WhatsApp e Instagram adentro. {GUARANTEE}
           </p>
           <a
             href={WHATSAPP}

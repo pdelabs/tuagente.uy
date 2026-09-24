@@ -29,25 +29,13 @@ import {
 } from "lucide-react";
 import Reveal from "./Reveal";
 import TeardownButton from "./teardown/TeardownButton";
+// The price repeats in the numbers, the pricing section, the FAQ, the final
+// CTA and the structured data; it lives in ./pricing and nowhere else.
+import { GUARANTEE, MONTHLY, MONTHLY_USD } from "./pricing";
 import { AgentitoAvatar, AgentitoAnimated, type AgentitoLook } from "./app/lib/agentito";
 
 const WHATSAPP = "https://wa.me/59899002835";
 const EMAIL = "mailto:hola@tuagente.uy";
-
-/* ─────────────────────────────────────────── Pricing
- *
- * The model decided by Luis on 2026-09-24, and the ONLY number the site
- * publishes: the monthly, with no setup fee, that already carries the agent
- * and its WhatsApp and Instagram replies. Every job added on top joins the
- * monthly at a price that is quoted (free) and never published; custom work
- * is paid once and half of it comes back as a discount on the monthly. It
- * repeats in the numbers, the pricing section, the FAQ, the final CTA and the
- * structured data — change it here and every place picks it up. */
-const MONTHLY_USD = "90";
-const MONTHLY = `USD ${MONTHLY_USD}`;
-
-/** The guarantee, word for word wherever it shows. */
-const GUARANTEE = "Si el primer mes no hizo lo que te dijimos, ese mes no lo pagás.";
 
 export default function Page() {
   return (
