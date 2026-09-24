@@ -46,6 +46,7 @@ earlier versions of one it still does. Renaming a curated flow is otherwise how
 a client ends up with two of them reading the same feed.
 """
 
+import board_store
 import ig_graph
 import ig_store  # noqa: F401 — imported for the tables it creates on load
 import ig_tools
@@ -117,3 +118,7 @@ def register(engine) -> None:
     # tool: what the social plugin's creator takes is something it can hang on
     # its `Agent(...)` without knowing anything about this plugin.
     engine.provide("instagram.performance", ig_tools.performance())
+    # Who wrote, and under which post, on the Bandeja's tickets: what lets it
+    # show a person once however many comments and messages they left.
+    board_store.EXTRA[ig_tools.FROM_COMMENT] = ig_tools.comment_extra
+    board_store.EXTRA[ig_tools.FROM_DM] = ig_tools.dm_extra
