@@ -76,9 +76,9 @@ FILES = """\
 
 
 def soul() -> str:
-    """Who the agent is, read from disk every run on purpose: it is a read-only
-    mount and editing it should not need a restart while the engine is being
-    poked at."""
+    """Who the agent is: the read-only mount's SOUL.md. Read once, when the
+    agent is built (`standing()`), like a delegate's `IDENTITY` — an edit
+    reaches the agent on the next restart."""
     return (config.AGENT_DIR / "SOUL.md").read_text().strip()
 
 
@@ -140,25 +140,41 @@ def identity() -> str:
 IDENTITY = identity()
 
 
-def instructions(ctx: RunContext[Deps]) -> str:
-    """SOUL + the engine's own rules + the enabled plugins' prose + the skills index + today's date.
+def standing() -> str:
+    """SOUL + the engine's own rules + the enabled plugins' prose. A STRING.
 
     THE ORDER IS THE POINT. The SOUL says who the agent is and nothing else;
     each mechanism's rules arrive with the plugin that brings the mechanism, so
     a client who does not have approvals never reads a word about approvals.
 
-    AND THE DATE STAYS LAST: it is the one line that changes by itself, and
-    everything above it is a stable prefix the provider's cache keeps. Cache is
-    nearly all of this engine's conversational saving
-    (`kit/notes/image-cost-anatomy.md`: 96-97% on a session), and moving the
-    clock to the top would end that prefix at the SOUL.
+    AND IT IS A PLAIN STRING SO THE NOTEBOOK LANDS UNDER IT. Pydantic AI renders
+    every literal instruction before every callable one, the agent's own before
+    its capabilities'. The memory plugin's notebook is a capability's literal,
+    so while this was one callable the notebook was the FIRST thing the face
+    read, above its own SOUL — our own agent's held «no posteos los domingos»,
+    a post's topic misread as a rule, right over the SOUL of an agent with a
+    flow that posts every day (2026-09-24). Now the order is: this, then
+    the notebook, then `situation` below. The SOUL is read once for it, which
+    is the restart a delegate's `IDENTITY` already needed.
 
     THE FACE READS ITS SOUL WHOLE, and `identity()` is the part of it a
     delegate gets. Not the same text and not meant to be: the face is the one
     with a scope, a chat and manners in it.
     """
-    parts = [soul(), FLOWS, FILES, web.WEB, *plugins.prose(), skills.index_text(), today()]
+    parts = [soul(), FLOWS, FILES, web.WEB, *plugins.prose()]
     return "\n\n".join(p for p in parts if p)
+
+
+def situation(ctx: RunContext[Deps]) -> str:
+    """The skills index + today's date: what changes without a restart.
+
+    THE DATE STAYS LAST: it is the one line that changes by itself, and
+    everything above it is a stable prefix the provider's cache keeps. Cache is
+    nearly all of this engine's conversational saving
+    (`kit/notes/image-cost-anatomy.md`: 96-97% on a session), and moving the
+    clock to the top would end that prefix at the SOUL.
+    """
+    return "\n\n".join(p for p in (skills.index_text(), today()) if p)
 
 
 def hands() -> list[AbstractToolset[Deps]]:
@@ -216,7 +232,7 @@ def get_agent() -> Agent[Deps, str]:
         _agent = Agent(
             model(),
             deps_type=Deps,
-            instructions=instructions,
+            instructions=[standing(), situation],
             model_settings=config.MODEL_SETTINGS,
             toolsets=[*hands(), flows.toolset(), *EXTRA_TOOLSETS],
             capabilities=CAPABILITIES or None,
