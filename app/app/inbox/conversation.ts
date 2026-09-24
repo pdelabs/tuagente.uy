@@ -24,7 +24,10 @@
 // WHATSAPP IS THE EXCEPTION THAT HAS A COLUMN: the engine keeps each chat
 // (`GET /portal/whatsapp/chats/{jid}`, the jid being the ticket's
 // `source_ref`) with the contact's name and number, so there the person comes
-// from that record and not from prose.
+// from that record and not from prose. SO DOES INSTAGRAM since 2026-09-24:
+// its tickets carry `handle` (`ig_tools.comment_extra` / `dm_extra`), which is
+// what lets the list show a person once (`people.ts`); the title is the
+// fallback for a ticket the plugin has no record of.
 
 import { isTheAgent, isTheClient, type Ticket, type WhatsAppChat } from "../lib/agent";
 import { momentOf, type Moment, type Tone } from "../lib/labels";
@@ -52,13 +55,22 @@ export function channelKey(t: Ticket | null | undefined): Channel | null {
 
 /** What the engine puts on a CHANNEL ticket on top of the board's fields
  *  (`board_store.as_ticket`): the conversation's last line — never the
- *  agent's note to the owner — and, on WhatsApp, the chat's record (`EXTRA`).
+ *  agent's note to the owner — and what the channel's plugin adds (`EXTRA`):
+ *  on WhatsApp the chat's record, on Instagram who wrote and, for a comment,
+ *  the comment's own words and the post it is under.
  *  Typed here and not in `lib/agent.ts` because only this screen reads it. */
 export type ChannelTicket = Ticket & {
   last_comment?: { author: string; body: string; created_at: number } | null;
   name?: string | null;
   phone?: string | null;
   taken_over_until?: string | number | null;
+  /** Instagram: the person's @, without the @. */
+  handle?: string | null;
+  /** An Instagram comment: what the person wrote. The ticket's body is what
+   *  the agent wrote when it opened the ticket. */
+  comment_text?: string | null;
+  post_permalink?: string | null;
+  post_line?: string | null;
 };
 
 /** The WhatsApp chat a list row already carries: the same record
@@ -106,8 +118,11 @@ const BARE_ADDRESS = /([^\s<>@]+@[^\s<>]+\.[a-z]{2,})/i;
 // An Instagram handle, as the skill writes it into the title.
 const HANDLE = /@([a-z0-9._]{2,30})/i;
 
-export function personOf(t: Ticket | null | undefined): Person {
+export function personOf(t: ChannelTicket | null | undefined): Person {
   if (!t) return { name: "", handle: null };
+  // Instagram says who wrote in a field (`ig_tools.comment_extra`): the @ is
+  // their name — Instagram gives nothing else.
+  if (t.handle) return { name: t.name || `@${t.handle}`, handle: `@${t.handle}` };
   const body = t.body ?? "";
   const from = FROM_LINE.exec(body)?.[1]?.trim();
   if (from) {
@@ -194,7 +209,9 @@ export function previewOf(t: Ticket | null | undefined, limit = 120): string {
  *  said it. With no comment yet it is the message that opened it. */
 export function lastLineOf(t: ChannelTicket, limit = 120): { author: string | null; text: string } {
   const last = t.last_comment;
-  if (!last) return { author: null, text: previewOf(t, limit) };
+  // An Instagram comment's opener is the comment itself, not the body the
+  // agent wrote around it.
+  if (!last) return { author: null, text: previewOf(t.comment_text ? { ...t, body: t.comment_text } : t, limit) };
   const text = last.body.replace(HEADERS, "").replace(MARKS, "").trim();
   const first = text.split(/\n+/).map((l) => l.trim()).find(Boolean) ?? "";
   return {

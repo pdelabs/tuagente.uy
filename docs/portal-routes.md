@@ -196,6 +196,19 @@ Instagram or WhatsApp answer goes out with no card, so a blocked thread with
 no card naming it is one the agent LEFT for the owner, and the banner says so
 instead of linking anywhere.
 
+**`?thread=` NAMES A TICKET; WHAT OPENS IS ITS PERSON** (2026-09-24). The
+Inbox's list is one row per person (`app/app/inbox/people.ts`): an Instagram
+person is every comment ticket and DM ticket with the same `handle`, a
+WhatsApp person is their chat (`source_ref`, the jid), and a mail stays one
+row per ticket — a mail ticket carries no structured sender. There is no
+person param: the ticket id already identifies the person, and every link
+that exists (Activity, the chat's chip, the Board's forward) carries a ticket
+id. Clicking a row writes the person's LATEST ticket and the timeline opens at
+the bottom; a link to any OTHER of their tickets opens the same merged
+timeline scrolled to that ticket's first line (for a comment, the «Comentó en
+«…»» header). A ticket the list does not have (archived, or past the list's
+hundred) opens on its own.
+
 **WHAT THE INBOX ADDS THAT HAS NO URL, ON PURPOSE** (2026-09-24, the messages
 tab):
 

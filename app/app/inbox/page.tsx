@@ -26,6 +26,13 @@
 // and at the bottom, where a composer would be, the box that asks the agent.
 // The whole screen is one viewport tall and each pane scrolls on its own; on
 // a phone it is one pane at a time.
+//
+// A ROW IS A PERSON, NOT A TICKET (Luis, 2026-09-24): Instagram opens a ticket
+// per comment and one per DM thread, and the owner reads all of them as one
+// conversation with that person. `people.ts` says who is who; the open thread
+// merges their tickets into one timeline, each comment under the post it was
+// left on. The URL still names a TICKET (`?thread=`): a link from anywhere
+// opens that ticket's person, scrolled to that ticket.
 
 import {
   useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentType,
@@ -33,7 +40,8 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, ChevronDown, Hand, Inbox, Mail, MessagesSquare, RefreshCw, Search, Send, Smartphone, X,
+  ArrowLeft, ChevronDown, ExternalLink, Hand, Inbox, Mail, MessagesSquare, RefreshCw, Search, Send,
+  Smartphone, X,
 } from "lucide-react";
 import {
   getApprovals, getFlows, getManifest, getTicketDetail, getTickets, isTheAgent, isTheClient,
@@ -56,6 +64,7 @@ import {
   personOf, phoneLabel, stateOf, takenOverUntil, whatsAppJid, whatsAppPerson,
   type Channel, type ChannelTicket, type Person, type State,
 } from "./conversation";
+import { groupByPerson, mostUrgent, type PersonGroup } from "./people";
 import {
   ContactAvatar, TakeoverBanner, WhatsAppCard, WhatsAppLine, useSeen, useWhatsAppChat,
   useWhatsAppLink,
@@ -103,6 +112,14 @@ const labelFor = (author: string) => authorLabel(author, agentName());
 const personFor = (t: ChannelTicket | null, chat = t ? chatOfRow(t) : null): Person =>
   whatsAppJid(t) ? whatsAppPerson(t, chat) : personOf(t);
 
+/** A person's channel, said once. Their comments and their DMs are both
+ *  «Instagram»: the timeline says which line is which. */
+const channelOfGroup = (tickets: Ticket[]) => {
+  const first = channelOf(tickets[0]);
+  const labels = new Set(tickets.map((t) => channelOf(t).label));
+  return labels.size > 1 ? { ...first, label: "Instagram" } : first;
+};
+
 /** «laura», «Laura», «Láura» are one search. */
 const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
@@ -119,21 +136,22 @@ const MARKER: Partial<Record<State["key"], { icon: Glyph; cls: string }>> = {
 };
 
 /** A row: the person's face with the channel on it, their name, when, the
- *  last thing said, and — when it needs her — where it stands.
+ *  last thing said on ANY of their tickets, and — when one of them needs her —
+ *  the most urgent of where they stand (`mostUrgent`).
  *
  *  A WhatsApp row carries the chat's record (name, number, takeover) on the
  *  ticket itself, and asks WhatsApp for the picture ONLY ONCE IT IS ON SCREEN
  *  (`useSeen`): a Bandeja with two hundred chats does not ask for two hundred
  *  pictures on load (see `whatsapp.tsx` for why that matters). */
-function Conversation({ cfg, t, open, waitingOk, onClick }: {
-  cfg: PortalConfig; t: ChannelTicket; open: boolean; waitingOk: boolean; onClick: () => void;
+function Conversation({ cfg, group, state, open, onClick }: {
+  cfg: PortalConfig; group: PersonGroup; state: State; open: boolean; onClick: () => void;
 }) {
   const [ref, seen] = useSeen<HTMLButtonElement>();
+  const t = group.latest;
   const jid = whatsAppJid(t);
   const chat = chatOfRow(t);
-  const { icon: Icon, label } = channelOf(t);
+  const { icon: Icon, label } = channelOfGroup(group.tickets);
   const person = personFor(t, chat);
-  const state = stateOf(t.status, { waitingOk, takenOver: takenOverUntil(chat) !== null });
   const marker = MARKER[state.key];
   const unread = state.key === "new";
   const last = lastLineOf(t);
@@ -234,59 +252,118 @@ type Side = "theirs" | "agent" | "owner";
 
 type Line =
   | { kind: "day"; key: string; label: string }
-  | { kind: "note"; key: string; body: string; at: number | string }
+  /** Where an Instagram comment was left: the header its lines sit under. */
+  | { kind: "post"; key: string; anchor: string; line: string | null; href: string | null }
+  | { kind: "note"; key: string; anchor?: string; body: string; at: number | string }
   | {
-      kind: "msg"; key: string; side: Side; author: string; who: string; body: string;
-      at: number | string;
+      kind: "msg"; key: string; anchor?: string; side: Side; author: string; who: string;
+      body: string; at: number | string;
       /** The first of a run by the same author: it carries the name. */
       head: boolean;
     };
 
-/** The thread as the timeline draws it: the message that opened it, then the
- *  comments, with a separator where the day changes and the author's name
- *  once per run of consecutive messages.
+type Said = {
+  ticket: ChannelTicket; author: string; body: string; at: number | string;
+  theirs?: boolean; sent?: boolean;
+};
+
+/** What was said on one ticket, in order: the message that opened it, then
+ *  its comments.
  *
  *  THE FIRST MESSAGE HAS NO AUTHOR: it is the ticket's body, the mail or the
- *  comment that started the conversation, and it is theirs by definition. */
-function linesOf(ticket: Ticket, comments: TicketComment[], person: Person): Line[] {
-  const raw: { author: string; body: string; at: number | string; theirs?: boolean; sent?: boolean }[] = [];
-  if (ticket.body?.trim()) raw.push({ author: "", body: messageOf(ticket), at: ticket.created_at, theirs: true });
-  for (const c of comments) raw.push({ author: c.author, body: c.body, at: c.created_at, sent: c.sent });
+ *  message that started the conversation, and it is theirs by definition. ON
+ *  AN INSTAGRAM COMMENT IT IS THE COMMENT ITSELF (`comment_text`): the body is
+ *  what the agent wrote when it opened the ticket, not what the person said. */
+function saidOn(ticket: ChannelTicket, comments: TicketComment[]): Said[] {
+  const said: Said[] = [];
+  const opener = ticket.comment_text?.trim() || messageOf(ticket);
+  if (opener) said.push({ ticket, author: "", body: opener, at: ticket.created_at, theirs: true });
+  for (const c of comments)
+    said.push({ ticket, author: c.author, body: c.body, at: c.created_at, sent: c.sent });
+  return said;
+}
 
-  const noted = NOTED_CHANNELS.has(ticket.source ?? "");
+const msAt = (at: number | string) => (momentOf(at)?.ms ?? 0);
+
+/** The person's timeline: every one of their tickets merged, with a separator
+ *  where the day changes and the author's name once per run.
+ *
+ *  A DM's or a chat's lines are interleaved by time with everything else. AN
+ *  INSTAGRAM COMMENT IS A BLOCK: the comment and what was answered under it
+ *  stay together under «Comentó en «…»», placed where the comment was made —
+ *  an answer to a comment read between two DMs would not say what it answers.
+ *
+ *  Each ticket's first line carries `anchor` (its id): it is what a `?thread=`
+ *  link to that ticket scrolls to. */
+function linesOf(tickets: ChannelTicket[], comments: Record<string, TicketComment[]>,
+  person: Person): Line[] {
+  const blocks: { at: number; post: ChannelTicket | null; said: Said[] }[] = [];
+  for (const t of tickets) {
+    const said = saidOn(t, comments[t.id] ?? []);
+    if (t.source === "instagram") blocks.push({ at: msAt(t.created_at), post: t, said });
+    else for (const s of said) blocks.push({ at: msAt(s.at), post: null, said: [s] });
+  }
+  blocks.sort((a, b) => a.at - b.at);
+
   const lines: Line[] = [];
+  const anchored = new Set<string>();
   let day: number | null = null;
   let run: string | null = null;
-  raw.forEach((r, i) => {
-    const m = momentOf(r.at);
-    if (m && m.days !== day) {
+  let i = 0;
+  const dayOf = (at: number | string) => {
+    const m = momentOf(at);
+    // Only forward: a block's answer from tomorrow is followed by a DM from
+    // today, and «Hoy» twice in one thread reads like a bug.
+    if (m && (day === null || m.days > day)) {
       day = m.days;
       run = null;
       lines.push({ kind: "day", key: `day-${i}`, label: dayLabel(m) });
     }
-    // THE AGENT'S NOTE FOR THE OWNER is not a message the person got: on
-    // WhatsApp and Instagram, what went out is marked `sent`, and an agent
-    // line that wasn't is drawn as a note across the thread, in its place.
-    if (noted && !r.theirs && isTheAgent(r.author) && !r.sent) {
+  };
+  for (const block of blocks) {
+    if (block.post) {
+      const t = block.post;
+      dayOf(t.created_at);
+      anchored.add(t.id);
       run = null;
-      lines.push({ kind: "note", key: `note-${i}`, body: r.body, at: r.at });
-      return;
+      lines.push({
+        kind: "post", key: `post-${t.id}`, anchor: t.id,
+        line: t.post_line?.trim() || null, href: t.post_permalink || null,
+      });
     }
-    const ours = !r.theirs && isOurSide(r.author, person);
-    const side: Side = !ours ? "theirs" : isTheClient(r.author) ? "owner" : "agent";
-    const runKey = side === "theirs" ? "theirs" : `${side}:${r.author}`;
-    lines.push({
-      kind: "msg",
-      key: `msg-${i}`,
-      side,
-      author: r.author,
-      who: ours ? labelFor(r.author) : person.name || (r.author ? labelFor(r.author) : "Quien escribió"),
-      body: r.body,
-      at: r.at,
-      head: runKey !== run,
-    });
-    run = runKey;
-  });
+    for (const r of block.said) {
+      i += 1;
+      dayOf(r.at);
+      const anchor = anchored.has(r.ticket.id) ? undefined : r.ticket.id;
+      anchored.add(r.ticket.id);
+      // THE AGENT'S NOTE FOR THE OWNER is not a message the person got: on
+      // WhatsApp and Instagram, what went out is marked `sent`, and an agent
+      // line that wasn't is drawn as a note across the thread, in its place.
+      if (NOTED_CHANNELS.has(r.ticket.source ?? "") && !r.theirs && isTheAgent(r.author) && !r.sent) {
+        run = null;
+        lines.push({ kind: "note", key: `note-${i}`, anchor, body: r.body, at: r.at });
+        continue;
+      }
+      const ours = !r.theirs && isOurSide(r.author, person);
+      const side: Side = !ours ? "theirs" : isTheClient(r.author) ? "owner" : "agent";
+      const runKey = side === "theirs" ? "theirs" : `${side}:${r.author}`;
+      lines.push({
+        kind: "msg",
+        key: `msg-${i}`,
+        anchor,
+        side,
+        author: r.author,
+        who: ours ? labelFor(r.author) : person.name || (r.author ? labelFor(r.author) : "Quien escribió"),
+        body: r.body,
+        at: r.at,
+        head: runKey !== run,
+      });
+      run = runKey;
+    }
+    // What follows a comment's block is not part of it: the next line names
+    // its author again.
+    if (block.post) run = null;
+  }
   return lines;
 }
 
@@ -309,7 +386,7 @@ function Bubble({ line, look, wide }: {
   // The corner the bubble comes out of, on the first of a run.
   const corner = line.head ? (ours ? "rounded-tr-sm" : "rounded-tl-sm") : "";
   return (
-    <li className={`flex ${ours ? "justify-end" : "justify-start"} ${line.head ? "mt-3" : "mt-1"}`}>
+    <li data-ticket={line.anchor} className={`flex ${ours ? "justify-end" : "justify-start"} ${line.head ? "mt-3" : "mt-1"}`}>
       <div
         className={`flex min-w-0 flex-col ${ours ? "items-end" : "items-start"} ${
           wide ? "max-w-[92%]" : "max-w-[85%] md:max-w-[70%]"
@@ -347,7 +424,9 @@ function Bubble({ line, look, wide }: {
  *  ONLY THE LAST THING SAID GETS THE CARD OPEN. A note with the conversation
  *  going on after it was already dealt with — the person wrote again, someone
  *  answered — so it folds to one line she can open (Luis, 2026-09-24). */
-function AgentNote({ body, at, latest }: { body: string; at: string | number; latest: boolean }) {
+function AgentNote({ anchor, body, at, latest }: {
+  anchor?: string; body: string; at: string | number; latest: boolean;
+}) {
   const [open, setOpen] = useState(latest);
   useEffect(() => { setOpen(latest); }, [latest]);
   const head = (
@@ -360,7 +439,7 @@ function AgentNote({ body, at, latest }: { body: string; at: string | number; la
     </>
   );
   return (
-    <li className="my-3 flex justify-center">
+    <li data-ticket={anchor} className="my-3 flex justify-center">
       <div className={`w-full max-w-lg rounded-xl border border-c-amber ${open ? "bg-c-amber/40" : "bg-c-amber/15"} px-3 py-2`}>
         <button
           type="button"
@@ -381,13 +460,45 @@ function AgentNote({ body, at, latest }: { body: string; at: string | number; la
   );
 }
 
+/** Where an Instagram comment was left, over the comment and its answer. The
+ *  post opens on Instagram, in a new tab: it is theirs, not a place here. */
+function PostHeader({ line }: { line: Extract<Line, { kind: "post" }> }) {
+  const text = (
+    <>
+      <InstagramMark className="h-3 w-3 shrink-0" />
+      <span className="min-w-0 truncate">
+        Comentó en {line.line ? `«${line.line}»` : "un posteo"}
+      </span>
+      {line.href && <ExternalLink className="h-3 w-3 shrink-0" />}
+    </>
+  );
+  const cls = "inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-black/[0.07] bg-white px-2.5 py-1 text-[11px] font-semibold text-ink-soft";
+  return (
+    <li data-ticket={line.anchor} className="mb-1 mt-4 flex justify-start">
+      {line.href ? (
+        <a href={line.href} target="_blank" rel="noopener noreferrer"
+          className={`${cls} transition hover:text-ink`}>
+          {text}
+        </a>
+      ) : (
+        <span className={cls}>{text}</span>
+      )}
+    </li>
+  );
+}
+
 /** The timeline. It opens at the bottom — the last thing said is what she
  *  came to read — and goes back to the bottom when something new arrives
- *  (`useChanges` reloads the detail, the line count grows). */
-function Thread({ ticket, comments, person, look }: {
-  ticket: Ticket; comments: TicketComment[]; person: Person; look: ReturnType<typeof loadAgentLook>;
+ *  (`useChanges` reloads the details, the line count grows).
+ *
+ *  UNLESS THE LINK NAMED ONE OF THE TICKETS (`focus`): a `?thread=` from
+ *  Activity or the chat is about THAT comment or THAT message, so the thread
+ *  opens on its first line — once; after that it behaves like any other. */
+function Thread({ tickets, comments, person, look, focus }: {
+  tickets: ChannelTicket[]; comments: Record<string, TicketComment[]>; person: Person;
+  look: ReturnType<typeof loadAgentLook>; focus: string | null;
 }) {
-  const lines = useMemo(() => linesOf(ticket, comments, person), [ticket, comments, person]);
+  const lines = useMemo(() => linesOf(tickets, comments, person), [tickets, comments, person]);
   const scroller = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLUListElement>(null);
   // Whether she is reading the end. A bubble's height is not final when it
@@ -395,11 +506,24 @@ function Thread({ ticket, comments, person, look }: {
   // pane changes size with the window: while she is at the bottom, it keeps
   // her there; once she scrolls up to read, it leaves her alone.
   const atEnd = useRef(true);
+  const focused = useRef<string | null>(null);
   const toEnd = () => {
     const el = scroller.current;
     if (el) el.scrollTop = el.scrollHeight;
   };
-  useEffect(() => { atEnd.current = true; toEnd(); }, [ticket.id, lines.length]);
+  const who = tickets.map((t) => t.id).join(",");
+  useEffect(() => {
+    const target = focus && focused.current !== focus
+      ? list.current?.querySelector<HTMLElement>(`[data-ticket="${focus}"]`) : null;
+    if (target && scroller.current) {
+      focused.current = focus;
+      atEnd.current = false;
+      scroller.current.scrollTop = target.offsetTop - 12;
+      return;
+    }
+    if (focus && focused.current !== focus) return; // its lines have not arrived yet
+    if (atEnd.current || !focus) { atEnd.current = true; toEnd(); }
+  }, [who, lines.length, focus]);
   useEffect(() => {
     const ro = new ResizeObserver(() => { if (atEnd.current) toEnd(); });
     if (list.current) ro.observe(list.current);
@@ -411,12 +535,12 @@ function Thread({ ticket, comments, person, look }: {
     if (el) atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
   };
   // A mail is read as a letter, not a line: its bubbles take the width.
-  const wide = channelKey(ticket) === "mail";
+  const wide = channelKey(tickets[0]) === "mail";
   // The last line that is a message or a note: a note is «latest» only when
-  // nothing was said after it (day separators don't count).
-  const last = [...lines].reverse().find((l) => l.kind !== "day");
+  // nothing was said after it (day separators and post headers don't count).
+  const last = [...lines].reverse().find((l) => l.kind === "msg" || l.kind === "note");
   return (
-    <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto bg-black/[0.025] px-3 py-3 [overflow-anchor:none] md:px-6">
+    <div ref={scroller} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto bg-black/[0.025] px-3 py-3 [overflow-anchor:none] md:px-6">
       <ul ref={list} className="mx-auto flex max-w-3xl flex-col pb-2">
         {lines.map((l) =>
           l.kind === "day" ? (
@@ -425,8 +549,10 @@ function Thread({ ticket, comments, person, look }: {
                 {l.label}
               </span>
             </li>
+          ) : l.kind === "post" ? (
+            <PostHeader key={l.key} line={l} />
           ) : l.kind === "note" ? (
-            <AgentNote key={l.key} body={l.body} at={l.at} latest={l === last} />
+            <AgentNote key={l.key} anchor={l.anchor} body={l.body} at={l.at} latest={l === last} />
           ) : (
             <Bubble key={l.key} line={l} look={look} wide={wide} />
           ),
@@ -451,16 +577,17 @@ const ANSWER_YOURSELF: Record<Channel, string> = {
  *  moment the chat opens (`docs/portal-routes.md`), so a link ending in a
  *  colon for the client to complete would land her in a screen where there is
  *  nothing left to complete — the same reason Posteos asks what is wrong with
- *  the image before it builds the link. */
-function AskAgent({ ticket }: { ticket: Ticket }) {
+ *  the image before it builds the link.
+ *
+ *  IT NAMES THE PERSON AND EVERY TICKET ID: the row is a person, but the agent
+ *  acts on tickets, and on Instagram one person can be several of them. */
+function AskAgent({ tickets, person }: { tickets: Ticket[]; person: Person }) {
   const [what, setWhat] = useState("");
   const router = useRouter();
   const field = useId();
   const ask = what.trim();
-  const href = ask
-    ? buildChatLink(`Sobre la conversación «${ticket.title}» (${ticket.id}): ${ask}`)
-    : null;
-  const channel = channelKey(ticket);
+  const channel = channelKey(tickets[0]);
+  const href = ask ? buildChatLink(askAbout(tickets, person, channel, ask)) : null;
   return (
     <div className="shrink-0 border-t border-black/[0.07] bg-white px-3 pb-2.5 pt-2.5 md:px-4">
       <form
@@ -496,6 +623,18 @@ function AskAgent({ ticket }: { ticket: Ticket }) {
   );
 }
 
+/** The request to the agent, in words. A mail keeps its subject — that IS the
+ *  conversation —; anybody else is named, with every ticket id they have. */
+function askAbout(tickets: Ticket[], person: Person, channel: Channel | null, ask: string): string {
+  const ids = tickets.map((t) => t.id).join(", ");
+  if (channel === "mail" && tickets.length === 1)
+    return `Sobre la conversación «${tickets[0].title}» (${ids}): ${ask}`;
+  const who = person.handle && person.handle !== person.name
+    ? `${person.name} (${person.handle})` : person.name || tickets[0].title;
+  const where = CHANNELS.find((c) => c.key === channel)?.label;
+  return `Sobre la conversación con ${who}${where ? ` por ${where}` : ""} (${ids}): ${ask}`;
+}
+
 export default function InboxPage() {
   const [agentLook] = useState(loadAgentLook);
   const [cfg] = useState<PortalConfig | null>(() => loadConfig());
@@ -503,10 +642,9 @@ export default function InboxPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // WHAT IS OPEN IS THE URL'S TO SAY: `/app/inbox?thread=t_ab12`.
+  // WHAT IS OPEN IS THE URL'S TO SAY: `/app/inbox?thread=t_ab12`. It names a
+  // TICKET; what opens is that ticket's PERSON (`people.ts`).
   const openId = useRouteParam(PARAM.thread);
-  const [detail, setDetail] = useState<TicketDetail | null>(null);
-  const [detailError, setDetailError] = useState(false);
   const openIdRef = useRef<string | null>(null);
 
   // The pending requests, only to answer one question: does THIS conversation
@@ -550,23 +688,61 @@ export default function InboxPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const loadDetail = useCallback(() => {
-    if (!cfg || !openId) return;
-    getTicketDetail(cfg, openId)
-      .then((d) => { if (openIdRef.current === openId) setDetail(d); })
-      .catch(() => { if (openIdRef.current === openId) setDetailError(true); });
-  }, [cfg, openId]);
+  /** The request waiting on the client's ok FOR THIS TICKET, if the card
+   *  names it.
+   *
+   *  THE ENGINE HAS NO LINK FROM A TICKET TO ITS APPROVAL: a row in `approvals`
+   *  carries the session it stopped in and the tool call it stopped at, not the
+   *  ticket (`kit/plugins/approval/core/store.py`). What it DOES carry is the
+   *  card's text, and the mail plugin writes the ticket's id into it («la
+   *  conversación — tarea «…» (t_ab12)»), so an id found in a body is a true
+   *  match — an id is unique and nothing else writes one there.
+   *
+   *  When no card names it, a blocked thread is one the agent LEFT for her:
+   *  an Instagram or WhatsApp answer goes out with no card at all, so there is
+   *  nothing in Aprobaciones to point at — only the agent's note on the
+   *  thread. */
+  const approvalFor = useCallback(
+    (t: Ticket) => approvals.find((a) => (a.body ?? "").includes(t.id))?.id ?? null,
+    [approvals],
+  );
+
+  // ONE ROW PER PERSON (`people.ts`), the one something last happened on first.
+  const groups = useMemo(() => groupByPerson(tickets ?? [], msOf), [tickets]);
+
+  // The person the URL's ticket belongs to, when the list has it. A ticket the
+  // list does not have (archived, or past the list's hundred) opens alone.
+  const listed = useMemo(
+    () => (openId ? groups.find((g) => g.tickets.some((t) => t.id === openId)) ?? null : null),
+    [groups, openId],
+  );
+  const openKey = listed ? listed.tickets.map((t) => t.id).join(",") : openId ?? "";
+
+  // THE DETAIL OF EVERY TICKET OF THE OPEN PERSON — their comments are what
+  // the timeline is made of. A person is a handful of tickets, asked in
+  // parallel, and what already arrived stays while a live update asks again.
+  const [details, setDetails] = useState<Record<string, TicketDetail>>({});
+  const [failed, setFailed] = useState<Record<string, boolean>>({});
+  const loadDetails = useCallback(() => {
+    if (!cfg || !openKey) return;
+    const asked = openIdRef.current;
+    for (const id of openKey.split(",")) {
+      getTicketDetail(cfg, id)
+        .then((d) => { if (openIdRef.current === asked) setDetails((p) => ({ ...p, [id]: d })); })
+        .catch(() => { if (openIdRef.current === asked) setFailed((p) => ({ ...p, [id]: true })); });
+    }
+  }, [cfg, openKey]);
 
   useEffect(() => {
     openIdRef.current = openId;
-    setDetail(null);
-    setDetailError(false);
-    loadDetail();
-  }, [openId, loadDetail]);
+    setDetails({});
+    setFailed({});
+  }, [openId]);
+  useEffect(() => { loadDetails(); }, [loadDetails]);
 
   // A mail or a DM that came in, an answer the agent sent, a decision on a
   // reply: the list and the open thread move without a reload.
-  useChanges(["tickets"], () => { load(); loadDetail(); });
+  useChanges(["tickets"], () => { load(); loadDetails(); });
 
   const openThread = useCallback((id: string) => openInRoute({ [PARAM.thread]: id }), []);
   const closeThread = useCallback(() => closeInRoute(PARAM.thread), []);
@@ -585,64 +761,60 @@ export default function InboxPage() {
   const [channel, setChannel] = useState<Channel | null>(null);
   const [query, setQuery] = useState("");
 
-  const conversations = useMemo(
-    () => [...(tickets ?? [])].sort((a, b) => msOf(b) - msOf(a)),
-    [tickets],
-  );
   // The chips are the channels this agent HAS: the ones something came in
   // through, and WhatsApp once it is installed even before its first message.
   const channels = useMemo(() => {
-    const present = new Set(conversations.map(channelKey));
+    const present = new Set((tickets ?? []).map(channelKey));
     if (hasWhatsApp) present.add("whatsapp");
     return CHANNELS.map((c) => c.key).filter((k) => present.has(k));
-  }, [conversations, hasWhatsApp]);
-  // The search reads what the row shows and what the thread opened with:
-  // the name, the number or the address, the subject, the first and the last
-  // message. It is the list the portal already has — nothing is asked for.
+  }, [tickets, hasWhatsApp]);
+  // The search reads what the row shows and what any of the person's threads
+  // said: the name, the number or the address, the subject, the post, the
+  // first and the last message. It is the list the portal already has —
+  // nothing is asked for.
   const shown = useMemo(() => {
     const q = fold(query.trim());
-    return conversations.filter((t) => {
-      if (channel && channelKey(t) !== channel) return false;
+    return groups.filter((g) => {
+      if (channel && channelKey(g.latest) !== channel) return false;
       if (!q) return true;
-      const p = personFor(t);
+      const p = personFor(g.latest);
       return fold([
-        p.name, p.handle, phoneLabel(t.phone), t.title, t.body, t.last_comment?.body,
+        p.name, p.handle,
+        ...g.tickets.flatMap((t) => [
+          phoneLabel(t.phone), t.title, t.body, t.comment_text, t.post_line, t.last_comment?.body,
+        ]),
       ].filter(Boolean).join(" ")).includes(q);
     });
-  }, [conversations, channel, query]);
+  }, [groups, channel, query]);
 
-  // The detail wins — it carries the status after whatever just happened — and
-  // until it arrives the row the client clicked paints the header.
-  const ticket = useMemo<ChannelTicket | null>(() => {
-    if (!openId) return null;
-    return detail?.ticket ?? conversations.find((t) => t.id === openId) ?? null;
-  }, [openId, detail, conversations]);
+  // The details win — they carry the status after whatever just happened —
+  // and until they arrive the list's rows paint the header.
+  const openTickets = useMemo<ChannelTicket[]>(() => {
+    if (!openKey) return [];
+    return openKey.split(",")
+      .map((id) => details[id]?.ticket ?? listed?.tickets.find((t) => t.id === id))
+      .filter((t): t is ChannelTicket => Boolean(t));
+  }, [openKey, details, listed]);
+  const comments = useMemo<Record<string, TicketComment[]>>(
+    () => Object.fromEntries(Object.entries(details).map(([id, d]) => [id, d.comments ?? []])),
+    [details],
+  );
+  const lead = listed?.latest ?? openTickets[0] ?? null;
 
   // The open thread's WhatsApp chat: who it is and whether she took it over.
-  const openJid = whatsAppJid(ticket);
+  const openJid = whatsAppJid(lead);
   const { chat: openChat, reload: reloadChat } = useWhatsAppChat(cfg, openJid);
-  const comments = useMemo<TicketComment[]>(() => detail?.comments ?? [], [detail]);
   const person = useMemo(
-    () => (openJid ? whatsAppPerson(ticket, openChat) : personOf(ticket)),
-    [openJid, ticket, openChat],
+    () => (openJid ? whatsAppPerson(lead, openChat) : personOf(lead)),
+    [openJid, lead, openChat],
   );
 
-  /** The request waiting on the client's ok FOR THIS CONVERSATION, if the card
-   *  names it.
-   *
-   *  THE ENGINE HAS NO LINK FROM A TICKET TO ITS APPROVAL: a row in `approvals`
-   *  carries the session it stopped in and the tool call it stopped at, not the
-   *  ticket (`kit/plugins/approval/core/store.py`). What it DOES carry is the
-   *  card's text, and the mail plugin writes the ticket's id into it («la
-   *  conversación — tarea «…» (t_ab12)»), so an id found in a body is a true
-   *  match — an id is unique and nothing else writes one there.
-   *
-   *  When no card names it, a blocked thread is one the agent LEFT for her:
-   *  an Instagram or WhatsApp answer goes out with no card at all, so there is
-   *  nothing in Aprobaciones to point at — only the agent's note on the
-   *  thread. */
-  const approvalFor = (t: Ticket) =>
-    approvals.find((a) => (a.body ?? "").includes(t.id))?.id ?? null;
+  /** Where a ticket stands, as the list and the header say it. */
+  const stateFor = (t: ChannelTicket, chat = chatOfRow(t)) =>
+    stateOf(t.status, {
+      waitingOk: t.status === "blocked" && approvalFor(t) !== null,
+      takenOver: takenOverUntil(chat) !== null,
+    });
 
   const wrap = "mx-auto max-w-6xl px-6 py-6 md:px-8";
   if (!cfg) return <div className={wrap}><Spinner /></div>;
@@ -653,20 +825,34 @@ export default function InboxPage() {
   // On WhatsApp the number goes where the address or the handle goes: it is
   // how she tells two Lauras apart.
   const handle = openJid ? phoneLabel(openChat?.phone) || null : person.handle;
-  const requestId = ticket ? approvalFor(ticket) : null;
   const takenOver = takenOverUntil(openChat) !== null;
-  const state = ticket ? stateOf(ticket.status, { waitingOk: Boolean(requestId), takenOver }) : null;
-  const { brand: ChannelBrand, label: channelLabel } = ticket
-    ? channelOf(ticket) : { brand: Inbox, label: "" };
+  // ANY of their tickets decides the banners: one comment left for her is a
+  // person she has to look at, whatever the rest say.
+  const state = openTickets.length > 0
+    ? mostUrgent(openTickets.map((t) => stateFor(t, whatsAppJid(t) ? openChat : null)))
+    : null;
+  const blocked = openTickets.filter((t) => t.status === "blocked");
+  const requests = blocked.map(approvalFor).filter((id): id is string => id !== null);
+  const leftForHer = blocked.some((t) => approvalFor(t) === null);
+  const { brand: ChannelBrand, label: channelLabel } = openTickets.length > 0
+    ? channelOfGroup(openTickets) : { brand: Inbox, label: "" };
+  const mailSubject = openTickets.length === 1 && channelKey(openTickets[0]) === "mail"
+    ? openTickets[0].title : null;
+  // Every detail answered, one way or the other: the timeline is drawn whole,
+  // so a link to one ticket scrolls to where it will stay.
+  const ready = openKey !== "" && openKey.split(",").every((id) => details[id] || failed[id]);
+  const someFailed = openKey !== "" && openKey.split(",").some((id) => failed[id]);
+  // A link to a ticket that is not the person's latest is about THAT ticket.
+  const focus = listed && openId !== listed.latest.id ? openId : null;
   // The link is stale when the list has no such conversation AND the agent has
   // no such ticket: a plain notice and the list underneath, like every other
   // screen.
-  const stale = Boolean(openId && detailError && !ticket);
+  const stale = Boolean(openId && !listed && failed[openId]);
   // A STALE LINK OPENS NOTHING. With the notice up top and an empty thread
   // panel next to it, the screen said both things at once: «that conversation
   // is not here any more» and a header with a close button over nothing.
   const showThread = Boolean(openId && !stale);
-  const empty = conversations.length === 0 && !openId;
+  const empty = groups.length === 0 && !openId;
   // On a phone the open thread is the whole screen: what sits above the
   // panes belongs to the list.
   const listOnly = showThread ? "max-md:hidden" : "";
@@ -739,14 +925,14 @@ export default function InboxPage() {
               <ChannelFilter channels={channels} value={channel} onChange={setChannel} />
             )}
             <div className="min-h-0 flex-1 overflow-y-auto border-t border-black/[0.07]">
-              {shown.map((t) => (
+              {shown.map((g) => (
                 <Conversation
-                  key={t.id}
+                  key={g.key}
                   cfg={cfg}
-                  t={t}
-                  open={t.id === openId}
-                  waitingOk={t.status === "blocked" && approvalFor(t) !== null}
-                  onClick={() => openThread(t.id)}
+                  group={g}
+                  state={mostUrgent(g.tickets.map((t) => stateFor(t)))}
+                  open={g.key === listed?.key}
+                  onClick={() => openThread(g.latest.id)}
                 />
               ))}
               {shown.length === 0 && (
@@ -784,14 +970,14 @@ export default function InboxPage() {
                     <ContactAvatar
                       cfg={cfg}
                       jid={openJid}
-                      name={person.name || ticket?.title || ""}
+                      name={person.name || lead?.title || ""}
                       seen
                       className="h-10 w-10"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <h2 className="min-w-0 truncate text-[15px] font-bold text-ink">
-                          {person.name || ticket?.title}
+                          {person.name || lead?.title}
                         </h2>
                         {state && <span className="shrink-0"><Chip tone={state.tone}>{state.label}</Chip></span>}
                       </div>
@@ -813,9 +999,9 @@ export default function InboxPage() {
                       </IconBtn>
                     </span>
                   </div>
-                  {ticket && channelKey(ticket) === "mail" && (
+                  {mailSubject && (
                     <p className="truncate border-t border-black/[0.07] px-4 py-1.5 text-[12px] text-ink">
-                      <span className="text-ink-soft">Asunto: </span>{ticket.title}
+                      <span className="text-ink-soft">Asunto: </span>{mailSubject}
                     </p>
                   )}
                   {openChat && takenOver && (
@@ -825,16 +1011,17 @@ export default function InboxPage() {
                       onResumed={() => { reloadChat(); load(); }}
                     />
                   )}
-                  {ticket?.status === "blocked" && requestId && (
+                  {requests.map((requestId) => (
                     <Link
+                      key={requestId}
                       href={`/app/approvals?${PARAM.request}=${encodeURIComponent(requestId)}`}
                       className="flex items-center gap-2 border-t border-black/[0.07] bg-c-amber/40 px-4 py-1.5 text-[12px] font-medium text-c-amber-ink transition hover:bg-c-amber/60"
                     >
                       <Hand className="h-3.5 w-3.5 shrink-0" />
                       La respuesta está escrita y espera tu ok. Ver en Aprobaciones
                     </Link>
-                  )}
-                  {ticket?.status === "blocked" && !requestId && (
+                  ))}
+                  {leftForHer && (
                     <p className="flex items-center gap-2 border-t border-black/[0.07] bg-c-amber/40 px-4 py-1.5 text-[12px] font-medium text-c-amber-ink">
                       <Hand className="h-3.5 w-3.5 shrink-0" />
                       Tu agente te dejó esta conversación a vos: su nota está abajo.
@@ -842,17 +1029,23 @@ export default function InboxPage() {
                   )}
                 </header>
 
-                {!ticket ? (
+                {!ready || openTickets.length === 0 ? (
                   <div className="flex-1"><Spinner /></div>
                 ) : (
-                  <Thread ticket={ticket} comments={comments} person={person} look={agentLook} />
+                  <Thread
+                    tickets={openTickets}
+                    comments={comments}
+                    person={person}
+                    look={agentLook}
+                    focus={focus}
+                  />
                 )}
-                {detailError && ticket && (
+                {someFailed && openTickets.length > 0 && (
                   <p className="shrink-0 border-t border-black/[0.07] bg-white px-4 py-2 text-[13px] text-ink-soft">
                     No pude traer el resto de la conversación.
                   </p>
                 )}
-                {ticket && <AskAgent ticket={ticket} />}
+                {openTickets.length > 0 && <AskAgent tickets={openTickets} person={person} />}
               </EntityProvider>
             )}
           </section>
