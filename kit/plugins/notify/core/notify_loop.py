@@ -1,11 +1,13 @@
 """What the owner hears about, and when. Code, no model.
 
-THREE THINGS, each said once:
+FOUR THINGS, each said once:
 
 1. A request is waiting for her ok — the moment it appears.
 2. It is STILL waiting after `REMIND_AFTER` — one reminder, never two.
 3. A flow broke: a run that could not finish, a watcher that could not look
    (the `flow.failed` events the scheduler writes).
+4. A conversation the agent left for her — a WhatsApp or Instagram message it
+   would not answer — with its note.
 
 A chat turn that failed is not here: she was in the chat and saw it.
 
@@ -46,6 +48,8 @@ STILL_WAITING = "Sigue esperando tu ok: {title}."
 SUBJECT_WAITING = "Espera tu ok: {title}"
 SUBJECT_STILL = "Sigue esperando tu ok: {title}"
 SUBJECT_FAILED = "Algo no salió como esperaba"
+LEFT = "Te dejé una conversación a vos: {title}."
+SUBJECT_LEFT = "Te dejé a vos: {title}"
 SUBJECT_MANY = "Tengo {n} cosas para contarte"
 
 
@@ -69,6 +73,32 @@ def failures(floor: float) -> list:
     )
 
 
+# THE CONVERSATIONS THE AGENT LEFT FOR THE OWNER: a WhatsApp or Instagram
+# message it would not answer — a price that is not published, a complaint,
+# something it was not sure of — sits blocked in the Bandeja with its note.
+# That is her to answer, and it was the one thing the Bandeja showed her that
+# no mail did (Luis, 2026-09-24). Told once per conversation. The board is the
+# `kanban` plugin's, which an agent may not run: then there is nothing to tell.
+CHANNELS = ("instagram", "instagram-dm", "whatsapp")
+
+
+def left_for_the_owner() -> list:
+    if not db.one("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tickets'"):
+        return []
+    rows = db.query(
+        f"SELECT id, title FROM tickets WHERE status = 'blocked'"
+        f" AND source IN ({','.join('?' * len(CHANNELS))}) ORDER BY updated_at",
+        CHANNELS,
+    )
+    out = []
+    for r in rows:
+        note = db.one(
+            "SELECT body FROM ticket_comments WHERE ticket_id = ? AND author = 'agente'"
+            " AND sent = 0 ORDER BY id DESC LIMIT 1", (r["id"],))
+        out.append({"id": r["id"], "title": r["title"], "note": note["body"] if note else None})
+    return out
+
+
 def items(now: float) -> list[dict]:
     """Everything not yet told, oldest first. Each one: the mark it leaves, the
     subject it would have alone, its line, and where it opens."""
@@ -90,6 +120,15 @@ def items(now: float) -> list[dict]:
                 "line": STILL_WAITING.format(title=a["title"]),
                 "detail": None,
                 "link": link,
+            })
+    for t in left_for_the_owner():
+        if not store.marked(f"left:{t['id']}"):
+            found.append({
+                "mark": f"left:{t['id']}",
+                "subject": SUBJECT_LEFT.format(title=t["title"]),
+                "line": LEFT.format(title=t["title"]),
+                "detail": t["note"],
+                "link": notify_email.url(f"/app/inbox?thread={t['id']}"),
             })
     for e in failures(store.state("floor") or 0):
         slug = json.loads(e["payload"]).get("slug") if e["payload"] else None

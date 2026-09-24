@@ -24,6 +24,8 @@ opening the portal (`core/notify.py`, `kit/plugins/notify/`).
      what happened before.
   k. A FAILED MAIL MARKS NOTHING — the next window says it again.
   l. INSTALLING IT DOES NOT MAIL THE PAST — events before the floor are history.
+  m. A CONVERSATION LEFT FOR HER — mailed once, with the agent's note and the
+     Bandeja link.
 
 WHERE IT POINTS. `CORE_CONTAINER` moves it onto a second instance; the default
 is the main compose's `tuagente-core`.
@@ -65,6 +67,8 @@ notify_email.post = post
 PREFIX = "apr_test_notify_"
 original_pending = notify_loop.pending_approvals
 notify_loop.pending_approvals = lambda: [a for a in original_pending() if a["id"].startswith(PREFIX)]
+original_left = notify_loop.left_for_the_owner
+notify_loop.left_for_the_owner = lambda: [t for t in original_left() if t["title"].startswith("Prueba notify")]
 
 first_event = store.newest_event()
 live = identity.LIVE.read_text() if identity.LIVE.exists() else None
@@ -193,6 +197,18 @@ try:
     failure("prueba-notify")
     store.start_floor()
     out["history"] = look(at(11))
+
+    # m.
+    reset()
+    sys.path.insert(0, "/opt/kit/plugins/kanban/core")
+    import board_store as board
+    tid, _ = board.create("Prueba notify: Mensaje de Ana por WhatsApp", "hola",
+                          status=board.BLOCKED, source="whatsapp", source_ref="prueba-notify@s.whatsapp.net")
+    board.comment(tid, board.AGENT, "Pregunta un precio que no está publicado.")
+    out["left"] = look(at(11))
+    out["left_again"] = look(at(11, 40))
+    db.write("DELETE FROM ticket_comments WHERE ticket_id = ?", (tid,))
+    db.write("DELETE FROM tickets WHERE id = ?", (tid,))
 finally:
     notify.CHANNELS.pop("email", None)
     if had_email:
@@ -330,6 +346,16 @@ def main() -> int:
 
     problems = [] if not r["history"]["sent"] else [f"it mailed {subjects(r['history'])!r}"]
     failures += judge("l. installing it does not mail the past", problems)
+
+    problems = []
+    if subjects(r["left"]) != ["Te dejé a vos: Prueba notify: Mensaje de Ana por WhatsApp"]:
+        problems.append(f"a conversation left for her sent {subjects(r['left'])!r}")
+    elif "precio que no está publicado" not in r["left"]["sent"][0]["text"] \
+            or "/app/inbox?thread=" not in r["left"]["sent"][0]["text"]:
+        problems.append("the mail does not carry the note and the conversation's link")
+    if r["left_again"]["sent"]:
+        problems.append("the same conversation was mailed twice")
+    failures += judge("m. a conversation left for her is mailed once, with the note", problems)
 
     print("NOTIFY: " + ("PASS" if not failures else "FAIL"))
     return 1 if failures else 0
