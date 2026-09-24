@@ -172,7 +172,7 @@ with the background locked.
 ## `?thread=` — and why `?task=` still works for a mail
 
 **A ticket that came in through a channel lives in the Inbox and nowhere
-else.** `source` says which: `mail`, `instagram` and `instagram-dm` are a
+else.** `source` says which: `mail`, `instagram`, `instagram-dm` and `whatsapp` are a
 conversation — somebody wrote in and is waiting — and everything else
 (`client`, `agent`, none) is work and stays on the Board. The two tabs are the
 same call with a filter: `/portal/tickets?source=channels` and `?source=work`.
@@ -191,9 +191,23 @@ what it has always done.
 The Inbox's own link to Aprobaciones is **the one thing on this page that can
 be less precise than the rest**: the engine records no link from a ticket to
 the request the agent opened about it, so a card that names the ticket's id in
-its text (the mail plugin's does) gets `?request=<id>`, and one that does not
-(an Instagram reply's card is about the comment) gets the tab. It never says
-something false; it can say something general.
+its text (the mail plugin's does) gets `?request=<id>`. Since 2026-09-24 an
+Instagram or WhatsApp answer goes out with no card, so a blocked thread with
+no card naming it is one the agent LEFT for the owner, and the banner says so
+instead of linking anywhere.
+
+**WHAT THE INBOX ADDS THAT HAS NO URL, ON PURPOSE** (2026-09-24, the messages
+tab):
+
+- **The channel filter** (Todos · WhatsApp · Instagram · Mail) is a view of
+  the list, not something that opens. A `?thread=` link lands on its thread
+  whatever the filter was, and the filter starts at «Todos» on every visit.
+- **The WhatsApp pairing QR** (`modules.whatsapp`) is a process on the
+  engine, not a place: it is read from `GET /portal/whatsapp/pairing`, and a
+  reload mid-scan finds it again because the status says `pairing`, not
+  because the URL does.
+- **«Desvincular»'s confirmation** is an inline second step on the same line,
+  not a modal and not the browser's `confirm()`.
 
 ## `?p=` — the chat with the request already sent
 
