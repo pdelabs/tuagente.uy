@@ -49,8 +49,8 @@ export default function InboxIntro({ onOk }: IntroProps) {
       <Title>Todo lo que te escriben, en un solo lugar</Title>
       <Lead>
         Cada mensaje que entra por el mail de la empresa o por Instagram queda acá,
-        con la conversación entera. Tu agente escribe la respuesta y la deja esperando
-        tu ok: no sale nada sin que lo mires.
+        con la conversación entera. En Instagram tu agente contesta solo, con tus
+        reglas; los mails los deja escritos esperando tu ok.
       </Lead>
 
       <div className="mt-6 grid gap-6 md:grid-cols-2 md:items-start">
@@ -68,8 +68,8 @@ export default function InboxIntro({ onOk }: IntroProps) {
             <Row
               icon={Instagram}
               who="@tu.cliente"
-              chip="Esperando tu ok"
-              tone="bg-c-amber text-c-amber-ink"
+              chip="Respondido"
+              tone="bg-c-green text-c-green-ink"
             />
           </div>
         </Mockup>
@@ -79,13 +79,14 @@ export default function InboxIntro({ onOk }: IntroProps) {
             No importa por dónde te escribieron: la conversación es una sola y está
             completa, con los archivos que hayan mandado.
           </Point>
-          <Point icon={PenLine} title="La respuesta ya está escrita">
-            Tu agente la arma con la voz de tu empresa. Vos la leés, la corregís si
-            querés y recién ahí sale.
+          <Point icon={PenLine} title="Contesta con la voz de tu empresa">
+            En Instagram responde solo lo que sabe: lo que no está publicado, un
+            reclamo o algo que no tiene claro, te lo deja a vos. Un mail lo deja
+            escrito y sale cuando le decís que sí.
           </Point>
           <Point icon={Hand} title="Vos tenés la última palabra">
-            Las que esperan tu ok te llevan a Aprobaciones. Lo que no quieras que
-            conteste, se lo decís por el chat.
+            Los mails que esperan tu ok te llevan a Aprobaciones. Lo que no quieras
+            que conteste, se lo decís por el chat.
           </Point>
         </div>
       </div>

@@ -11,8 +11,9 @@
 // the board and then finds it again in the inbox is a client with two inboxes.
 //
 // WHAT THE CLIENT DOES HERE IS READ AND DECIDE. She does not write the answer:
-// the agent drafts it and it waits for her ok in Aprobaciones, which is where
-// the «Esperando tu ok» chip points. What she can do is TELL THE AGENT
+// a mail's waits for her ok in Aprobaciones; an Instagram answer goes out on
+// its own (since 2026-09-24), and a blocked Instagram thread is one the agent
+// left for her, with its note on the thread. What she can do is TELL THE AGENT
 // something about the conversation, and that goes where everything the client
 // asks for goes — the chat, with the request already written (`?p=`).
 
@@ -423,18 +424,20 @@ export default function InboxPage() {
                   </header>
 
                   <div className="px-4 py-4">
-                    {ticket?.status === "blocked" && (
+                    {ticket?.status === "blocked" && requestId && (
                       <Link
-                        href={
-                          requestId
-                            ? `/app/approvals?${PARAM.request}=${encodeURIComponent(requestId)}`
-                            : "/app/approvals"
-                        }
+                        href={`/app/approvals?${PARAM.request}=${encodeURIComponent(requestId)}`}
                         className="mb-4 flex items-center gap-2 rounded-lg border border-c-amber bg-c-amber/25 px-3 py-2 text-[13px] font-medium text-c-amber-ink transition hover:bg-c-amber/40"
                       >
                         <Hand className="h-3.5 w-3.5 shrink-0" />
                         La respuesta está escrita y espera tu ok. Ver en Aprobaciones
                       </Link>
+                    )}
+                    {ticket?.status === "blocked" && !requestId && (
+                      <p className="mb-4 flex items-center gap-2 rounded-lg border border-c-amber bg-c-amber/25 px-3 py-2 text-[13px] font-medium text-c-amber-ink">
+                        <Hand className="h-3.5 w-3.5 shrink-0" />
+                        Tu agente te dejó esta conversación a vos: su nota está abajo.
+                      </p>
                     )}
 
                     {!detail && !detailError && !ticket ? (
