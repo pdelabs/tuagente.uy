@@ -223,8 +223,8 @@ export default function TeardownModal({ onClose }: { onClose: () => void }) {
               ))}
             </ul>
             <p className="mt-auto rounded-2xl bg-white/50 p-4 text-sm font-semibold text-c-violet-ink/80">
-              Es la antesala del diagnóstico: esto es gratis y automático; el diagnóstico va más a fondo, con
-              tu caso a la vista.
+              Esto es gratis y automático. Si te cierra, la cotización con tu caso a la vista también
+              es gratis.
             </p>
           </aside>
 
@@ -409,7 +409,7 @@ function Result({
     );
   }
 
-  const waMsg = `Hola! Hice el teardown de este workflow: "${workflow}". Quiero avanzar con el diagnóstico.`;
+  const waMsg = `Hola! Hice el teardown de este workflow: "${workflow}". Quiero la cotización.`;
 
   return (
     <div className="flex flex-col gap-5">
@@ -503,7 +503,7 @@ function Result({
 
       <div className="mt-1 border-t border-black/[0.07] pt-5">
         <p className="text-sm text-ink-soft">
-          ¿Te cierra? El próximo paso es el diagnóstico: una llamada y un informe con los números de tu caso.
+          ¿Te cierra? El próximo paso es la cotización, gratis y con tu caso a la vista: qué te sumamos y cuánto queda el mensual.
         </p>
         <div className="mt-3 flex flex-col gap-2.5 sm:flex-row">
           <a
@@ -512,7 +512,7 @@ function Result({
             rel="noopener noreferrer"
             className="group inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-primary px-5 py-3 text-sm font-extrabold text-white transition hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
-            Agendá el diagnóstico
+            Pedí la cotización
             <ArrowRight size={15} className="transition group-hover:translate-x-1" />
           </a>
           <button
