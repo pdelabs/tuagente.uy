@@ -246,6 +246,29 @@ def save_conversation(
     )
 
 
+def participant_handle(conversation_id: str) -> str | None:
+    """The @ of the person on the other side of a thread, without the @.
+
+    READ OFF THE MESSAGES AND NOT OFF `participant_username`, because that
+    column was measured wrong (our own account, 24/9/2026): a message the owner
+    sends from the Instagram app carries the account's Instagram id, not the id
+    `sift` compares against, so it is read as inbound and the conversation row
+    ends up naming US as the person. The last message signed by anybody who is
+    not this account is the person; the row is the answer only for a thread
+    with no signed message yet.
+    """
+    row = db.one(
+        "SELECT from_username FROM instagram_messages WHERE conversation_id = ?"
+        " AND from_username IS NOT NULL AND from_username != COALESCE(?, '')"
+        " ORDER BY created_time DESC, seen_at DESC LIMIT 1",
+        (conversation_id, username()),
+    )
+    if row:
+        return row["from_username"]
+    found = conversation(conversation_id)
+    return found["participant_username"] if found else None
+
+
 # ── the account: the username, and the token that is current ────────────────
 
 

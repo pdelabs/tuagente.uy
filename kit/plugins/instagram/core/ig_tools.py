@@ -397,6 +397,35 @@ def answered(source: str, source_ref: str, text: str, session_id: str | None) ->
     board.move(ticket_id, board.DONE, said=text, session_id=session_id)
 
 
+# ── what an Instagram ticket carries for the Bandeja ────────────────────────
+
+
+def comment_extra(comment_id: str) -> dict:
+    """What a comment's ticket carries besides the board's own fields
+    (`board_store.EXTRA`), so the Bandeja groups a person's comments and DMs
+    under one row and draws each comment under the post it was left on.
+
+    THE COMMENT'S OWN WORDS TRAVEL TOO (`comment_text`): the ticket's body is
+    what the MODEL wrote when it opened the ticket («@x comentó «…» en …»),
+    and the thread has to show what the person said, not the agent's account
+    of it. There is no `name`: Instagram gives a comment its @ and nothing else.
+    """
+    row = ig_store.seen(comment_id)
+    if row is None:
+        return {}
+    return {
+        "handle": row["username"],
+        "comment_text": row["text"],
+        "post_permalink": row["permalink"],
+        "post_line": row["post_line"],
+    }
+
+
+def dm_extra(conversation_id: str) -> dict:
+    """What a DM thread's ticket carries: who is on the other side."""
+    return {"handle": ig_store.participant_handle(conversation_id)}
+
+
 # ── the messages of one thread ──────────────────────────────────────────────
 
 
