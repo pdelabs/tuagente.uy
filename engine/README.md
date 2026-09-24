@@ -786,6 +786,165 @@ Last run 2026-09-24 on a throwaway instance: **0 failures** (one earlier run
 the same day had the model skip `send_message` in the DM turn after being told
 in the previous turn that nothing was connected).
 
+### WhatsApp: the client's own number
+
+`kit/plugins/whatsapp/` answers the company's own WhatsApp, linked AS A DEVICE —
+the owner scans a QR from the portal, the way WhatsApp Web is linked; no
+Business API, no Meta app. The number itself lives in a SECOND PROCESS OF THE
+SAME CONTAINER: `engine/whatsapp-bridge/`, a few hundred lines of Go over
+whatsmeow (pinned to `v0.0.0-20260919103545-0057a822e79a`; keep it current —
+an old whatsmeow is how a client gets `ClientOutdated`). The Dockerfile builds
+it in a first stage and copies the binary in; `entrypoint.sh` starts it ONLY
+when `whatsapp` is in `CORE_PLUGINS` (or `WHATSAPP_BRIDGE=1`), generates the
+token both sides check and exports it to both, and takes the container down
+when either process dies, so `restart: unless-stopped` brings both back. An
+agent that did not buy it has no second process: uvicorn is PID 1, as before.
+
+```
+engine/whatsapp-bridge/
+  main.go      config, the loopback HTTP API (X-Bridge-Token), shutdown
+  session.go   the one whatsmeow client: pairing, events, sending, presence
+  outbox.go    bridge_events: every event written, pushed, replayed
+  avatar.go    one profile picture on demand, cached
+  pure.go      JIDs, text extraction, the echo set, splitting, the CDN guard
+kit/plugins/whatsapp/core/
+  wa_bridge.py  HTTP to the bridge       wa_store.py   events, chats, messages
+  wa_tools.py   ingest, the watcher, send_whatsapp, the takeover
+  wa_routes.py  the webhook and /portal/whatsapp/*
+```
+
+**THE BRIDGE** listens on `127.0.0.1:8645`, keeps whatsmeow's store and its
+outbox in ONE SQLite file on the state volume (`/state/whatsapp/whatsapp.db`,
+so a restart comes back linked), and speaks:
+
+| | |
+|---|---|
+| `GET /health`, `GET /status` | `{state, phone, push_name, since, last_error}`; `state` is `unpaired`, `pairing`, `connecting`, `connected`, `disconnected`, `logged_out` or `banned` |
+| `POST /pairing`, `GET /pairing`, `DELETE /pairing` | a QR attempt: `{state: pending\|completed\|timeout\|error\|cancelled, qr_png, expires_at}` |
+| `POST /logout` | unlink, disconnect, wipe |
+| `POST /messages` | `{to, text, reply_to?}` → `{message_id, timestamp}` |
+| `POST /chats/{jid}/typing`, `POST /chats/{jid}/read` | `{state: composing\|paused}`, `{message_ids}` |
+| `GET /contacts/{jid}`, `GET /contacts/{jid}/avatar` | the local store only; the picture's bytes, 204 none |
+| `GET /events?after=N` | the outbox, for catch-up |
+
+**PUSH, SO A REPLY IS SECONDS AWAY.** Every event (`message.received`,
+`message.revoked`, `message.edited`, `connection.changed`, `pairing.updated`)
+is written to the outbox first and then POSTed to the engine's
+`/internal/whatsapp/events`, retried after 1, 2 and 4 s, and left undelivered —
+in order, holding back the ones behind it — when the engine is not there; the
+next event or the 30-second clock replays it. The engine's `whatsapp.catchup`
+ticker reads `GET /events?after=<highest seq it has>` every minute as the net,
+and `whatsapp_events.event_id` is the dedupe for both roads. The webhook checks
+the token and is not reachable from a browser: the preflight does not allow the
+header.
+
+**THE WEBHOOK POKES THE FLOW** (`scheduler.poke(event)`, the one engine seam
+this added). A push looks at once and schedules a second look `POKE_SETTLE` (4 s)
+after the LAST poke, so the ordinary settle — a look that finds something waits,
+the quiet look after it runs — happens in seconds instead of on the 30-second
+tick, and three messages typed in a row are one run. Measured with the real
+watcher: three messages half a second apart, one run 2.5 s after the first
+(with the settle at 1.5 s in the test).
+
+**WHAT THE BRIDGE WILL NOT DO, and each one was paid for by somebody** (Orbit's
+connector, 2026-09): it never enumerates contacts, groups or profile pictures —
+a number was banned on 2026-09-01 for bulk avatar fetches — and a picture is
+fetched only when the portal asks for that one, cached 7 days (a «none» 24 h),
+four at a time, from `*.whatsapp.net`/`*.fbcdn.net` only, 5 MB at most; a
+`rate-overlimit` stops that class of call for 30 minutes instead of retrying
+through it; sends go one at a time through one mutex, 30 s each, cut at 4096
+characters with a short gap, after «escribiendo…»; it answers inbound only,
+one-to-one only (groups, broadcasts, status and newsletters are skipped, and
+refused as a destination); every pairing attempt gets a FRESH client, whose QR
+context is cancelled before its socket is closed; whatsmeow's handlers only
+enqueue; `StreamReplaced` stops the socket instead of fighting another process;
+history sync is not downloaded; the device shows up as DESKTOP «tuagente.uy»
+and says it is available (then unavailable) on every connect and once a week,
+because a linked device that never shows itself is unlinked after about 30
+days.
+
+**ONE PERSON IS ONE CHAT, keyed by the phone JID** (a hidden `@lid` is resolved
+by the bridge before anything reaches the engine), and one Bandeja ticket:
+`source="whatsapp"`, `source_ref` the JID, opened and written BY CODE when the
+message arrives. The thread is signed so the Inbox can tell the sides apart: the
+person's messages carry their phone (`+598…`, or their name when WhatsApp hid
+the number), what the agent sent carries `agente`, what the owner typed on her
+phone carries `cliente`. A WhatsApp ticket carries `name`, `phone` and
+`taken_over_until` on top of the board's fields (`board_store.EXTRA`), and
+every channel ticket now carries `last_comment`.
+
+**THE RUN GETS THE PERSON, AND ANSWERS AT ONCE.** The watcher `whatsapp.inbox`
+hands the curated flow (`flows/whatsapp/`, `trigger: event`) every chat with
+something new, whole — «Vos» for ours, «Tu cliente, desde su teléfono» for
+hers, «(nuevo · id …)» for the new ones, the ticket and its column —, and
+`send_whatsapp(chat, text, reply_to=None)` sends with no yes in between (Luis,
+24/9/2026, for every channel), writes «Le contesté a <nombre> por WhatsApp:
+«…»» into Activity, marks what it answered as read, and closes the ticket with
+the words. ONE ANSWER PER MESSAGE is code: the tool sends only when the last
+thing in the chat is the person's. What is the owner's to answer is the skill
+(`skills/whatsapp/SKILL.md`): it goes to the board `blocked`, unanswered.
+
+**THE OWNER TAKES OVER BY ANSWERING.** A message she types on her own phone
+arrives as `origin: owner_phone`: it closes the ticket as hers, marks what the
+person wrote as dealt with, and makes the chat hers for
+`WHATSAPP_TAKEOVER_MINUTES` (120, from `secrets.env` if it has to change) — the
+watcher skips the chat, `send_whatsapp` refuses it, and Activity says once
+«Estás atendiendo vos a <nombre>: no le contesto hasta las HH:MM». The portal
+ends it early.
+
+The portal's contract (every time in epoch seconds, errors in `{error:
+{message}}` with the bridge's status: 409 already linked, 404 no attempt yet,
+429 slowed down, 503 not connected, 502 no bridge):
+
+| endpoint | what |
+|---|---|
+| `GET /portal/whatsapp/status` | `{state, phone, push_name, since, last_error}` |
+| `POST /portal/whatsapp/pairing` | `{state}` — starts a QR attempt |
+| `GET /portal/whatsapp/pairing` | `{state, qr_png, expires_at}` — the QR is a PNG data URL and rotates every 20–60 s |
+| `DELETE /portal/whatsapp/pairing` | `{ok}` |
+| `POST /portal/whatsapp/logout` | `{ok}` |
+| `GET /portal/whatsapp/avatar/{jid}` | the picture, or 204 |
+| `GET /portal/whatsapp/chats/{jid}` | `{jid, phone, name, taken_over_until}` |
+| `POST /portal/whatsapp/chats/{jid}/resume` | `{ok}` — ends the takeover, writes `whatsapp.resumed` |
+
+`connection.whatsapp` («tu WhatsApp») is linked while the bridge says
+`connected`, `connecting` or `disconnected`, so the flow reads `incomplete`
+until the owner scans the code and after a logout or a ban; `modules.whatsapp`
+is on while the plugin is loaded. Activity also gets «Quedó conectado tu
+WhatsApp…» when a pairing completes and a line when the number is unlinked or
+banned.
+
+```bash
+(cd engine/whatsapp-bridge && go test ./...)          # the pure parts
+CORE_CONTAINER=tuagente-wt8 python3 engine/tests/test_whatsapp.py
+INSTANCE=wt8 python3 engine/tests/test_whatsapp_routes.py
+```
+
+The first is Go: JIDs (`ParseJID` is permissive, so no user or no server is
+refused, and only a person's servers are accepted), text out of every kind that
+carries one, the bounded echo set, the split in runes at paragraph, line and
+word, the CDN guard and what counts as a rate limit. The second runs the
+plugin's code inside the container against a STUB bridge — seven claims: ingest
+once with the ticket opened by code, the whole chat handed to the run, the
+answer going out with typing, send and read and closing the ticket, a second
+answer refused, the takeover (her line, the silence, the refusal, the clock and
+`resume`), revoke and edit, the connection read off the bridge's state, and a
+burst of three pushed messages waking ONE run in seconds. The third runs from
+outside against an instance with the real bridge, unpaired — the webhook's
+token, the chat and ticket shapes, the takeover by route, the bridge's answers
+passed through (including a real QR code, cancelled), the module and the
+incomplete flow.
+
+**TRYING IT WITH A REAL PHONE** — a SECONDARY number, never a client's while
+testing: bring an instance up with `whatsapp` in `CORE_PLUGINS`, open the portal
+on it and link the number from the WhatsApp screen (or `POST
+/portal/whatsapp/pairing` and open `qr_png` from `GET /portal/whatsapp/pairing`),
+and scan it within a minute from WhatsApp → Dispositivos vinculados → Vincular
+un dispositivo. The status goes `pairing` → `connecting` → `connected` and the
+flow stops being incomplete. Write to that number from another phone: a ticket
+appears in Bandeja, and a run answers within a few seconds. Answer from the
+linked phone itself and the chat is yours for two hours.
+
 ## Sub-agents
 
 **The face is the only entry point** — the chat and every flow run — and what
