@@ -373,7 +373,7 @@ def land(conversation_id: str, new: list[dict], row, mine: str | None,
     # client the same sentence twice, one above the other.
     for message in (new[1:] if opened else new):
         board.comment(ticket_id, signature(message, mine), message["text"],
-                      session_id=session_id)
+                      session_id=session_id, sent=message["ours"])
     if not opened and any(not message["ours"] for message in new):
         current = board.row_of(ticket_id)["status"]
         if current != board.READY:
@@ -391,7 +391,7 @@ def answered(source: str, source_ref: str, text: str, session_id: str | None) ->
     ticket_id = ticket_of(source, source_ref)
     if not ticket_id:
         return
-    board.comment(ticket_id, board.AGENT, text, session_id=session_id)
+    board.comment(ticket_id, board.AGENT, text, session_id=session_id, sent=True)
     board.move(ticket_id, board.DONE, said=text, session_id=session_id)
 
 

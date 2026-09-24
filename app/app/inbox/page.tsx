@@ -221,6 +221,30 @@ function Message({ ours, who, author, body, at, look }: {
   );
 }
 
+/** The channels whose sends are marked `sent` (`board_store.comment`). Mail
+ *  is not one of them: an agent line on a mail thread is still drawn as a
+ *  message, as it always was. */
+const NOTED_CHANNELS = new Set(["whatsapp", "instagram", "instagram-dm"]);
+
+/** What the agent wrote FOR THE OWNER when it didn't answer the person: not a
+ *  bubble on either side, a note across the thread. */
+function AgentNote({ who, body, at }: { who: () => string; body: string; at: string | number }) {
+  return (
+    <li className="rounded-lg border border-c-amber bg-c-amber/20 px-3 py-2">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <Hand className="h-3.5 w-3.5 shrink-0 self-center text-c-amber-ink" />
+        <span className="text-[12px] font-semibold text-c-amber-ink">
+          Nota de {who()} para vos · no se la mandó
+        </span>
+        <span className="text-[11px] text-ink-soft">{dateTime(at)}</span>
+      </div>
+      <div className="mt-1 [&>div]:text-[13px]">
+        <Markdown>{body}</Markdown>
+      </div>
+    </li>
+  );
+}
+
 /** «Pedirle al agente»: one line about this conversation, and the chat opens
  *  with the request already sent.
  *
@@ -593,6 +617,20 @@ export default function InboxPage() {
                         )}
                         {comments.map((c, i) => {
                           const ours = isOurSide(c.author, person);
+                          // THE AGENT'S NOTE FOR THE OWNER is not a message the
+                          // person got: on WhatsApp and Instagram, what went out
+                          // is marked `sent`, and an agent line that wasn't is
+                          // drawn as a note, in its place in the conversation.
+                          if (NOTED_CHANNELS.has(ticket?.source ?? "") && isTheAgent(c.author) && !c.sent) {
+                            return (
+                              <AgentNote
+                                key={`${c.created_at}-${i}`}
+                                who={agentName}
+                                body={c.body}
+                                at={c.created_at}
+                              />
+                            );
+                          }
                           return (
                             <Message
                               key={`${c.created_at}-${i}`}

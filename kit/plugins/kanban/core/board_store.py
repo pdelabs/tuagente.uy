@@ -157,6 +157,23 @@ SCHEMA = (
 for statement in SCHEMA:
     db.write(statement)
 
+# WHAT WENT OUT TO THE PERSON vs WHAT THE AGENT WROTE FOR THE OWNER. On a
+# channel ticket both are signed «agente»: the reply that reached the person on
+# WhatsApp or Instagram, and the note the agent left the owner when it would not
+# answer («Luis creyó que hablaba con Tienda Inglesa… ¿Qué querés que le
+# responda?»). The Inbox drew the note as a message the person had received
+# (Luis, 2026-09-24). `sent` is set by the channel plugins on what they sent.
+if "sent" not in {c["name"] for c in db.query("PRAGMA table_info(ticket_comments)")}:
+    db.write("ALTER TABLE ticket_comments ADD COLUMN sent INTEGER NOT NULL DEFAULT 0")
+    # What already went out before the column existed: every reply a channel
+    # plugin sent wrote an event with its text, so a line with that text is
+    # a sent one. Everything else from the agent stays a note.
+    db.write(
+        "UPDATE ticket_comments SET sent = 1 WHERE author = 'agente' AND body IN ("
+        " SELECT json_extract(payload, '$.text') FROM events"
+        " WHERE kind IN ('whatsapp.sent', 'comment.replied', 'message.sent'))"
+    )
+
 
 def column_of(status: str, source: str) -> str:
     """The column's name, the way the client reads it on the board."""
@@ -207,10 +224,11 @@ def as_ticket(row) -> dict:
         "source_ref": row["source_ref"],
     }
     if row["source"] in CHANNELS:
+        # The conversation's last line, not the agent's note to the owner.
         last = db.one(
             "SELECT author, body, created_at FROM ticket_comments WHERE ticket_id = ?"
-            " ORDER BY id DESC LIMIT 1",
-            (row["id"],),
+            " AND NOT (author = ? AND sent = 0) ORDER BY id DESC LIMIT 1",
+            (row["id"], AGENT),
         )
         ticket["last_comment"] = (
             {"author": last["author"], "body": last["body"],
@@ -247,9 +265,10 @@ def listing(sources: tuple[str, ...] = (), other: bool = False) -> list[dict]:
 
 def comments(ticket_id: str) -> list[dict]:
     return [
-        {"author": row["author"], "body": row["body"], "created_at": int(row["created_at"])}
+        {"author": row["author"], "body": row["body"], "created_at": int(row["created_at"]),
+         "sent": bool(row["sent"])}
         for row in db.query(
-            "SELECT author, body, created_at FROM ticket_comments WHERE ticket_id = ?"
+            "SELECT author, body, created_at, sent FROM ticket_comments WHERE ticket_id = ?"
             " ORDER BY id",
             (ticket_id,),
         )
@@ -330,12 +349,16 @@ def detail(ticket_id: str) -> dict | None:
     }
 
 
-def comment(ticket_id: str, author: str, body: str, session_id: str | None = None) -> None:
+def comment(ticket_id: str, author: str, body: str, session_id: str | None = None,
+            sent: bool = False) -> None:
+    """`sent`: this line went out on the channel (a reply, or the owner's own
+    from her phone), as opposed to a note on the ticket."""
     ticket = row_of(ticket_id)
     now = time.time()
     db.write(
-        "INSERT INTO ticket_comments (ticket_id, author, body, created_at) VALUES (?, ?, ?, ?)",
-        (ticket_id, author, body, now),
+        "INSERT INTO ticket_comments (ticket_id, author, body, created_at, sent)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (ticket_id, author, body, now, int(sent)),
     )
     db.write("UPDATE tickets SET updated_at = ? WHERE id = ?", (now, ticket_id))
     db.append_event(

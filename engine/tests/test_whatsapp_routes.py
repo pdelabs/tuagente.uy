@@ -6,7 +6,7 @@ so the REAL bridge is behind it, unpaired. Free, no model, no phone; the pairing
 claim does open a socket to WhatsApp to get a QR code, the same thing WhatsApp
 Web does when the page loads, and cancels it.
 
-    INSTANCE=wt8 python3 engine/tests/test_whatsapp_routes.py
+    INSTANCE=<an instance with NOTHING linked> python3 engine/tests/test_whatsapp_routes.py
 
   a. THE WEBHOOK IS THE BRIDGE'S — no token or a wrong one is 401; the bridge's
      token (read out of the engine process, where the entrypoint put it) is 200,
@@ -33,7 +33,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-INSTANCE = os.environ.get("INSTANCE", "wt8")
+INSTANCE = os.environ["INSTANCE"]
 ROOT = Path(__file__).resolve().parents[1] / "instances" / INSTANCE
 ENV = dict(line.split("=", 1) for line in (ROOT / "instance.env").read_text().splitlines()
            if "=" in line and not line.startswith("#"))
@@ -100,6 +100,13 @@ def judge(name: str, problems: list[str]) -> list[str]:
 
 def main() -> int:
     print(f"instance: {INSTANCE} ({BASE})")
+    # IT LOGS OUT. Run against a bridge with a number linked, it unlinked a
+    # real phone (2026-09-24). A linked bridge is not this test's to touch.
+    _, status = call("GET", "/portal/whatsapp/status")
+    if status.get("phone"):
+        print(f"REFUSED: {INSTANCE} has {status['phone']} linked, and this test logs out."
+              " Run it on an instance with nothing linked.")
+        return 1
     subprocess.run(["docker", "exec", CONTAINER, "python3", "-c", CLEAN], check=True)
     token = bridge_token()
     failures = []

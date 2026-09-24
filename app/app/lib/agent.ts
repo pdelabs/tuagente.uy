@@ -554,7 +554,10 @@ export function isClientRejection(c: { author?: string; body?: string } | null |
   return Boolean(c && isTheClient(c.author) && REJECTION_RE.test((c.body ?? "").trim()));
 }
 
-export type TicketComment = { author: string; body: string; created_at: number };
+/** `sent`: on a channel ticket, this line went out to the person (a reply, or
+ *  the owner's own from her phone). An agent line that did NOT is its note for
+ *  the owner, and the Inbox draws it as a note, not as a message she received. */
+export type TicketComment = { author: string; body: string; created_at: number; sent?: boolean };
 export type TicketEvent = {
   kind: string;
   created_at: number;

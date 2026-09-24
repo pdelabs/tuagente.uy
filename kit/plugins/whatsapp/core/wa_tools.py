@@ -195,7 +195,7 @@ def on_board(chat, origin: str, text: str, when: float) -> None:
     found = ticket_of(jid)
     if found is None:
         return
-    board.comment(found["id"], board.CLIENT, text)
+    board.comment(found["id"], board.CLIENT, text, sent=True)
     if found["status"] != board.DONE:
         board.move(found["id"], board.DONE)
 
@@ -427,7 +427,8 @@ def toolset() -> FunctionToolset:
         )
         found = ticket_of(chat)
         if found is not None:
-            board.comment(found["id"], board.AGENT, message, session_id=ctx.deps.session_id)
+            board.comment(found["id"], board.AGENT, message, session_id=ctx.deps.session_id,
+                          sent=True)
             board.move(found["id"], board.DONE, said=message, session_id=ctx.deps.session_id)
         return SENT.format(name=name)
 
