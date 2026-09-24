@@ -116,6 +116,8 @@ SENT = "Le respondí a @{username} por Instagram. Ya le llegó."
 FAILED_SEND = "No pude mandarle el mensaje a @{username}: {reason}. No salió nada."
 # META'S CLOCK, NOT OURS, and the sentence says what to do instead: a message
 # that cannot be sent is still a person waiting, and the board is where she goes.
+OURSELVES = ("No lo mandé: esta conversación figura como si fuera con nuestra propia cuenta,"
+             " y un mensaje ahí no le llega a nadie. Dejale la conversación a tu cliente.")
 CLOSED = (
     "Se pasaron las 24 horas desde el último mensaje de @{username}, y después de eso "
     "Instagram no deja contestar hasta que vuelva a escribir. No mandé nada: si hace "
@@ -398,18 +400,25 @@ def answered(source: str, source_ref: str, text: str, session_id: str | None) ->
 # ── the messages of one thread ──────────────────────────────────────────────
 
 
-def sift(conversation_id: str, found: list[dict], mine: str) -> list[dict]:
+def sift(conversation_id: str, found: list[dict], mine: str,
+         handle: str | None = None) -> list[dict]:
     """Every message written down, and the NEW INBOUND ones handed back.
 
-    Ours are told apart by `from.id`, which is the account's own id — the same
-    fact `IG_USER_ID` is — and never by the text. Writing ours down too is what
-    lets the listing show a conversation instead of half of one.
+    Ours are told apart by `from.id` OR by our own @, never by the text.
+    THE ACCOUNT HAS TWO IDS: the one the login API answers (`IG_USER_ID`) and
+    the Instagram-scoped one a message sent from the Instagram app carries.
+    Comparing only the first, a message the owner typed on her phone read as
+    the other person's, and it overwrote who the other person is: on our own
+    agent (2026-09-24) @anitamaral's thread was saved as being with
+    @tuagente.uy, and two replies meant for her were addressed to ourselves.
+    Writing ours down too is what lets the listing show a conversation
+    instead of half of one.
     """
     new = []
     for item in reversed(found):          # oldest first: the ticket is a thread
         author = item.get("from") or {}
         from_id = str(author.get("id") or "")
-        ours = from_id == mine
+        ours = from_id == mine or bool(handle and author.get("username") == handle)
         text = item.get("message") or ""
         when = ig_graph.moment(item["created_time"]) if item.get("created_time") else None
         fresh = ig_store.record_message(
@@ -535,7 +544,7 @@ def new_messages(session_id: str | None, everything: bool = True) -> str | None:
     handle = ig_store.username()
     found = {}
     for item in moved("conversation", threads, "updated_time", everything):
-        new = sift(item["id"], ig_graph.messages(item["id"]), mine)
+        new = sift(item["id"], ig_graph.messages(item["id"]), mine, handle)
         if any(not message["ours"] for message in new):
             found[item["id"]] = new
         elif new:
@@ -766,6 +775,12 @@ def toolset() -> FunctionToolset:
         if row is None:
             raise ModelRetry(NO_THREAD.format(conversation_id=conversation_id))
         who = row["participant_username"] or "esa persona"
+        # NEVER TO OURSELVES. A thread saved with our own @ as the other side is
+        # the misread `sift` now avoids (2026-09-24: two replies meant for
+        # @anitamaral were addressed to @tuagente.uy); one saved before the fix
+        # is refused here instead of answered.
+        if row["participant_username"] and row["participant_username"] == ig_store.username():
+            return OURSELVES
         # META'S CLOCK, CHECKED BEFORE THE CALL: past 24 hours the Graph refuses
         # anyway, and the sentence here says what to do instead. NOT a
         # ModelRetry — sending the same message again cannot fix time.
