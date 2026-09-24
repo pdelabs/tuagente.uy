@@ -16,9 +16,9 @@
 // the intro presents the tab, not this agent's inventory.
 
 import type { ComponentType } from "react";
-import { Hand, Inbox, Instagram, Mail, MessagesSquare, Smartphone } from "lucide-react";
+import { Hand, Inbox, Mail, MessagesSquare, Smartphone } from "lucide-react";
 import { Eyebrow, IntroPage, Lead, Mockup, Point, Title, type IntroProps } from "./shell";
-import { WhatsAppGlyph } from "../glyphs";
+import { InstagramMark, WhatsAppMark } from "../glyphs";
 
 /** A "line" of a message. */
 function Line({ w }: { w: string }) {
@@ -75,14 +75,14 @@ export default function InboxIntro({ onOk }: IntroProps) {
         >
           <div className="flex flex-col gap-1.5">
             <Row
-              icon={WhatsAppGlyph}
+              icon={WhatsAppMark}
               who="Martín Suárez"
               initials="MS"
               chip="Respondido"
               tone="bg-c-green text-c-green-ink"
             />
             <Row
-              icon={Instagram}
+              icon={InstagramMark}
               who="@tu.cliente"
               initials="TC"
               chip="Te la dejó a vos"

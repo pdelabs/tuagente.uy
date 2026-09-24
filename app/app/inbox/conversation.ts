@@ -27,7 +27,7 @@
 // from that record and not from prose.
 
 import { isTheAgent, isTheClient, type Ticket, type WhatsAppChat } from "../lib/agent";
-import { momentOf, type Tone } from "../lib/labels";
+import { momentOf, type Moment, type Tone } from "../lib/labels";
 
 /** Who wrote in. `handle` is how their own messages are signed on the thread —
  *  the address, the `@usuario` — or null when the convention did not hold. */
@@ -49,6 +49,26 @@ export function channelKey(t: Ticket | null | undefined): Channel | null {
   if (s === "mail") return "mail";
   return null;
 }
+
+/** What the engine puts on a CHANNEL ticket on top of the board's fields
+ *  (`board_store.as_ticket`): the conversation's last line — never the
+ *  agent's note to the owner — and, on WhatsApp, the chat's record (`EXTRA`).
+ *  Typed here and not in `lib/agent.ts` because only this screen reads it. */
+export type ChannelTicket = Ticket & {
+  last_comment?: { author: string; body: string; created_at: number } | null;
+  name?: string | null;
+  phone?: string | null;
+  taken_over_until?: string | number | null;
+};
+
+/** The WhatsApp chat a list row already carries: the same record
+ *  `GET /portal/whatsapp/chats/{jid}` answers, without asking for it once per
+ *  row. */
+export const chatOfRow = (t: ChannelTicket): WhatsAppChat | null =>
+  channelKey(t) === "whatsapp" && t.source_ref
+    ? { jid: t.source_ref, name: t.name ?? null, phone: t.phone ?? null,
+        taken_over_until: t.taken_over_until ?? null }
+    : null;
 
 /** The chat a WhatsApp ticket is about, or null for any other channel. */
 export const whatsAppJid = (t: Ticket | null | undefined): string | null =>
@@ -125,22 +145,25 @@ export function isOurSide(author: string | null | undefined, person: Person): bo
  *  answer goes out on its own, so a blocked thread there is one the agent LEFT
  *  for her, with its note. The page knows which by whether a pending request
  *  names the ticket (`waitingOk`). */
-const STATE: Record<string, { label: string; tone: Tone }> = {
-  ready: { label: "Nuevo", tone: "violet" },
-  in_progress: { label: "En curso", tone: "neutral" },
-  blocked: { label: "Te la dejó a vos", tone: "amber" },
-  done: { label: "Respondido", tone: "green" },
-  archived: { label: "Archivada", tone: "neutral" },
+export type StateKey = "new" | "working" | "left" | "waiting_ok" | "taken_over" | "done" | "archived";
+export type State = { key: StateKey; label: string; tone: Tone };
+
+const STATE: Record<string, State> = {
+  ready: { key: "new", label: "Nuevo", tone: "violet" },
+  in_progress: { key: "working", label: "En curso", tone: "neutral" },
+  blocked: { key: "left", label: "Te la dejó a vos", tone: "amber" },
+  done: { key: "done", label: "Respondido", tone: "green" },
+  archived: { key: "archived", label: "Archivada", tone: "neutral" },
 };
-const WAITING_OK = { label: "Esperando tu ok", tone: "amber" as Tone };
+const WAITING_OK: State = { key: "waiting_ok", label: "Esperando tu ok", tone: "amber" };
 /** The owner is answering this WhatsApp chat from her phone: whatever the
  *  ticket's status, what the row has to say is that the agent stepped back. */
-const TAKEN_OVER = { label: "La estás atendiendo vos", tone: "neutral" as Tone };
+const TAKEN_OVER: State = { key: "taken_over", label: "La estás atendiendo vos", tone: "neutral" };
 
 export function stateOf(
   status: string | null | undefined,
   { waitingOk = false, takenOver = false }: { waitingOk?: boolean; takenOver?: boolean } = {},
-): { label: string; tone: Tone } {
+): State {
   if (takenOver) return TAKEN_OVER;
   const s = (status || "").trim().toLowerCase();
   if (s === "blocked" && waitingOk) return WAITING_OK;
@@ -165,4 +188,39 @@ export function previewOf(t: Ticket | null | undefined, limit = 120): string {
   const text = messageOf(t).replace(MARKS, "").trim();
   const first = text.split(/\n+/).map((l) => l.trim()).find(Boolean) ?? "";
   return first.length > limit ? `${first.slice(0, limit).trimEnd()}…` : first;
+}
+
+/** The row's line: what was said LAST, not what opened the thread, and who
+ *  said it. With no comment yet it is the message that opened it. */
+export function lastLineOf(t: ChannelTicket, limit = 120): { author: string | null; text: string } {
+  const last = t.last_comment;
+  if (!last) return { author: null, text: previewOf(t, limit) };
+  const text = last.body.replace(HEADERS, "").replace(MARKS, "").trim();
+  const first = text.split(/\n+/).map((l) => l.trim()).find(Boolean) ?? "";
+  return {
+    author: last.author,
+    text: first.length > limit ? `${first.slice(0, limit).trimEnd()}…` : first,
+  };
+}
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** When, the way a messaging app's list says it: «14:32» today, «Ayer», the
+ *  weekday this week, the date before that. */
+export function listWhen(value: string | number | null | undefined): string {
+  const m = momentOf(value);
+  if (!m) return "";
+  if (m.days === 0) return m.time;
+  if (m.days === -1) return "Ayer";
+  if (m.days > -7) return capitalize(m.weekday);
+  return m.dayMonth;
+}
+
+/** The separator between two days of a thread: «Hoy», «Ayer», «Lunes», «lun
+ *  17 ago» — with the year only when it is not this one. */
+export function dayLabel(m: Moment): string {
+  if (m.days === 0) return "Hoy";
+  if (m.days === -1) return "Ayer";
+  if (m.days > -7) return capitalize(m.weekday);
+  return m.year === momentOf(Date.now())?.year ? m.shortDate : `${m.shortDate} ${m.year}`;
 }

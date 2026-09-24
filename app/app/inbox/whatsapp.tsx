@@ -21,7 +21,7 @@ import {
   getWhatsAppStatus, logoutWhatsApp, resumeWhatsAppChat, startWhatsAppPairing,
   type PortalConfig, type WhatsAppChat, type WhatsAppPairing, type WhatsAppStatus,
 } from "../lib/agent";
-import { WhatsAppGlyph } from "../lib/glyphs";
+import { WhatsAppMark } from "../lib/glyphs";
 import { dateAndTime, momentOf } from "../lib/labels";
 import { pollNow, useChanges } from "../lib/live";
 import { Btn, supportWhatsApp } from "../lib/ui";
@@ -144,8 +144,9 @@ function untilLabel(ms: number): string {
   return p.date === "hoy" ? `hasta las ${p.time}` : `hasta el ${p.date} a las ${p.time}`;
 }
 
-/** The banner on a WhatsApp thread the owner is answering from her phone,
- *  with the one thing to do about it: give it back. */
+/** The strip under a WhatsApp thread's header while the owner is answering
+ *  it from her phone, with the one thing to do about it: give it back. It is
+ *  part of the header — it stays in view however far up she scrolls. */
 export function TakeoverBanner({ cfg, chat, onResumed }: {
   cfg: PortalConfig; chat: WhatsAppChat; onResumed: () => void;
 }) {
@@ -162,9 +163,9 @@ export function TakeoverBanner({ cfg, chat, onResumed }: {
       .finally(() => setBusy(false));
   };
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-c-violet bg-c-violet/40 px-3 py-2">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-black/[0.07] bg-c-violet/40 px-4 py-1.5">
       <Smartphone className="h-3.5 w-3.5 shrink-0 text-c-violet-ink" />
-      <p className="min-w-0 flex-1 text-[13px] font-medium text-c-violet-ink">
+      <p className="min-w-0 flex-1 text-[12px] font-medium text-c-violet-ink">
         La estás atendiendo vos: tu agente no le contesta {untilLabel(until)}.
         {failed && " No pude avisarle, probá de nuevo."}
       </p>
@@ -284,10 +285,17 @@ const DOWN: Partial<Record<WhatsAppStatus["state"], { title: string; text: strin
   },
 };
 
-/** The line or the card at the top of the Bandeja that says whether the
- *  agent is on the owner's WhatsApp, and lets her link it or unlink it. The
- *  parent draws it only when `manifest.modules.whatsapp` is on. */
-export function WhatsAppPanel({ cfg }: { cfg: PortalConfig }) {
+/** The link to the owner's number: its state, the pairing in progress, and
+ *  what can be done about it.
+ *
+ *  ONE HOOK, TWO DRAWINGS. When the link works it is a slim line at the top of
+ *  the list (`WhatsAppLine`) — the way WhatsApp Web says nothing about being
+ *  connected; when she has something to do (link it, scan the code, a number
+ *  that dropped) it is the card across the top of the screen
+ *  (`WhatsAppCard`). The page picks WHERE by the state, so the state lives
+ *  here once: two components asking for it would poll the pairing twice. The
+ *  parent passes `null` when `manifest.modules.whatsapp` is off. */
+export function useWhatsAppLink(cfg: PortalConfig | null) {
   const [status, setStatus] = useState<WhatsAppStatus | null>(null);
   const [pairing, setPairing] = useState<WhatsAppPairing | null>(null);
   const [pairingOpen, setPairingOpen] = useState(false);
@@ -297,6 +305,7 @@ export function WhatsAppPanel({ cfg }: { cfg: PortalConfig }) {
   const [failure, setFailure] = useState<string | null>(null);
 
   const loadStatus = useCallback(() => {
+    if (!cfg) return;
     getWhatsAppStatus(cfg).then(setStatus).catch((e) => setFailure(e.message));
   }, [cfg]);
   useEffect(() => { loadStatus(); }, [loadStatus]);
@@ -307,7 +316,7 @@ export function WhatsAppPanel({ cfg }: { cfg: PortalConfig }) {
   const open = pairingOpen || status?.state === "pairing";
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !cfg) return;
     let alive = true;
     const ask = () => getWhatsAppPairing(cfg)
       .then((p) => {
@@ -328,6 +337,7 @@ export function WhatsAppPanel({ cfg }: { cfg: PortalConfig }) {
   }, [open, cfg, loadStatus]);
 
   const startPairing = () => {
+    if (!cfg) return;
     setBusy(true);
     setFailure(null);
     setPairing(null);
@@ -337,11 +347,13 @@ export function WhatsAppPanel({ cfg }: { cfg: PortalConfig }) {
       .finally(() => setBusy(false));
   };
   const cancelPairing = () => {
+    if (!cfg) return;
     setPairingOpen(false);
     setPairing(null);
     cancelWhatsAppPairing(cfg).catch(() => {}).finally(loadStatus);
   };
   const unlink = () => {
+    if (!cfg) return;
     setBusy(true);
     setFailure(null);
     logoutWhatsApp(cfg)
@@ -350,101 +362,125 @@ export function WhatsAppPanel({ cfg }: { cfg: PortalConfig }) {
       .finally(() => setBusy(false));
   };
 
-  if (!status) return null;
-
   // A pairing that stopped (timeout, error) keeps its card up: the way on is
   // «Generar otro código», and it should not vanish under her.
-  const stuck = pairing && (pairing.state === "timeout" || pairing.state === "error");
-  if (open || stuck) {
-    return (
-      <div className="mb-4">
-        <PairingCard pairing={pairing} onRetry={startPairing} onCancel={cancelPairing} />
-      </div>
-    );
-  }
+  const stuck = Boolean(pairing && (pairing.state === "timeout" || pairing.state === "error"));
+  const place: "line" | "card" | null = !status
+    ? null
+    : open || stuck
+      ? "card"
+      : status.state === "connected" || status.state === "connecting"
+        ? "line"
+        : "card";
 
-  if (status.state === "connected") {
-    const who = [phoneLabel(status.phone), status.push_name && `(${status.push_name})`]
-      .filter(Boolean).join(" ");
-    return (
-      <div
-        className={`mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border px-3 py-2 ${
-          justLinked ? "border-c-green bg-c-green/40" : "border-black/[0.07] bg-white"
-        }`}
-      >
-        <WhatsAppGlyph className={`h-4 w-4 shrink-0 ${justLinked ? "text-c-green-ink" : "text-ink-soft"}`} />
-        <p className={`min-w-0 flex-1 text-[13px] ${justLinked ? "font-medium text-c-green-ink" : "text-ink"}`}>
-          {justLinked && <Check className="-mt-0.5 mr-1 inline h-3.5 w-3.5" />}
-          {justLinked ? "Listo, quedó vinculado. " : ""}
-          WhatsApp conectado{who ? `: ${who}` : ""}
-        </p>
-        {confirmUnlink ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[13px] text-ink-soft">Tu agente deja de contestar por WhatsApp.</span>
-            <Btn kind="danger" size="sm" disabled={busy} onClick={unlink}>
-              {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Sí, desvincular
-            </Btn>
-            <Btn kind="ghost" size="sm" disabled={busy} onClick={() => setConfirmUnlink(false)}>
-              Cancelar
-            </Btn>
-          </div>
-        ) : (
-          <Btn kind="ghost" size="sm" onClick={() => setConfirmUnlink(true)}>
-            <Unlink className="h-3.5 w-3.5" />
-            Desvincular
-          </Btn>
-        )}
-        {failure && <p className="w-full text-[12px] text-c-coral-ink">No pude desvincularlo: {failure}</p>}
-      </div>
-    );
-  }
+  return {
+    status, pairing, pairingOpen: open || stuck, justLinked, confirmUnlink, busy, failure, place,
+    setConfirmUnlink, startPairing, cancelPairing, unlink,
+  };
+}
+export type WhatsAppLink = ReturnType<typeof useWhatsAppLink>;
 
-  if (status.state === "connecting" || status.state === "pairing") {
+/** The slim line at the top of the list while the link works: the number it
+ *  is on, and the way to unlink it. */
+export function WhatsAppLine({ link }: { link: WhatsAppLink }) {
+  const { status, justLinked, confirmUnlink, busy, failure } = link;
+  if (!status) return null;
+  if (status.state === "connecting") {
     return (
-      <div className="mb-4 flex items-center gap-2 rounded-lg border border-black/[0.07] bg-white px-3 py-2 text-[13px] text-ink-soft">
+      <div className="flex items-center gap-2 border-b border-black/[0.07] px-4 py-2 text-[12px] text-ink-soft">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         Conectando WhatsApp…
       </div>
     );
+  }
+  const who = [phoneLabel(status.phone), status.push_name && `(${status.push_name})`]
+    .filter(Boolean).join(" ");
+  return (
+    <div
+      className={`flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-black/[0.07] px-4 py-1.5 ${
+        justLinked ? "bg-c-green/40" : ""
+      }`}
+    >
+      <WhatsAppMark brand className="h-3.5 w-3.5 shrink-0" />
+      <p className={`min-w-0 flex-1 truncate text-[12px] ${justLinked ? "font-medium text-c-green-ink" : "text-ink-soft"}`}>
+        {justLinked && <Check className="-mt-0.5 mr-1 inline h-3.5 w-3.5" />}
+        {justLinked ? "Listo, quedó vinculado: " : "Conectado: "}
+        {who || "WhatsApp"}
+      </p>
+      {confirmUnlink ? (
+        <div className="flex w-full flex-wrap items-center gap-2">
+          <span className="text-[12px] text-ink-soft">Tu agente deja de contestar por WhatsApp.</span>
+          <Btn kind="danger" size="sm" disabled={busy} onClick={link.unlink}>
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Sí, desvincular
+          </Btn>
+          <Btn kind="ghost" size="sm" disabled={busy} onClick={() => link.setConfirmUnlink(false)}>
+            Cancelar
+          </Btn>
+        </div>
+      ) : (
+        <button
+          onClick={() => link.setConfirmUnlink(true)}
+          className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-ink-soft transition hover:text-ink"
+        >
+          <Unlink className="h-3 w-3" />
+          Desvincular
+        </button>
+      )}
+      {failure && <p className="w-full text-[12px] text-c-coral-ink">No pude desvincularlo: {failure}</p>}
+    </div>
+  );
+}
+
+/** The card across the top of the Bandeja when WhatsApp needs her: linking
+ *  it for the first time, the QR while she scans it, a number that dropped or
+ *  was banned. */
+export function WhatsAppCard({ link }: { link: WhatsAppLink }) {
+  const { status, pairing, busy, failure } = link;
+  if (!status) return null;
+  if (link.pairingOpen) {
+    return <PairingCard pairing={pairing} onRetry={link.startPairing} onCancel={link.cancelPairing} />;
   }
 
   const down = DOWN[status.state] ?? DOWN.disconnected!;
   const tone = status.state === "banned"
     ? "border-c-coral bg-c-coral/30"
     : status.state === "unpaired" ? "border-black/[0.07] bg-white" : "border-c-amber bg-c-amber/25";
-  const Icon = status.state === "unpaired" ? WhatsAppGlyph : TriangleAlert;
   return (
-    <div className={`mb-4 rounded-xl border p-4 ${tone}`}>
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/[0.04]">
-          <Icon className="h-4 w-4 text-ink" />
+    // ONE BAND, NOT A BLOCK: it sits above the two panes, and every line it
+    // takes is a line the conversation loses.
+    <div className={`rounded-xl border px-4 py-3 ${tone}`}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/[0.04]">
+          {status.state === "unpaired"
+            ? <WhatsAppMark brand className="h-5 w-5" />
+            : <TriangleAlert className="h-4 w-4 text-ink" />}
         </span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-64">
           <p className="text-sm font-bold text-ink">{down.title}</p>
-          <p className="mt-1 max-w-xl text-[13px] text-ink-soft">{down.text}</p>
+          <p className="mt-0.5 max-w-3xl text-[12px] leading-snug text-ink-soft">{down.text}</p>
           {status.phone && status.state !== "unpaired" && (
-            <p className="mt-1 text-[12px] text-ink-soft">Número: {phoneLabel(status.phone)}</p>
+            <p className="mt-0.5 text-[12px] text-ink-soft">Número: {phoneLabel(status.phone)}</p>
           )}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {down.relink ? (
-              <Btn kind="primary" size="sm" disabled={busy} onClick={startPairing}>
-                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <QrCode className="h-3.5 w-3.5" />}
-                {status.state === "unpaired" ? "Vincular WhatsApp" : "Vincular de nuevo"}
-              </Btn>
-            ) : (
-              <a
-                href={supportWhatsApp(
-                  `Hola, WhatsApp bloqueó el número ${phoneLabel(status.phone)} de mi agente.`)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex h-8 items-center rounded-lg bg-primary px-2.5 text-[13px] font-semibold text-white transition hover:bg-primary-dark"
-              >
-                Escribinos
-              </a>
-            )}
-          </div>
-          {failure && <p className="mt-2 text-[12px] text-c-coral-ink">No pude empezar: {failure}</p>}
+          {failure && <p className="mt-1 text-[12px] text-c-coral-ink">No pude empezar: {failure}</p>}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {down.relink ? (
+            <Btn kind="primary" size="sm" disabled={busy} onClick={link.startPairing}>
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <QrCode className="h-3.5 w-3.5" />}
+              {status.state === "unpaired" ? "Vincular WhatsApp" : "Vincular de nuevo"}
+            </Btn>
+          ) : (
+            <a
+              href={supportWhatsApp(
+                `Hola, WhatsApp bloqueó el número ${phoneLabel(status.phone)} de mi agente.`)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 items-center rounded-lg bg-primary px-2.5 text-[13px] font-semibold text-white transition hover:bg-primary-dark"
+            >
+              Escribinos
+            </a>
+          )}
         </div>
       </div>
     </div>
