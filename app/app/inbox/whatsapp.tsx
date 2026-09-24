@@ -380,14 +380,15 @@ export function useWhatsAppLink(cfg: PortalConfig | null) {
 }
 export type WhatsAppLink = ReturnType<typeof useWhatsAppLink>;
 
-/** The slim line at the top of the list while the link works: the number it
- *  is on, and the way to unlink it. */
+/** The slim line in the Bandeja's header while the link works: the number it
+ *  is on, and the way to unlink it. It sat on top of the list and took a row
+ *  from the conversations (Luis, 2026-09-24). */
 export function WhatsAppLine({ link }: { link: WhatsAppLink }) {
   const { status, justLinked, confirmUnlink, busy, failure } = link;
   if (!status) return null;
   if (status.state === "connecting") {
     return (
-      <div className="flex items-center gap-2 border-b border-black/[0.07] px-4 py-2 text-[12px] text-ink-soft">
+      <div className="flex items-center gap-2 rounded-lg border border-black/[0.07] px-2.5 py-1 text-[12px] text-ink-soft">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         Conectando WhatsApp…
       </div>
@@ -397,8 +398,8 @@ export function WhatsAppLine({ link }: { link: WhatsAppLink }) {
     .filter(Boolean).join(" ");
   return (
     <div
-      className={`flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-black/[0.07] px-4 py-1.5 ${
-        justLinked ? "bg-c-green/40" : ""
+      className={`flex min-w-0 max-w-full flex-wrap items-center justify-end gap-x-2 gap-y-1.5 rounded-lg border px-2.5 py-1 ${
+        justLinked ? "border-c-green bg-c-green/40" : "border-black/[0.07]"
       }`}
     >
       <WhatsAppMark brand className="h-3.5 w-3.5 shrink-0" />

@@ -674,10 +674,13 @@ export default function InboxPage() {
   return (
     <div className="flex h-dvh flex-col">
       <div className={`flex shrink-0 items-center justify-between gap-3 border-b border-black/[0.07] bg-white px-4 py-3 md:px-5 ${listOnly}`}>
-        <h1 className="text-lg font-bold tracking-tight text-ink">Bandeja</h1>
-        <IconBtn label="Actualizar" onClick={load} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-        </IconBtn>
+        <h1 className="shrink-0 text-lg font-bold tracking-tight text-ink">Bandeja</h1>
+        <div className="flex min-w-0 items-center gap-2">
+          {whatsApp.place === "line" && <WhatsAppLine link={whatsApp} />}
+          <IconBtn label="Actualizar" onClick={load} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </IconBtn>
+        </div>
       </div>
       {(stale || whatsApp.place === "card") && (
         <div className={`shrink-0 border-b border-black/[0.07] px-4 pt-4 md:px-5 ${whatsApp.place === "card" ? "pb-4" : ""} ${listOnly}`}>
@@ -693,7 +696,6 @@ export default function InboxPage() {
 
       {empty ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {whatsApp.place === "line" && <WhatsAppLine link={whatsApp} />}
           <EmptyState
             icon={Inbox}
             title="Todavía no entró ningún mensaje"
@@ -719,7 +721,6 @@ export default function InboxPage() {
           <aside
             className={`flex min-h-0 w-full flex-col border-black/[0.07] bg-white md:w-[340px] md:shrink-0 md:border-r ${listOnly}`}
           >
-            {whatsApp.place === "line" && <WhatsAppLine link={whatsApp} />}
             <div className="px-3 pb-2 pt-3">
               <label className="relative block">
                 <span className="sr-only">Buscar una conversación</span>
