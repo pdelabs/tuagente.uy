@@ -1,7 +1,7 @@
 {
   "id": "memory",
   "version": "1.0.0",
-  "description": "A dated notebook of what the client told the agent about their business and how they want it to work: injected into every turn, written by the model when it is asked to remember and by an extraction pass after each turn",
+  "description": "A dated notebook of what the client told the agent about their business and how they want it to work: injected into every turn, written by the model when it is asked to remember and by an extraction pass after each of the owner's chat turns, and tidied every night",
   "client_copy": "Se acuerda de lo que le contás de tu negocio y de cómo te gusta que trabaje.",
   "_comment": [
     "THIS PLUGIN IS THE core ENGINE'S AND NOBODY ELSE'S, which is why the only",

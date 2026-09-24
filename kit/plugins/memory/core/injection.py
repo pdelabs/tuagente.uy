@@ -30,7 +30,9 @@ It buys the thing the reordering could not: a delegated turn whose tool return
 is the delegate's report and nothing else, and a persisted history with no
 `<memory>` in it. The block is a LITERAL instruction and not a callable, which
 keeps it above the date line and inside the run's stable prefix — one snapshot
-per run, not one per round trip.
+per run, not one per round trip. And it lands UNDER the face's SOUL and
+prose, which are a plain string for that reason (`core/agent.py`'s
+`standing()`): a capability's literal comes after the agent's own.
 
 IT IS STILL DELIMITED. `<memory>` markers stay around the notebook and the
 guidance stays outside them: the instruction channel is one authority level up
@@ -92,7 +94,7 @@ class Notebook(Memory):
         if error is not None or not (content or subfiles or files_truncated):
             return None
         guidance = self._render_guidance()
-        budget = self.max_tokens * 4 - len(guidance or "") - len(OPEN) - len(CLOSE)
+        budget = self.budget()
         body = render_memory_prompt(
             content,
             subfiles,
@@ -107,6 +109,12 @@ class Notebook(Memory):
             files_truncated=files_truncated,
         )[:budget]
         return f"{OPEN}{body}{CLOSE}"
+
+    def budget(self) -> int:
+        """The characters of notebook this capability has room for: the whole
+        section's `max_tokens`, minus the guidance and the markers. What the
+        nightly tidy keeps a notebook under (`consolidation.py`)."""
+        return self.max_tokens * 4 - len(self._render_guidance() or "") - len(OPEN) - len(CLOSE)
 
     def get_instructions(self) -> str | None:
         """The rule and the notebook, in that order, as one instruction."""
