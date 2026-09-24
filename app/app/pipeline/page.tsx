@@ -66,8 +66,7 @@ import {
 import Markdown from "../lib/Markdown";
 import { EntityProvider } from "../lib/EntityViewer";
 import { EntityChip } from "../lib/entities";
-
-const REFRESH_MS = 30_000;
+import { useChanges } from "../lib/live";
 const NO_TENANT = "__sin_tenant__"; // sentinel for tickets with a null tenant
 
 /* ── Authorship ──────────────────────────────────────────────────────────── */
@@ -362,11 +361,7 @@ export default function PipelinePage() {
     }
   }, [cfg]);
 
-  useEffect(() => {
-    load();
-    const id = setInterval(load, REFRESH_MS);
-    return () => clearInterval(id);
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   // Detail: returns what it read so the caller knows whether it could
   // confirm. Discards the response if the client already closed it or
@@ -438,6 +433,13 @@ export default function PipelinePage() {
       }
     });
   }, [openId, loadDetail, router]);
+
+  // A task the agent created, moved or commented on, or one an approval
+  // unblocked: the board and the open task move without a reload.
+  useChanges(["tickets"], () => {
+    load();
+    if (openIdRef.current) loadDetail(openIdRef.current);
+  });
 
   // Modals: close on Escape and block the background scroll.
   const hasModal = createOpen || openId !== null;

@@ -40,8 +40,7 @@ import {
 import Markdown from "../lib/Markdown";
 import { EntityProvider } from "../lib/EntityViewer";
 import { isOurSide, messageOf, personOf, previewOf, stateOf } from "./conversation";
-
-const REFRESH_MS = 30_000;
+import { useChanges } from "../lib/live";
 
 // One icon per channel. `instagram-dm` is a MessageCircle and not the
 // Instagram glyph: what the row says first is that somebody is talking to you
@@ -259,21 +258,25 @@ export default function InboxPage() {
       .catch(() => setApprovals([]));
   }, [cfg]);
 
-  useEffect(() => {
-    load();
-    const id = setInterval(load, REFRESH_MS);
-    return () => clearInterval(id);
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    openIdRef.current = openId;
-    setDetail(null);
-    setDetailError(false);
+  const loadDetail = useCallback(() => {
     if (!cfg || !openId) return;
     getTicketDetail(cfg, openId)
       .then((d) => { if (openIdRef.current === openId) setDetail(d); })
       .catch(() => { if (openIdRef.current === openId) setDetailError(true); });
   }, [cfg, openId]);
+
+  useEffect(() => {
+    openIdRef.current = openId;
+    setDetail(null);
+    setDetailError(false);
+    loadDetail();
+  }, [openId, loadDetail]);
+
+  // A mail or a DM that came in, an answer the agent sent, a decision on a
+  // reply: the list and the open thread move without a reload.
+  useChanges(["tickets"], () => { load(); loadDetail(); });
 
   const openThread = useCallback((id: string) => openInRoute({ [PARAM.thread]: id }), []);
   const closeThread = useCallback(() => closeInRoute(PARAM.thread), []);

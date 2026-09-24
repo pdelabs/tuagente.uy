@@ -32,6 +32,7 @@ import {
   type Manifest, type PortalConfig, type Post, type Ticket,
 } from "../lib/agent";
 import { PARAM } from "../lib/routes";
+import { useChanges } from "../lib/live";
 // The SAME flow ↔ scheduled-task match that Flows uses: if each screen
 // picked its own, we'd be back to two answers for "when does it run?".
 import { crossTask } from "../flows/runs";
@@ -47,7 +48,6 @@ import { AgentitoAnimated, loadAgentLook } from "../lib/agentito";
 import type { AgentitoState } from "../lib/AgentitoRive";
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
-const REFRESH_MS = 60_000;
 const DELIVERABLES = "entregables/"; // what the agent produces FOR the client
 // What the business plugin writes from the client's website
 // (`kit/plugins/business/core/business_draft.py`, `DRAFT`).
@@ -588,10 +588,10 @@ function HomeBody({ cfg }: { cfg: PortalConfig }) {
   }, [cfg]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    const id = setInterval(() => load(true), REFRESH_MS);
-    return () => clearInterval(id);
-  }, [load]);
+  // Inicio is the summary of every other tab, so it listens to all of them
+  // but Uso. One refetch per poll however many kinds came in.
+  useChanges(["approvals", "tickets", "posts", "flows", "chat", "activity", "files"],
+    () => load(true));
 
   // ── derived ──
   const board = useMemo(() => {

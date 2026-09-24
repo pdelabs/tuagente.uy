@@ -3,7 +3,7 @@
 // Portal shell: sidebar built from the manifest + connection status with the
 // agent. Features live in subfolders and do NOT touch this file.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -18,6 +18,7 @@ import {
   type PortalConfig, type Manifest,
 } from "./lib/agent";
 import { Btn, SUPPORT, Support, Spinner, inputCls } from "./lib/ui";
+import { pollNow, startChangeFeed, useChanges } from "./lib/live";
 import {
   notifyRouteChange, stripCredentialFromUrl, urlPointsToDetail, useUrlPointsToDetail,
   backToTab,
@@ -374,32 +375,42 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // The indicator has to tell the truth: if the agent goes down while the
   // portal is open, a lying green dot is worse than not having one.
-  // While we're at it, we fetch the pending count, which is what the client
-  // wants to see on arrival.
   useEffect(() => {
     if (state !== "ok" || !cfg) return;
     const tick = () => {
       getManifest(cfg).then((m) => { setManifest(m); setOnline(true); })
         .catch(() => setOnline(false));
-      getApprovals(cfg)
-        // The badge counts what's WAITING ON YOUR OK.
-        .then((r) => setPending((r.approvals ?? []).length))
-        .catch(() => setPending(0));
     };
     tick();
     const id = setInterval(tick, 60_000);
-    // And the moment the client resolves an approval, right away: waiting up
-    // to a minute with the "1" still showing makes them think their click
-    // didn't land. The second tick is because unblocking the ticket takes a
-    // second on the agent's side and the first one can still read the queue
-    // before it updates.
-    const onResolved = () => { tick(); setTimeout(tick, 2500); };
-    window.addEventListener(APPROVALS_EVENT, onResolved);
-    return () => {
-      clearInterval(id);
-      window.removeEventListener(APPROVALS_EVENT, onResolved);
-    };
+    return () => clearInterval(id);
   }, [state, cfg]);
+
+  // THE ONE POLLER of the whole portal (`lib/live.ts`): every tab listens to
+  // it instead of running a timer of its own. Here because the layout is the
+  // one thing mounted for as long as the portal is open.
+  useEffect(() => {
+    if (state !== "ok" || !cfg) return;
+    return startChangeFeed(cfg);
+  }, [state, cfg]);
+
+  // The badge counts what's WAITING ON YOUR OK, and moves the moment the
+  // queue does: an approval the agent asks for, or one another tab decided.
+  const loadPending = useCallback(() => {
+    if (state !== "ok" || !cfg) return;
+    getApprovals(cfg)
+      .then((r) => setPending((r.approvals ?? []).length))
+      .catch(() => setPending(0));
+  }, [state, cfg]);
+  useEffect(loadPending, [loadPending]);
+  useChanges(["approvals"], loadPending);
+  // And this tab's own click: the feed asks now instead of at its next tick,
+  // or the "1" stays up a few seconds and the client thinks the click didn't
+  // land.
+  useEffect(() => {
+    window.addEventListener(APPROVALS_EVENT, pollNow);
+    return () => window.removeEventListener(APPROVALS_EVENT, pollNow);
+  }, []);
 
   if (state === "loading") return <main className="app-shell min-h-screen bg-surface"><Spinner /></main>;
   if (state === "login") return <Login onReady={boot} />;

@@ -55,6 +55,7 @@ import {
   Spinner, inputCls,
 } from "../lib/ui";
 import { FileBody, AgentImage } from "../lib/EntityViewer";
+import { useChanges } from "../lib/live";
 import { readableFileName, fileType, folderLabel } from "../lib/names";
 import Spreadsheet, { CsvPreview } from "../lib/Spreadsheet";
 
@@ -310,16 +311,20 @@ export default function FilesPage() {
     if (isInternal(dir) || (openPath && isInternal(openPath))) setShowInternal(true);
   }, [dir, openPath]);
 
-  const load = useCallback(() => {
+  // silent: a refresh the agent caused re-reads the list in place, never
+  // blanking what the client is looking at.
+  const load = useCallback((silent = false) => {
     if (!cfg) return;
-    setFiles(null);
-    setErr(null);
+    if (!silent) { setFiles(null); setErr(null); }
     getFiles(cfg)
-      .then((r) => setFiles(Array.isArray(r.files) ? r.files : []))
-      .catch((e: Error) => setErr(e.message || "error"));
+      .then((r) => { setFiles(Array.isArray(r.files) ? r.files : []); setErr(null); })
+      .catch((e: Error) => { if (!silent) setErr(e.message || "error"); });
   }, [cfg]);
 
   useEffect(() => { load(); }, [load]);
+  // What the agent writes lands here while the client looks: a deliverable,
+  // a post's pictures, a flow's result.
+  useChanges(["files"], () => load(true));
 
   // The manifest is what says whether this agent accepts having something
   // uploaded to it. If it doesn't answer, it isn't offered: when in doubt,
@@ -558,7 +563,7 @@ export default function FilesPage() {
             title="Los archivos no están disponibles en este agente"
             hint="Cuando tu agente escriba algo, lo vas a poder abrir desde acá."
           />
-          <div className="flex justify-center"><Btn kind="ghost" size="sm" onClick={load}>Reintentar</Btn></div>
+          <div className="flex justify-center"><Btn kind="ghost" size="sm" onClick={() => load()}>Reintentar</Btn></div>
         </>
       );
     }

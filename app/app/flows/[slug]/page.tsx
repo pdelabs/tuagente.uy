@@ -27,6 +27,7 @@ import {
   StaleLinkNotice, Btn, Card, Chip, ErrorState, IconBtn, PageHeader, Spinner,
 } from "../../lib/ui";
 import { CopyLink, PARAM } from "../../lib/routes";
+import { useChanges } from "../../lib/live";
 
 const WRAP = "mx-auto max-w-4xl px-6 py-6 md:px-8";
 
@@ -91,6 +92,8 @@ export default function FlowDetailPage() {
   }, [cfg, slug]);
 
   useEffect(() => { load(); }, [load]);
+  // Its runs and their results show up as they happen.
+  useChanges(["flows"], load);
   // A re-pause left mid-way is resumed on entry here too: the flow's link
   // gets shared, and an F5 can land on the detail. Mind the order -- the
   // hooks all go BEFORE the conditional returns below.

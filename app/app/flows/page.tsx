@@ -37,6 +37,7 @@ import {
 } from "./runs";
 import { FlowActions, MissingConnection, ResultChip, StatusBanner, Runs, WhyItCouldNot } from "./FlowStatus";
 import { EntityProvider } from "../lib/EntityViewer";
+import { useChanges } from "../lib/live";
 import { EntityChip } from "../lib/entities";
 import { ExampleCarousel, buildChatLink } from "../lib/flowExamples";
 import {
@@ -46,7 +47,6 @@ import {
 type Failure = { status?: number; message: string };
 
 const WRAP = "mx-auto max-w-5xl px-6 py-6 md:px-8";
-const REFRESH_MS = 30_000;
 // After a button press the engine takes a moment to write the new status: a
 // second read at 6 s keeps "Probarlo ahora" from looking like it did nothing.
 const REREAD_MS = 6_000;
@@ -283,11 +283,8 @@ export default function FlowsPage() {
   }, [load]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    if (!cfg) return;
-    const t = setInterval(load, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [cfg, load]);
+  // A run that started or ended, a flow the agent created from the chat.
+  useChanges(["flows"], load);
 
   // A re-pause left mid-way (an F5 right between "run" and "pause") is
   // resumed on entry: the pause cannot depend on the tab having stayed open.
