@@ -788,7 +788,7 @@ function Pricing() {
           <article className="flex h-full flex-col rounded-card border border-ink/5 bg-white p-8 shadow-soft sm:p-9">
             <p className="text-sm font-bold uppercase tracking-wider text-primary">Cuando lo necesites</p>
             <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">Lo que le sumás</h3>
-            <p className="mt-3 text-2xl font-extrabold leading-snug tracking-tight text-ink">
+            <p className="mt-3 text-4xl font-extrabold leading-snug tracking-tight text-primary">
               Se cotiza gratis
             </p>
 
