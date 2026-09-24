@@ -36,25 +36,18 @@ const EMAIL = "mailto:hola@tuagente.uy";
 
 /* ─────────────────────────────────────────── Pricing
  *
- * The prices live here and nowhere else: they repeat in the hero, the
- * numbers, the pricing section, the FAQ and the structured data.
- *
- * TODO(Luis): SETUP_FROM and MONTHLY_FROM are NOT decided yet (29/8/2026).
- * While a constant is empty the page says the number comes out of the
- * diagnóstico — it never renders a blank or a placeholder. Write the string
- * the client should read (e.g. "USD 1.200") and every place picks it up. */
+ * The model decided by Luis on 2026-09-24, and the ONLY number the site
+ * publishes: the monthly, with no setup fee, that already carries the agent
+ * and its WhatsApp and Instagram replies. Every job added on top joins the
+ * monthly at a price that is quoted (free) and never published; custom work
+ * is paid once and half of it comes back as a discount on the monthly. It
+ * repeats in the numbers, the pricing section, the FAQ, the final CTA and the
+ * structured data — change it here and every place picks it up. */
+const MONTHLY_USD = "90";
+const MONTHLY = `USD ${MONTHLY_USD}`;
 
-/** Decided: the entry door. Discounted from the setup if the client goes on. */
-const DIAGNOSTIC: string = "USD 200";
-
-/** TODO(Luis): the agent plus its first plugin, one time. */
-const SETUP_FROM: string = "";
-
-/** TODO(Luis): the monthly — models, hosting, adjustments, support. */
-const MONTHLY_FROM: string = "";
-
-/** What an undecided price says instead of a blank. */
-const QUOTED = "Se cotiza en el diagnóstico";
+/** The guarantee, word for word wherever it shows. */
+const GUARANTEE = "Si el primer mes no hizo lo que te dijimos, ese mes no lo pagás.";
 
 export default function Page() {
   return (
@@ -174,7 +167,7 @@ function Hero() {
             <ArrowRight size={19} className="transition group-hover:translate-x-1" />
           </a>
           {/* The free top of the funnel: type your workflow, get an instant
-              teardown. Sits before the paid diagnóstico. */}
+              teardown. Sits before the free cotización. */}
           <TeardownButton className="group inline-flex w-full items-center justify-center gap-2 rounded-pill border border-primary/30 bg-white px-7 py-4 text-base font-bold text-primary shadow-soft transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:w-auto">
             <Sparkles size={18} />
             Probá gratis: contanos tu workflow
@@ -266,7 +259,7 @@ function Cards() {
 // product facts, all verifiable against what actually gets delivered.
 const STATS: { value: string; l: string; size?: string }[] = [
   { value: "24/7", l: "tu agente no para" },
-  { value: DIAGNOSTIC, l: "el diagnóstico, y se descuenta", size: "text-3xl sm:text-5xl" },
+  { value: MONTHLY, l: "por mes, sin costo de alta", size: "text-3xl sm:text-5xl" },
   { value: "1 a 1", l: "un agente por empresa, aislado" },
   { value: "Tu ok", l: "para todo lo que sale para afuera" },
 ];
@@ -297,18 +290,18 @@ function Stats() {
 const STEPS = [
   {
     Icon: PhoneCall,
-    title: "Empezás por el diagnóstico",
-    body: `Una llamada y un informe: qué trabajo tuyo conviene sacarte de encima primero, cuánta plata o cuántas horas te devuelve y qué sale ponerlo a andar. Son ${DIAGNOSTIC} y se descuentan si seguís.`,
+    title: "Nos contás qué te come las horas",
+    body: "Por WhatsApp, o con el teardown gratis de acá arriba. Te decimos qué trabajo conviene sacarte de encima primero, si ya lo tenemos o hay que escribirlo, y cuánto queda el mensual. La cotización es gratis.",
   },
   {
     Icon: Wrench,
-    title: "Armamos tu agente y su primer plugin",
-    body: "Lo instalamos adentro de tu empresa, con el nombre y la cara que elegiste, conectado a lo que ya usás y con los permisos que vos le des. El primer plugin lleva tu proceso adentro: tus precios, tu tono, tu manera.",
+    title: "Armamos tu agente",
+    body: `Lo instalamos adentro de tu empresa, con el nombre y la cara que elegiste, contestando tu WhatsApp y tu Instagram con tus reglas. Son ${MONTHLY} por mes, sin costo de alta. Cada trabajo que le sumes lleva tu proceso adentro: tus precios, tu tono, tu manera.`,
   },
   {
     Icon: Zap,
     title: "Trabaja solo",
-    body: "Desde ese día el trabajo pasa sin que nadie lo empuje. Vos entrás al portal, mirás lo que hizo y aprobás lo que sale para afuera. Cuando querés otro trabajo resuelto, pedís el plugin que sigue.",
+    body: "Desde ese día el trabajo pasa sin que nadie lo empuje. Vos entrás al portal, mirás lo que hizo y aprobás lo que te compromete. Cuando querés otro trabajo resuelto, se lo sumás.",
   },
 ];
 
@@ -674,7 +667,7 @@ function Portal() {
       </div>
 
       <p className="mx-auto mt-8 max-w-2xl text-center text-sm font-medium text-ink-soft">
-        Te lo mostramos funcionando en el diagnóstico, con tu caso adentro.
+        Escribinos y te lo mostramos funcionando antes de que pongas un peso.
       </p>
     </section>
   );
@@ -730,21 +723,27 @@ function Integrations() {
 
 /* ─────────────────────────────────────────── Pricing */
 
-// Three numbers and nothing else: the diagnóstico that opens the door, the
-// plugin we build once, and the monthly that keeps it alive. The section id
-// stays #planes because a blog post links there.
-const SETUP_INCLUDES = [
-  "Tu agente instalado adentro de tu empresa, con el nombre y la cara que elegís",
-  "El primer plugin escrito con tu proceso adentro, y su “nunca”",
-  "Conectado a lo que ya usás: WhatsApp, tu correo, tus planillas, tu agenda",
-  "Tu portal, para ver todo lo que hace y aprobar lo que sale para afuera",
+// One published number and what goes on top of it: the monthly that already
+// brings the agent answering WhatsApp and Instagram, and the jobs and custom
+// work the client adds, quoted for free. The section id stays #planes because
+// a blog post links there.
+const MONTHLY_INCLUDES = [
+  "Tu agente, con el nombre y la cara que elegís, y tu portal para ver todo lo que hace",
+  "Los mensajes de WhatsApp e Instagram: contesta solo, con tus reglas",
+  "Lo que no sabe o no le toca —un precio que no publicaste, un reclamo— te lo deja a vos con una nota",
+  "Los modelos, el hosting y los ajustes: no pagás nada aparte",
+  "Soporte por WhatsApp, con nosotros. No con un ticket.",
 ];
 
-const MONTHLY_INCLUDES = [
-  "Los modelos que piensa: el consumo real va adentro, no lo pagás aparte",
-  "El hosting: la máquina donde vive tu agente, andando siempre",
-  "Los ajustes: le cambiás el criterio, nosotros lo dejamos fino",
-  "Soporte por WhatsApp, con nosotros. No con un ticket.",
+const ADD_ONS = [
+  {
+    title: "Cada trabajo que le sumes",
+    body: "Posteos, facturas a la planilla, presupuestos y seguimiento, transcribir reuniones: cada trabajo que le sumes se agrega al mensual. Qué sale cada uno te lo cotizamos gratis, con tu caso a la vista.",
+  },
+  {
+    title: "Lo que hay que escribir a medida",
+    body: "Si tu empresa necesita algo que no existe —una conexión con tu sistema, un proceso que es solo tuyo— se cotiza y se paga una vez. Y la mitad de lo que pagás por ese armado te vuelve como descuento en el mensual, en los primeros meses.",
+  },
 ];
 
 function Pricing() {
@@ -752,76 +751,30 @@ function Pricing() {
     <section id="planes" className="mx-auto max-w-7xl px-5 py-16 sm:px-8 sm:py-24">
       <div className="mx-auto max-w-2xl text-center">
         <span className="inline-flex items-center gap-2 rounded-pill bg-primary/10 px-4 py-1.5 text-sm font-bold text-primary">
-          <Sparkles size={15} /> Tres números, sin letra chica
+          <Sparkles size={15} /> Un precio, sin letra chica
         </span>
         <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
           Cuánto sale
         </h2>
         <p className="mt-4 text-lg text-ink-soft">
-          El diagnóstico, el plugin que te escribimos y el mensual que lo mantiene vivo. No hay
-          planes, no hay escalones y no hay cargo por mensaje.
+          Un mensual que ya trae lo que más se usa, y lo que le sumes cuando lo necesites. No hay
+          costo de alta, no hay escalones y no hay cargo por mensaje.
         </p>
       </div>
 
-      <div className="mt-12 grid gap-5 lg:grid-cols-3">
+      <div className="mx-auto mt-12 grid max-w-5xl gap-5 lg:grid-cols-2">
         <Reveal className="h-full">
-          <article className="flex h-full flex-col rounded-card border border-ink/5 bg-white p-8 shadow-soft sm:p-9">
-            <p className="text-sm font-bold uppercase tracking-wider text-primary">El primer paso</p>
-            <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">El diagnóstico</h3>
+          <article className="flex h-full flex-col rounded-card bg-primary p-8 text-white shadow-lift sm:p-9">
+            <p className="text-sm font-bold uppercase tracking-wider text-white/70">Todos los meses</p>
+            <h3 className="mt-4 text-2xl font-extrabold tracking-tight">Tu agente</h3>
             <div className="mt-3 flex flex-wrap items-baseline gap-x-3">
-              <span className="text-4xl font-extrabold tracking-tight text-ink">{DIAGNOSTIC}</span>
-              <span className="text-sm font-bold text-ink-soft">una sola vez</span>
+              <span className="text-5xl font-extrabold tracking-tight">{MONTHLY}</span>
+              <span className="text-sm font-bold text-white/80">por mes</span>
             </div>
-            <p className="mt-4 flex-1 text-ink-soft">
-              Una llamada y un informe escrito: qué trabajo tuyo conviene sacarte de encima
-              primero, cuánta plata o cuántas horas te devuelve, qué plugin hay que escribir y qué
-              sale todo. El informe es tuyo aunque no sigas — incluso si la conclusión honesta es
-              que todavía no te conviene.
-            </p>
-            <p className="mt-4 rounded-2xl bg-c-green p-4 text-sm font-semibold text-c-green-ink">
-              Si seguís, los {DIAGNOSTIC} se descuentan.
-            </p>
-            {/* The free step before paying: type your workflow, get an instant
-                teardown. The diagnóstico is the deeper, paid step after it. */}
-            <div className="mt-5 border-t border-ink/5 pt-5">
-              <p className="text-sm text-ink-soft">
-                ¿Todavía no querés poner un peso? Contanos tu workflow y te armamos un teardown gratis, al
-                toque.
-              </p>
-              <TeardownButton className="group mt-3 inline-flex w-full items-center justify-center gap-2 rounded-pill border border-primary/30 bg-white px-5 py-3 text-sm font-extrabold text-primary transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-                <Sparkles size={16} />
-                Probá gratis el teardown
-              </TeardownButton>
-            </div>
-          </article>
-        </Reveal>
-
-        <Reveal delay={110} className="h-full">
-          <article className="relative flex h-full flex-col rounded-card bg-primary p-8 text-white shadow-lift sm:p-9">
-            <p className="text-sm font-bold uppercase tracking-wider text-white/70">El armado</p>
-            <h3 className="mt-4 text-2xl font-extrabold tracking-tight">
-              Tu agente y su primer plugin
-            </h3>
-            <div className="mt-3 flex flex-wrap items-baseline gap-x-3">
-              {SETUP_FROM ? (
-                <>
-                  <span className="text-4xl font-extrabold tracking-tight">desde {SETUP_FROM}</span>
-                  <span className="text-sm font-bold text-white/80">de armado</span>
-                </>
-              ) : (
-                <span className="text-2xl font-extrabold leading-snug tracking-tight">
-                  {QUOTED}
-                </span>
-              )}
-            </div>
-            <p className="mt-3 text-sm font-medium text-white/75">
-              El número depende de una sola cosa: qué hay que escribir y qué hay que conectar.
-              Conectar una planilla de Google no cuesta lo mismo que conectar un sistema de 2009
-              que solo entiende el contador.
-            </p>
+            <p className="mt-2 text-sm font-semibold text-white/80">Sin costo de alta.</p>
 
             <ul className="mt-7 flex-1 space-y-3">
-              {SETUP_INCLUDES.map((f) => (
+              {MONTHLY_INCLUDES.map((f) => (
                 <li key={f} className="flex items-start gap-2.5">
                   <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/20">
                     <Check size={13} className="text-white" />
@@ -831,16 +784,11 @@ function Pricing() {
               ))}
             </ul>
 
-            <p className="mt-7 rounded-2xl bg-white/10 p-4 text-sm font-semibold text-white/90">
-              Empezás con uno. Cada plugin que sumes después se cotiza aparte y sale bastante
-              menos: el agente ya está instalado, conectado y sabiendo cómo trabajás.
-            </p>
-
             <a
               href={WHATSAPP}
               target="_blank"
               rel="noopener noreferrer"
-              className="group mt-6 inline-flex items-center justify-center gap-2 rounded-pill bg-white px-6 py-3.5 text-sm font-extrabold text-primary shadow-lift transition hover:-translate-y-0.5"
+              className="group mt-8 inline-flex items-center justify-center gap-2 rounded-pill bg-white px-6 py-3.5 text-sm font-extrabold text-primary shadow-lift transition hover:-translate-y-0.5"
             >
               Quiero mi agente
               <ArrowRight size={16} className="transition group-hover:translate-x-1" />
@@ -848,43 +796,50 @@ function Pricing() {
           </article>
         </Reveal>
 
-        <Reveal delay={220} className="h-full">
+        <Reveal delay={110} className="h-full">
           <article className="flex h-full flex-col rounded-card border border-ink/5 bg-white p-8 shadow-soft sm:p-9">
-            <p className="text-sm font-bold uppercase tracking-wider text-primary">Todos los meses</p>
-            <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">El mantenimiento</h3>
-            <div className="mt-3 flex flex-wrap items-baseline gap-x-3">
-              {MONTHLY_FROM ? (
-                <>
-                  <span className="text-4xl font-extrabold tracking-tight text-ink">
-                    desde {MONTHLY_FROM}
-                  </span>
-                  <span className="text-sm font-bold text-ink-soft">por mes</span>
-                </>
-              ) : (
-                <span className="text-2xl font-extrabold leading-snug tracking-tight text-ink">
-                  {QUOTED}
-                </span>
-              )}
+            <p className="text-sm font-bold uppercase tracking-wider text-primary">Cuando lo necesites</p>
+            <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-ink">Lo que le sumás</h3>
+            <p className="mt-3 text-2xl font-extrabold leading-snug tracking-tight text-ink">
+              Se cotiza gratis
+            </p>
+
+            <div className="mt-6 flex-1 space-y-5">
+              {ADD_ONS.map(({ title, body }) => (
+                <div key={title}>
+                  <p className="font-extrabold text-ink">{title}</p>
+                  <p className="mt-1 text-ink-soft">{body}</p>
+                </div>
+              ))}
             </div>
 
-            <ul className="mt-7 flex-1 space-y-3">
-              {MONTHLY_INCLUDES.map((f) => (
-                <li key={f} className="flex items-start gap-2.5">
-                  <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-c-green">
-                    <Check size={13} className="text-c-green-ink" />
-                  </span>
-                  <span className="text-ink-soft">{f}</span>
-                </li>
-              ))}
-            </ul>
-
-            <p className="mt-7 rounded-2xl bg-ink/[0.04] p-4 text-sm font-medium text-ink-soft">
-              Sin permanencia. Si un mes no te devolvió tiempo real, lo das de baja y dejás de
-              pagarlo — es la única prueba que importa.
-            </p>
+            {/* The free step: type your workflow, get an instant teardown of
+                what we would add first. */}
+            <div className="mt-6 border-t border-ink/5 pt-5">
+              <p className="text-sm text-ink-soft">
+                ¿Querés saber qué le sumaríamos primero? Contanos tu workflow y te armamos un
+                teardown gratis, al toque.
+              </p>
+              <TeardownButton className="group mt-3 inline-flex w-full items-center justify-center gap-2 rounded-pill border border-primary/30 bg-white px-5 py-3 text-sm font-extrabold text-primary transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                <Sparkles size={16} />
+                Probá gratis el teardown
+              </TeardownButton>
+            </div>
           </article>
         </Reveal>
       </div>
+
+      <Reveal>
+        <div className="mx-auto mt-5 flex max-w-5xl items-start gap-4 rounded-card bg-c-green p-6 text-c-green-ink sm:items-center sm:p-7">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/60">
+            <ShieldCheck size={22} />
+          </span>
+          <p className="text-base sm:text-lg">
+            <strong className="font-extrabold">{GUARANTEE}</strong> Y sin permanencia: si un mes
+            no te devolvió tiempo real, lo das de baja y dejás de pagarlo.
+          </p>
+        </div>
+      </Reveal>
     </section>
   );
 }
@@ -902,23 +857,19 @@ const FAQS = [
   },
   {
     q: "¿Puedo pedir uno a medida?",
-    a: "Es lo normal, no la excepción: casi todos los plugins que escribimos nacen de un pedido concreto de una empresa. Nos contás el trabajo que te come las horas, lo miramos, te decimos si algo parecido ya existe (y entonces se adapta, que es más rápido y más barato) o cuánto lleva escribirlo de cero. Recién después de eso hay un número, y el número se cotiza antes de escribir una línea.",
+    a: "Es lo normal, no la excepción: casi todos los plugins que escribimos nacen de un pedido concreto de una empresa. Nos contás el trabajo que te come las horas, lo miramos, te decimos si algo parecido ya existe (y entonces se adapta, que es más rápido y más barato) o cuánto lleva escribirlo de cero. Recién después de eso hay un número, y el número se cotiza gratis antes de escribir una línea. Lo que se escribe a medida se paga una vez, y la mitad de lo que pagás por ese armado te vuelve como descuento en el mensual.",
   },
   {
-    q: "¿Puedo probar antes de pagar el diagnóstico?",
-    a: `Sí, y es gratis. Contanos en una o dos líneas el trabajo que te come el día y te armamos al toque un teardown de tu workflow: qué agente y qué plugin te escribiríamos primero, qué capacidades nuestras lo cubren, qué hay que conectar de lo que ya usás y cuál es el piloto más chico que ya sirve, con el número para medirlo. Si automatizarlo todavía no te conviene, también te lo decimos. El diagnóstico (${DIAGNOSTIC}) es el paso que sigue y va más a fondo: una llamada y un informe con los números de tu caso.`,
+    q: "¿Puedo probar antes de pagar?",
+    a: `Sí, y es gratis. Contanos en una o dos líneas el trabajo que te come el día y te armamos al toque un teardown de tu workflow: qué agente y qué plugin te escribiríamos primero, qué capacidades nuestras lo cubren, qué hay que conectar de lo que ya usás y cuál es el piloto más chico que ya sirve, con el número para medirlo. Si automatizarlo todavía no te conviene, también te lo decimos. Si querés avanzar, la cotización de tu caso también es gratis. Y si arrancás y el primer mes no hizo lo que te dijimos, ese mes no lo pagás.`,
   },
   {
     q: "¿Cuánto cuesta?",
-    a: `Hay tres números y ninguno tiene letra chica. El diagnóstico sale ${DIAGNOSTIC}, una sola vez, y se descuenta si seguís. El agente con su primer plugin se paga una vez: ${
-      SETUP_FROM ? `desde ${SETUP_FROM}` : "el número sale del diagnóstico, con tu caso a la vista"
-    }. Y después hay un mensual que cubre los modelos, el hosting, el soporte y los ajustes: ${
-      MONTHLY_FROM ? `desde ${MONTHLY_FROM} por mes` : "también se cotiza ahí"
-    }. Cada plugin nuevo que pidas se cotiza aparte, antes de escribirlo.`,
+    a: `${MONTHLY} por mes, sin costo de alta. Eso trae tu agente con su portal y los mensajes de WhatsApp e Instagram: contesta solo, con tus reglas, y lo que no sabe o no le toca —un precio que no publicaste, un reclamo— te lo deja a vos con una nota. Los modelos, el hosting, los ajustes y el soporte van adentro. Cada trabajo que le sumes (posteos, facturas a la planilla, presupuestos y seguimiento, transcribir reuniones) se agrega al mensual, y te lo cotizamos gratis. Lo que haya que escribir a medida para tu empresa se paga una vez, y la mitad te vuelve como descuento en el mensual. ${GUARANTEE}`,
   },
   {
-    q: "¿Puedo empezar con uno solo?",
-    a: "Es lo que recomendamos. Un agente, un plugin: el trabajo que más te duele hoy. Lo ves andar un mes, medís si te devolvió horas de verdad y recién ahí pedís el segundo. Sumar un plugin después no es un proyecto nuevo — el agente ya está instalado, conectado y sabiendo cómo trabajás — así que sale bastante menos que el primero.",
+    q: "¿Puedo empezar con poco?",
+    a: "Es lo que recomendamos. Arrancás con el agente contestando tu WhatsApp y tu Instagram y, si hace falta, un solo trabajo más: el que más te duele hoy. Lo ves andar un mes, medís si te devolvió horas de verdad y recién ahí le sumás el que sigue. Sumar un trabajo después no es un proyecto nuevo: el agente ya está instalado, conectado y sabiendo cómo trabajás.",
   },
   {
     q: "¿En qué se diferencia de un chatbot?",
@@ -983,8 +934,8 @@ function Faq() {
 
 /* ─────────────────────────────────────────── Structured data (SEO / AEO) */
 
-// The undecided prices don't get faked here either: an Offer without a price
-// is honest, an Offer with a made-up one is a lie a crawler repeats.
+// Only the monthly carries a price: the jobs and the custom work are quoted,
+// and an Offer with a made-up number is a lie a crawler repeats.
 const JSON_LD = {
   "@context": "https://schema.org",
   "@graph": [
@@ -998,13 +949,7 @@ const JSON_LD = {
       slogan: "Un agente de IA que trabaja adentro de tu empresa",
       email: "hola@tuagente.uy",
       telephone: "+59899002835",
-      priceRange: [
-        `${DIAGNOSTIC} el diagnóstico`,
-        SETUP_FROM && `armado desde ${SETUP_FROM}`,
-        MONTHLY_FROM && `${MONTHLY_FROM} por mes`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
+      priceRange: `${MONTHLY} por mes, sin costo de alta`,
       address: {
         "@type": "PostalAddress",
         addressLocality: "Montevideo",
@@ -1026,23 +971,29 @@ const JSON_LD = {
       makesOffer: [
         {
           "@type": "Offer",
-          name: "Diagnóstico",
-          description:
-            "Una llamada y un informe: qué trabajo conviene sacarte de encima primero, cuánto te devuelve y qué sale ponerlo a andar. Se descuenta si seguís.",
-          price: "200",
+          name: "Plan mensual",
+          description: `Tu agente de IA con el nombre y la cara que elegís, su portal y los mensajes de WhatsApp e Instagram: contesta solo, con tus reglas. Modelos, hosting, ajustes y soporte incluidos. Sin costo de alta y sin permanencia. ${GUARANTEE}`,
+          price: MONTHLY_USD,
           priceCurrency: "USD",
+          priceSpecification: {
+            "@type": "UnitPriceSpecification",
+            price: MONTHLY_USD,
+            priceCurrency: "USD",
+            unitCode: "MON",
+            unitText: "por mes",
+          },
         },
         {
           "@type": "Offer",
-          name: "Tu agente y su primer plugin",
+          name: "Trabajos que le sumás",
           description:
-            "Un agente de IA instalado adentro de tu empresa, con el nombre y la cara que elegís, y un plugin escrito con tu proceso adentro. Se cotiza en el diagnóstico.",
+            "Posteos, facturas a la planilla, presupuestos y seguimiento, transcribir reuniones: cada trabajo que le sumás se agrega al mensual. Se cotiza gratis.",
         },
         {
           "@type": "Offer",
-          name: "Mantenimiento mensual",
+          name: "Desarrollo a medida",
           description:
-            "Los modelos, el hosting, los ajustes y el soporte, todos los meses. Sin permanencia.",
+            "Lo que hay que escribir a medida para tu empresa se cotiza gratis y se paga una vez. La mitad de lo que pagás te vuelve como descuento en el mensual.",
         },
       ],
     },
@@ -1128,9 +1079,8 @@ function FinalCta() {
           ¿Listo para tener tu agente trabajando?
         </h2>
         <p className="relative mx-auto mt-5 max-w-xl text-lg text-white/80">
-          Arrancá por el diagnóstico: {DIAGNOSTIC}, una llamada y un informe con el trabajo que
-          conviene sacarte de encima primero y qué sale. Si seguís, se descuentan. Escribinos y lo
-          agendamos.
+          Contanos qué te come las horas y te cotizamos gratis. Son {MONTHLY} por mes, sin costo
+          de alta, con WhatsApp e Instagram adentro. {GUARANTEE}
         </p>
         <a
           href={WHATSAPP}
@@ -1138,7 +1088,7 @@ function FinalCta() {
           rel="noopener noreferrer"
           className="group relative mt-9 inline-flex items-center justify-center gap-2 rounded-pill bg-white px-8 py-4 text-base font-extrabold text-primary shadow-lift transition hover:-translate-y-0.5"
         >
-          Quiero el diagnóstico
+          Pedí tu cotización gratis
           <ArrowRight size={19} className="transition group-hover:translate-x-1" />
         </a>
       </div>
