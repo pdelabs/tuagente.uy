@@ -309,7 +309,7 @@ function EntityChipFor({ entity, text }: { entity: Entity; text?: string }) {
 const INLINE_ENTITY_RE = new RegExp(
   "(\\bt_[0-9a-f]{6,16}\\b" +
   "|\\b\\d{4}-\\d{2}-\\d{2}-(?=[a-z0-9-]*[a-z])[a-z0-9][a-z0-9-]{0,39}\\b" +
-  `|(?:/opt/data/)?\\b(?:workspace|entregables|entrada|interno)/[\\w./-]+\\.(?:${FILE_EXTENSIONS})\\b)`,
+  `|(?:sandbox:)?(?:/(?=workspace/))?\\b(?:workspace|entregables|entrada|interno|posteos|negocio|imagenes)/[\\w./-]+\\.(?:${FILE_EXTENSIONS})\\b)`,
   "gi");
 
 // Emphasis is scanned THROUGH, and that is not a nicety: the face writes the
@@ -357,11 +357,12 @@ function makeComponents(streaming: boolean): Components {
     // text -- ugly, but it never lies.
     a: ({ href, children }) => {
       const url = typeof href === "string" ? href : "";
-      // `/opt/…` comes in here even though it starts with a slash: it's the
-      // workspace's absolute path, the one the agent uses to re-read its own
-      // files, and as a portal link it gave a 404. The rest of the absolute
+      // `/workspace/…` comes in here even though it starts with a slash: it's
+      // the workspace's absolute path, the one the agent uses to re-read its
+      // own files, and as a portal link it gave a 404. `sandbox:` has no slash
+      // and is caught by the first test. The rest of the absolute
       // paths (`/app/…`, `/blog/…`) belong to the site and stay ordinary links.
-      const fromAgent = !url.startsWith("/") || url.startsWith("/opt/");
+      const fromAgent = !url.startsWith("/") || url.startsWith("/workspace/");
       if (url && !isFetchable(url) && fromAgent && !url.startsWith("#")) {
         const entity = detectEntity(url);
         const text = Children.toArray(children).every((c) => typeof c === "string")
@@ -504,6 +505,19 @@ function makeComponents(streaming: boolean): Components {
       // agent had just made, in plain sight and with no way to look at it.
       if (!isFetchable(url)) {
         const entity = detectEntity(url);
+        // A PICTURE IN THE WORKSPACE IS DRAWN, not chipped: asked for a table
+        // of a post's slides, a row of chips named «01.png» was a list of
+        // things to click one by one. The bytes come the same way the Files
+        // tab gets them, with the bearer.
+        if (entity?.kind === "file" && isOpenable(entity) && isImage(entity.path)) {
+          return (
+            <AdapterImage
+              path={`/portal/files/${encodeURIComponent(entity.path)}`}
+              alt={alt?.trim() ?? ""}
+              title={title}
+            />
+          );
+        }
         if (entity && isOpenable(entity)) {
           return <EntityChipFor entity={entity} text={alt?.trim()} />;
         }
@@ -587,9 +601,21 @@ function stripAgentOnlyContent(md: string): string {
     .trim();
 }
 
+/** The agent's links, back to workspace paths BEFORE markdown parses them.
+ *  `sandbox:` is not a protocol the renderer lets through — the href arrives
+ *  empty and the link is dead text — and `/workspace/` is where the engine
+ *  mounts the workspace, not a portal route. Measured 2026-09-24: a PDF the
+ *  agent had just made, linked as `sandbox:/workspace/galeria.pdf`. */
+const AGENT_PATH_RE = /(\]\(|<|\s|^)(?:sandbox:)?\/workspace\//g;
+
+function relativePaths(md: string): string {
+  if (!md.includes("/workspace/")) return md;
+  return md.replace(AGENT_PATH_RE, "$1");
+}
+
 function MarkdownImpl({ children, streaming = false }: { children: string; streaming?: boolean }) {
   const source = useMemo(
-    () => closeOpenFence(stripAgentOnlyContent(children ?? "")), [children]);
+    () => closeOpenFence(relativePaths(stripAgentOnlyContent(children ?? ""))), [children]);
 
   return (
     <div className="break-words text-[15px] text-ink [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden [&_.katex-display]:py-1 [&_.katex-error]:font-mono [&_.katex-error]:text-[0.9em]">

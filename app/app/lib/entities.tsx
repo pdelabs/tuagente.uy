@@ -47,9 +47,12 @@ export const FILE_EXTENSIONS =
   "pdf|xlsx|xls|ods|docx|doc|odt|pptx|ppt|odp|rtf|" +
   "zip|gz|tar|ics|mp3|wav|ogg|m4a|mp4|mov|webm";
 
-// Workspace paths: the agent writes them with or without a prefix.
+// Workspace paths: the agent writes them with or without a prefix. The
+// engine's workspace is mounted at `/workspace` (and the date line says so),
+// and a model trained on another product's chat writes `sandbox:` in front;
+// both are the same relative path. `/opt/data/workspace/` was Hermes's.
 const FILE_RE = new RegExp(
-  `^(?:/opt/data/workspace/|workspace/|\\./)?([\\w./-]+\\.(?:${FILE_EXTENSIONS}))$`, "i");
+  `^(?:sandbox:)?(?:/workspace/|workspace/|\\./)?([\\w./-]+\\.(?:${FILE_EXTENSIONS}))$`, "i");
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|svg|ico|heic|avif)$/i;
 const SPREADSHEET_EXT = /\.(xlsx|xls|csv|tsv|ods)$/i;

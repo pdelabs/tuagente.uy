@@ -58,6 +58,23 @@ Un flujo es trabajo con nombre que se repite solo, y lo creás con `create_flow`
   trabajo en esta misma conversación y mostrá el resultado."""
 
 
+# HOW A FILE REACHES THE CLIENT FROM A SENTENCE. The portal turns a workspace
+# path into something she can open, and a picture written as markdown into the
+# picture itself. Measured on our own agent (2026-09-24): asked for a table of
+# the posts' images it wrote bare `01.png`–`05.png`, which name no post, and
+# linked a PDF as `sandbox:/workspace/…` — the chat dialect of another product.
+FILES = """\
+## Archivos en tus respuestas
+
+- **Nombrá cada archivo por su ruta dentro del espacio de trabajo**, entera y
+  tal cual: `posteos/2026-09-15-tema/01.png`, `negocio/borrador.md`. Así tu
+  cliente la toca y se abre. Nunca solo el nombre (`01.png`), nunca con
+  `/workspace/` adelante ni `sandbox:`.
+- **Una imagen que tu cliente quiere ver**, escribila como imagen:
+  `![Lámina 1](posteos/2026-09-15-tema/01.png)`. Se ve ahí mismo, también
+  dentro de una tabla."""
+
+
 def soul() -> str:
     """Who the agent is, read from disk every run on purpose: it is a read-only
     mount and editing it should not need a restart while the engine is being
@@ -140,7 +157,7 @@ def instructions(ctx: RunContext[Deps]) -> str:
     delegate gets. Not the same text and not meant to be: the face is the one
     with a scope, a chat and manners in it.
     """
-    parts = [soul(), FLOWS, web.WEB, *plugins.prose(), skills.index_text(), today()]
+    parts = [soul(), FLOWS, FILES, web.WEB, *plugins.prose(), skills.index_text(), today()]
     return "\n\n".join(p for p in parts if p)
 
 
