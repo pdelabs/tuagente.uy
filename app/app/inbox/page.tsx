@@ -1,7 +1,9 @@
 "use client";
 
-// Bandeja — the conversations that came in through a channel: mail, an
-// Instagram comment, an Instagram DM.
+// Bandeja — the conversations that came in through a channel: a WhatsApp
+// chat, an Instagram comment or DM, a mail. It is the base plan's messages
+// tab: the agent answers WhatsApp and Instagram on its own, with the owner's
+// rules, and this is where she sees what was said.
 //
 // THERE IS NO SECOND STORE AND NO SECOND ROUTE. A conversation is a ticket of
 // the board whose `source` is a channel, and this screen is
@@ -11,22 +13,23 @@
 // the board and then finds it again in the inbox is a client with two inboxes.
 //
 // WHAT THE CLIENT DOES HERE IS READ AND DECIDE. She does not write the answer:
-// a mail's waits for her ok in Aprobaciones; an Instagram answer goes out on
-// its own (since 2026-09-24), and a blocked Instagram thread is one the agent
-// left for her, with its note on the thread. What she can do is TELL THE AGENT
+// a mail's waits for her ok in Aprobaciones; an Instagram or WhatsApp answer
+// goes out on its own (since 2026-09-24), and a blocked thread there is one
+// the agent left for her, with its note on the thread. On WhatsApp she can
+// also answer from her own phone, which takes the chat over for a while
+// (`TakeoverBanner`), and give it back from here. What she can do is TELL THE AGENT
 // something about the conversation, and that goes where everything the client
 // asks for goes — the chat, with the request already written (`?p=`).
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Hand, Inbox, Instagram, Mail, MessageCircle, RefreshCw, Send, X,
-  type LucideIcon,
 } from "lucide-react";
 import {
-  getApprovals, getFlows, getTicketDetail, getTickets, isTheAgent, loadConfig, readComment,
-  authorLabel,
+  getApprovals, getFlows, getManifest, getTicketDetail, getTickets, isTheAgent, loadConfig,
+  readComment, authorLabel,
   type PortalConfig, type Ticket, type TicketComment, type TicketDetail,
 } from "../lib/agent";
 import { buildChatLink } from "../lib/flowExamples";
@@ -40,13 +43,23 @@ import {
 } from "../lib/ui";
 import Markdown from "../lib/Markdown";
 import { EntityProvider } from "../lib/EntityViewer";
-import { isOurSide, messageOf, personOf, previewOf, stateOf } from "./conversation";
+import {
+  CHANNELS, channelKey, isOurSide, messageOf, personOf, phoneLabel, previewOf, stateOf,
+  takenOverUntil, whatsAppJid, whatsAppPerson, type Channel,
+} from "./conversation";
+import {
+  ContactAvatar, TakeoverBanner, WhatsAppPanel, useSeen, useWhatsAppChat,
+} from "./whatsapp";
+import { WhatsAppGlyph } from "../lib/glyphs";
 import { useChanges } from "../lib/live";
+
+type Glyph = ComponentType<{ className?: string }>;
 
 // One icon per channel. `instagram-dm` is a MessageCircle and not the
 // Instagram glyph: what the row says first is that somebody is talking to you
 // in private, and the handle underneath already says where.
-const CHANNEL: Record<string, { icon: LucideIcon; label: string }> = {
+const CHANNEL: Record<string, { icon: Glyph; label: string }> = {
+  whatsapp: { icon: WhatsAppGlyph, label: "WhatsApp" },
   mail: { icon: Mail, label: "Mail" },
   instagram: { icon: Instagram, label: "Comentario de Instagram" },
   "instagram-dm": { icon: MessageCircle, label: "Mensaje de Instagram" },
@@ -72,37 +85,91 @@ const labelFor = (author: string) => authorLabel(author, agentName());
 
 /* ── The list ───────────────────────────────────────────────────────────── */
 
-function Conversation({ t, open, onClick }: {
-  t: Ticket; open: boolean; onClick: () => void;
+/** A row: the person's face with the channel on it, their name, when, what
+ *  they said, and where it stands.
+ *
+ *  A WhatsApp row asks the engine for its chat — the contact's name, whether
+ *  the owner took it over — and WhatsApp for the picture ONLY ONCE IT IS ON
+ *  SCREEN (`useSeen`): a Bandeja with two hundred chats does not ask for two
+ *  hundred pictures on load (see `whatsapp.tsx` for why that matters). */
+function Conversation({ cfg, t, open, waitingOk, onClick }: {
+  cfg: PortalConfig; t: Ticket; open: boolean; waitingOk: boolean; onClick: () => void;
 }) {
+  const [ref, seen] = useSeen<HTMLButtonElement>();
+  const jid = whatsAppJid(t);
+  const { chat } = useWhatsAppChat(cfg, jid, seen);
   const { icon: Icon, label } = channelOf(t);
-  const person = personOf(t);
-  const state = stateOf(t.status);
+  const person = jid ? whatsAppPerson(t, chat) : personOf(t);
+  const state = stateOf(t.status, { waitingOk, takenOver: takenOverUntil(chat) !== null });
   const preview = previewOf(t);
+  // A mail has a subject worth its own line; an Instagram or WhatsApp
+  // ticket's title only repeats who wrote and where, which the row says.
+  const subject = channelKey(t) === "mail" ? t.title : null;
+  const name = person.name || t.title;
   return (
     <button
+      ref={ref}
       onClick={onClick}
       aria-current={open}
       title={label}
-      className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${
+      className={`flex w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition ${
         open
           ? "border-c-violet bg-c-violet/40"
           : "border-black/[0.07] bg-white hover:bg-black/[0.02]"
       }`}
     >
-      <div className="flex items-center gap-2">
-        <Icon className="h-3.5 w-3.5 shrink-0 text-ink-soft" />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
-          {person.name || t.title}
+      <span className="relative mt-0.5 shrink-0">
+        <ContactAvatar cfg={cfg} jid={jid} name={name} seen={seen} />
+        <span className="absolute -bottom-0.5 -right-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-black/[0.07] bg-white">
+          <Icon className="h-2.5 w-2.5 text-ink-soft" />
         </span>
-        <span className="shrink-0 text-[11px] text-ink-soft">{dateTime(t.updated_at ?? t.created_at)}</span>
-      </div>
-      <p className="mt-1 truncate text-[13px] text-ink-soft">{t.title}</p>
-      {preview && <p className="mt-0.5 truncate text-[12px] text-ink-soft/80">{preview}</p>}
-      <div className="mt-1.5">
-        <Chip tone={state.tone}>{state.label}</Chip>
-      </div>
+      </span>
+      <span className="block min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">{name}</span>
+          <span className="shrink-0 text-[11px] text-ink-soft">{dateTime(t.updated_at ?? t.created_at)}</span>
+        </span>
+        {subject && <span className="mt-0.5 block truncate text-[13px] text-ink-soft">{subject}</span>}
+        {preview && <span className="mt-0.5 block truncate text-[12px] text-ink-soft/80">{preview}</span>}
+        <span className="mt-1.5 block">
+          <Chip tone={state.tone}>{state.label}</Chip>
+        </span>
+      </span>
     </button>
+  );
+}
+
+/** Todos · WhatsApp · Instagram · Mail — only the channels this agent has. */
+function ChannelFilter({ channels, value, onChange }: {
+  channels: Channel[]; value: Channel | null; onChange: (c: Channel | null) => void;
+}) {
+  const options: { key: Channel | null; label: string }[] = [
+    { key: null, label: "Todos" },
+    ...CHANNELS.filter((c) => channels.includes(c.key)),
+  ];
+  return (
+    <div role="tablist" aria-label="Canal" className="mb-3 flex flex-wrap gap-1.5">
+      {options.map((o) => {
+        const on = o.key === value;
+        const Icon = o.key ? CHANNEL[o.key].icon : Inbox;
+        return (
+          <button
+            key={o.label}
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(o.key)}
+            className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-semibold transition ${
+              on
+                ? "border-c-violet bg-c-violet/50 text-c-violet-ink"
+                : "border-black/[0.07] bg-white text-ink-soft hover:bg-black/[0.03] hover:text-ink"
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -282,9 +349,32 @@ export default function InboxPage() {
   const openThread = useCallback((id: string) => openInRoute({ [PARAM.thread]: id }), []);
   const closeThread = useCallback(() => closeInRoute(PARAM.thread), []);
 
+  // Whether this agent has WhatsApp at all: the messages plugin flips
+  // `modules.whatsapp`, and without it there is no panel and no chip for it.
+  const [hasWhatsApp, setHasWhatsApp] = useState(false);
+  useEffect(() => {
+    if (!cfg) return;
+    getManifest(cfg).then((m) => setHasWhatsApp(Boolean(m.modules.whatsapp))).catch(() => {});
+  }, [cfg]);
+
+  // THE FILTER IS A VIEW, NOT SOMETHING THAT OPENS: it has no URL, and a link
+  // to a thread lands on it whatever the filter was.
+  const [channel, setChannel] = useState<Channel | null>(null);
+
   const conversations = useMemo(
     () => [...(tickets ?? [])].sort((a, b) => msOf(b) - msOf(a)),
     [tickets],
+  );
+  // The chips are the channels this agent HAS: the ones something came in
+  // through, and WhatsApp once it is installed even before its first message.
+  const channels = useMemo(() => {
+    const present = new Set(conversations.map(channelKey));
+    if (hasWhatsApp) present.add("whatsapp");
+    return CHANNELS.map((c) => c.key).filter((k) => present.has(k));
+  }, [conversations, hasWhatsApp]);
+  const shown = useMemo(
+    () => (channel ? conversations.filter((t) => channelKey(t) === channel) : conversations),
+    [conversations, channel],
   );
 
   // The detail wins — it carries the status after whatever just happened — and
@@ -293,6 +383,10 @@ export default function InboxPage() {
     if (!openId) return null;
     return detail?.ticket ?? conversations.find((t) => t.id === openId) ?? null;
   }, [openId, detail, conversations]);
+
+  // The open thread's WhatsApp chat: who it is and whether she took it over.
+  const openJid = whatsAppJid(ticket);
+  const { chat: openChat, reload: reloadChat } = useWhatsAppChat(cfg, openJid);
 
   /** The request waiting on the client's ok FOR THIS CONVERSATION, if the card
    *  names it.
@@ -304,10 +398,10 @@ export default function InboxPage() {
    *  conversación — tarea «…» (t_ab12)»), so an id found in a body is a true
    *  match — an id is unique and nothing else writes one there.
    *
-   *  When no card names it — an Instagram reply's card is about the comment,
-   *  not about the ticket — the chip still points at Aprobaciones, the tab.
-   *  That is the honest fallback: the request IS there, and what we cannot do
-   *  is say which card it is. */
+   *  When no card names it, a blocked thread is one the agent LEFT for her:
+   *  an Instagram or WhatsApp answer goes out with no card at all, so there is
+   *  nothing in Aprobaciones to point at — only the agent's note on the
+   *  thread. */
   const approvalFor = (t: Ticket) =>
     approvals.find((a) => (a.body ?? "").includes(t.id))?.id ?? null;
 
@@ -317,10 +411,14 @@ export default function InboxPage() {
     return <div className={wrap}><ErrorState message={error} onRetry={load} /></div>;
   if (tickets === null) return <div className={wrap}><Spinner /></div>;
 
-  const person = personOf(ticket);
-  const state = ticket ? stateOf(ticket.status) : null;
-  const Channel = ticket ? channelOf(ticket).icon : Inbox;
+  // On WhatsApp the number goes where the address or the handle goes: it is
+  // how she tells two Lauras apart.
+  const person = openJid ? whatsAppPerson(ticket, openChat) : personOf(ticket);
+  const handle = openJid ? phoneLabel(openChat?.phone) || null : person.handle;
   const requestId = ticket ? approvalFor(ticket) : null;
+  const takenOver = takenOverUntil(openChat) !== null;
+  const state = ticket ? stateOf(ticket.status, { waitingOk: Boolean(requestId), takenOver }) : null;
+  const ChannelIcon = ticket ? channelOf(ticket).icon : Inbox;
   const comments: TicketComment[] = detail?.comments ?? [];
   // The link is stale when the list has no such conversation AND the agent has
   // no such ticket: a plain notice and the list underneath, like every other
@@ -335,7 +433,7 @@ export default function InboxPage() {
     <div className={wrap}>
       <PageHeader
         title="Bandeja"
-        subtitle="Los mensajes que le entraron a tu agente."
+        subtitle="Los mensajes que te escriben, y lo que tu agente les contestó."
         actions={
           <IconBtn label="Actualizar" onClick={load} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -348,14 +446,15 @@ export default function InboxPage() {
           sea viejo. Abajo está todo lo que hay hoy.
         </StaleLinkNotice>
       )}
+      {hasWhatsApp && <WhatsAppPanel cfg={cfg} />}
       {conversations.length === 0 && !openId ? (
         <>
           <EmptyState
             icon={Inbox}
             title="Todavía no entró ningún mensaje"
             hint={missing.length > 0
-              ? `Cuando alguien escriba o comente, tu agente lo deja acá con la respuesta lista para que la mires. Para eso falta conectar ${enumerateEs(missing)}: nos lo pedís y lo conectamos nosotros.`
-              : "Cuando alguien escriba al mail de la empresa o comente un posteo, tu agente lo deja acá con la respuesta lista para que la mires."}
+              ? `Cuando alguien te escriba, la conversación aparece acá con lo que le contestó tu agente. Para eso falta conectar ${enumerateEs(missing)}: nos lo pedís y lo conectamos nosotros.`
+              : "Cuando alguien te escriba, la conversación aparece acá con lo que le contestó tu agente."}
           />
           {missing.length > 0 && (
             <div className="-mt-10 flex justify-center pb-10">
@@ -374,15 +473,27 @@ export default function InboxPage() {
         <div className="grid gap-4 md:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] md:items-start">
           {/* On a phone the two panes are one screen at a time: the list, or
               the conversation with a way back to it. */}
-          <div className={`flex flex-col gap-1.5 ${showThread ? "max-md:hidden" : ""}`}>
-            {conversations.map((t) => (
-              <Conversation
-                key={t.id}
-                t={t}
-                open={t.id === openId}
-                onClick={() => openThread(t.id)}
-              />
-            ))}
+          <div className={showThread ? "max-md:hidden" : ""}>
+            {channels.length > 1 && (
+              <ChannelFilter channels={channels} value={channel} onChange={setChannel} />
+            )}
+            <div className="flex flex-col gap-1.5">
+              {shown.map((t) => (
+                <Conversation
+                  key={t.id}
+                  cfg={cfg}
+                  t={t}
+                  open={t.id === openId}
+                  waitingOk={t.status === "blocked" && approvalFor(t) !== null}
+                  onClick={() => openThread(t.id)}
+                />
+              ))}
+              {shown.length === 0 && (
+                <p className="rounded-lg border border-black/[0.07] bg-white px-3 py-6 text-center text-[13px] text-ink-soft">
+                  Todavía no hay conversaciones por {CHANNELS.find((c) => c.key === channel)?.label}.
+                </p>
+              )}
+            </div>
           </div>
 
           <div className={showThread ? "" : "max-md:hidden"}>
@@ -401,21 +512,34 @@ export default function InboxPage() {
                     >
                       <ArrowLeft className="h-4 w-4" />
                     </button>
-                    <Channel className="mt-1 h-4 w-4 shrink-0 text-ink-soft" />
+                    <span className="relative shrink-0">
+                      <ContactAvatar
+                        cfg={cfg}
+                        jid={openJid}
+                        name={person.name || ticket?.title || ""}
+                        seen
+                      />
+                      <span className="absolute -bottom-0.5 -right-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-black/[0.07] bg-white">
+                        <ChannelIcon className="h-2.5 w-2.5 text-ink-soft" />
+                      </span>
+                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className="truncate text-sm font-bold text-ink">
                           {person.name || ticket?.title}
                         </h2>
-                        {/* The address or the handle, when it is not already
-                            the name: it is how the client knows WHICH Laura
-                            this is, and the body no longer carries it. */}
-                        {person.handle && person.handle !== person.name && (
-                          <span className="truncate text-[12px] text-ink-soft">{person.handle}</span>
+                        {/* The address, the handle or the number, when it is
+                            not already the name: it is how the client knows
+                            WHICH Laura this is, and the body no longer
+                            carries it. */}
+                        {handle && handle !== person.name && (
+                          <span className="truncate text-[12px] text-ink-soft">{handle}</span>
                         )}
                         {state && <Chip tone={state.tone}>{state.label}</Chip>}
                       </div>
-                      {ticket && <p className="mt-0.5 truncate text-[13px] text-ink-soft">{ticket.title}</p>}
+                      {ticket && channelKey(ticket) === "mail" && (
+                        <p className="mt-0.5 truncate text-[13px] text-ink-soft">{ticket.title}</p>
+                      )}
                     </div>
                     <CopyLink label="Copiar el link de esta conversación" />
                     <IconBtn label="Cerrar" onClick={closeThread}>
@@ -424,6 +548,13 @@ export default function InboxPage() {
                   </header>
 
                   <div className="px-4 py-4">
+                    {openChat && takenOver && (
+                      <TakeoverBanner
+                        cfg={cfg}
+                        chat={openChat}
+                        onResumed={() => { reloadChat(); load(); }}
+                      />
+                    )}
                     {ticket?.status === "blocked" && requestId && (
                       <Link
                         href={`/app/approvals?${PARAM.request}=${encodeURIComponent(requestId)}`}

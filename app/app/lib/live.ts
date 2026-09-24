@@ -29,7 +29,8 @@ import { getChanges, type PortalConfig } from "./agent";
 /** What a tab can listen for. Several kinds, one topic: a tab thinks in
  *  "the approvals moved", not in `approval_reproposed`. */
 export type Topic =
-  | "approvals" | "tickets" | "posts" | "flows" | "chat" | "usage" | "activity" | "files";
+  | "approvals" | "tickets" | "posts" | "flows" | "chat" | "usage" | "activity" | "files"
+  | "whatsapp";
 
 /** The topics one event kind moves. Most kinds are something the agent did
  *  for the owner: Activity and Inicio list it and it may have left a file
@@ -46,6 +47,11 @@ function topicsOf(kind: string): Topic[] {
   if (kind.startsWith("ticket.")) return [...base, "tickets"];
   if (kind.startsWith("post.")) return [...base, "posts"];
   if (kind.startsWith("flow.")) return [...base, "flows"];
+  // The link to the owner's WhatsApp came up or dropped, a message came in or
+  // went out, the owner took a chat over from her phone: the Bandeja's panel
+  // and its list, both. A message is a ticket moving even when the plugin
+  // writes only its own kind.
+  if (kind.startsWith("whatsapp.")) return [...base, "whatsapp", "tickets"];
   // The end of any chat turn: the conversation moved, and the agent may have
   // created or paused a flow with its tools, which writes no event of its own.
   if (kind === "respuesta" || kind === "error") return [...base, "chat", "flows"];
