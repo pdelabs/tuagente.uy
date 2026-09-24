@@ -70,10 +70,11 @@ export type Ticket = {
   updated_at?: string | number | null;
   /** Where the ticket came from: `client` (she opened it from the portal),
    *  `agent`, or the plugin that brought it in (`mail`, `instagram`,
-   *  `instagram-dm`). */
+   *  `instagram-dm`, `whatsapp`). */
   source?: string | null;
   /** That plugin's own key for it — the message id, the comment id, the
-   *  conversation id. With `source` it is the board's dedupe. */
+   *  conversation id, the WhatsApp chat's jid. With `source` it is the
+   *  board's dedupe. */
   source_ref?: string | null;
 };
 
@@ -86,7 +87,7 @@ export type Ticket = {
  *  never sends the names. This copy answers a different question — "is THIS
  *  ticket, already in my hands, a conversation?" — which is what the board's
  *  detail needs to send the client to the right screen. */
-export const CHANNEL_SOURCES = ["mail", "instagram", "instagram-dm"];
+export const CHANNEL_SOURCES = ["mail", "instagram", "instagram-dm", "whatsapp"];
 
 /** Is this ticket a conversation with someone outside the company? */
 export const isChannelTicket = (t: { source?: string | null } | null | undefined) =>
@@ -887,6 +888,74 @@ export const getAdapterBytes = async (c: PortalConfig, path: string) => {
   if (!res.ok) throw httpError(res.status, path);
   return res.arrayBuffer();
 };
+
+// ── WhatsApp (`manifest.modules.whatsapp`) ──
+// The agent's WhatsApp is a LINKED DEVICE of the client's own number, the way
+// WhatsApp Web is: the engine pairs it with a QR the owner scans from her
+// phone, and from then on the conversations land in the Bandeja as tickets
+// (`source: "whatsapp"`, `source_ref` = the chat's jid).
+
+/** Where the link to the client's WhatsApp stands. */
+export type WhatsAppState =
+  | "unpaired" | "pairing" | "connecting" | "connected"
+  | "disconnected" | "logged_out" | "banned";
+export type WhatsAppStatus = {
+  state: WhatsAppState;
+  /** The linked number, once there is one. */
+  phone: string | null;
+  /** The name the number shows on WhatsApp. */
+  push_name: string | null;
+  /** When it entered this state. */
+  since: string | number | null;
+  last_error: string | null;
+};
+export type WhatsAppPairing = {
+  state: "pending" | "completed" | "timeout" | "error" | "cancelled";
+  /** The QR to scan, as a `data:image/png` URL: an image the engine drew,
+   *  not a path, so it needs no bearer. */
+  qr_png: string | null;
+  expires_at: string | number | null;
+};
+/** One WhatsApp chat as the engine keeps it. `taken_over_until` is the owner
+ *  answering from her phone: until then the agent does not answer that chat. */
+export type WhatsAppChat = {
+  jid: string;
+  phone: string | null;
+  name: string | null;
+  taken_over_until: string | number | null;
+};
+
+const jidPath = (jid: string) => encodeURIComponent(jid);
+export const getWhatsAppStatus = (c: PortalConfig) =>
+  get<WhatsAppStatus>(c.adapter, "/portal/whatsapp/status", c);
+export const startWhatsAppPairing = (c: PortalConfig) =>
+  post<{ state: WhatsAppPairing["state"] }>(c.adapter, "/portal/whatsapp/pairing", c);
+export const getWhatsAppPairing = (c: PortalConfig) =>
+  get<WhatsAppPairing>(c.adapter, "/portal/whatsapp/pairing", c);
+export const cancelWhatsAppPairing = async (c: PortalConfig) => {
+  const path = "/portal/whatsapp/pairing";
+  const res = await fetch(c.adapter + path, { method: "DELETE", headers: headers(c) });
+  if (!res.ok) throw await failure(res, path);
+};
+export const logoutWhatsApp = (c: PortalConfig) =>
+  post<{ ok: boolean }>(c.adapter, "/portal/whatsapp/logout", c);
+/** A contact's profile picture, or null when they have none (204).
+ *
+ *  EVERY CALL IS A QUERY TO WHATSAPP ITSELF, and a linked device that asks for
+ *  many pictures at once looks like a scraper — which is what gets a number
+ *  banned. The caller asks for one at a time, only for rows on screen, and
+ *  keeps what it got (`app/app/inbox/whatsapp.tsx`). */
+export const getWhatsAppAvatar = async (c: PortalConfig, jid: string) => {
+  const path = `/portal/whatsapp/avatar/${jidPath(jid)}`;
+  const res = await fetch(c.adapter + path, { headers: headers(c) });
+  if (!res.ok) throw httpError(res.status, path);
+  return res.status === 204 ? null : res.blob();
+};
+export const getWhatsAppChat = (c: PortalConfig, jid: string) =>
+  get<WhatsAppChat>(c.adapter, `/portal/whatsapp/chats/${jidPath(jid)}`, c);
+/** The owner hands a chat she took over back to the agent. */
+export const resumeWhatsAppChat = (c: PortalConfig, jid: string) =>
+  post<{ ok: boolean }>(c.adapter, `/portal/whatsapp/chats/${jidPath(jid)}/resume`, c);
 
 // ── Writing to the board ──
 export const createTicket = (c: PortalConfig, t: { title: string; body?: string; tenant?: string }) =>
