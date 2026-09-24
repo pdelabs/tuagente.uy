@@ -150,7 +150,7 @@ function Hero() {
           Uno solo, con el nombre y la cara que vos le pongas. Le sumás{" "}
           <strong className="text-ink">lo que tu empresa necesita</strong> — hecho a medida — y
           trabaja <strong className="text-ink">24/7</strong>: contesta el WhatsApp de las once de
-          la noche, arma el presupuesto, ordena las facturas. Nada sale para afuera sin tu ok.
+          la noche, arma el presupuesto, ordena las facturas. Lo que te compromete no sale sin tu ok.
         </p>
 
         <div
@@ -222,7 +222,7 @@ const CARDS = [
   {
     Icon: Eye,
     title: "Nada pasa a tus espaldas",
-    body: "Tenés un portal donde ves qué hizo, qué está haciendo y qué produjo. Y lo que sale para afuera — un mail a un cliente, un posteo, un presupuesto — espera tu ok.",
+    body: "Tenés un portal donde ves qué hizo, qué está haciendo y qué produjo. Y lo que te compromete — un mail a un cliente, un posteo, un presupuesto — espera tu ok.",
     bg: "bg-c-amber",
     ink: "text-c-amber-ink",
   },
@@ -261,7 +261,7 @@ const STATS: { value: string; l: string; size?: string }[] = [
   { value: "24/7", l: "tu agente no para" },
   { value: MONTHLY, l: "por mes, sin costo de alta", size: "text-3xl sm:text-5xl" },
   { value: "1 a 1", l: "un agente por empresa, aislado" },
-  { value: "Tu ok", l: "para todo lo que sale para afuera" },
+  { value: "Tu ok", l: "para todo lo que te compromete" },
 ];
 
 function Stats() {
@@ -531,7 +531,7 @@ const CONTROL_POINTS = [
   {
     Icon: Pause,
     title: "Lo frenás con un botón",
-    body: "Pausa inmediata, cuando quieras. Y lo que sale para afuera — un mail a un cliente, un posteo, un presupuesto — siempre pasa por tu aprobación.",
+    body: "Pausa inmediata, cuando quieras. Y lo que te compromete — un mail a un cliente, un posteo, un presupuesto — siempre pasa por tu aprobación.",
   },
 ];
 
@@ -889,7 +889,7 @@ const FAQS = [
   },
   {
     q: "¿Es seguro? ¿Qué pasa con mis datos?",
-    a: "Tu agente vive adentro de un contenedor tuyo, aislado del de cualquier otro cliente y con su propia clave. Opera con permisos acotados: solo ve y toca lo que le habilitás. Todo lo que sale para afuera pasa por tu aprobación, y cada plugin trae su límite escrito de fábrica — el de facturas, por ejemplo, mira y ordena los números pero no factura ni paga nada. Tus datos no se usan para entrenar ningún modelo.",
+    a: "Tu agente vive adentro de un contenedor tuyo, aislado del de cualquier otro cliente y con su propia clave. Opera con permisos acotados: solo ve y toca lo que le habilitás. Lo que te compromete —un mail, un posteo, un presupuesto— pasa por tu aprobación, y cada plugin trae su límite escrito de fábrica — el de facturas, por ejemplo, mira y ordena los números pero no factura ni paga nada. Tus datos no se usan para entrenar ningún modelo.",
   },
   {
     q: "¿Puedo hablarle y cambiarle las instrucciones?",
@@ -945,7 +945,7 @@ const JSON_LD = {
       name: "tuagente.uy",
       url: "https://tuagente.uy",
       description:
-        "Un agente de IA por empresa, instalado adentro de tu empresa y bautizado por vos, con plugins escritos a medida para el trabajo que te come las horas: WhatsApp fuera de hora, presupuestos, facturas, redes y transcripciones. Portal para ver todo lo que hace y aprobar lo que sale para afuera.",
+        "Un agente de IA por empresa, instalado adentro de tu empresa y bautizado por vos, con plugins escritos a medida para el trabajo que te come las horas: WhatsApp fuera de hora, presupuestos, facturas, redes y transcripciones. Contesta solo el WhatsApp y el Instagram, con tus reglas, y tenés un portal para ver todo lo que hace y aprobar lo que te compromete.",
       slogan: "Un agente de IA que trabaja adentro de tu empresa",
       email: "hola@tuagente.uy",
       telephone: "+59899002835",
