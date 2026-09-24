@@ -33,7 +33,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Hand, Inbox, Mail, MessagesSquare, RefreshCw, Search, Send, Smartphone, X,
+  ArrowLeft, ChevronDown, Hand, Inbox, Mail, MessagesSquare, RefreshCw, Search, Send, Smartphone, X,
 } from "lucide-react";
 import {
   getApprovals, getFlows, getManifest, getTicketDetail, getTickets, isTheAgent, isTheClient,
@@ -342,19 +342,40 @@ function Bubble({ line, look, wide }: {
 }
 
 /** What the agent wrote FOR THE OWNER when it didn't answer the person: not a
- *  bubble on either side, a card across the thread. */
-function AgentNote({ body, at }: { body: string; at: string | number }) {
+ *  bubble on either side, a card across the thread.
+ *
+ *  ONLY THE LAST THING SAID GETS THE CARD OPEN. A note with the conversation
+ *  going on after it was already dealt with — the person wrote again, someone
+ *  answered — so it folds to one line she can open (Luis, 2026-09-24). */
+function AgentNote({ body, at, latest }: { body: string; at: string | number; latest: boolean }) {
+  const [open, setOpen] = useState(latest);
+  useEffect(() => { setOpen(latest); }, [latest]);
+  const head = (
+    <>
+      <Hand className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate text-left">
+        Nota de {agentName()} para vos · no se la mandó
+      </span>
+      <span className="shrink-0 font-normal text-ink-soft">{timeOf(at)}</span>
+    </>
+  );
   return (
     <li className="my-3 flex justify-center">
-      <div className="w-full max-w-lg rounded-xl border border-c-amber bg-c-amber/40 px-3 py-2">
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-c-amber-ink">
-          <Hand className="h-3.5 w-3.5 shrink-0" />
-          <span className="min-w-0 flex-1">Nota de {agentName()} para vos · no se la mandó</span>
-          <span className="shrink-0 font-normal text-ink-soft">{timeOf(at)}</span>
-        </div>
-        <div className="mt-1 [&>div]:text-[13px]">
-          <Markdown>{body}</Markdown>
-        </div>
+      <div className={`w-full max-w-lg rounded-xl border border-c-amber ${open ? "bg-c-amber/40" : "bg-c-amber/15"} px-3 py-2`}>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex w-full items-center gap-1.5 text-[11px] font-semibold text-c-amber-ink"
+        >
+          {head}
+          <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition ${open ? "rotate-180" : ""}`} />
+        </button>
+        {open && (
+          <div className="mt-1 [&>div]:text-[13px]">
+            <Markdown>{body}</Markdown>
+          </div>
+        )}
       </div>
     </li>
   );
@@ -391,6 +412,9 @@ function Thread({ ticket, comments, person, look }: {
   };
   // A mail is read as a letter, not a line: its bubbles take the width.
   const wide = channelKey(ticket) === "mail";
+  // The last line that is a message or a note: a note is «latest» only when
+  // nothing was said after it (day separators don't count).
+  const last = [...lines].reverse().find((l) => l.kind !== "day");
   return (
     <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto bg-black/[0.025] px-3 py-3 [overflow-anchor:none] md:px-6">
       <ul ref={list} className="mx-auto flex max-w-3xl flex-col pb-2">
@@ -402,7 +426,7 @@ function Thread({ ticket, comments, person, look }: {
               </span>
             </li>
           ) : l.kind === "note" ? (
-            <AgentNote key={l.key} body={l.body} at={l.at} />
+            <AgentNote key={l.key} body={l.body} at={l.at} latest={l === last} />
           ) : (
             <Bubble key={l.key} line={l} look={look} wide={wide} />
           ),
