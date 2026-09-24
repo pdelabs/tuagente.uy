@@ -18,21 +18,21 @@ it is a clock and a live test would have to wait a day to see it close.
   b2. THE TICKET IS THE CONVERSATION AND THE CODE WRITES IT — a first message
      opens one by itself (nobody asked the model), signed with the person's
      handle so the Inbox draws the two sides; the nudge lands as a comment and
-     REOPENS it from `blocked`; what `send_message` sent lands as the agent's
-     comment and closes it `done`. No narration: every comment on the ticket is
-     something somebody actually said.
-  c. THE ANSWER IS THE CALL META DOCUMENTS — `POST /{IG_USER_ID}/messages`, a
-     JSON body carrying the recipient's IGSID and the text, the token as a
-     Bearer header. The recipient comes from the CONVERSATION and never from
-     the model. The client's correction replaces the text.
+     REOPENS it from `blocked` — which the listing reads as «left for the
+     owner», not as a request out —; what `send_message` sent lands as the
+     agent's comment and closes it `done`. No narration: every comment on the
+     ticket is something somebody actually said.
+  c. THE ANSWER IS THE CALL META DOCUMENTS, THE MOMENT IT IS CALLED —
+     `POST /{IG_USER_ID}/messages`, a JSON body carrying the recipient's IGSID
+     and the text, the token as a Bearer header, no yes in between (24/9/2026).
+     The recipient comes from the CONVERSATION and never from the model. What
+     went out is written down as ours in the thread, and the Activity line
+     carries the handle AND THE WORDS.
   d. PAST 24 HOURS IT DOES NOT GO OUT — the tool answers the Spanish sentence
      that says why and what to do instead, and nothing is sent. Meta's clock,
-     checked again in the body because a request can sit in the queue overnight.
+     checked before the call.
   e. A CONVERSATION THE AGENT NEVER SAW IS REFUSED — in Spanish, before
      anything leaves.
-  f. THE CARD IS THE PERSON, THE CLOCK, THE THREAD AND THE DRAFT — the thread
-     as table rows with ours marked, so the answer is the editable tail the
-     portal preloads into the correction box.
 
 IT CLEANS UP AFTER ITSELF: the rows it wrote in the three tables and the events
 are gone by the end, whatever happened.
@@ -57,7 +57,7 @@ CLOSED_THREAD = "aWdfZG1fcHJ1ZWJhX3ZlbmNpZGE"
 ASKED = "Hola, ¿ustedes atienden los sábados?"
 ANSWERED = "Sí, los sábados de 9 a 13."
 DRAFT = "Sí, de 9 a 13. ¿De qué es tu negocio?"
-CORRECTION = "Sí, sábados de 9 a 13. ¿Qué tipo de negocio tenés?"
+SECOND = "Sí, sábados de 9 a 13. ¿Qué tipo de negocio tenés?"
 
 INSIDE = r"""
 import json, sys, types
@@ -76,7 +76,7 @@ import ig_tools
 from core import db
 
 (SESSION, USER, MINE, TOKEN, WHO, IGSID, OPEN_THREAD, CLOSED_THREAD,
- ASKED, ANSWERED, DRAFT, CORRECTION) = sys.argv[1:13]
+ ASKED, ANSWERED, DRAFT, SECOND) = sys.argv[1:13]
 
 
 def stamp(hours):
@@ -130,7 +130,9 @@ def handle(request):
             return httpx.Response(200, json={"id": thread_id,
                                              "messages": {"data": messages}})
     if path == f"/v21.0/{USER}/messages" and request.method == "POST":
-        return httpx.Response(200, json={"recipient_id": IGSID, "message_id": "m_salido"})
+        # One id per send, as Meta does: two answers are two messages.
+        return httpx.Response(200, json={"recipient_id": IGSID,
+                                         "message_id": f"m_salido_{len(calls)}"})
     return httpx.Response(400, json={"error": {"message": "nadie pidió esto"}})
 
 
@@ -143,9 +145,7 @@ NUDGE = {"id": "m_insistencia", "created_time": stamp(0.2), "from": THEM,
          "to": {"data": [US]}, "message": "hola buenas, ¿leyeron mi mensaje?"}
 
 tools = {name: tool.function for name, tool in ig_tools.toolset().tools.items()}
-gated = {name: tool.function for name, tool in ig_tools.gated().tools.items()}
 ctx = types.SimpleNamespace(deps=types.SimpleNamespace(session_id=SESSION))
-NOTE = ig_tools.ApprovalNote(what="x", if_approved="x", if_rejected="x", why="x")
 
 out = {}
 try:
@@ -176,24 +176,25 @@ try:
     out["threads"] = [dict(r) for r in db.query(
         "SELECT * FROM instagram_conversations ORDER BY conversation_id")]
 
-    # (f) the card, before anything goes out.
-    title, body = ig_tools.send_card({"conversation_id": OPEN_THREAD, "text": DRAFT})
-    out["card"] = {"title": title, "body": body}
+    # What `blocked` reads as in the listing now that nothing of this plugin
+    # waits on a request: the agent left it for the owner.
+    board_store.move(out["ticket_id"], "blocked", said="Esto lo tiene que ver el dueño.")
+    out["blocked_line"] = ig_tools.ticket_line(out["ticket_id"])
 
-    # (c) the answer, and the correction that replaces it.
-    out["sent"] = gated["send_message"](ctx, OPEN_THREAD, DRAFT, NOTE)
-    out["corrected"] = gated["send_message"](
-        ctx, OPEN_THREAD, DRAFT, NOTE, client_correction=CORRECTION)
+    # (c) the answer, straight out, and a second one to the same person.
+    out["sent"] = tools["send_message"](ctx, OPEN_THREAD, DRAFT)
+    out["second"] = tools["send_message"](ctx, OPEN_THREAD, SECOND)
     out["after_send"] = dict(board_store.row_of(out["ticket_id"]))
     out["comments_send"] = board_store.comments(out["ticket_id"])
+    out["ours_after_send"] = [dict(r) for r in db.query(
+        "SELECT text FROM instagram_messages WHERE conversation_id = ? AND from_id = ?"
+        " ORDER BY created_time", (OPEN_THREAD, USER))]
     # (d) the one whose window shut.
-    out["closed"] = gated["send_message"](ctx, CLOSED_THREAD, DRAFT, NOTE)
-    out["closed_card"] = ig_tools.send_card({"conversation_id": CLOSED_THREAD,
-                                             "text": DRAFT})[1]
+    out["closed"] = tools["send_message"](ctx, CLOSED_THREAD, DRAFT)
 
     # (e) a thread nobody ever saw.
     try:
-        gated["send_message"](ctx, "no-existe", DRAFT, NOTE)
+        tools["send_message"](ctx, "no-existe", DRAFT)
         out["unknown"] = ""
     except Exception as exc:
         out["unknown"] = f"{type(exc).__name__}: {exc}"
@@ -224,7 +225,7 @@ def main() -> int:
     done = subprocess.run(
         ["docker", "exec", CONTAINER, "python3", "-c", INSIDE, SESSION, USER, MINE,
          TOKEN, WHO, IGSID, OPEN_THREAD, CLOSED_THREAD, ASKED, ANSWERED, DRAFT,
-         CORRECTION],
+         SECOND],
         capture_output=True, text=True,
     )
     if done.returncode != 0:
@@ -333,6 +334,8 @@ def main() -> int:
     answers = [c for c in measured["comments_send"] if c["author"] == "agente"]
     if not any(DRAFT in c["body"] for c in answers):
         problems.append("what was sent is not on the ticket")
+    if "la dejaste para tu cliente" not in measured["blocked_line"]:
+        problems.append(f"a blocked ticket reads {measured['blocked_line']!r} in the listing")
     narration = [c["body"] for c in measured["comments_send"]
                  if "esperando" in c["body"].lower() or "nuevo mensaje" in c["body"].lower()]
     if narration:
@@ -351,17 +354,20 @@ def main() -> int:
             problems.append(f"the token travelled as {sent[0]['auth']!r}")
         if "application/json" not in (sent[0]["type"] or ""):
             problems.append(f"it was not sent as JSON ({sent[0]['type']!r})")
-        if sent[1]["body"]["message"]["text"] != CORRECTION:
-            problems.append("the client's correction did not replace the text: "
+        if sent[1]["body"]["message"]["text"] != SECOND:
+            problems.append(f"the second answer went out as "
                             f"{sent[1]['body']['message']['text']!r}")
-    if f"@{WHO}" not in measured["sent"]:
+    if f"@{WHO}" not in measured["sent"] or "llegó" not in measured["sent"]:
         problems.append(f"the tool answered {measured['sent']!r}")
     said = [e for e in measured["events"] if e["kind"] == "message.sent"]
     if len(said) != 2:
         problems.append(f"Activity has {len(said)} message.sent")
-    elif f"@{WHO}" not in said[0]["label"]:
+    elif said[0]["label"] != f"Le escribí a @{WHO} por mensaje: «{DRAFT}»":
         problems.append(f"the event reads {said[0]['label']!r}")
-    failures += judge("c. the answer is the call Meta documents", problems)
+    ours = [row["text"] for row in measured["ours_after_send"]]
+    if DRAFT not in ours or SECOND not in ours:
+        problems.append(f"what went out is not in the thread as ours: {ours}")
+    failures += judge("c. the answer is the call Meta documents, with no yes", problems)
 
     # (d) the window
     problems = []
@@ -373,8 +379,6 @@ def main() -> int:
         problems.append("it does not say what to do instead")
     if len(sent) != 2:
         problems.append("something was sent for the thread whose window is shut")
-    if "VENCIÓ" not in measured["closed_card"]:
-        problems.append("the card of a shut thread does not say so")
     failures += judge("d. past 24 hours it does not go out", problems)
 
     # (e) a thread nobody saw
@@ -385,28 +389,6 @@ def main() -> int:
     elif "No tengo ninguna conversación" not in unknown:
         problems.append(f"it said {unknown!r}")
     failures += judge("e. a conversation the agent never saw is refused", problems)
-
-    # (f) the card
-    problems = []
-    card = measured["card"]
-    body = card["body"]
-    if f"@{WHO}" not in card["title"]:
-        problems.append(f"the title is {card['title']!r}")
-    for wanted in (ASKED, ANSWERED, DRAFT, "Quedan", measured["ticket_id"]):
-        if wanted not in body:
-            problems.append(f"the card does not carry {wanted!r}")
-    if "| Vos |" not in body:
-        problems.append("our own message is not marked as ours on the card")
-    if body.index("Hola!") > body.index(ASKED):
-        problems.append("the card's thread is not oldest first")
-    lines = body.splitlines()
-    last_row = max((i for i, line in enumerate(lines) if line.strip().startswith("|")),
-                   default=-1)
-    draft_at = max((i for i, line in enumerate(lines) if DRAFT in line), default=-1)
-    if not last_row < draft_at:
-        problems.append("the answer is not the card's editable tail")
-    failures += judge("f. the card is the person, the clock, the thread and the draft",
-                      problems)
 
     print("INSTAGRAM MESSAGES: PASS" if not failures else "INSTAGRAM MESSAGES: FAIL")
     return 1 if failures else 0

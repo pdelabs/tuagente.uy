@@ -9,13 +9,15 @@ customer actually shows up.
 - `ig_store.py` — four tables: the comments already handled, the messages and
   who is on the other side of each thread, and the account (its username, and
   the token that is current).
-- `ig_tools.py` — `fetch_comments`, `fetch_messages` and `refresh_if_due` on
-  the face; the three gated ones, `reply_comment`, `hide_comment` and
-  `send_message`, with the cards they are read through; and
+- `ig_tools.py` — `fetch_comments`, `fetch_messages`, `refresh_if_due` and
+  the two that ANSWER, `reply_comment` and `send_message`, on the face — an
+  answer goes out the moment it is called, since 24/9/2026 —; `hide_comment`,
+  the one still gated, with the card it is read through; and
   `recent_performance`, which is not the face's at all.
 - `skills/comments/SKILL.md` — which comment gets an answer, which gets
-  nothing, which gets hidden, what a first message deserves, and when either
-  one is a client.
+  nothing, which gets hidden, which one is the OWNER's and goes to the board
+  unanswered, what a first message deserves, and when either one is a client.
+  With no yes between the agent and the person, this file is the judgement.
 - `flows/instagram/` — the curated flow that makes all of it happen without
   anybody asking: `trigger: event`, fired by `ig_tools.watch`, which looks at
   the account every thirty seconds WITH NO MODEL and only wakes the agent up
@@ -73,9 +75,14 @@ SUPERSEDED = {
 # else is hers and stays, with a line in the log. It keeps working as it was —
 # the fetch tools are still on the face — it just keeps costing a turn every
 # fifteen minutes until somebody moves it over.
+#
+# 24/9/2026, the second version: answers stopped waiting for the client's yes,
+# and a copy that still says «ninguna respuesta sale sola» would have the agent
+# telling her the opposite of what happens.
 UPGRADED = {
     "instagram": {
         "3772d40d3a11f45809b9092ad5de3727dd37b6f815d0d3f908a94b2a107f9e0c",
+        "49417fb482a9040b9a0499b802420ea998d53dcfff22866db9bb30938cc91da6",
     },
 }
 
@@ -91,26 +98,18 @@ def register(engine) -> None:
     # WHAT FIRES THE FLOW: code that looks at the account with no model in it
     # (`ig_tools.watch`). The flow names it in its frontmatter, `event:`.
     engine.watcher(ig_tools.WATCHER, ig_tools.watch, every=ig_tools.WATCH_EVERY)
+    # Reading AND ANSWERING. Since 24/9/2026 a reply and a message go out when
+    # they are called: what the gate used to do around them — the ticket, the
+    # Activity line — the tools do themselves (`ig_tools.py`).
     engine.toolset(ig_tools.toolset())
-    # THE WHOLE TOOLSET IS GATED, with no predicate, exactly as the approval and
-    # social plugins gate theirs: a tool added here tomorrow is gated without
-    # anyone remembering to put its name on a list.
+    # WHAT IS STILL GATED, the whole toolset with no predicate, exactly as the
+    # approval and social plugins gate theirs: a tool added here tomorrow is
+    # gated without anyone remembering to put its name on a list. Today it is
+    # `hide_comment` alone.
     engine.toolset(ig_tools.gated().approval_required())
-    # And the cards those two are read through. The approval plugin looks them
-    # up by tool name when a run stops (`approval/core/render.py`).
-    engine.provide(f"approval.render.{ig_tools.REPLY}", ig_tools.reply_card)
+    # And the card it is read through. The approval plugin looks it up by tool
+    # name when a run stops (`approval/core/render.py`).
     engine.provide(f"approval.render.{ig_tools.HIDE}", ig_tools.hide_card)
-    engine.provide(f"approval.render.{ig_tools.SEND}", ig_tools.send_card)
-    # AND WHAT HAPPENS TO THE TICKET WHILE SHE DECIDES. A gated tool's body does
-    # not run until the yes, so the «Esperando tu ok» on the thread cannot be
-    # written by the tool: the gate calls this when it writes the row
-    # (`approval/core/store.py`'s `PAUSED`). It was prose until 16/9/2026, and
-    # prose is what left a thread blocked forever with every request approved.
-    engine.provide(f"approval.paused.{ig_tools.SEND}", ig_tools.paused)
-    engine.provide(f"approval.paused.{ig_tools.REPLY}", ig_tools.paused)
-    # And the gate's own answer to «is that request still out?», which is what
-    # keeps a rejected one from reading as a pending one forever.
-    ig_tools.PENDING_FOR = engine.use("approvals.pending_for")
     # The token, shared with whoever else talks to this account.
     engine.provide("instagram.token", ig_store.current_token)
     engine.provide("instagram.token.refreshed", ig_graph.remember_token)

@@ -13,13 +13,14 @@ plugin's surface modules import each other by plain name and share ONE
 already imported under that name, and this plugin would come up reading the
 gate's rows with nothing failing and nothing logged.
 
-`instagram_seen` IS THE DEDUPE AND THE CARD'S SOURCE. A comment is handled once
-— the flow ticks every fifteen minutes over the same feed, so «already saw it»
-is the normal case — and the row carries what the client has to read when the
-run stops at the gate: who wrote it, what it says, and which post it is under.
-THE APPROVAL CARD IS RENDERED FROM THIS ROW AND NOT FROM A GRAPH CALL: the card
-is drawn inside the pause path, and a network call there is a run that dies
-holding a request the client never sees.
+`instagram_seen` IS THE DEDUPE AND THE HIDE CARD'S SOURCE. A comment is
+handled once — the watcher looks at the same feed all day, so «already saw it»
+is the normal case — and the row carries what the client has to read when a
+`hide_comment` stops at the gate: who wrote it, what it says, and which post it
+is under. THE APPROVAL CARD IS RENDERED FROM THIS ROW AND NOT FROM A GRAPH CALL:
+the card is drawn inside the pause path, and a network call there is a run that
+dies holding a request the client never sees. It is also what `reply_comment`
+answers: an id that is not here is one the agent never saw.
 
 THERE IS NO `ticket_id` COLUMN, and the plan's first sketch had one. The ticket
 a lead becomes is opened by the face with the board's own `create_ticket`, and
@@ -29,9 +30,9 @@ would be a second copy of it that nothing in this plugin maintains.
 
 `instagram_messages` AND `instagram_conversations` ARE THE SAME IDEA FOR THE
 DMs, with one difference: the message table keeps OURS TOO. `from_id` is what
-tells them apart, the listing only shows the new inbound ones, and the approval
-card shows the thread — where an answer of ours missing would read like a person
-talking to a wall. The conversation row holds who is on the other side (their
+tells them apart, the listing marks only the new inbound ones as new, and it
+shows the whole thread — where an answer of ours missing would read like a
+person talking to a wall. The conversation row holds who is on the other side (their
 IGSID, which is what a reply is addressed to, and their handle) and
 `last_inbound_at`, WHICH IS META'S 24-HOUR CLOCK: it only ever moves forward, so
 reading a thread twice cannot reset a window and a message that arrives out of
@@ -102,6 +103,8 @@ SCHEMA = (
     # What the watcher last saw of each post and each conversation: a post's
     # `comments_count`, a conversation's `updated_time`. It is what lets a look
     # that finds nothing cost two calls instead of sixty (`ig_tools.watch`).
+    # And one more kind, `replied`: the words that went out under a comment,
+    # which is what keeps a comment to one answer (`ig_tools.ALREADY`).
     """
     CREATE TABLE IF NOT EXISTS instagram_marks (
         kind TEXT NOT NULL,
@@ -152,8 +155,7 @@ def record(
 
     The primary key is the dedupe and `INSERT OR IGNORE` is what it does with a
     comment that is already there: the tick that finds the same comment again
-    leaves the first row alone, which is the row the approval card is drawn
-    from.
+    leaves the first row alone, which is the row the hide card is drawn from.
     """
     if seen(comment_id) is not None:
         return False
@@ -185,9 +187,9 @@ def record_message(
     """One message written down, and whether it is new.
 
     EVERY MESSAGE OF THE THREAD IS KEPT, ours included — `from_id` is what tells
-    them apart. The listing only ever shows the new INBOUND ones, but the
-    approval card shows the conversation, and a thread with our own answers
-    missing reads like a person talking to a wall.
+    them apart. The listing only ever marks the new INBOUND ones as new, but
+    it shows the conversation, and a thread with our own answers missing reads
+    like a person talking to a wall.
     """
     if message_seen(message_id) is not None:
         return False
@@ -200,7 +202,7 @@ def record_message(
 
 
 def thread(conversation_id: str, limit: int = 6):
-    """The last messages of one thread, oldest first: the card reads it."""
+    """The last messages of one thread, oldest first: the listing reads it."""
     rows = db.query(
         "SELECT * FROM instagram_messages WHERE conversation_id = ?"
         " ORDER BY created_time DESC, seen_at DESC LIMIT ?",

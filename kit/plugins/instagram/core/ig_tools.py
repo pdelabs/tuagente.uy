@@ -1,32 +1,32 @@
 """The tools: read the comments, answer one, hide one, and keep the token alive.
 
-WHAT IS GATED AND WHAT IS NOT, and the line is the same one the rest of this
-kit draws: reading is the agent's, and anything the client's followers can SEE
-is the client's. `fetch_comments` and `refresh_if_due` are plain tools;
-`reply_comment` and `hide_comment` go out under the brand on a public thread,
-so they are registered wrapped in `approval_required()` (`plugin.py`) and the
-run stops before the tool body runs.
+WHAT IS GATED AND WHAT IS NOT. Until 24/9/2026 everything that went out was:
+`reply_comment`, `send_message` and `hide_comment` all stopped the run for the
+client's yes. Luis decided that day that AN ANSWER GOES OUT DIRECTLY — a
+comment or a message is a person waiting, Meta gives a DM 24 hours, and a reply
+that sits in Aprobaciones until the owner looks is the lead going cold. So the
+two answering tools are plain tools on the face, and what used to be the gate's
+work is the tool's own now: the Activity line with the words that went out,
+the ticket closed with them, the 24-hour clock checked before sending.
+`hide_comment` is still gated — it is not an answer, it takes something the
+person wrote out of sight — and it is the one card this plugin still draws.
 
-THE CARD IS DRAWN HERE AND NOT BY THE APPROVAL PLUGIN. A card built from a
-comment id would say nothing about what is being answered, so this plugin hands
-the gate a renderer per tool — `engine.provide("approval.render.reply_comment",
-reply_card)`, the mechanism `core/plugins.py` already has — and the renderer
-reads the comment out of `instagram_seen` and the post out of `posteos/`.
+WHAT KEEPS AN ANSWER FROM BEING A MISTAKE IS NOW THE SKILL, NOT THE CLIENT:
+`skills/comments/SKILL.md` says which comment gets an answer, which gets
+nothing, which gets hidden, and which one is NOT the agent's to answer (a price
+the brand does not publish, a complaint, a refund, anything it is not sure of)
+and goes to the owner on the board instead. What code CAN hold, it holds: a
+comment is answered once (`ALREADY`), our own comments carry no id and are never
+in `instagram_seen`, so there is nothing of ours to answer.
 
-AND IT IS READ OFF DISK, NEVER OFF THE GRAPH. The card is rendered inside the
-pause path: a network call there is a turn that dies holding a request the
-client never sees.
-
-THE REPLY IS THE CARD'S LAST BLOCK ON PURPOSE. The portal cuts a request's
-editable text after the LAST table row (`splitProposal`), so the post and the
-comment sit in a table and the answer sits under it: what the client edits in
-the box is the reply and nothing else, and her edit arrives as
-`client_correction`, which REPLACES the text — the same shape as the caption of
-a post about to be published.
-
-WHAT THE MODEL CANNOT BE GIVEN BY CODE is in `skills/comments/SKILL.md`: which
-comment gets an answer, which gets nothing, which gets hidden, and when a
-comment is a client and becomes a ticket.
+THE HIDE CARD IS DRAWN HERE AND NOT BY THE APPROVAL PLUGIN. A card built from a
+comment id would say nothing about what is being hidden, so this plugin hands
+the gate a renderer — `engine.provide("approval.render.hide_comment",
+hide_card)`, the mechanism `core/plugins.py` already has — and the renderer
+reads the comment out of `instagram_seen` and the post out of `posteos/`. READ
+OFF DISK, NEVER OFF THE GRAPH: the card is rendered inside the pause path, and
+a network call there is a turn that dies holding a request the client never
+sees.
 
 **THE PERSON IS THE UNIT, NOT THE MESSAGE**, and that rule was bought on
 16/9/2026 with a real conversation on our own account. `fetch_messages` handed
@@ -63,10 +63,8 @@ import ig_graph
 import ig_store
 from core import config, db, scheduler
 
-# The three tool names the approval plugin looks a card up by.
-REPLY = "reply_comment"
+# The one tool name the approval plugin looks a card up by.
 HIDE = "hide_comment"
-SEND = "send_message"
 
 # How much of the feed a tick looks at. Ten posts is more than a fortnight of
 # a client posting every day, and a comment older than that is not news.
@@ -81,15 +79,9 @@ PERFORMANCE = 10
 FROM_COMMENT = "instagram"
 FROM_DM = "instagram-dm"
 
-# The approval plugin's own answer to «is there still a request out for this?».
-# Bound by `plugin.py`; `None` would mean an engine with no gate, which this
-# plugin's manifest does not allow.
-PENDING_FOR = None
-
-# How many message threads a tick looks at, and how much of one is shown — on
-# the approval card and in the listing a tick comes back with. TEN AND NOT SIX:
-# what the client is approving is an answer to a conversation, and she cannot
-# judge it against the half of it she can see.
+# How many message threads a tick looks at, and how much of one is shown in the
+# listing a tick comes back with. TEN AND NOT SIX: what the agent answers is a
+# conversation, and it cannot answer one it only sees half of.
 THREADS = 50
 SHOWN = 10
 
@@ -99,7 +91,17 @@ UNKNOWN = (
     "No tengo ningún comentario {comment_id}. Los que puedo contestar son los que "
     "te trajo `fetch_comments` en esta corrida o en una anterior."
 )
-REPLIED = "Contesté el comentario de @{username}."
+REPLIED = "Contesté el comentario de @{username}. Ya salió: está publicado abajo del comentario."
+# ONE ANSWER PER COMMENT, held by code: with no one reading the reply before it
+# goes out, a turn that calls the tool twice for the same id — a retry, a
+# resumed run, a second look at the same thread — is two public answers under
+# one comment. What the person writes BACK is a new comment with its own id,
+# so a conversation under a post is still possible; answering the same line
+# twice is not.
+ALREADY = (
+    "Ese comentario ya lo contestaste: «{text}». No salió nada. Si la persona "
+    "volvió a escribir, lo nuevo es otro comentario, con su propio id."
+)
 HIDDEN = "Oculté el comentario de @{username}. Lo sigue viendo quien lo escribió y nadie más."
 FAILED_REPLY = "No pude contestar el comentario: {reason}. No salió nada."
 FAILED_HIDE = "No pude ocultar el comentario: {reason}. Sigue visible."
@@ -110,7 +112,7 @@ NO_THREAD = (
     "No tengo ninguna conversación {conversation_id}. Las que puedo contestar son las "
     "que te trajo `fetch_messages`."
 )
-SENT = "Le respondí a @{username} por Instagram."
+SENT = "Le respondí a @{username} por Instagram. Ya le llegó."
 FAILED_SEND = "No pude mandarle el mensaje a @{username}: {reason}. No salió nada."
 # META'S CLOCK, NOT OURS, and the sentence says what to do instead: a message
 # that cannot be sent is still a person waiting, and the board is where she goes.
@@ -123,10 +125,19 @@ OPEN = "Quedan {hours} h del plazo para contestarle"
 CLOSING = "El plazo para contestarle YA VENCIÓ (Instagram da 24 h desde su último mensaje)"
 
 # The events the client reads in Activity. The label is written by the code,
-# in Spanish, with the handle in it (`app/app/lib/labels.ts` has the two kinds).
+# in Spanish, with the handle in it (`app/app/lib/labels.ts` has the kinds).
+# AN ANSWER'S LINE CARRIES THE WORDS THAT WENT OUT: nobody approved them, so
+# Activity is where the owner reads what her account said, and a line that only
+# says «contesté» is one she has to go to Instagram to check.
 REPLIED_EVENT = "comment.replied"
 HIDDEN_EVENT = "comment.hidden"
 SENT_EVENT = "message.sent"
+REPLIED_LABEL = "Le contesté a @{username}: «{text}»"
+SENT_LABEL = "Le escribí a @{username} por mensaje: «{text}»"
+# Where the one-answer-per-comment rule is written down: the watcher's own
+# table, a kind of its own, and the words that went out as the mark — which is
+# what `ALREADY` quotes back.
+REPLIED_MARK = "replied"
 
 
 class ApprovalNote(BaseModel):
@@ -189,12 +200,11 @@ def slide_of(media_id: str) -> tuple[str, str] | None:
     return None
 
 
-# ── the cards ───────────────────────────────────────────────────────────────
+# ── the hide card ───────────────────────────────────────────────────────
 
 
 def about(row) -> list[str]:
-    """The two rows every card of this plugin opens with: the post and the
-    comment. A TABLE, which is what puts the editable text below it."""
+    """What the hide card is: the post and the comment, as a table."""
     post = first_line(row["post_line"]) or "un posteo"
     where = f"«{post}»"
     if row["permalink"]:
@@ -210,27 +220,15 @@ def about(row) -> list[str]:
     return lines
 
 
-def reply_card(args: dict) -> tuple[str, str]:
-    """The title and the body of «contestar este comentario», in Spanish.
+def hide_card(args: dict) -> tuple[str, str]:
+    """The card of «ocultar este comentario», in Spanish. There is nothing to
+    edit under the table: hiding is a yes or a no, and the client has the
+    comment in front of her.
 
     A comment that is not in `instagram_seen` is not an error here — the id came
     from the model and the model can be wrong — so the card says so and the
     client says no.
     """
-    comment_id = args["comment_id"]
-    row = ig_store.seen(comment_id)
-    if row is None:
-        return (f"Contestar el comentario {comment_id}",
-                UNKNOWN.format(comment_id=comment_id))
-    who = f"@{row['username']}" if row["username"] else "un comentario"
-    title = f"Contestar a {who} en Instagram"
-    body = about(row) + ["", args["text"].strip()]
-    return title, "\n".join(body)
-
-
-def hide_card(args: dict) -> tuple[str, str]:
-    """The same card, for «ocultar». There is nothing to edit under the table:
-    hiding is a yes or a no, and the client has the comment in front of her."""
     comment_id = args["comment_id"]
     row = ig_store.seen(comment_id)
     if row is None:
@@ -248,8 +246,9 @@ def window_left(row) -> float:
     """Seconds left to answer this thread, negative once they are gone.
 
     It is Meta's rule and not ours: an app may answer up to 24 hours after the
-    person's last message. The client has to see it on the card, because a
-    request she sits on until tomorrow is one that cannot be carried out.
+    person's last message. The listing says how much is left, so the threads
+    about to close are answered first, and `send_message` checks it again
+    before sending, so a closed one is refused in words and not by Meta.
     """
     last = row["last_inbound_at"] or 0
     return last + ig_graph.WINDOW_HOURS * 3600 - time.time()
@@ -277,27 +276,24 @@ def ticket_of(source: str, source_ref: str) -> str | None:
     return found["id"] if found else None
 
 
-def ticket_line(ticket_id: str, conversation_id: str) -> str:
-    """The ticket and what its column MEANS, which is not the same question.
+def ticket_line(ticket_id: str) -> str:
+    """The ticket and what its column MEANS for the agent reading the listing.
 
-    `blocked` reads «waiting for the client», and that is true only while there
-    IS a request out: a rejected one leaves the ticket blocked with nothing
-    pending, and an agent that reads the column alone never answers that person
-    again — measured, 16/9/2026. So the column is crossed against the gate's own
-    queue (`approvals.pending_for`, the approval plugin's) and the line says
-    which of the two it is.
+    `blocked` on a channel ticket is the agent's own doing now — nothing of this
+    plugin waits on a request any more — and it means «this one is the owner's»:
+    a price the brand does not publish, a complaint, anything the agent decided
+    not to answer on its own (`skills/comments/SKILL.md`). So the line says so,
+    and sends it to the ticket, where the owner may already have answered.
     """
     status = board.row_of(ticket_id)["status"]
     if status != board.BLOCKED:
         return f"tarea {ticket_id} ({board.COLUMN[status]})"
-    waiting = PENDING_FOR(SEND, conversation_id) if PENDING_FOR else None
-    if waiting:
-        return f"tarea {ticket_id} (hay un pedido tuyo esperando: no prepares otra respuesta)"
-    return f"tarea {ticket_id} (quedó frenada y no hay ningún pedido pendiente: seguí)"
+    return (f"tarea {ticket_id} (la dejaste para tu cliente: leela con `read_ticket` "
+            "antes de contestar nada)")
 
 
 def said_by(row, participant_id: str | None) -> str:
-    """Who said it, the way the listing and the card name them: «Vos» is us."""
+    """Who said it, the way the listing names them: «Vos» is us."""
     if row["from_id"] and participant_id and row["from_id"] != participant_id:
         return "Vos"
     return f"@{row['from_username']}" if row["from_username"] else "la persona"
@@ -331,10 +327,10 @@ TITLE = "Mensaje de @{username} en Instagram"
 # looks for it.
 BODY = "**Fecha:** {when}\n\n{text}"
 HIDDEN_ON_TICKET = "Oculté el comentario de @{username}: {text}"
-WAITING = "Esperando tu ok en Aprobaciones."
 
 # The three columns a channel ticket ever moves between, and what each one means
-# on the Inbox: `ready` «Nuevo», `blocked` «Esperando tu ok», `done` «Respondido».
+# on the Inbox: `ready` «Nuevo», `blocked` «Esperando tu ok» — the agent left it
+# for the owner —, `done` «Respondido».
 
 
 def when_of(stamp: float | None) -> str:
@@ -399,23 +395,6 @@ def answered(source: str, source_ref: str, text: str, session_id: str | None) ->
     board.move(ticket_id, board.DONE, said=text, session_id=session_id)
 
 
-def paused(approval_id: str, args: dict) -> None:
-    """The gate stopped a run on one of this plugin's tools: the ticket says so.
-
-    Handed to the approval plugin by name (`approval.paused.<tool>`), which
-    calls it when the row is written — the only moment code can see, because a
-    gated tool's body does not run until the client has already decided. It used
-    to be prose in the tool's own docstring, and prose is what left a thread
-    `blocked` forever with every request approved.
-    """
-    if "conversation_id" in args:
-        ticket_id = ticket_of(FROM_DM, args["conversation_id"])
-    else:
-        ticket_id = ticket_of(FROM_COMMENT, args.get("comment_id", ""))
-    if ticket_id and board.row_of(ticket_id)["status"] != board.BLOCKED:
-        board.move(ticket_id, board.BLOCKED, said=WAITING)
-
-
 # ── the messages of one thread ──────────────────────────────────────────────
 
 
@@ -424,7 +403,7 @@ def sift(conversation_id: str, found: list[dict], mine: str) -> list[dict]:
 
     Ours are told apart by `from.id`, which is the account's own id — the same
     fact `IG_USER_ID` is — and never by the text. Writing ours down too is what
-    lets the approval card show a conversation instead of half of one.
+    lets the listing show a conversation instead of half of one.
     """
     new = []
     for item in reversed(found):          # oldest first: the ticket is a thread
@@ -446,34 +425,6 @@ def sift(conversation_id: str, found: list[dict], mine: str) -> list[dict]:
             new.append({"id": item["id"], "ours": ours, "text": text, "when": when,
                         "username": author.get("username")})
     return new
-
-
-def send_card(args: dict) -> tuple[str, str]:
-    """«Contestarle este mensaje», in Spanish: who, the thread, the clock, the draft.
-
-    THE THREAD IS TABLE ROWS AND NOT A QUOTE BLOCK, and that is what puts the
-    answer — and only the answer — in the box the portal preloads: it cuts the
-    editable text after the LAST table row (`splitProposal`).
-    """
-    conversation_id = args["conversation_id"]
-    row = ig_store.conversation(conversation_id)
-    if row is None:
-        return (f"Contestar la conversación {conversation_id}",
-                NO_THREAD.format(conversation_id=conversation_id))
-    who = f"@{row['participant_username']}" if row["participant_username"] else "alguien"
-    title = f"Contestarle a {who} por mensaje en Instagram"
-    lines = ["| | |", "|---|---|", f"| La persona | {who} |",
-             f"| El plazo | {window_line(row)} |"]
-    ticket = ticket_of(FROM_DM, conversation_id)
-    if ticket:
-        lines.append(f"| En el tablero | {ticket} |")
-    # OLDEST FIRST AND TEN OF THEM: what the client is approving is an answer to
-    # a conversation, and she cannot judge it against the half she can see.
-    for message in ig_store.thread(conversation_id, SHOWN):
-        lines.append(f"| {said_by(message, row['participant_id'])} | "
-                     f"{flat(message['text'])} |")
-    lines += ["", args["text"].strip()]
-    return title, "\n".join(lines)
 
 
 # ── the listing a tick comes back with ──────────────────────────────────────
@@ -604,7 +555,7 @@ def new_messages(session_id: str | None, everything: bool = True) -> str | None:
                else "alguien")
         ticket_id = land(conversation_id, new, row, handle, session_id)
         title = (f"- `{conversation_id}` · {who} · {window_line(row)}"
-                 f" · {ticket_line(ticket_id, conversation_id)}")
+                 f" · {ticket_line(ticket_id)}")
         blocks.append("\n".join(
             [title] + thread_lines(conversation_id, row["participant_id"],
                                    {m["id"] for m in new if not m["ours"]})))
@@ -663,7 +614,9 @@ def watch() -> str | None:
 
 
 def toolset() -> FunctionToolset:
-    """What the face gets un-gated: reading, and the token's own maintenance."""
+    """What the face gets un-gated: reading, answering — a comment or a message,
+    which go out the moment they are called (24/9/2026) — and the token's own
+    maintenance."""
     ts = FunctionToolset()
 
     @ts.tool
@@ -734,41 +687,22 @@ def toolset() -> FunctionToolset:
             return str(exc)
         return RENEWED.format(days=days_left(seconds))
 
-    return ts
-
-
-def gated() -> FunctionToolset:
-    """What goes out on the client's public thread. `plugin.py` registers this
-    one wrapped in `approval_required()`: the whole toolset, with no predicate,
-    so a tool added here tomorrow is gated without anyone remembering a list."""
-    ts = FunctionToolset()
-
     @ts.tool
-    def reply_comment(
-        ctx: RunContext,
-        comment_id: str,
-        text: str,
-        note: ApprovalNote,
-        client_correction: str | None = None,
-    ) -> str:
-        """Contestar un comentario de Instagram. Frena hasta que el cliente apruebe.
+    def reply_comment(ctx: RunContext, comment_id: str, text: str) -> str:
+        """Contestar un comentario de Instagram. SALE EN EL MOMENTO.
 
-        Sale como respuesta abajo del comentario, con el nombre de la cuenta del
-        cliente y a la vista de cualquiera. Es la única forma de contestar un
-        comentario: cuando decidas contestar, llamala ahí mismo con la
-        respuesta escrita. Mostrarle al cliente lo que va a salir y esperar el
-        sí lo hace la puerta, no vos.
+        Se publica abajo del comentario, con el nombre de la cuenta de tu
+        cliente y a la vista de cualquiera. Nadie la lee antes que la persona:
+        llamala sólo cuando la skill `comments` dice que ese comentario lo
+        contestás vos. Si no estás seguro, si pide un precio que la marca no
+        publica, si es una queja o algo que tiene que decidir tu cliente, NO la
+        llames: dejalo en el tablero para él.
 
-        Si ya tenés el id, esto es lo que llamás: no vuelvas a pedir la lista de
-        comentarios para «verificar». Si falta algo —la conexión, el
-        comentario—, te lo digo yo.
-
-        `note` es lo que el cliente lee para decidir: llenala siempre, en
-        criollo, diciendo quién comentó y qué le vas a contestar.
-
-        `client_correction` NO LA ESCRIBÍS VOS: la completa el cliente cuando
-        aprueba con correcciones, y es LA RESPUESTA ya editada por él, tal cual
-        tiene que salir. Llega sola en la segunda vuelta; dejala vacía siempre.
+        Una respuesta por comentario: si ya lo contestaste, no sale nada y te
+        lo digo. Si ya tenés el id, esto es lo que llamás: no vuelvas a pedir
+        la lista para «verificar». Si falta algo —la conexión, el comentario—,
+        te lo digo yo. Lo que salió queda en la Actividad de tu cliente y, si el
+        comentario tiene tarea, en la tarea.
 
         Args:
             comment_id: el id que te dio `fetch_comments`.
@@ -777,7 +711,10 @@ def gated() -> FunctionToolset:
         row = ig_store.seen(comment_id)
         if row is None:
             raise ModelRetry(UNKNOWN.format(comment_id=comment_id))
-        message = (client_correction or text).strip()
+        before = ig_store.mark(REPLIED_MARK, comment_id)
+        if before is not None:
+            return ALREADY.format(text=before)
+        message = text.strip()
         try:
             ig_graph.reply(comment_id, message)
         except ig_graph.NotConnected as exc:
@@ -787,9 +724,10 @@ def gated() -> FunctionToolset:
             # is the last thing to attempt twice. What comes back is a sentence
             # the face reads out, and the client decides what happens next.
             return FAILED_REPLY.format(reason=exc)
+        ig_store.set_mark(REPLIED_MARK, comment_id, message)
         db.append_event(
-            REPLIED_EVENT, f"Contesté a @{row['username']} en Instagram", "completed",
-            ctx.deps.session_id,
+            REPLIED_EVENT, REPLIED_LABEL.format(username=row["username"], text=message),
+            "completed", ctx.deps.session_id,
             {"comment_id": comment_id, "media_id": row["media_id"], "text": message},
         )
         # On the lead's ticket, WHEN THERE IS ONE: a comment the agent answered
@@ -798,38 +736,27 @@ def gated() -> FunctionToolset:
         return REPLIED.format(username=row["username"])
 
     @ts.tool
-    def send_message(
-        ctx: RunContext,
-        conversation_id: str,
-        text: str,
-        note: ApprovalNote,
-        client_correction: str | None = None,
-    ) -> str:
-        """Contestar un mensaje privado de Instagram. Frena hasta que el cliente apruebe.
+    def send_message(ctx: RunContext, conversation_id: str, text: str) -> str:
+        """Contestar un mensaje privado de Instagram. SALE EN EL MOMENTO.
 
         Le llega a la persona que escribió, en el mismo hilo, con el nombre de
-        la cuenta del cliente. **A quién le va lo decide la conversación**: vos
-        pasás el id del hilo y nada más. Cuando decidas contestar, llamala ahí
-        mismo con la respuesta escrita: mostrarle al cliente lo que va a salir y
-        esperar el sí lo hace la puerta, no vos.
+        la cuenta de tu cliente. Nadie lo lee antes que ella: llamala sólo
+        cuando la skill `comments` dice que esa respuesta la das vos. Si no
+        estás seguro, si pide un precio que la marca no publica, si es un
+        reclamo o algo que tiene que decidir tu cliente, NO la llames: dejá la
+        tarea de esa conversación para él.
 
-        Si ya tenés el id de la conversación, esto es lo que llamás: no vuelvas
-        a pedir los mensajes para «verificar». Si falta algo —la conexión, la
-        conversación, el plazo—, te lo digo yo.
+        **A quién le va lo decide la conversación**: vos pasás el id del hilo y
+        nada más. Si ya lo tenés, esto es lo que llamás: no vuelvas a pedir los
+        mensajes para «verificar». Si falta algo —la conexión, la conversación,
+        el plazo—, te lo digo yo.
 
         Instagram sólo deja contestar hasta 24 horas después del último mensaje
-        de esa persona. Si ya se pasó, la herramienta no manda nada y te lo
-        dice.
+        de esa persona. Si ya se pasó, no mando nada y te lo digo.
 
         De la tarea del tablero no te ocupás vos: la abro yo cuando llega el
-        mensaje, le escribo lo que salió y la muevo a «Completado» cuando sale.
-
-        `note` es lo que el cliente lee para decidir: quién escribió, qué
-        preguntó y qué le vas a contestar.
-
-        `client_correction` NO LA ESCRIBÍS VOS: la completa el cliente cuando
-        aprueba con correcciones, y es EL MENSAJE ya editado por él, tal cual
-        tiene que salir. Dejala vacía siempre.
+        mensaje, le escribo lo que salió y la muevo a «Completado». Lo que
+        salió también queda en la Actividad de tu cliente.
 
         Args:
             conversation_id: el id que te dio `fetch_messages`.
@@ -839,13 +766,12 @@ def gated() -> FunctionToolset:
         if row is None:
             raise ModelRetry(NO_THREAD.format(conversation_id=conversation_id))
         who = row["participant_username"] or "esa persona"
-        # THE CLOCK IS CHECKED AGAIN HERE AND NOT ONLY ON THE CARD: a request
-        # can sit in the queue overnight, and the yes arrives after the window
-        # the card showed as open. NOT a ModelRetry — proposing the same message
-        # again cannot fix time, and the sentence says what to do instead.
+        # META'S CLOCK, CHECKED BEFORE THE CALL: past 24 hours the Graph refuses
+        # anyway, and the sentence here says what to do instead. NOT a
+        # ModelRetry — sending the same message again cannot fix time.
         if window_left(row) <= 0:
             return CLOSED.format(username=who)
-        message = (client_correction or text).strip()
+        message = text.strip()
         try:
             sent = ig_graph.send_message(row["participant_id"], message)
         except ig_graph.NotConnected as exc:
@@ -855,16 +781,26 @@ def gated() -> FunctionToolset:
         ig_store.record_message(sent, conversation_id, ig_graph.user_id(), None,
                                 message, time.time())
         db.append_event(
-            SENT_EVENT, f"Le respondí a @{who} por Instagram", "completed",
+            SENT_EVENT, SENT_LABEL.format(username=who, text=message), "completed",
             ctx.deps.session_id,
             {"conversation_id": conversation_id, "message_id": sent, "text": message},
         )
         # WHAT WENT OUT, ON THE TICKET, BY THE CODE THAT SENT IT. The thread the
         # client reads in Inbox is the conversation and not the agent's account
-        # of it, and a ticket that stays «Esperando tu ok» after the answer went
-        # out is the state that stopped this agent from ever writing again.
+        # of it, and the ticket is closed by the same call that answered it.
         answered(FROM_DM, conversation_id, message, ctx.deps.session_id)
         return SENT.format(username=who)
+
+    return ts
+
+
+def gated() -> FunctionToolset:
+    """What still stops for the client's yes: hiding a comment. `plugin.py`
+    registers this one wrapped in `approval_required()`, the whole toolset with
+    no predicate, so a tool added here tomorrow is gated without anyone
+    remembering a list. The two that ANSWER are not here (24/9/2026): they are
+    on the face, in `toolset()`."""
+    ts = FunctionToolset()
 
     @ts.tool
     def hide_comment(
