@@ -159,10 +159,10 @@ kit/plugins/instagram/core/ the other half of the account: ig_graph.py
                                    already handled, the thread's other side
                                    with its 24-hour clock, and the account's
                                    own row), ig_tools.py (fetch_comments,
-                                   fetch_messages and refresh_if_due on the
-                                   face, reply_comment, hide_comment and
-                                   send_message behind the gate with their
-                                   cards, and recent_performance for the
+                                   fetch_messages, refresh_if_due,
+                                   reply_comment and send_message on the
+                                   face, hide_comment behind the gate with
+                                   its card, and recent_performance for the
                                    creator), instructions.md,
                                    skills/comments/SKILL.md and flows/instagram/
 ```
@@ -639,31 +639,32 @@ no others, because a field this flavor does not serve fails the whole call, and
 expanded because the documented alternative is one call per message and this
 connection has two hundred an hour. Ours are told apart by `from.id`, which is
 the account's own id; theirs are new if `instagram_messages` has not seen them.
-EVERY message is written down and only the new inbound ones are listed — the
-card shows a conversation, and half a conversation reads like a person talking to
-a wall. Nothing new: «Sin mensajes nuevos.»
+EVERY message is written down and only the new inbound ones are marked new —
+the listing shows a conversation, and half a conversation reads like a person
+talking to a wall. Nothing new: «Sin mensajes nuevos.»
 
-**THE 24 HOURS ARE META'S AND THEY ARE ON THE CARD.** An app may answer a person
-up to 24 h after their last message, and each message of theirs starts it again;
-`instagram_conversations.last_inbound_at` holds that clock and only ever moves
-forward, so reading a thread twice cannot reset a window. `send_message(
-conversation_id, text, note)` is gated like the rest and **takes no recipient**:
-the IGSID comes off the conversation, which is the only way a model cannot
-address a stranger. The card is the person, the window, the ticket, the last ten
-messages as table rows oldest first with ours marked, and the draft as the
-editable tail. The window is
-checked AGAIN in the tool body — a request can sit in the queue overnight — and
-past it the tool sends nothing and answers the sentence that says so and says to
-use the board instead. The send itself is the one call in this kit that is JSON
-with a Bearer header: `POST /{IG_USER_ID}/messages` with `{"recipient": {"id":
-…}, "message": {"text": …}}`, which is how Meta documents it.
+**THE 24 HOURS ARE META'S AND THEY ARE IN THE LISTING.** An app may answer a
+person up to 24 h after their last message, and each message of theirs starts it
+again; `instagram_conversations.last_inbound_at` holds that clock and only ever
+moves forward, so reading a thread twice cannot reset a window. Each
+conversation in the listing says how much is left, so the ones about to close
+are answered first. `send_message(conversation_id, text)` **takes no
+recipient**: the IGSID comes off the conversation, which is the only way a
+model cannot address a stranger. The window is checked in the tool body before
+the call, and past it the tool sends nothing and answers the sentence that says
+so and says to use the board instead. The send itself is the one call in this
+kit that is JSON with a Bearer header: `POST /{IG_USER_ID}/messages` with
+`{"recipient": {"id": …}, "message": {"text": …}}`, which is how Meta documents
+it. What went out is written into the thread as ours, into Activity as «Le
+escribí a @… por mensaje: «…»», and onto the conversation's ticket, which it
+closes.
 
 **A FIRST MESSAGE IS A LEAD, AND A THREAD IS ONE TICKET.** `source="instagram-dm"`
 with the CONVERSATION id as `source_ref`, so the second message of the same
 person does not open a second ticket — what they say afterwards is a comment on
 the one that exists. The skill carries the rest: warmer than a comment, one
-question back to qualify, never a price but the diagnóstico's, never a date,
-never a conversation carried past where the client would carry it.
+question back to qualify, never a price or a date the brand file does not
+state, never a conversation carried past where the client would carry it.
 
 **A TICK WITH NOTHING NEW IS ONE LINE.** `fetch_comments()` reads the last ten
 posts (`GET /{IG_USER_ID}/media`), then each one's comments with the replies
@@ -678,28 +679,41 @@ makes — and it is the whole mechanism for telling our own answers apart: the
 Graph hands them back nested under the comment they answer, and an agent that
 read its own reply as new would answer itself every fifteen minutes.
 
-**ANSWERING AND HIDING GO THROUGH THE GATE**, like everything this product does
-outwards. `reply_comment(comment_id, text, note)` is `POST /{comment-id}/
-replies` and `hide_comment(comment_id, note)` is `POST /{comment-id}?hide=true`
-— hiding, never deleting: it can be undone from the app and the author still
-sees it. Both draw their own card through the approval plugin's renderer hook
-(`engine.provide("approval.render.reply_comment", …)`), READ OFF DISK and never
+**ANSWERING GOES OUT AT ONCE; HIDING GOES THROUGH THE GATE.** Until 24/9/2026
+all three waited for the client's yes. Luis decided that day that an answer
+does not: a comment or a message is a person waiting, and a reply parked in
+Aprobaciones until the owner looks is a lead going cold. So
+`reply_comment(comment_id, text)` — `POST /{comment-id}/replies` — and
+`send_message` are plain tools on the face, and what the gate used to do around
+them the tools do themselves: the Activity line carries the handle AND THE
+WORDS («Le contesté a @…: «…»»), because nobody read them before they went
+out; the ticket, when there is one, gets the answer and moves to done. A
+comment gets ONE answer — the words that went out are written in
+`instagram_marks` (kind `replied`) and a second call for the same id sends
+nothing and quotes them back — and the agent's own comments carry no id and are
+never in `instagram_seen`, so there is nothing of ours to answer. WHAT KEEPS A
+REPLY FROM BEING A MISTAKE IS THE SKILL: `skills/comments/SKILL.md` has a pile
+for what is the OWNER's (a price the brand does not publish, a complaint, a
+refund, legal, anything the agent is not sure of), which is not answered and
+goes to the board as a `blocked` ticket with what the owner has to decide — and
+the listing reads a blocked channel ticket back as «la dejaste para tu
+cliente». `hide_comment(comment_id, note)` — `POST /{comment-id}?hide=true`,
+hiding, never deleting: it can be undone from the app and the author still sees
+it — is still gated: it is not an answer, it takes what somebody wrote out of
+sight. It draws its own card through the approval plugin's renderer hook
+(`engine.provide("approval.render.hide_comment", …)`), READ OFF DISK and never
 off the Graph, because the card is rendered inside the pause path and a network
-call there is a run that dies holding a request nobody sees. The card is the
-post — its permalink and its first slide, when the media id matches a post in
-`posteos/` — then the comment, in a table, and then the draft answer, which is
-therefore the editable tail the portal preloads: the client's correction
-REPLACES the text, the way a caption's does. Both tools refuse an id that is not
-in `instagram_seen`, in Spanish, before anything leaves.
+call there is a run that dies holding a request nobody sees: the post — its
+permalink and its first slide, when the media id matches a post in `posteos/` —
+and the comment, in a table. Both comment tools refuse an id that is not in
+`instagram_seen`, in Spanish, before anything leaves.
 
 **A LEAD IS A TICKET**, and it is the board's own `create_ticket` with
 `source="instagram"` and the comment id as `source_ref` — the pair that is a
 UNIQUE index over there, so the same comment never opens two. What makes a
 comment a lead, what gets answered, what gets nothing and what gets hidden is
 `skills/comments/SKILL.md`; the reply invites them to the address on
-`marca/brand.md`, because **DMs are not built and cannot be**:
-`instagram_manage_messages` needs Meta's Advanced Access even on the account's
-own owner, and `plugin.json` names it as a known limit.
+`marca/brand.md` or to a direct message.
 
 **THE CREATOR READS THE NUMBERS BEFORE IT WRITES.** `recent_performance()` is
 the last ten posts with their date, caption, permalink, reach, saves, likes,
@@ -730,17 +744,19 @@ and without comments has no table and nothing changes for it.
 ```bash
 python3 engine/tests/test_instagram_comments.py   # free, a second, no model
 python3 engine/tests/test_instagram_messages.py   # free, a second, no model
-bash engine/tests/test_comments_gate.sh           # ~2 min, ~US$0.02, three turns
+bash engine/tests/test_comments_gate.sh           # ~2 min, ~US$0.02, five turns
 ```
 
 The first one is the mechanism, with the Graph behind an `httpx.MockTransport`
-and a throwaway post on disk: eight claims — the tick that walks the replies and
+and a throwaway post on disk: nine claims — the tick that walks the replies and
 skips our own, the second tick that says «Sin comentarios nuevos.», the answer
-posted under the right comment with the right text, the correction that replaces
-it, the spam hidden and nothing deleted, an id nobody saw refused by both tools,
-the card with the slide and the draft as its editable tail, the numbers the
-creator reads, and the token renewing itself and being what the NEXT call goes
-out with.
+posted under the right comment with the right text and NO YES, its Activity line
+carrying the words, the same comment a second time sending nothing, the spam
+hidden and nothing deleted, an id nobody saw refused by both tools, the hide
+card with the slide and the comment, the numbers the creator reads, the token
+renewing itself and being what the NEXT call goes out with, and WHAT PAUSES:
+the plugin's `register()` against a recording engine, read with the engine's
+own `core.plugins.gated`, has `hide_comment` gated and nothing else.
 
 The second one is the messages, and it is the only place both clocks can be
 asserted — the window, which a live test would have to wait a day to watch shut,
@@ -749,19 +765,23 @@ tick that comes back with whole conversations, with the time left and the ticket
 on each; THE NUDGE — a second tick carrying one new message and the question
 from three messages up, unmarked, which is the regression this rule was bought
 with; the documented send (the JSON body, the IGSID off the conversation, the
-Bearer header) with the correction replacing the text; a thread whose last
-message is twenty-five hours old refused with the sentence that says what to do
-instead; a conversation nobody saw refused; and the card with the thread as
-table rows, oldest first, and the draft as its tail.
+Bearer header) with no yes, what went out written into the thread as ours and
+into Activity with its words, and the ticket closed; a blocked ticket read back
+as left for the owner; a thread whose last message is twenty-five hours old
+refused with the sentence that says what to do instead; and a conversation
+nobody saw refused.
 
-The third is the gate, live, with `IG_*` unset — which is why it can be run as
-often as it likes. Three turns: the tick answers «falta conectar Instagram» and
-ends normally instead of dying; a seeded comment is answered, the run pauses,
-the card carries the post, the comment and the draft below the last table row,
-and the client's yes comes back with the missing connection — an answer and not
-a dead turn; and the same door for a direct message, whose card carries the
-person, what she wrote and how much of the 24 hours is left. Last run
-2026-09-16: **0 failures**.
+The third is live, with `IG_*` unset — which is why it can be run as often as
+it likes (`SECRETS=`, `ENDPOINT=`, `ADAPTER=`, `CONTAINER=` point it at an
+instance). Five turns: the tick answers «falta conectar Instagram» and ends
+normally instead of dying; a seeded comment is answered and the turn does NOT
+stop — no request in Aprobaciones, the missing connection said —; the same for
+a direct message; and a spam comment asked to be hidden DOES stop, with a card
+that carries who wrote it, what it says and the post's link, and the client's
+yes comes back with the missing connection — an answer and not a dead turn.
+Last run 2026-09-24 on a throwaway instance: **0 failures** (one earlier run
+the same day had the model skip `send_message` in the DM turn after being told
+in the previous turn that nothing was connected).
 
 ## Sub-agents
 
