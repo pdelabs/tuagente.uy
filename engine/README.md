@@ -208,17 +208,20 @@ adds.
 The instructions a run is built from, in order:
 
 ```
-agent/SOUL.md  +  each enabled plugin's instructions.md  +  the skills index  +  the date line
+agent/SOUL.md  +  each enabled plugin's instructions.md       (a string: `standing()`)
+  +  the capabilities' own: the memory guidance and notebook, the sub-agent listing
+  +  the skills index  +  the date line                         (a callable: `situation`)
 ```
 
-A CAPABILITY'S OWN INSTRUCTIONS COME BEFORE ALL OF THAT, and that is Pydantic
-AI's ordering, not ours: the memory guidance, the notebook and the sub-agent
-listing are rendered by the capabilities that own them and land at the head of
-the prompt, because `InstructionPart.sorted` puts every LITERAL instruction
-before every CALLABLE one and the face's whole prompt is one callable. The date
-line stays last on purpose — it is the one line that changes by itself, and
-everything above it is a stable prefix the provider's cache keeps, which is
-nearly all of this engine's conversational saving.
+That order is Pydantic AI's sorting put to work: `InstructionPart.sorted` puts
+every LITERAL instruction before every CALLABLE one, the agent's own before its
+capabilities'. Until 2026-09-24 the face's whole prompt was one callable, so
+the capabilities' literals — the notebook among them — landed ABOVE the SOUL.
+Now the SOUL and the plugins' prose are one string built with the agent (a SOUL
+edit needs a restart, the one a delegate already needed), the notebook lands
+under them, and the date line stays last on purpose — it is the one line that
+changes by itself, and everything above it is a stable prefix the provider's
+cache keeps, which is nearly all of this engine's conversational saving.
 
 **That sorting is the whole reason a delegate's prompt is a LIST** (see
 **Sub-agents**): `engine.identity` is a string and comes first, `engine.today`
@@ -1308,8 +1311,9 @@ report and a persisted history with no `<memory>` in any message part, which
 factory is `notebook(scope, guidance)`: the face's guidance is written for
 someone in a conversation («cuando te dice acordate…») and the creator has no
 conversation, so the social plugin writes the three lines its delegate works
-under (`creator.MEMORY`: what topic on what day, what the pedido corrected,
-what a review found wrong in an image — a dated fact, never a procedure). On
+under (`creator.MEMORY`: a correction that still holds — what a review found
+wrong, what the owner corrected — dated, never a procedure and never a log of
+saved posts, which is what `posteos/` is). On
 top of its own notebook a delegate may ask for `engine.use("client_memory")()`,
 which is the FACE's `main` notebook rendered into its instructions under «Lo
 que el cliente dijo», bounded by the same token cap and with its toolset
@@ -1321,7 +1325,8 @@ can tell the creator, and the page is hers to write, not its.
 | who writes | when | how |
 |---|---|---|
 | the model | the client says "acordate…" / "olvidate de…" | the `write_memory` tool |
-| `core/extraction.py` | after every client turn | one small model call, then the code appends |
+| `extraction.py` | after every OWNER CHAT turn | one small model call, then the code appends |
+| `consolidation.py` | once a night, every notebook | one small model call, then the code rewrites |
 
 The second one is why the mechanism works at all: the first only fires on the
 magic word, and a client saying "los sábados abrimos de 9 a 13" is telling
@@ -1338,10 +1343,59 @@ reads the notebook in Files and the event in Activity: the QA client read
 «Anoté: El cliente quiere…» about herself (2026-09-23). The face's and the
 delegates' guidance say that «vos» in the notebook is the client.
 
-It skips three shapes, each measured and not a precaution: a run with no prompt
-(a run RESUMED after an approval, whose only new content is a tool result), a
-run that ended at the gate (the turn is not over), and a client message under
-30 characters ("dale", "gracias": no fact, same price).
+**Only the owner's chat is read.** On our own agent (2026-09-24) 243 of 307
+extractions ran on FLOW runs — the flow's instructions and, on an event flow, a
+stranger's DM or e-mail — and wrote nothing useful; each one was a way for a
+third party to put a line in the notebook. So it skips, before any model call,
+a run of a `flow` session and a chat run that called a tool bringing outside
+text in (`extraction.EXTERNAL`: `fetch_mail`, `fetch_comments`,
+`fetch_messages`, `web_fetch`, `web_search`). And three more shapes, each
+measured: a run with no prompt (a run RESUMED after an approval, whose only new
+content is a tool result), a run that ended at the gate (the turn is not
+over), and a client message under 30 characters ("dale", "gracias": no fact,
+same price). It does not note what the owner dictates for a piece of work — a
+post's topic is a request, not a preference: «no posteos los domingos» landed
+in our agent's notebook from a post ABOUT not writing on Sundays.
+
+Every line says where it came from: `- 24/09/2026 · preferencia · chat: …`.
+
+**The notebook's model is `CORE_MEMORY_MODEL`**, for the extraction and the
+tidy. Unset, it is the main model, which is the cheap tier today (gpt-6-luna,
+US$0.10/0.50 per M tokens on OpenRouter): `qwen/qwen3.7-flash` is a third of
+that and unmeasured on our Spanish and our structured output, for calls that
+cost a tenth of a cent either way.
+
+**Every notebook is tidied once a night** (`consolidation.py`). The first tick
+at or after 03:00 in the agent's timezone — or the first after a restart, if it
+was down then — sends each notebook that changed since its last tidy (`main`
+and every delegate's, the ones `notebook()` enrolled) to the notebook's model
+NUMBERED, with the notebook's own rule. It answers the lines to keep, each with
+the numbers it stands for; the code dates each line with its newest source (so
+on a contradiction the newest wins, and no date is invented), keeps that
+source's origin, and REFUSES an empty answer, a number used twice or one that
+does not exist, and a notebook over the budget the injection has for it
+(`Notebook.budget()`: `max_tokens × 4` minus the guidance) — a refusal leaves
+the notebook as it was and is one log line. Before a write the old notebook is
+copied to `memoria/.history/<scope>/MEMORY-<date>.md`: the store's journal
+keeps an operation's new content, not the one it replaced, and the copy lives
+outside the scope's folder so neither the injection's file list nor
+`search_memory` finds yesterday's page (Archivos skips dotfiles). The owner
+reads one line in Activity, «Ordené mi memoria: 4 líneas unidas, 37 quitadas»,
+and Uso counts the call as «ordenar la memoria». The day and each notebook's
+digest are marked in `memory_marks`, the day BEFORE the run: a failure is a try
+tomorrow, never a retry every tick. `Tidy.run()` is the manual trigger.
+
+**What wins over it.** The face's guidance says it in words: the SOUL above it,
+the brand file, the flow's own instructions and the owner's current message
+outrank any line, and a memory line never cancels or skips scheduled work. The
+creator's prompt no longer says the notebook «gana» over the business draft,
+and the face is told to pass THIS conversation's corrections in a brief but
+never to copy the notebook into it — it did in 28 of 68 briefs, where a
+background line read as an order — because the creator already reads it.
+
+**Business facts go to the draft.** With the `business` plugin, a fact the
+owner corrects goes into `negocio/borrador.md` through `correct_draft`; the
+plugin's prose no longer tells the face to write it in memory as well.
 
 **The rule, and where it lives.** Memory holds FACTS about the business and
 PREFERENCES about how the agent works, dated. Never procedures, never how to do
@@ -1353,8 +1407,24 @@ capability already owns the slot, and a second copy would be two places to
 change one rule.
 
 ```bash
-python3 engine/tests/test_memory.py       # ~40 s, ~US$0.001
+python3 engine/tests/test_memory_notebook.py   # no model, a few seconds
+python3 engine/tests/test_memory.py            # ~40 s, ~US$0.001
 ```
+
+`test_memory_notebook.py` runs inside the container with a `FunctionModel` for
+every model: a flow run is not read, an owner's chat turn writes a line with
+its origin, a turn that called `fetch_mail` is not read; the tidy merges,
+keeps the newest line on a contradiction, backs up and writes its Activity
+line, refuses an empty answer, a reused source and an over-budget one, runs
+once a day and skips a notebook that did not change; and the face's prompt
+reads SOUL, then the memory guidance, then the date.
+
+The first real tidy ran on a COPY of our own agent's two notebooks
+(2026-09-24, US$0.002): the face's went from 15 lines to 11 in the second
+person, the creator's from 39 lines of «posteo guardado…» to the two
+corrections that still hold. It kept «no prepares posteos los domingos»: a
+misfiled topic reads exactly like a preference, and only the owner can tell
+them apart.
 
 Four short conversations against the running container, notebook cleared first
 so "contains" means "this run wrote it": the fact lands (a), a **NEW**
