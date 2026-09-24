@@ -85,7 +85,14 @@ FROM_AGENT = "agent"
 # `/portal/tickets?source=channels` asks for these three and `?source=work`
 # for everything else, so the day a fourth channel exists the portal does not
 # have to learn its name.
-CHANNELS = ("mail", "instagram", "instagram-dm")
+CHANNELS = ("mail", "instagram", "instagram-dm", "whatsapp")
+
+# WHAT A CHANNEL PLUGIN ADDS TO ITS OWN TICKETS, by source: `fn(source_ref) ->
+# dict`, merged into the ticket's payload. The WhatsApp plugin puts the
+# person's name and its takeover clock there, so the Inbox draws its list of
+# chats without one more request per row. Keyed by source because a plugin
+# knows only its own tickets, and nothing here knows what any of them adds.
+EXTRA: dict = {}
 
 # Who signs a comment. `cliente` is the word the portal reads as hers
 # (`isTheClient`), `agente` the one it draws under the name she gave the agent.
@@ -176,8 +183,12 @@ def as_ticket(row) -> dict:
     and this board has no one to put in it. `source` and `source_ref` travel
     too — they are what the mail and Instagram waves draw «Ver el mail» and
     «Ver el comentario» from.
+
+    A CHANNEL ticket also carries `last_comment` — `{author, body,
+    created_at}`, or null — because a conversation is read by its last line
+    and the body is only its first; and whatever its plugin put in `EXTRA`.
     """
-    return {
+    ticket = {
         "id": row["id"],
         "title": row["title"],
         "body": row["body"],
@@ -195,6 +206,20 @@ def as_ticket(row) -> dict:
         "source": row["source"],
         "source_ref": row["source_ref"],
     }
+    if row["source"] in CHANNELS:
+        last = db.one(
+            "SELECT author, body, created_at FROM ticket_comments WHERE ticket_id = ?"
+            " ORDER BY id DESC LIMIT 1",
+            (row["id"],),
+        )
+        ticket["last_comment"] = (
+            {"author": last["author"], "body": last["body"],
+             "created_at": int(last["created_at"])} if last else None
+        )
+    extra = EXTRA.get(row["source"])
+    if extra and row["source_ref"]:
+        ticket.update(extra(row["source_ref"]))
+    return ticket
 
 
 def listing(sources: tuple[str, ...] = (), other: bool = False) -> list[dict]:
