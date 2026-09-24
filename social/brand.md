@@ -52,7 +52,9 @@ Everything verifiable against the landing (`app/page.tsx`):
   agente y los mensajes de WhatsApp e Instagram incluidos. Cada trabajo que le
   sumes se agrega al mensual. Lo que hay que escribir a medida se cotiza: se
   paga una vez y **la mitad te vuelve como descuento en el mensual**. La
-  cotización es gratis. Never post any other number.
+  cotización es gratis, y si el primer mes no hizo lo que te dijimos, ese mes
+  no lo pagás. Each job's own price is never published: «se cotiza gratis».
+  Never post any other number.
 - Corre sobre nuestro propio motor, hecho para esto.
 - Hecho en Montevideo por pdelabs. Somos nuestro propio cliente: Mr. Wobbles.
 - Conexiones listas hoy: Telegram, correo, Google Planillas/Drive/Agenda/Docs,
