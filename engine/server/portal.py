@@ -16,6 +16,7 @@ its manifest already said.
 import base64
 import binascii
 import mimetypes
+import zlib
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -167,6 +168,43 @@ def activity():
              "status": ended.get(row["id"], row["status"])}
             for row in rows
         ]
+    }
+
+
+@router.get("/portal/changes")
+def changes(since: int | None = None):
+    """What changed since the portal last looked: the one thing it polls.
+
+    NOTHING ON SCREEN MOVED WITHOUT A RELOAD (Luis, 2026-09-24): every tab read
+    its data once and then every 30 or 60 seconds, each on its own timer, so an
+    approval the agent asked for sat invisible for up to a minute and the
+    sidebar's count for longer. The portal now asks this every few seconds
+    while it is visible, and each tab refetches only when a kind it draws is
+    in `kinds`.
+
+    - `last` is the log's cursor: `sqlite_sequence`, not `MAX(id)`, so a
+      deleted newest row never moves it back and never replays kinds.
+    - `kinds` is every distinct kind written after `since`, INTERNAL ones
+      included: Uso draws `turn_usage`. With no `since` (the portal's first
+      ask) it is empty: that call only sets the cursor.
+    - `sessions` is a stamp of the client's conversations. A conversation
+      opened in another tab or a rename writes no event, and the Chat's list
+      has to move the moment it happens, not when the answer lands.
+    """
+    seq = db.one("SELECT seq FROM sqlite_sequence WHERE name = 'events'")
+    kinds = [] if since is None else [
+        row["kind"] for row in db.query("SELECT DISTINCT kind FROM events WHERE id > ?", (since,))
+    ]
+    stamp = db.one(
+        "SELECT COUNT(*) AS n, MAX(last_active) AS at, GROUP_CONCAT(title, '|') AS titles"
+        " FROM (SELECT last_active, COALESCE(title, '') AS title FROM sessions"
+        " WHERE kind = 'chat' ORDER BY id)"
+    )
+    titles = zlib.crc32((stamp["titles"] or "").encode())
+    return {
+        "last": seq["seq"] if seq else 0,
+        "kinds": kinds,
+        "sessions": f"{stamp['n']}:{stamp['at'] or 0}:{titles}",
     }
 
 
