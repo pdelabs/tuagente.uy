@@ -6,6 +6,11 @@
     POST /portal/tickets                  {title, body?, tenant?} -> {ok, id}
     POST /portal/tickets/{id}/comment     {body, author?}         -> {ok}
     POST /portal/tickets/{id}/status      {status}                -> {ok}
+    POST /portal/tickets/{id}/reply       {text}                  -> {ok}
+
+The last one is new (25/9/2026): the owner answering a person herself from the
+Bandeja. The board does not know how to reach anybody — the channel plugin that
+opened the ticket does, and files how under `board.REPLY + source`.
 
 Not one of them is new: the portal has been calling these since the Hermes
 adapter served them, and this plugin is what answers them on this engine. The
@@ -49,6 +54,10 @@ DETAIL = "tickets.detail."
 # aliases are built out of.
 CHANNELS = "channels"
 WORK = "work"
+
+# Read by the owner, under the Bandeja's box.
+NO_REPLY = "Esta conversación no se contesta desde acá."
+EMPTY_REPLY = "Escribí lo que le querés contestar."
 
 
 async def payload(request: Request) -> dict:
@@ -138,4 +147,22 @@ async def status(ticket_id: str, request: Request):
     if board.row_of(ticket_id) is None:
         raise HTTPException(404, board.MISSING.format(ticket_id=ticket_id))
     board.move(ticket_id, a_status((await payload(request))["status"]))
+    return {"ok": True}
+
+
+@router.post("/portal/tickets/{ticket_id}/reply")
+async def reply(ticket_id: str, request: Request):
+    row = board.row_of(ticket_id)
+    if row is None:
+        raise HTTPException(404, board.MISSING.format(ticket_id=ticket_id))
+    send = SHARED.get(board.REPLY + row["source"])
+    if send is None:
+        raise HTTPException(400, NO_REPLY)
+    text = ((await payload(request)).get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, EMPTY_REPLY)
+    try:
+        send(row["source_ref"], text)
+    except board.Refused as exc:
+        raise HTTPException(409, str(exc)) from exc
     return {"ok": True}

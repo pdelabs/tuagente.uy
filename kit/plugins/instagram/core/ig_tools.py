@@ -123,6 +123,13 @@ CLOSED = (
     "Instagram no deja contestar hasta que vuelva a escribir. No mandé nada: si hace "
     "falta seguirlo, dejalo en el tablero."
 )
+# What the owner reads when her own answer from the Bandeja did not go out.
+OWNER_CLOSED = (
+    "Pasaron más de 24 horas desde el último mensaje de @{username}, e Instagram no "
+    "deja contestarle hasta que vuelva a escribir. No salió nada."
+)
+OWNER_OURSELVES = "Esta conversación figura como si fuera con tu propia cuenta. No salió nada."
+OWNER_FAILED = "Instagram no lo aceptó: {reason}. No salió nada."
 OPEN = "Quedan {hours} h del plazo para contestarle"
 CLOSING = "El plazo para contestarle YA VENCIÓ (Instagram da 24 h desde su último mensaje)"
 
@@ -136,6 +143,8 @@ HIDDEN_EVENT = "comment.hidden"
 SENT_EVENT = "message.sent"
 REPLIED_LABEL = "Le contesté a @{username}: «{text}»"
 SENT_LABEL = "Le escribí a @{username} por mensaje: «{text}»"
+OWNER_REPLIED_LABEL = "Le contestaste a @{username}: «{text}»"
+OWNER_SENT_LABEL = "Le escribiste a @{username} por mensaje: «{text}»"
 # Where the one-answer-per-comment rule is written down: the watcher's own
 # table, a kind of its own, and the words that went out as the mark — which is
 # what `ALREADY` quotes back.
@@ -383,7 +392,8 @@ def land(conversation_id: str, new: list[dict], row, mine: str | None,
     return ticket_id
 
 
-def answered(source: str, source_ref: str, text: str, session_id: str | None) -> None:
+def answered(source: str, source_ref: str, text: str, session_id: str | None,
+             author: str = board.AGENT) -> None:
     """What the tool just sent, written on the ticket, and the ticket closed.
 
     The ticket of a thread nobody opened is nothing to write to — a comment the
@@ -393,7 +403,7 @@ def answered(source: str, source_ref: str, text: str, session_id: str | None) ->
     ticket_id = ticket_of(source, source_ref)
     if not ticket_id:
         return
-    board.comment(ticket_id, board.AGENT, text, session_id=session_id, sent=True)
+    board.comment(ticket_id, author, text, session_id=session_id, sent=True)
     board.move(ticket_id, board.DONE, said=text, session_id=session_id)
 
 
@@ -836,6 +846,46 @@ def toolset() -> FunctionToolset:
         return SENT.format(username=who)
 
     return ts
+
+
+# ── what the owner sends herself from the Bandeja ───────────────────────────
+# `board_routes.reply` (25/9/2026). The same Graph calls as the two tools and
+# the same traces — the Activity line, the ticket closed — signed `cliente`.
+# No one-answer rule: she read the thread and decided. Meta's rules still hold,
+# and a refusal is a sentence she reads under the box.
+
+
+def owner_comment_reply(comment_id: str, text: str) -> None:
+    row = ig_store.seen(comment_id)
+    try:
+        ig_graph.reply(comment_id, text)
+    except (ig_graph.NotConnected, ig_graph.Refused) as exc:
+        raise board.Refused(OWNER_FAILED.format(reason=exc)) from exc
+    ig_store.set_mark(REPLIED_MARK, comment_id, text)
+    db.append_event(
+        REPLIED_EVENT, OWNER_REPLIED_LABEL.format(username=row["username"], text=text),
+        "completed", None, {"comment_id": comment_id, "media_id": row["media_id"], "text": text},
+    )
+    answered(FROM_COMMENT, comment_id, text, None, board.CLIENT)
+
+
+def owner_message(conversation_id: str, text: str) -> None:
+    row = ig_store.conversation(conversation_id)
+    who = row["participant_username"] or "esa persona"
+    if row["participant_username"] and row["participant_username"] == ig_store.username():
+        raise board.Refused(OWNER_OURSELVES)
+    if window_left(row) <= 0:
+        raise board.Refused(OWNER_CLOSED.format(username=who))
+    try:
+        sent = ig_graph.send_message(row["participant_id"], text)
+    except (ig_graph.NotConnected, ig_graph.Refused) as exc:
+        raise board.Refused(OWNER_FAILED.format(reason=exc)) from exc
+    ig_store.record_message(sent, conversation_id, ig_graph.user_id(), None, text, time.time())
+    db.append_event(
+        SENT_EVENT, OWNER_SENT_LABEL.format(username=who, text=text), "completed", None,
+        {"conversation_id": conversation_id, "message_id": sent, "text": text},
+    )
+    answered(FROM_DM, conversation_id, text, None, board.CLIENT)
 
 
 def gated() -> FunctionToolset:

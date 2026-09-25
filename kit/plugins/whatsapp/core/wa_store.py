@@ -19,8 +19,8 @@ push name second, the phone last — `last_inbound_at`, and
 chat herself from her phone and the agent does not.
 
 `whatsapp_messages` KEEPS BOTH SIDES, with `origin`: `contact` (the person),
-`agent` (what `send_whatsapp` sent) and `owner_phone` (what the owner typed on
-her phone). `handled` is whether an inbound message has been dealt with — handed
+`agent` (what `send_whatsapp` sent), `owner_phone` (what the owner typed on
+her phone) and `owner_portal` (what she sent from the Bandeja). `handled` is whether an inbound message has been dealt with — handed
 to a run, or answered by the owner herself — and it is what the watcher reads.
 """
 

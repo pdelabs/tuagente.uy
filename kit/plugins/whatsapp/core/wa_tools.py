@@ -28,13 +28,17 @@ board unanswered), and what code CAN hold it holds here:
   hand the chat to a run and `send_whatsapp` refuses it. Her message also marks
   what the person had written as dealt with — she answered it — and the portal
   can end the takeover early (`POST /portal/whatsapp/chats/{jid}/resume`).
+- THE OWNER'S ANSWER FROM THE BANDEJA (`owner_reply`, `origin: owner_portal`)
+  is an answer and not a takeover (Luis, 25/9/2026): what the person wrote is
+  dealt with, the ticket closes, and what they write next the agent answers.
 - NOBODY IS WRITTEN TO FIRST. The tool takes a chat the agent already has, and
   the bridge refuses anything that is not a one-to-one chat.
 
 HOW A TICKET'S THREAD IS SIGNED, which is how the Inbox tells the two sides
 apart (`app/app/inbox/conversation.ts`): the person's messages carry their
 PHONE (`+598…`, or their name when WhatsApp hid the number), what the agent
-sent carries `agente`, and what the owner typed on her phone carries `cliente`.
+sent carries `agente`, and what the owner wrote — on her phone or in the
+Bandeja — carries `cliente`.
 """
 
 import logging
@@ -102,8 +106,12 @@ ALREADY = (
     "le contestás lo nuevo."
 )
 OWNER_ANSWERED = (
-    "A {name} ya le contestó tu cliente desde su teléfono. No salió nada."
+    "A {name} ya le contestó tu cliente. No salió nada."
 )
+# What the owner reads when her own answer from the Bandeja did not go out.
+OWNER_NOT_CONNECTED = "Tu WhatsApp no está conectado, así que no salió nada."
+OWNER_SLOW_DOWN = "WhatsApp pidió que bajemos el ritmo. No salió nada: probá en media hora."
+OWNER_FAILED = "No se pudo mandar por WhatsApp: {reason}. No salió nada."
 SENT = "Le contesté a {name} por WhatsApp. Ya le llegó."
 NOT_CONNECTED = "No está conectado tu WhatsApp, así que no salió nada."
 SLOW_DOWN = (
@@ -114,6 +122,7 @@ FAILED = "No pude mandar el mensaje por WhatsApp: {reason}. No salió nada."
 
 SENT_EVENT = "whatsapp.sent"
 SENT_LABEL = "Le contesté a {name} por WhatsApp: «{text}»"
+OWNER_SENT_LABEL = "Le contestaste a {name} por WhatsApp: «{text}»"
 TAKEN_EVENT = "whatsapp.taken_over"
 TAKEN_LABEL = "Estás atendiendo vos a {name}: no le contesto hasta las {until}"
 RESUMED_EVENT = "whatsapp.resumed"
@@ -297,6 +306,8 @@ def said_by(row, chat) -> str:
         return "Vos"
     if row["origin"] == "owner_phone":
         return "Tu cliente, desde su teléfono"
+    if row["origin"] == "owner_portal":
+        return "Tu cliente, desde el portal"
     return wa_store.name_of(chat)
 
 
@@ -397,7 +408,7 @@ def toolset() -> FunctionToolset:
         last = wa_store.last_message(chat)
         if last["origin"] == "agent":
             return ALREADY.format(name=name, text=flat(last["text"]))
-        if last["origin"] == "owner_phone":
+        if last["origin"] in ("owner_phone", "owner_portal"):
             return OWNER_ANSWERED.format(name=name)
         answered = waiting_ids(chat)
         try:
@@ -411,25 +422,53 @@ def toolset() -> FunctionToolset:
             if exc.status == 429:
                 return SLOW_DOWN
             return FAILED.format(reason=exc)
-        wa_store.add_message(chat, sent["message_id"], "agent", "text", message, reply_to,
-                             float(sent.get("timestamp") or time.time()), handled=True)
-        try:
-            # The blue ticks: what this answer answered, read. It already went
-            # out, so a receipt that fails is a line in the log and not a
-            # failure of the answer.
-            wa_bridge.read(chat, answered)
-        except wa_bridge.BridgeError as exc:
-            log.warning("whatsapp: read receipt for %s failed: %s", chat, exc)
-        db.append_event(
-            SENT_EVENT, SENT_LABEL.format(name=name, text=message), "completed",
-            ctx.deps.session_id,
-            {"chat_jid": chat, "message_id": sent["message_id"], "text": message},
-        )
-        found = ticket_of(chat)
-        if found is not None:
-            board.comment(found["id"], board.AGENT, message, session_id=ctx.deps.session_id,
-                          sent=True)
-            board.move(found["id"], board.DONE, said=message, session_id=ctx.deps.session_id)
+        went_out(row, sent, message, reply_to, answered, "agent", ctx.deps.session_id)
         return SENT.format(name=name)
 
     return ts
+
+
+def went_out(row, sent: dict, message: str, reply_to: str | None, answered: list[str],
+             origin: str, session_id: str | None) -> None:
+    """What one answer leaves behind, whoever wrote it: the message kept, the
+    blue ticks, the Activity line, and the ticket written and closed."""
+    chat = row["jid"]
+    name = wa_store.name_of(row)
+    wa_store.add_message(chat, sent["message_id"], origin, "text", message, reply_to,
+                         float(sent.get("timestamp") or time.time()), handled=True)
+    try:
+        # The blue ticks: what this answer answered, read. It already went
+        # out, so a receipt that fails is a line in the log and not a
+        # failure of the answer.
+        wa_bridge.read(chat, answered)
+    except wa_bridge.BridgeError as exc:
+        log.warning("whatsapp: read receipt for %s failed: %s", chat, exc)
+    owner = origin == "owner_portal"
+    db.append_event(
+        SENT_EVENT, (OWNER_SENT_LABEL if owner else SENT_LABEL).format(name=name, text=message),
+        "completed", session_id,
+        {"chat_jid": chat, "message_id": sent["message_id"], "text": message},
+    )
+    found = ticket_of(chat)
+    if found is not None:
+        board.comment(found["id"], board.CLIENT if owner else board.AGENT, message,
+                      session_id=session_id, sent=True)
+        board.move(found["id"], board.DONE, said=message, session_id=session_id)
+
+
+def owner_reply(jid: str, text: str) -> None:
+    """The owner answering from the Bandeja (`board_routes.reply`). No typing,
+    no one-answer rule and no takeover: she read the chat and decided. What
+    the person had written is dealt with — she answered it."""
+    row = wa_store.chat(jid)
+    answered = waiting_ids(jid)
+    try:
+        sent = wa_bridge.send(jid, text, None)
+    except wa_bridge.BridgeError as exc:
+        if exc.status in (502, 503):
+            raise board.Refused(OWNER_NOT_CONNECTED) from exc
+        if exc.status == 429:
+            raise board.Refused(OWNER_SLOW_DOWN) from exc
+        raise board.Refused(OWNER_FAILED.format(reason=exc)) from exc
+    wa_store.handle_inbound(jid)
+    went_out(row, sent, text, None, answered, "owner_portal", None)

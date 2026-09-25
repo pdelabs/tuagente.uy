@@ -33,6 +33,10 @@ it is a clock and a live test would have to wait a day to see it close.
      checked before the call.
   e. A CONVERSATION THE AGENT NEVER SAW IS REFUSED — in Spanish, before
      anything leaves.
+  f. THE OWNER ANSWERS FROM THE BANDEJA — `owner_message` sends the same call
+     with no one-answer rule, signs the ticket `cliente` and closes it, and
+     Activity reads «Le escribiste»; past 24 hours it is `board.Refused` with
+     the sentence she reads, and nothing leaves.
 
 IT CLEANS UP AFTER ITSELF: the rows it wrote in the three tables and the events
 are gone by the end, whatever happened.
@@ -199,9 +203,27 @@ try:
     except Exception as exc:
         out["unknown"] = f"{type(exc).__name__}: {exc}"
 
-    out["calls"] = calls
+    out["calls"] = list(calls)
     out["events"] = [dict(r) for r in db.query(
         "SELECT kind, label, payload FROM events WHERE session_id = ? ORDER BY id", (SESSION,))]
+
+    # (f) the owner, from the Bandeja.
+    board_store.move(out["ticket_id"], "blocked", said="Esto lo tiene que ver el dueño.")
+    calls.clear()
+    ig_tools.owner_message(OPEN_THREAD, "Te escribo yo: sí, de 9 a 13.")
+    out["owner_calls"] = [c["body"] for c in calls if c["path"] == f"/v21.0/{USER}/messages"]
+    out["owner_ticket"] = dict(board_store.row_of(out["ticket_id"]))
+    out["owner_comment"] = board_store.comments(out["ticket_id"])[-1]
+    out["owner_events"] = [r["label"] for r in db.query(
+        "SELECT label FROM events WHERE kind = 'message.sent' AND session_id IS NULL"
+        " AND payload LIKE ?", (f"%{OPEN_THREAD}%",))]
+    calls.clear()
+    try:
+        ig_tools.owner_message(CLOSED_THREAD, "Tarde")
+        out["owner_closed"] = ""
+    except board_store.Refused as exc:
+        out["owner_closed"] = str(exc)
+    out["owner_closed_calls"] = len(calls)
     print(json.dumps(out, ensure_ascii=False, default=str))
 finally:
     for ticket in db.query("SELECT id FROM tickets WHERE source = ?", ("instagram-dm",)):
@@ -212,6 +234,7 @@ finally:
         db.write("DELETE FROM instagram_conversations WHERE conversation_id = ?", (thread_id,))
     db.write("DELETE FROM instagram_account", ())
     db.write("DELETE FROM events WHERE session_id = ?", (SESSION,))
+    db.write("DELETE FROM events WHERE session_id IS NULL AND payload LIKE ?", (f"%{OPEN_THREAD}%",))
 """
 
 
@@ -389,6 +412,21 @@ def main() -> int:
     elif "No tengo ninguna conversación" not in unknown:
         problems.append(f"it said {unknown!r}")
     failures += judge("e. a conversation the agent never saw is refused", problems)
+
+    # (f) the owner
+    problems = []
+    if measured["owner_calls"] != [{"recipient": {"id": IGSID},
+                                    "message": {"text": "Te escribo yo: sí, de 9 a 13."}}]:
+        problems.append(f"the owner's send was {measured['owner_calls']!r}")
+    c = measured["owner_comment"]
+    if (measured["owner_ticket"]["status"], c["author"]) != ("done", "cliente"):
+        problems.append(f"the ticket is {measured['owner_ticket']['status']} with {c}")
+    if measured["owner_events"] != [f"Le escribiste a @{WHO} por mensaje: «Te escribo yo: sí, de 9 a 13.»"]:
+        problems.append(f"Activity has {measured['owner_events']}")
+    if "24 horas" not in measured["owner_closed"] or measured["owner_closed_calls"]:
+        problems.append(f"past 24 hours: {measured['owner_closed']!r}, "
+                        f"{measured['owner_closed_calls']} calls")
+    failures += judge("f. the owner answers from the Bandeja", problems)
 
     print("INSTAGRAM MESSAGES: PASS" if not failures else "INSTAGRAM MESSAGES: FAIL")
     return 1 if failures else 0

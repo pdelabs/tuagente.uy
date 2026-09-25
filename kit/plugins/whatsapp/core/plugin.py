@@ -42,6 +42,8 @@ def register(engine) -> None:
     # does itself — the Activity line with the words, the ticket closed.
     engine.toolset(wa_tools.toolset())
     engine.router(wa_routes.router)
+    # What the owner sends herself from the Bandeja (`board_routes.reply`).
+    engine.provide(board_store.REPLY + wa_tools.SOURCE, wa_tools.owner_reply)
     engine.module("whatsapp", True)
     # The chat's name and takeover clock on its Bandeja ticket.
     board_store.EXTRA[wa_tools.SOURCE] = wa_tools.ticket_extra

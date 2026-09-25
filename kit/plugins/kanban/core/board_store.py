@@ -99,6 +99,19 @@ EXTRA: dict = {}
 CLIENT = "cliente"
 AGENT = "agente"
 
+# WHAT THE OWNER TYPES IN THE BANDEJA AND SENDS HERSELF, by source: `fn(
+# source_ref, text) -> None`, filed by each channel plugin as
+# `inbox.reply.<source>` (`board_routes.reply`). It sends through the channel,
+# writes the line on the ticket signed `cliente` and closes it. A channel that
+# will not send it — Meta's 24 hours are gone, the number is not linked —
+# raises `Refused` with the sentence she reads. Mail files none: an answer by
+# mail waits for her yes, and the Bandeja sends her to the chat for it.
+REPLY = "inbox.reply."
+
+
+class Refused(Exception):
+    """A reply the channel would not send, in the owner's words."""
+
 # ── the events a ticket writes ──────────────────────────────────────────────
 
 CREATED = "ticket.created"

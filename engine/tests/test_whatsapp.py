@@ -28,6 +28,12 @@ Free, a few seconds, no model, no phone. The container has to run the plugin
   g. A PUSH WAKES THE FLOW IN SECONDS, AND A BURST IS ONE RUN — `scheduler.poke`
      with the real watcher and a recording `run`: one run a settle after the
      LAST message of three, carrying all three.
+  h. THE OWNER ANSWERS FROM THE BANDEJA — `owner_reply` sends with no typing,
+     marks what the person wrote read and dealt with, signs the ticket
+     `cliente` and closes it, says «Le contestaste» in Activity and takes
+     NOTHING over; the agent's answer after it is refused. A bridge that does
+     not answer is `board.Refused` with the sentence she reads, and nothing
+     is kept.
 
 IT CLEANS UP AFTER ITSELF: its chats, messages, tickets and events.
 """
@@ -186,6 +192,31 @@ try:
     out["chat_resumed"] = dict(wa_store.chat(JID))
     out["resumed_events"] = [r["label"] for r in db.query(
         "SELECT label FROM events WHERE kind = 'whatsapp.resumed' AND payload LIKE ?", (f"%{JID}%",))]
+
+    # (h) the owner answers from the Bandeja.
+    calls.clear()
+    wa_tools.owner_reply(JID, "Te lo mando mañana, Lu")
+    out["calls_h"] = list(calls)
+    out["ticket_h"] = ticket(JID)
+    out["comment_h"] = board.comments(out["ticket_h"]["id"])[-1]
+    out["chat_h"] = dict(wa_store.chat(JID))
+    out["open_h"] = wa_store.open_chats()
+    out["events_h"] = [r["label"] for r in db.query(
+        "SELECT label FROM events WHERE kind = 'whatsapp.sent' AND label LIKE 'Le contestaste%'"
+        " AND payload LIKE ?", (f"%{JID}%",))]
+    calls.clear()
+    out["agent_after_h"] = send(ctx, JID, "Hola")
+    out["agent_calls_h"] = list(calls)
+    kept = db.one("SELECT COUNT(*) AS n FROM whatsapp_messages WHERE chat_jid = ?", (JID,))["n"]
+    os.environ["WHATSAPP_BRIDGE_URL"] = "http://127.0.0.1:1"
+    try:
+        wa_tools.owner_reply(JID, "No va a salir")
+        out["refused_h"] = None
+    except board.Refused as exc:
+        out["refused_h"] = str(exc)
+    os.environ["WHATSAPP_BRIDGE_URL"] = "http://127.0.0.1:8699"
+    out["kept_after_refusal"] = db.one(
+        "SELECT COUNT(*) AS n FROM whatsapp_messages WHERE chat_jid = ?", (JID,))["n"] - kept
 
     # (e) revoke and edit.
     wa_tools.ingest(message(JID2, "BBB1", "Mensaje equivocado"))
@@ -356,6 +387,29 @@ def main() -> int:
             problems.append(f"the run started {runs[0]['after']} s after the first message")
         print(f"  (the run started {runs[0]['after']} s after the first of three messages)")
     failures += judge("g. a push wakes the flow in seconds, a burst is one run", problems)
+
+    problems = []
+    paths = [(c["method"], c["path"]) for c in r["calls_h"]]
+    if paths != [("POST", "/messages"), ("POST", f"/chats/{jid}/read")]:
+        problems.append(f"the calls were {paths}")
+    elif r["calls_h"][1]["body"] != {"message_ids": ["AAA5"]}:
+        problems.append(f"the read body was {r['calls_h'][1]['body']}")
+    c = r["comment_h"]
+    if (r["ticket_h"]["status"], c["author"], c["body"]) != ("done", "cliente", "Te lo mando mañana, Lu"):
+        problems.append(f"the ticket is {r['ticket_h']['status']} with {c}")
+    if r["chat_h"]["taken_over_until"] is not None:
+        problems.append("the owner's portal answer took the chat over")
+    if jid in r["open_h"]:
+        problems.append("what the owner answered is still open")
+    if len(r["events_h"]) != 1 or "«Te lo mando mañana, Lu»" not in r["events_h"][0]:
+        problems.append(f"Activity has {r['events_h']}")
+    if r["agent_calls_h"] or "ya le contestó tu cliente" not in r["agent_after_h"]:
+        problems.append(f"the agent after her: {r['agent_after_h']!r}, calls {r['agent_calls_h']}")
+    if r["refused_h"] != "Tu WhatsApp no está conectado, así que no salió nada.":
+        problems.append(f"a bridge that does not answer: {r['refused_h']!r}")
+    if r["kept_after_refusal"]:
+        problems.append("a refused answer was kept")
+    failures += judge("h. the owner answers from the Bandeja", problems)
 
     print("WHATSAPP: " + ("PASS" if not failures else f"FAIL ({len(failures)})"))
     return 1 if failures else 0

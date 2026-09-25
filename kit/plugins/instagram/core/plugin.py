@@ -122,3 +122,6 @@ def register(engine) -> None:
     # show a person once however many comments and messages they left.
     board_store.EXTRA[ig_tools.FROM_COMMENT] = ig_tools.comment_extra
     board_store.EXTRA[ig_tools.FROM_DM] = ig_tools.dm_extra
+    # What the owner sends herself from the Bandeja (`board_routes.reply`).
+    engine.provide(board_store.REPLY + ig_tools.FROM_COMMENT, ig_tools.owner_comment_reply)
+    engine.provide(board_store.REPLY + ig_tools.FROM_DM, ig_tools.owner_message)
