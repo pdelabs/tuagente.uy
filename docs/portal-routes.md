@@ -33,6 +33,7 @@ in their portal and that we'll take them there as soon as they enter).
 | Board | `/app/pipeline` |
 | Approvals | `/app/approvals` |
 | Posts | `/app/posts` |
+| Brand («Marca») | `/app/brand` |
 | Activity | `/app/activity` |
 | Files | `/app/files` |
 | Usage | `/app/usage` |
@@ -47,6 +48,13 @@ OpenRouter had charged US$1.52. Now the number comes from
 `GET /portal/usage`, which asks OpenRouter for that agent's own key. The tab
 only shows up if the agent has a provider key (the manifest declares `usage`
 for that reason, not from `state.db`).
+
+**Marca (`/app/brand`) has no detail param.** It is one page: the business
+context's sections, the agent's open questions, the owner's notes and her
+business files. Nothing on it opens in place — a file opens in the Files
+viewer (`/app/files?file=negocio/archivos/<name>`) and «Contestar en el chat»
+is a `?d=` draft (below). The tab shows when the manifest declares
+`business`. Its data is `GET /portal/business` on the adapter base.
 
 ## The detail
 

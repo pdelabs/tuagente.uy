@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity, BarChart3, ChevronDown, Columns3, Folder, Hand, Home, Images,
+  Activity, BarChart3, BookOpen, ChevronDown, Columns3, Folder, Hand, Home, Images,
   Inbox, LifeBuoy, LogOut, MessageSquare, Puzzle, Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -67,6 +67,10 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   // knows which one it goes to -- it doesn't, and tomorrow the same tab holds
   // another.
   { key: "posts", path: "/app/posts", label: "Posteos", icon: Images },
+  // Marca: everything the agent knows about the business, for the owner to
+  // confirm or correct. Right after Posteos because that is where it shows
+  // most -- a post in the wrong voice is corrected here, not there.
+  { key: "business", path: "/app/brand", label: "Marca", icon: BookOpen },
   { key: "approvals", path: "/app/approvals", label: "Aprobaciones", icon: Hand },
   // ACTIVIDAD WENT BACK UNDER "Más" (9/16, Luis). It came out of there on 8/13
   // with a good reason -- two blind-QA clients went hunting for it and one of

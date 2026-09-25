@@ -60,6 +60,7 @@ const KIND_LABEL: Record<string, string> = {
   memoria: "Memoria",
   notify: "Aviso",
   "business.researched": "Negocio",
+  "business.corrected": "Negocio",
   archivo: "Archivo",
   conversacion: "Conversación",
 };

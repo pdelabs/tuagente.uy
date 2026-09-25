@@ -30,7 +30,7 @@ import { getChanges, type PortalConfig } from "./agent";
  *  "the approvals moved", not in `approval_reproposed`. */
 export type Topic =
   | "approvals" | "tickets" | "posts" | "flows" | "chat" | "usage" | "activity" | "files"
-  | "whatsapp";
+  | "whatsapp" | "business";
 
 /** The topics one event kind moves. Most kinds are something the agent did
  *  for the owner: Activity and Inicio list it and it may have left a file
@@ -47,6 +47,10 @@ function topicsOf(kind: string): Topic[] {
   if (kind.startsWith("ticket.")) return [...base, "tickets"];
   if (kind.startsWith("post.")) return [...base, "posts"];
   if (kind.startsWith("flow.")) return [...base, "flows"];
+  // The business context moved: a research run started or finished, a
+  // section was confirmed or edited, a file or the notes changed. Marca
+  // redraws; the agent may have written to it from a chat turn too.
+  if (kind.startsWith("business.")) return [...base, "business"];
   // The link to the owner's WhatsApp came up or dropped, a message came in or
   // went out, the owner took a chat over from her phone: the Bandeja's panel
   // and its list, both. A message is a ticket moving even when the plugin

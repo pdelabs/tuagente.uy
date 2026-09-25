@@ -333,6 +333,22 @@ async function post<T>(base: string, path: string, cfg: PortalConfig, body?: unk
   return res.json();
 }
 
+async function put<T>(base: string, path: string, cfg: PortalConfig, body: unknown): Promise<T> {
+  const res = await fetch(base + path, {
+    method: "PUT",
+    headers: { ...headers(cfg), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await failure(res, path);
+  return res.json();
+}
+
+async function del<T>(base: string, path: string, cfg: PortalConfig): Promise<T> {
+  const res = await fetch(base + path, { method: "DELETE", headers: headers(cfg) });
+  if (!res.ok) throw await failure(res, path);
+  return res.json();
+}
+
 /** The shape the `approval` skill gives a request: a markdown box ("if you
  *  approve / if you reject / why"). It's what tells a PROPOSAL apart from any
  *  other text from the agent. */
@@ -897,6 +913,75 @@ export const getAdapterBytes = async (c: PortalConfig, path: string) => {
   if (!res.ok) throw httpError(res.status, path);
   return res.arrayBuffer();
 };
+
+// ── The business context (`manifest.modules.business`) ──
+// Everything the agent works from about the owner's business: what it
+// researched on her website, split in sections she confirms or corrects, the
+// questions it still has, her own free notes and the files she hands it.
+// A CONFIRMED section is the owner's word; an unconfirmed one is the agent's
+// draft. Dates are epoch SECONDS.
+
+export type BusinessSection = {
+  key: string;
+  heading: string;
+  /** Markdown. */
+  text: string;
+  confirmed: boolean;
+  confirmed_at: number | null;
+};
+export type BusinessFile = {
+  name: string;
+  /** Workspace-relative (`negocio/archivos/precios.pdf`): what the Files tab
+   *  opens with `?file=`. */
+  path: string;
+  size: number;
+  uploaded_at: number;
+};
+export type BusinessContext = {
+  /** false until the agent researched the business at least once. */
+  exists: boolean;
+  researched_at: number | null;
+  sources: string[];
+  website: string | null;
+  /** A research run is going on right now. */
+  researching: boolean;
+  sections: BusinessSection[];
+  /** What the agent still doesn't know and would like the owner to answer. */
+  questions: string[];
+  /** The owner's own notes, markdown, read by the agent as-is. */
+  notes: string;
+  files: BusinessFile[];
+};
+
+export const getBusiness = (c: PortalConfig) =>
+  get<BusinessContext>(c.adapter, "/portal/business", c);
+/** Saving the owner's edit CONFIRMS the section: what she wrote is her word. */
+export const saveBusinessSection = (c: PortalConfig, key: string, text: string) =>
+  put<{ ok: boolean; section: BusinessSection }>(
+    c.adapter, `/portal/business/sections/${encodeURIComponent(key)}`, c, { text });
+export const confirmBusinessSection = (c: PortalConfig, key: string) =>
+  post<{ ok: boolean; section: BusinessSection }>(
+    c.adapter, `/portal/business/sections/${encodeURIComponent(key)}/confirm`, c);
+export const saveBusinessNotes = (c: PortalConfig, text: string) =>
+  put<{ ok: boolean }>(c.adapter, "/portal/business/notes", c, { text });
+/** Multipart, field `file`: the bytes go as they are, no base64. */
+/** Same body as `/portal/upload` (the engine has no multipart parser). */
+export async function uploadBusinessFile(c: PortalConfig, file: File) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < buf.length; i += 8192) {
+    bin += String.fromCharCode.apply(null, Array.from(buf.subarray(i, i + 8192)));
+  }
+  return post<{ ok: boolean; file: BusinessFile }>(
+    c.adapter, "/portal/business/files", c, { name: file.name, content_b64: btoa(bin) },
+  );
+}
+export const deleteBusinessFile = (c: PortalConfig, name: string) =>
+  del<{ ok: boolean }>(c.adapter, `/portal/business/files/${encodeURIComponent(name)}`, c);
+/** Starts a research run in the background. A 409 carries the sentence of why
+ *  not (one is already running). */
+export const researchBusiness = (c: PortalConfig, website?: string) =>
+  post<{ ok: boolean }>(c.adapter, "/portal/business/research", c, website ? { website } : {});
 
 // ── WhatsApp (`manifest.modules.whatsapp`) ──
 // The agent's WhatsApp is a LINKED DEVICE of the client's own number, the way
