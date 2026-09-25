@@ -25,9 +25,25 @@ asked for a second call on `questions` and the face never made it. So the
 questions her words answer are an argument of the same call, required, and the
 code takes them off the list; a question it cannot find goes back with the
 list as it reads now, so a paraphrase does not silently leave it there.
+
+A SECTION THE OWNER CONFIRMED IS HERS, AND THE RESEARCHER DOES NOT TOUCH IT.
+The «Marca» tab shows every section with a state — «Borrador» (read on the
+web) or «Confirmado» (her word) — and confirming is a row in
+`business_confirmed` holding the sha256 of the section's text AT THAT MOMENT. A
+section is confirmed while the row's digest is the digest of what the section
+says now, so anything that rewrites it afterwards — a new research, a hand
+edit in Archivos — lapses the confirmation on its own, with no code having to
+remember to clear it: honest by construction. Three paths confirm, and all
+three are her word: the confirm button, her edit from the tab, and the face's
+`correct_draft`, which writes what she just said. `save_draft` keeps every
+confirmed section's text as it is and writes the rest. `questions` and
+`sources` are not confirmable: one is what the agent still wants to know, the
+other what the researcher read.
 """
 
+import hashlib
 import re
+import time
 from datetime import datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -35,7 +51,7 @@ from zoneinfo import ZoneInfo
 import business_site
 from pydantic_ai import FunctionToolset, ModelRetry, RunContext
 
-from core import config, identity
+from core import config, db, identity
 
 DRAFT = "negocio/borrador.md"
 
@@ -50,6 +66,7 @@ NOTE = (
     " publicado: corregí lo que no sea así y contame lo que falta —las"
     " preguntas del final son lo que más me sirve saber—."
 )
+NOTE_DATE = re.compile(r"^> Borrador que armé leyendo .* el (\d{2}/\d{2}/\d{4})\.", re.M)
 SECTIONS = (
     ("summary", "En pocas palabras"),
     ("offer", "Qué vendés"),
@@ -78,6 +95,25 @@ NOT_A_QUESTION = (
     " ninguna. Las preguntas ahora son:\n{questions}"
 )
 NO_DRAFT = "Todavía no hay borrador en {path}: guardá lo que te dijo en tu memoria y listo."
+KEPT = " Dejé como estaban {headings}: tu cliente ya las confirmó."
+# The face, correcting a section with what the owner said, leaves a line in
+# Activity: it is her agent changing what it knows about her business, and the
+# «Marca» tab refetches on it (`/portal/changes`).
+CORRECTED_EVENT = "Corregí «{heading}» en Marca con lo que me dijiste."
+
+CONFIRMABLE = tuple(key for key, _ in SECTIONS if key not in ("questions", "sources"))
+LISTS = ("offer", "prices", "where_and_when", "channels", "questions")
+
+db.write(
+    "CREATE TABLE IF NOT EXISTS business_confirmed"
+    " (section TEXT PRIMARY KEY, digest TEXT NOT NULL, confirmed_at REAL NOT NULL)"
+)
+# When the researcher last saved a draft: the note says the day, the tab says
+# «hace dos horas». One row.
+db.write(
+    "CREATE TABLE IF NOT EXISTS business_researched"
+    " (id INTEGER PRIMARY KEY CHECK (id = 1), at REAL NOT NULL)"
+)
 
 # THE DRAFT HAS TO HAVE READ THE SITE, and it is checked here because the prose
 # alone did not do it (`business_site.py`). ONE REFUSAL per site and process:
@@ -210,6 +246,68 @@ def same_question(asked: str, listed: str) -> bool:
     return bool(flat(asked)) and flat(asked) in flat(listed)
 
 
+def body(text: str, key: str) -> str | None:
+    """What section `key` says, without its heading: `None` when it is not there."""
+    lines = text.splitlines()
+    start, end = bounds(lines, key)
+    if start is None:
+        return None
+    return "\n".join(lines[start + 1:end]).strip()
+
+
+def fingerprint(section_text: str) -> str:
+    return hashlib.sha256(section_text.strip().encode()).hexdigest()
+
+
+def confirm(text: str, key: str) -> None:
+    """Section `key` of `text` is the owner's word, as it reads in `text`."""
+    db.write(
+        "INSERT OR REPLACE INTO business_confirmed (section, digest, confirmed_at) VALUES (?, ?, ?)",
+        (key, fingerprint(body(text, key) or ""), time.time()),
+    )
+
+
+def confirmations(text: str) -> dict[str, float]:
+    """The sections of `text` that are confirmed NOW, with when: a row whose
+    digest is not what the section says any more is a confirmation that
+    lapsed."""
+    return {
+        row["section"]: row["confirmed_at"]
+        for row in db.query("SELECT section, digest, confirmed_at FROM business_confirmed")
+        if row["section"] in CONFIRMABLE
+        and (found := body(text, row["section"])) is not None
+        and fingerprint(found) == row["digest"]
+    }
+
+
+def rewritten(text: str, key: str, content: list[str]) -> str:
+    """`text` with section `key` set to `content`: one item per line for a list
+    section, paragraphs for the others. The one formatting path for the face's
+    correction and the owner's edit from «Marca»."""
+    value = content if key in LISTS else "\n\n".join(c.strip() for c in content)
+    return replace(text, key, value)
+
+
+def save(text: str, key: str) -> None:
+    """Write the draft, and confirm section `key` if it is confirmable: whoever
+    calls this is writing the owner's word into it."""
+    (config.WORKSPACE / DRAFT).write_text(text)
+    if key in CONFIRMABLE:
+        confirm(text, key)
+
+
+def researched_at(text: str) -> float | None:
+    """When the draft was researched, epoch seconds. A draft saved before this
+    was recorded has only its note's day, which is still the truth about it."""
+    row = db.one("SELECT at FROM business_researched WHERE id = 1")
+    if row:
+        return row["at"]
+    day = NOTE_DATE.search(text)
+    if not day:
+        return None
+    return datetime.strptime(day.group(1), "%d/%m/%Y").replace(tzinfo=ZoneInfo(config.TIMEZONE)).timestamp()
+
+
 def toolset() -> FunctionToolset:
     """The researcher's: `save_draft`, which writes the whole draft."""
     ts = FunctionToolset()
@@ -263,18 +361,29 @@ def toolset() -> FunctionToolset:
             "where_and_when": where_and_when, "channels": channels, "voice": voice,
             "edge": edge, "questions": questions, "sources": sources,
         }
+        target = config.WORKSPACE / DRAFT
+        before = target.read_text() if target.exists() else ""
+        # Her confirmed sections go back in AS THEY READ, a string: `section()`
+        # writes a string as it came, so the digest still matches and they stay
+        # confirmed.
+        kept = {key: body(before, key) for key in confirmations(before)}
+        parts.update(kept)
         seen = amounts(parts)
         site = business_site.host(sources[0]) if sources else ""
-        if seen and not any(p.strip() for p in prices) and site not in _priced:
+        priced = "prices" in kept or any(p.strip() for p in prices)
+        if seen and not priced and site not in _priced:
             _priced.add(site)
             raise ModelRetry(PRICES_EMPTY.format(
                 amounts=", ".join(f"«{a}»" for hits in seen.values() for a in hits[:3]),
                 where=" y ".join(f"«{HEADINGS[k]}»" for k in seen),
             ))
-        target = config.WORKSPACE / DRAFT
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(render(parts, datetime.now(ZoneInfo(config.TIMEZONE))))
-        return SAVED.format(path=DRAFT)
+        db.write("INSERT OR REPLACE INTO business_researched (id, at) VALUES (1, ?)", (time.time(),))
+        said = SAVED.format(path=DRAFT)
+        if kept:
+            said += KEPT.format(headings=", ".join(f"«{HEADINGS[k]}»" for k in kept))
+        return said
 
     return ts
 
@@ -296,6 +405,8 @@ def corrections() -> FunctionToolset:
         wrong or no longer so. Spanish, to her, in vos («Cerrás los sábados a
         las 14»). For a list section (offer, prices, where_and_when, channels,
         questions) one item per line; for the others, one or two paragraphs.
+        The section is left CONFIRMED, as her word: only with what she told
+        you, never with what you guessed or read somewhere.
 
         Args:
             section: which section: summary, offer, customers, prices, where_and_when, channels, voice, edge or questions.
@@ -305,9 +416,7 @@ def corrections() -> FunctionToolset:
         target = config.WORKSPACE / DRAFT
         if not target.exists():
             return NO_DRAFT.format(path=DRAFT)
-        lists = ("offer", "prices", "where_and_when", "channels", "questions")
-        value = content if section in lists else "\n\n".join(c.strip() for c in content)
-        text = replace(target.read_text(), section, value)
+        text = rewritten(target.read_text(), section, content)
         if answered_questions:
             open_ = items(text, "questions")
             unknown = [a for a in answered_questions if not any(same_question(a, q) for q in open_)]
@@ -318,7 +427,9 @@ def corrections() -> FunctionToolset:
                 ))
             left = [q for q in open_ if not any(same_question(a, q) for a in answered_questions)]
             text = replace(text, "questions", left)
-        target.write_text(text)
+        # Her word: the section is confirmed as it reads now.
+        save(text, section)
+        db.append_event("business.corrected", CORRECTED_EVENT.format(heading=HEADINGS[section]), "completed")
         said = CORRECTED.format(heading=HEADINGS[section], path=DRAFT)
         if answered_questions:
             said += " " + ANSWERED.format(count=len(open_) - len(left))

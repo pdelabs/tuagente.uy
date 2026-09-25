@@ -49,6 +49,13 @@ TASK = (
     " `save_draft`.\n\nEstas son las páginas de la web (las encontré yo, del"
     " sitemap o del menú):\n{pages}"
 )
+# What the owner already confirmed in «Marca». `save_draft` keeps those
+# sections as they are whatever the researcher passes, so this is not a rule
+# the model has to keep: it is so its questions do not ask what she answered.
+CONFIRMED = (
+    "\n\nEstas secciones ya las confirmó tu cliente y quedan como están; no"
+    " preguntes lo que ya dicen:\n{sections}"
+)
 
 _agent: Agent | None = None
 _deps = None
@@ -75,9 +82,15 @@ async def run(company: str, url: str) -> str:
     from core import config, turn_usage
 
     listed = await business_site.pages(url)
+    task = TASK.format(company=company or url, url=url, pages="\n".join(f"- {p}" for p in listed[:40]))
+    draft = config.WORKSPACE / business_draft.DRAFT
+    text = draft.read_text() if draft.exists() else ""
+    confirmed = business_draft.confirmations(text)
+    if confirmed:
+        task += CONFIRMED.format(sections="\n\n".join(
+            f"### {business_draft.HEADINGS[k]}\n{business_draft.body(text, k)}" for k in confirmed))
     result = await _agent.run(
-        TASK.format(company=company or url, url=url,
-                    pages="\n".join(f"- {p}" for p in listed[:40])),
+        task,
         deps=_deps(workspace=config.WORKSPACE, session_id=f"business-{NAME}"),
         usage_limits=LIMITS,
     )

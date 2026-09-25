@@ -63,6 +63,9 @@ from core import config, db, identity
 out = {}
 live = identity.LIVE.read_text() if identity.LIVE.exists() else None
 marks = db.query("SELECT key, at FROM business_marks")
+# `correct_draft` confirms and `save_draft` stamps: both tables go back too.
+confirmed_rows = db.query("SELECT section, digest, confirmed_at FROM business_confirmed")
+researched_rows = db.query("SELECT id, at FROM business_researched")
 draft = config.WORKSPACE / business_draft.DRAFT
 before = draft.read_text() if draft.exists() else None
 first_event = db.one("SELECT COALESCE(MAX(id), 0) AS id FROM events")["id"]
@@ -230,6 +233,12 @@ finally:
     db.write("DELETE FROM business_marks")
     for r in marks:
         db.write("INSERT INTO business_marks (key, at) VALUES (?, ?)", (r["key"], r["at"]))
+    db.write("DELETE FROM business_confirmed")
+    for r in confirmed_rows:
+        db.write("INSERT INTO business_confirmed (section, digest, confirmed_at) VALUES (?, ?, ?)", tuple(r))
+    db.write("DELETE FROM business_researched")
+    for r in researched_rows:
+        db.write("INSERT INTO business_researched (id, at) VALUES (?, ?)", tuple(r))
     db.write("DELETE FROM events WHERE id > ?", (first_event,))
     if before is None:
         draft.unlink(missing_ok=True)
