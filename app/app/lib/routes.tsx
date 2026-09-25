@@ -51,6 +51,9 @@ export const PARAM = {
 /** `?p=` (the request the chat starts with) also counts as arriving with an
  *  intention: it's not a detail, but it hides the welcome screen just the same. */
 export const PARAM_CHAT_REQUEST = "p";
+/** `?d=` is the other way in: a NEW conversation with the message written in
+ *  the box and NOT sent, for the client to add to it and send herself. */
+export const PARAM_CHAT_DRAFT = "d";
 
 // The conversation the client was last in, so arriving at Chat with nothing
 // in the URL lands there and not on a blank «Nueva conversación». A
@@ -75,7 +78,7 @@ export function lastConversation(): string | null {
   }
 }
 
-const DETAILS: string[] = [...Object.values(PARAM), PARAM_CHAT_REQUEST];
+const DETAILS: string[] = [...Object.values(PARAM), PARAM_CHAT_REQUEST, PARAM_CHAT_DRAFT];
 
 /** Does this URL point at something concrete (and not a tab's home screen)?
  *  Used by the shell to NOT get in the way with the module's welcome screen:

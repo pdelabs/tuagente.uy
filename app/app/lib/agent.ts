@@ -591,6 +591,12 @@ export const getTickets = (c: PortalConfig, source?: "channels" | "work") =>
     c.adapter, source ? `/portal/tickets?source=${source}` : "/portal/tickets", c);
 export const getTicketDetail = (c: PortalConfig, id: string) =>
   get<TicketDetail>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}`, c);
+/** The owner answering the person herself, from the Bandeja: it goes out
+ *  through the ticket's channel (WhatsApp, the Instagram DM, a reply under the
+ *  comment). A 409 carries the sentence of why it did not — Meta's 24 hours,
+ *  the number not linked. */
+export const replyToTicket = (c: PortalConfig, id: string, text: string) =>
+  post<{ ok: boolean }>(c.adapter, `/portal/tickets/${encodeURIComponent(id)}/reply`, c, { text });
 export const getApprovals = (c: PortalConfig) => get<{ approvals: any[] }>(c.adapter, "/portal/approvals", c);
 /** `correction` (optional): your corrected version gets recorded as your own
  *  comment before the stopped call goes ahead -- the original request isn't

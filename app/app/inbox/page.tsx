@@ -12,18 +12,18 @@
 // overlap: a ticket lives on one screen, and a client who answers a mail on
 // the board and then finds it again in the inbox is a client with two inboxes.
 //
-// WHAT THE CLIENT DOES HERE IS READ AND DECIDE. She does not write the answer:
-// a mail's waits for her ok in Aprobaciones; an Instagram or WhatsApp answer
-// goes out on its own (since 2026-09-24), and a blocked thread there is one
-// the agent left for her, with its note on the thread. On WhatsApp she can
-// also answer from her own phone, which takes the chat over for a while
-// (`TakeoverBanner`), and give it back from here. What she can do is TELL THE AGENT
-// something about the conversation, and that goes where everything the client
-// asks for goes — the chat, with the request already written (`?p=`).
+// WHAT THE CLIENT DOES HERE IS READ, AND ANSWER WHEN IT IS HERS. An Instagram
+// or WhatsApp answer goes out on its own (since 2026-09-24), and a blocked
+// thread is one the agent left for her, with its note on the thread. She can
+// answer it right here (`Composer`, since 2026-09-25), or take it to the chat
+// with the conversation already named («Verlo con…», `?d=`). On WhatsApp she
+// can also answer from her own phone, which takes the chat over for a while
+// (`TakeoverBanner`), and give it back from here. A mail's answer waits for
+// her ok in Aprobaciones.
 //
 // IT IS DRAWN LIKE THE MESSAGING APPS SHE ALREADY USES (Luis, 2026-09-24):
 // the list of chats on the left, the open one on the right with its bubbles,
-// and at the bottom, where a composer would be, the box that asks the agent.
+// and at the bottom the composer.
 // The whole screen is one viewport tall and each pane scrolls on its own; on
 // a phone it is one pane at a time.
 //
@@ -38,17 +38,16 @@ import {
   useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentType,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, ChevronDown, ExternalLink, Hand, Inbox, Mail, MessagesSquare, RefreshCw, Search, Send,
-  Smartphone, X,
+  ArrowLeft, ChevronDown, ExternalLink, Hand, Inbox, Loader2, Mail, MessagesSquare, RefreshCw, Search,
+  Send, Smartphone, Sparkles, X,
 } from "lucide-react";
 import {
   getApprovals, getFlows, getManifest, getTicketDetail, getTickets, isTheAgent, isTheClient,
-  loadConfig, readComment, authorLabel,
+  loadConfig, readComment, authorLabel, replyToTicket,
   type PortalConfig, type Ticket, type TicketComment, type TicketDetail,
 } from "../lib/agent";
-import { buildChatLink } from "../lib/flowExamples";
+import { buildChatDraftLink } from "../lib/flowExamples";
 import { momentOf, timeOf } from "../lib/labels";
 import { loadAgentName } from "../lib/onboarding";
 import { AgentitoAvatar, loadAgentLook } from "../lib/agentito";
@@ -562,77 +561,130 @@ function Thread({ tickets, comments, person, look, focus }: {
   );
 }
 
-// Where she answers the person HERSELF, said under the box that does not.
-const ANSWER_YOURSELF: Record<Channel, string> = {
-  whatsapp: "Para escribirle vos, contestale desde tu celular.",
-  instagram: "Para escribirle vos, contestale desde Instagram.",
-  mail: "Para escribirle vos, contestale desde tu mail.",
+// WHERE HER ANSWER GOES, said under the box before she sends it. An answer
+// under an Instagram comment is public, and she should know that first.
+const GOES_TO: Record<string, string> = {
+  whatsapp: "Le llega por WhatsApp, desde tu número.",
+  "instagram-dm": "Le llega por mensaje privado de Instagram.",
+  instagram: "Se publica como respuesta a su comentario, a la vista de todos.",
 };
 
-/** Where a composer would be: one line to the AGENT about this conversation,
- *  and the chat opens with the request already sent. The person never reads
- *  it — the line under the box says so, and where she writes to them.
+/** Where a messaging app has its composer: the OWNER answering the person
+ *  herself (Luis, 2026-09-25). What she types goes out through the channel of
+ *  the conversation's most recent ticket (`POST /portal/tickets/{id}/reply`),
+ *  lands in the thread signed as hers and closes the ticket. It is an answer,
+ *  not a takeover: what the person writes next, the agent answers.
  *
- *  The sentence is FINISHED before the link exists. `?p=` sends itself the
- *  moment the chat opens (`docs/portal-routes.md`), so a link ending in a
- *  colon for the client to complete would land her in a screen where there is
- *  nothing left to complete — the same reason Posteos asks what is wrong with
- *  the image before it builds the link.
+ *  «Verlo con <agente>» is the other way: the chat, in a NEW conversation,
+ *  with the conversation's context already in the box and NOT sent
+ *  (`?d=`) — she adds what she wants and sends it there, where the agent can
+ *  look things up, prepare a quote and learn from what she tells it.
  *
- *  IT NAMES THE PERSON AND EVERY TICKET ID: the row is a person, but the agent
- *  acts on tickets, and on Instagram one person can be several of them. */
-function AskAgent({ tickets, person }: { tickets: Ticket[]; person: Person }) {
-  const [what, setWhat] = useState("");
-  const router = useRouter();
+ *  Mail has no box: an answer by mail waits for her yes, so the chat is the
+ *  only way, and the button is all there is.
+ *
+ *  THE CONTEXT NAMES THE PERSON AND EVERY TICKET ID: the row is a person, but
+ *  the agent acts on tickets, and on Instagram one person can be several. */
+function Composer({ cfg, tickets, person, onSent }: {
+  cfg: PortalConfig; tickets: Ticket[]; person: Person; onSent: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const field = useId();
-  const ask = what.trim();
+  const target = [...tickets]
+    .filter((t) => t.source && t.source in GOES_TO)
+    .sort((a, b) => msOf(b) - msOf(a))[0];
   const channel = channelKey(tickets[0]);
-  const href = ask ? buildChatLink(askAbout(tickets, person, channel, ask)) : null;
+  const draft = buildChatDraftLink(`${contextOf(tickets, person, channel)}\n\n`);
+  const words = text.trim();
+
+  const send = async () => {
+    if (!target || !words || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      await replyToTicket(cfg, target.id, words);
+      setText("");
+      onSent();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const withAgent = (
+    <Link
+      href={draft}
+      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-[13px] font-semibold text-ink transition hover:border-primary/40 hover:text-primary"
+    >
+      <Sparkles className="h-4 w-4" />
+      Verlo con {agentName()}
+    </Link>
+  );
+
   return (
     <div className="shrink-0 border-t border-black/[0.07] bg-white px-3 pb-2.5 pt-2.5 md:px-4">
-      <form
-        className="mx-auto flex max-w-3xl items-center gap-2"
-        onSubmit={(e) => { e.preventDefault(); if (href) router.push(href); }}
-      >
-        <label htmlFor={field} className="sr-only">
-          Qué querés que haga {agentName()} con esta conversación
-        </label>
-        <input
-          id={field}
-          value={what}
-          onChange={(e) => setWhat(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Escape") setWhat(""); }}
-          placeholder={`Pedile algo a ${agentName()} sobre esta conversación…`}
-          className="h-10 min-w-0 flex-1 rounded-xl border border-black/10 bg-black/[0.025] px-3.5 text-[14px] text-ink outline-none transition placeholder:text-ink-soft/70 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15"
-        />
-        <button
-          type="submit"
-          disabled={!href}
-          aria-label="Pedírselo"
-          title="Pedírselo"
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-white transition hover:bg-primary-dark disabled:opacity-40"
+      {target ? (
+        <form
+          className="mx-auto flex max-w-3xl items-end gap-2"
+          onSubmit={(e) => { e.preventDefault(); send(); }}
         >
-          <Send className="h-4 w-4" />
-        </button>
-      </form>
-      <p className="mx-auto mt-1.5 max-w-3xl px-1 text-[11px] text-ink-soft">
-        Se lo pedís a {agentName()} en el chat; la persona no lo ve.
-        {channel && ` ${ANSWER_YOURSELF[channel]}`}
-      </p>
+          <label htmlFor={field} className="sr-only">Tu respuesta</label>
+          <textarea
+            id={field}
+            value={text}
+            rows={1}
+            onChange={(e) => { setText(e.target.value); setError(null); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            placeholder={`Escribile a ${person.name || "esta persona"}…`}
+            className="max-h-40 min-h-10 min-w-0 flex-1 resize-none rounded-xl border border-black/10 bg-black/[0.025] px-3.5 py-2 text-[14px] leading-6 text-ink outline-none transition [field-sizing:content] placeholder:text-ink-soft/70 focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/15"
+          />
+          <button
+            type="submit"
+            disabled={!words || sending}
+            aria-label="Enviar"
+            title="Enviar"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-white transition hover:bg-primary-dark disabled:opacity-40"
+          >
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </button>
+          {withAgent}
+        </form>
+      ) : (
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+          <p className="text-[12px] text-ink-soft">
+            Las respuestas por mail pasan por tu ok: pedísela a {agentName()} en el chat.
+          </p>
+          {withAgent}
+        </div>
+      )}
+      {target && (
+        <p className={`mx-auto mt-1.5 max-w-3xl px-1 text-[11px] ${error ? "text-c-coral-ink" : "text-ink-soft"}`}>
+          {error ?? GOES_TO[target.source as string]}
+        </p>
+      )}
     </div>
   );
 }
 
-/** The request to the agent, in words. A mail keeps its subject — that IS the
- *  conversation —; anybody else is named, with every ticket id they have. */
-function askAbout(tickets: Ticket[], person: Person, channel: Channel | null, ask: string): string {
+/** What the chat starts with: which conversation this is, in words. A mail
+ *  keeps its subject — that IS the conversation —; anybody else is named,
+ *  with every ticket id they have. */
+function contextOf(tickets: Ticket[], person: Person, channel: Channel | null): string {
   const ids = tickets.map((t) => t.id).join(", ");
   if (channel === "mail" && tickets.length === 1)
-    return `Sobre la conversación «${tickets[0].title}» (${ids}): ${ask}`;
+    return `Sobre la conversación «${tickets[0].title}» (${ids}):`;
   const who = person.handle && person.handle !== person.name
     ? `${person.name} (${person.handle})` : person.name || tickets[0].title;
   const where = CHANNELS.find((c) => c.key === channel)?.label;
-  return `Sobre la conversación con ${who}${where ? ` por ${where}` : ""} (${ids}): ${ask}`;
+  return `Sobre la conversación con ${who}${where ? ` por ${where}` : ""} (${ids}):`;
 }
 
 export default function InboxPage() {
@@ -1045,7 +1097,14 @@ export default function InboxPage() {
                     No pude traer el resto de la conversación.
                   </p>
                 )}
-                {openTickets.length > 0 && <AskAgent tickets={openTickets} person={person} />}
+                {openTickets.length > 0 && cfg && (
+                  <Composer
+                    cfg={cfg}
+                    tickets={openTickets}
+                    person={person}
+                    onSent={() => { load(); loadDetails(); reloadChat(); }}
+                  />
+                )}
               </EntityProvider>
             )}
           </section>

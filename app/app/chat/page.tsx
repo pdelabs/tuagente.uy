@@ -17,7 +17,7 @@ import {
 } from "../lib/agent";
 import { Btn, EmptyState, ErrorState, IconBtn, Spinner } from "../lib/ui";
 import {
-  CopyLink, PARAM, PARAM_CHAT_REQUEST, lastConversation, openInRoute, rememberConversation,
+  CopyLink, PARAM, PARAM_CHAT_DRAFT, PARAM_CHAT_REQUEST, lastConversation, openInRoute, rememberConversation,
   replaceInRoute, useRouteParam,
 } from "../lib/routes";
 import { EntityProvider } from "../lib/EntityViewer";
@@ -242,6 +242,26 @@ export default function ChatPage() {
     run(request.trim(), []);
   }, [cfg]);
 
+  // OPEN A NEW CONVERSATION WITH THE MESSAGE WRITTEN BUT NOT SENT: ?d=<text>.
+  // The Bandeja's «Verlo con…» — the conversation's context is in the box and
+  // the client says what she wants before sending. Read once, at arrival, and
+  // cleaned off the URL; `drafted` also keeps the arrival below from
+  // reopening the last conversation over it.
+  const drafted = useRef(false);
+  useEffect(() => {
+    const draft = new URLSearchParams(window.location.search).get(PARAM_CHAT_DRAFT);
+    if (!draft) return;
+    drafted.current = true;
+    replaceInRoute({ [PARAM_CHAT_DRAFT]: null });
+    setInput(draft);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(draft.length, draft.length);
+    });
+  }, []);
+
   // A REFRESH THAT ARRIVES LATE DOES NOT PAINT. The same counter `loadThread`
   // uses to know whether the thread it opened is still the thread on screen:
   // a slower request is ignored, never awaited.
@@ -463,7 +483,7 @@ export default function ChatPage() {
     // with `?p=`, which is a new conversation by definition: the effect above
     // has already sent it and already cleaned it out of the URL, so what says
     // so here is the send in flight.
-    if (previous === undefined && !activeId && !sendingRef.current) {
+    if (previous === undefined && !activeId && !sendingRef.current && !drafted.current) {
       const last = lastConversation();
       if (last) {
         restoredRef.current = last;

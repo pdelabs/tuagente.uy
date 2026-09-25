@@ -96,6 +96,10 @@ export const FLOW_EXAMPLES: FlowExample[] = [
 export const buildChatLink = (prompt: string) =>
   `/app/chat?p=${encodeURIComponent(prompt)}`;
 
+/** A new chat with the message written in the box and NOT sent. */
+export const buildChatDraftLink = (draft: string) =>
+  `/app/chat?d=${encodeURIComponent(draft)}`;
+
 /** Horizontal carousel: drags and snaps to each card.
  *
  *  The edges fade out with `mask-image` instead of cutting off sharply: a

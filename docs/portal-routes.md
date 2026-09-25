@@ -234,10 +234,6 @@ Who builds one today:
 
 - **Flows** — the example cards and the two offers on a flow that lost its
   scheduled task (`app/app/lib/flowExamples.tsx`, `app/app/flows/FlowStatus.tsx`).
-- **Inbox** — «Pedirle al agente», on the open conversation: the client writes
-  in one line what she wants done and the link carries «Sobre la conversación
-  «<título>» (t_ab12): contestale que sí, pero pedile la dirección». The
-  sentence is finished before the link exists, for the reason above.
 - **Posts** — two of them, and for the same reason: the tab never asks the
   agent for anything of its own.
   - «Arreglar esta imagen», under each slide of an open post: the client
@@ -254,6 +250,20 @@ Who builds one today:
     «Publicado» chip and the permalink instead, and has no button.
     `engine/tests/test_publish_gate.sh` walks the whole sentence, from the
     message to the card to the client's yes.
+
+## `?d=` — the chat with the message written, NOT sent
+
+`/app/chat?d=<text>` opens a new conversation with the text in the box and the
+cursor at its end; the client adds what she wants and sends it herself. Cleaned
+off the URL on arrival, and it keeps the chat from reopening the last
+conversation over it.
+
+Who builds one today:
+
+- **Inbox** — «Verlo con <agente>», next to the composer: the box starts with
+  «Sobre la conversación con Anita (@anitamaral) por Instagram (t_ab12,
+  t_cd34):». The composer itself answers the person directly
+  (`POST /portal/tickets/{id}/reply`); this is for what needs the agent.
 
 ## `?request=` doesn't go stale by rejecting it
 
