@@ -40,14 +40,18 @@ import {
 // not a deletion: the screen, its route and its welcome screen stay whole,
 // and removing the key from here brings them back to the nav.
 //
-// There's none today. `usage` sat here from 8/16 to 8/19/2026, because the
+// `skills` since 9/26/2026 (Luis): the agent's instruction files, read-only,
+// with names only we understand — nothing a client can act on. The page stays
+// at /app/skills for us.
+//
+// `usage` sat here from 8/16 to 8/19/2026, because the
 // number it showed was FALSE, and false in the worst direction: it only saw
 // what passed through litellm, and image generation hits the provider
 // directly (the tab said US$0.17 the day the provider charged US$1.52 -- 9x).
 // It came back once the number stopped being ours: it now comes from the
 // agent's own OpenRouter account (`/portal/usage`), which is what they were
 // actually charged.
-export const HIDDEN_MODULES = new Set<string>([]);
+export const HIDDEN_MODULES = new Set<string>(["skills"]);
 
 export const MODULES: { key: string; path: string; label: string; icon: LucideIcon; sec?: boolean }[] = [
   { key: "home", path: "/app/home", label: "Inicio", icon: Home },
