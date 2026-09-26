@@ -71,12 +71,11 @@ function timeAgo(mtime: number): string {
 }
 
 
-function FlowCard({ f, e, cfg, posts, onChange }: {
+function FlowCard({ f, e, cfg, onChange }: {
   f: Flow;
   e: RealStatus;
   cfg: PortalConfig;
   /** The agent has the Posteos tab: that is where this flow's work shows up. */
-  posts: boolean;
   onChange: () => void;
 }) {
   const Icon = TRIGGER_ICON[f.trigger_type] ?? Workflow;
@@ -145,20 +144,6 @@ function FlowCard({ f, e, cfg, posts, onChange }: {
             </Link>
           )}
         </div>
-      )}
-
-      {/* "Todavía no produjo resultados" (Hasn't produced results yet) over a
-          flow that ran and failed was the same lie said quietly: there it is
-          not that it hasn't produced yet, it is that it couldn't. It stays
-          quiet whenever there is something to say -- even paused, which is
-          how a broken flow the client stopped ends up looking.
-          Results are filled by the plugins that produce them (a post, a
-          deliverable); until the first one lands, the line says where the
-          flow's work will show up. */}
-      {!e.note && e.missingConnections.length === 0 && !e.unconfirmed && f.results.length === 0 && (
-        <p className="text-[12px] text-ink-soft/80">
-          {posts ? "Lo que arma te queda en Posteos." : "Lo que produce te queda en Archivos."}
-        </p>
       )}
 
       <FlowActions cfg={cfg} e={e} name={f.name} trigger={f.trigger} triggerType={f.trigger_type} onChange={onChange} />
@@ -332,7 +317,6 @@ export default function FlowsPage() {
               f={flow}
               e={status}
               cfg={cfg}
-              posts={Boolean(manifest?.modules?.posts)}
               onChange={reread}
             />
           ))}
