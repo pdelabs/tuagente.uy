@@ -43,8 +43,8 @@ which brought flows into the engine, an image plugin and a social plugin with
 its Posts tab. `docs/own-agent-plan.md`, `docs/own-agent-verdict.md`. Open
 after it, and whose:
 
-- **The mascot** (Luis): generative 3D robot that drifts daily, or the HTML
-  renderer in `social/` for the brand's SVG agentito.
+- **The mascot** (Luis): generative 3D robot that drifts daily. (The HTML
+  renderer that was the other option was removed from `social/` on 2026-09-26.)
 - **The agent's name** (Luis): «Tu Agente» for now.
 - **Telling the owner: BUILT, waiting on Luis for the account** (2026-09-22,
   replaces Telegram, which was taken out). The `notify` plugin mails the owner

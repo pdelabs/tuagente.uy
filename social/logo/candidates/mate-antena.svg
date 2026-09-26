@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
-  <!-- A mate whose bombilla is the antenna; one round eye -->
-  <path d="M38 44h44c2 0 4 2 4 4v22c0 15-11 27-26 27S34 85 34 70V48c0-2 2-4 4-4z" stroke="#5B4BE8" stroke-width="9" stroke-linejoin="round"/>
-  <line x1="74" y1="44" x2="94" y2="18" stroke="#5B4BE8" stroke-width="9" stroke-linecap="round"/>
-  <circle cx="97" cy="14" r="6.5" fill="#5B4BE8"/>
-  <circle cx="60" cy="68" r="7" fill="#5B4BE8"/>
-</svg>
