@@ -52,6 +52,14 @@ Before anything else: **someone who has never heard of tuagente.uy reads slide 1
 alone, in the feed, and knows what it is about and whether it is for them.**
 Clear beats clever, always. Slide 1 names the reader's situation, concretely:
 
+- **Most posts: a yes-question about the reader's problem.** «¿Te escriben
+  por WhatsApp cuando ya cerraste?» · «¿Perdiste una venta por contestar
+  tarde?» · «¿Todavía pasás las facturas a mano?». The agent enters on slide 2.
+- **One post in three or four: the direct offer, with the result inside.**
+  «Un agente de IA que contesta tu WhatsApp por USD 90 al mes.» · «Tu
+  WhatsApp contestado a las 23:40, sin que lo agarres vos.» The product is
+  named, always glued to what it solves; «¿Querés un agente de IA en tu
+  empresa?» alone is a question most owners answer «no sé qué es».
 - Good: «Son las 23:40 y te preguntaron el precio por WhatsApp.» · «Si
   contestás WhatsApp de noche, esto es para vos.» · «3 trabajos que tu empresa
   puede dejar de hacer a mano.» · «Cómo no perder un presupuesto por contestar
@@ -198,7 +206,7 @@ Pinned, whatever the look:
 After the block, every brief ends with the slide's own two lines: the
 headline, and which phrase (if any) gets the marker.
 
-### The `violet` block
+### The `violet` block (text only)
 
 ```
 Instagram slide, 1080x1350 portrait. Flat solid saturated violet background
@@ -219,7 +227,7 @@ same accents, same punctuation, nothing added — no question mark or
 exclamation mark that is not in it.
 ```
 
-### The `amber` block
+### The `amber` block (text only)
 
 ```
 Instagram slide, 1080x1350 portrait. Flat solid warm amber background

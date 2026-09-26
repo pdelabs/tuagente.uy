@@ -25,6 +25,10 @@ called it «the brand», and a model left to choose picks the safe one every day
      are still in `imagenes/`, no post exists, and the refusal names what is
      free. A look the client asked for by name goes through, and is recorded.
   g. AND A FREE ONE IS SAVED AND WRITTEN DOWN — `look` in `post.json`.
+  i. AFTER A TEXT-ONLY LOOK, EVERY TEXT-ONLY LOOK RESTS — unless that would
+     leave nothing to wear (Luis, 2026-09-26: a feed of posters).
+  j. THE CAPTION DOES NOT COPY A SLIDE — a caption sentence that is a slide's
+     sentence is refused; the hook line and a bare name are spared.
   h. A CAROUSEL IS A STORY OR IT IS NOT SAVED — `save_post` refuses one with no
      `structure` and no `goal`, writes both down, and the creator is told which
      structures the last carousels used and that the last two rest.
@@ -127,6 +131,19 @@ try:
     out["no_block"] = looks.of_brief("A cat on a sofa, photorealistic.", blocks)
     out["old_post"] = looks.of_post({"prompts": [brief("dia", "Otra.")]}, blocks)
     out["rest_four"] = looks.resting(["foto", "noche", "dia", None], blocks)
+    out["rest_text"] = looks.resting(["noche", "foto", None], blocks, {"noche", "dia"})
+    out["rest_text_all"] = looks.resting(["noche", "dia"], {k: BLOCKS[k] for k in ("noche", "dia")},
+                                         {"noche", "dia"})
+    def caption_refused(caption, briefs):
+        try:
+            posts.check_caption(caption, briefs)
+            return None
+        except Exception as exc:
+            return str(exc)
+    slides = ["Texto «Tu pan sale del horno a las 7.»", "Texto «Guardá esto para el sábado. Panadería Sol»"]
+    out["caption_copy"] = caption_refused("Pan a las 7.\nGuardá esto para el sábado.", slides)
+    out["caption_hook"] = caption_refused("Tu pan sale del horno a las 7.\nLos sábados también.", slides)
+    out["caption_name"] = caption_refused("Pan.\nPanadería Sol", slides)
     out["rest_two"] = looks.resting(["dia", "noche"], {k: BLOCKS[k] for k in ("noche", "dia")})
     out["first_day"] = looks.today([])
 
@@ -205,6 +222,16 @@ def main() -> int:
     failures += judge("c. a post from before has a look too", problems)
 
     problems = []
+    problems_ij = []
+    if sorted(r["rest_text"]) != ["dia", "foto", "noche"]:
+        problems_ij.append(f"after a text-only look, {r['rest_text']} rest")
+    if r["rest_text_all"] != ["noche"]:
+        problems_ij.append(f"with only text-only looks, {r['rest_text_all']} rest")
+    if not r["caption_copy"] or "repite una lámina" not in r["caption_copy"]:
+        problems_ij.append(f"a copied slide in the caption: {r['caption_copy']!r}")
+    if r["caption_hook"] or r["caption_name"]:
+        problems_ij.append(f"the hook or the name refused: {r['caption_hook']!r}, {r['caption_name']!r}")
+    failures += judge("i-j. text-only looks rest, the caption does not copy", problems_ij)
     if r["rest_four"] != ["foto", "noche"]:
         problems.append(f"with four looks, {r['rest_four']} rest")
     if r["rest_two"] != ["dia"]:

@@ -453,6 +453,45 @@ def check_slide(number: int, brief: str, closing: bool, image: str | None = None
         raise ModelRetry(UNSIGNED.format(number=number, name=name, signed=together, how=how))
 
 
+# THE CAPTION ADDS, IT DOES NOT REPEAT. The skill says so and the model did
+# not keep it: our own agent's pricing post (2026-09-26) closed its caption with
+# «Guardá estos datos para comparar. tuagente.uy.», the last slide word for
+# word, and Luis read a caption that was the carousel again. So a caption
+# sentence that IS a slide's sentence is refused. The first line is spared: the
+# hook is the post's strongest sentence and is often the cover's. Short
+# sentences are spared too — «tuagente.uy», «Escribinos» — because a name or a
+# one-word ask repeated is not a caption that repeats the post.
+REPEATS_FROM = 4
+CAPTION_SENTENCE = re.compile(r"(?<=[.!?…])\s+|\n+")
+
+
+def said(text: str) -> str:
+    """A sentence as words: lowercase, no punctuation, one space."""
+    return " ".join(re.sub(r"[^\w\s]", " ", text.lower()).split())
+
+
+def check_caption(caption: str, briefs: list[str]) -> None:
+    slides = set()
+    for brief in briefs:
+        quoted = voseo.quoted(brief)
+        if not quoted:
+            continue
+        for sentence in CAPTION_SENTENCE.split(max(quoted, key=len)):
+            if len(said(sentence).split()) >= REPEATS_FROM:
+                slides.add(said(sentence))
+    lines = [line for line in caption.splitlines() if line.strip()]
+    for line in lines[1:]:
+        for sentence in CAPTION_SENTENCE.split(line):
+            if said(sentence) in slides:
+                raise ModelRetry(
+                    f"el pie repite una lámina palabra por palabra: «{sentence.strip()}». "
+                    "El pie agrega lo que las láminas no dicen —el contexto, un "
+                    "ejemplo, el dato entero—: reescribí esa oración con otras "
+                    "palabras o sacala. Las láminas están bien, no las rehagas. "
+                    "No guardé nada."
+                )
+
+
 def clean_title(title: str) -> str:
     """The post's name, one short line. The creator writes it — the model
     supplies the words — because a name derived from the slug has lost its
@@ -633,6 +672,7 @@ def toolset() -> FunctionToolset:
         for number, record in enumerate(records, 1):
             check_slide(number, record["prompt"],
                         closing=format == "carousel" and number == len(records))
+        check_caption(caption, [record["prompt"] for record in records])
 
         now = datetime.now(ZoneInfo(config.TIMEZONE))
         date = now.strftime("%Y-%m-%d")

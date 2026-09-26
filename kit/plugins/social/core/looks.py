@@ -26,8 +26,12 @@ from core import config
 
 BRAND = "marca/brand.md"
 
-# «### The `violet` block», then the first fenced block under it.
-HEADING = re.compile(r"^###\s+The\s+`([a-z0-9-]+)`\s+block\s*$", re.MULTILINE)
+# «### The `violet` block», then the first fenced block under it. A heading
+# that ends «(text only)» is a look with nothing to look at but the words: two
+# of those in a row read as a feed of posters (Luis, 2026-09-26), so after one
+# of them every text-only look rests too (`resting`).
+HEADING = re.compile(
+    r"^###\s+The\s+`([a-z0-9-]+)`\s+block(\s*\(text only\))?\s*$", re.MULTILINE)
 FENCE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 
 # How much of a block has to be in a brief for the brief to be that look's.
@@ -46,6 +50,14 @@ SENTENCE = re.compile(r"(?<=[.!?])\s+")
 def squash(text: str) -> str:
     """Whitespace out of the way: a brief is the block re-wrapped by a model."""
     return " ".join(text.split())
+
+
+def text_only() -> set[str]:
+    """The looks the brand marks «(text only)»."""
+    path = config.WORKSPACE / BRAND
+    if not path.is_file():
+        return set()
+    return {m.group(1) for m in HEADING.finditer(path.read_text()) if m.group(2)}
 
 
 def declared() -> dict[str, str]:
@@ -85,22 +97,29 @@ def of_post(post: dict, blocks: dict[str, str]) -> str | None:
     return of_brief(prompts[0], blocks) if prompts else None
 
 
-def resting(recent: list[str | None], blocks: dict[str, str]) -> list[str]:
+def resting(recent: list[str | None], blocks: dict[str, str],
+            words: set[str] = frozenset()) -> list[str]:
     """The looks today's post may not wear: those of the last few posts.
 
     HALF THE WARDROBE RESTS. With two looks that is the last post's, which is
     strict alternation; with six it is the last three. A post whose look nobody
-    can name rests nothing.
+    can name rests nothing. AND AFTER A TEXT-ONLY LOOK, every text-only look
+    rests (`words`), unless that would leave nothing to wear.
     """
     window = len(blocks) // 2
-    return [look for look in dict.fromkeys(recent[:window]) if look in blocks]
+    rest = [look for look in dict.fromkeys(recent[:window]) if look in blocks]
+    if recent and recent[0] in words:
+        more = [look for look in blocks if look in words and look not in rest]
+        if len(rest) + len(more) < len(blocks):
+            rest += more
+    return rest
 
 
 def state(posts: list[dict]) -> tuple[dict[str, str], list[str | None], list[str]]:
     """`(blocks, what the posts wore newest first, what rests today)`."""
     blocks = declared()
     recent = [of_post(post, blocks) for post in posts]
-    return blocks, recent, resting(recent, blocks)
+    return blocks, recent, resting(recent, blocks, text_only())
 
 
 # Read by the creator, as the last thing before the date. Spanish: it is an

@@ -84,6 +84,15 @@ Si la tapa promete tres cosas, adentro hay tres, ni dos ni cuatro.
 - **La 1 promete y deja una pregunta.** Se entiende sola y no se cierra sola:
   «A las 23:40 te preguntaron el precio.» deja la pregunta «¿y qué pasó?»;
   «Contestar rápido es importante» no deja ninguna. Formas que funcionan:
+  - **una pregunta que quien lee contesta «sí» sin pensar, sobre su
+    problema**: «¿Te escriben por WhatsApp cuando ya cerraste?», «¿Se te
+    quema el pan cuando hay cola?». Es la que más para el dedo. Nunca una
+    pregunta sobre el producto que se contesta «no sé» («¿Conocés nuestro
+    servicio?»);
+  - **la oferta directa, con el resultado adentro**, uno de cada tres o cuatro
+    posteos: «Pan de masa madre recién horneado, todos los días a las 7.» El
+    producto nombrado siempre pegado a lo que le resuelve a quien lee, nunca
+    solo;
   - una escena con hora y lugar: «Sábado, 11:00, la vidriera llena y el
     teléfono sonando.»;
   - a quién le habla: «Si vendés por WhatsApp, esto es para vos.»;
@@ -166,7 +175,8 @@ look de texto solo, lo que cambia es la composición y dónde cae el resaltado.
 
 El pie acompaña al carrusel, no lo repite: **agrega lo que las láminas no
 dicen** —el contexto, el matiz, lo que el agente nunca hace— y termina con el
-mismo pedido que la última lámina. **Con una excepción: el dato por el que
+mismo pedido que la última lámina, **dicho con otras palabras**: ninguna
+oración del pie es una lámina copiada —`save_post` lo frena—. **Con una excepción: el dato por el que
 existe el posteo**, el que anotaste en la prueba del hilo. Ese va también en el
 pie, dicho entero —«los sábados de 9 a 13», no «ahora también los sábados»—,
 porque mucha gente lee el pie y no pasa las láminas. Un pie que sólo invita
