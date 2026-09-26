@@ -12,7 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
-  loadConfig, clearConfig, getManifest, getApprovals, APPROVALS_EVENT,
+  loadConfig, clearConfig, getManifest, getApprovals, getFlows, getTickets, APPROVALS_EVENT,
   learnAgentUtcOffset, CONFIG_KEY, savedConfig,
   credentialInUrl, sameSession,
   type PortalConfig, type Manifest,
@@ -411,6 +411,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [state, cfg]);
   useEffect(loadPending, [loadPending]);
   useChanges(["approvals"], loadPending);
+  // THE AMBER DOT: a tab with something that needs the OWNER (Luis, 9/26). Not
+  // a count — Aprobaciones has the count — and not «something new»: only what
+  // waits on her. The Bandeja, a conversation the agent left for her (a
+  // WhatsApp or Instagram ticket `blocked`; a mail one is waiting on her ok and
+  // Aprobaciones already counts it). Flujos, a flow that cannot run — a
+  // connection missing — or whose last run failed.
+  const [needs, setNeeds] = useState<Record<string, boolean>>({});
+  const loadInboxNeed = useCallback(() => {
+    if (state !== "ok" || !cfg || !manifest?.modules?.inbox) return;
+    getTickets(cfg, "channels")
+      .then((r) => setNeeds((n) => ({
+        ...n, inbox: r.tickets.some((t) => t.status === "blocked" && t.source !== "mail"),
+      })))
+      .catch(() => {});
+  }, [state, cfg, manifest]);
+  const loadFlowsNeed = useCallback(() => {
+    if (state !== "ok" || !cfg || !manifest?.modules?.flows) return;
+    getFlows(cfg)
+      .then((r) => setNeeds((n) => ({
+        ...n, flows: (r.flows ?? []).some((f) => f.status === "incomplete"
+          || (f.status === "active" && f.last_run?.status === "failed")),
+      })))
+      .catch(() => {});
+  }, [state, cfg, manifest]);
+  useEffect(loadInboxNeed, [loadInboxNeed]);
+  useEffect(loadFlowsNeed, [loadFlowsNeed]);
+  useChanges(["tickets"], loadInboxNeed);
+  useChanges(["flows"], loadFlowsNeed);
+
   // And this tab's own click: the feed asks now instead of at its next tick,
   // or the "1" stays up a few seconds and the client thinks the click didn't
   // land.
@@ -535,6 +564,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         <Icon className="h-4 w-4 shrink-0" />
         <span className="hidden flex-1 md:inline">{m.label}</span>
+        {needs[m.key] && (
+          <span
+            aria-label="Necesita que lo veas"
+            className="h-2 w-2 shrink-0 rounded-full bg-[#F0B429] max-md:absolute max-md:right-2 max-md:top-2"
+          />
+        )}
         {m.key === "approvals" && pending > 0 && (
           <span className={`rounded-full text-[10px] font-bold max-md:absolute max-md:right-1 max-md:top-1 max-md:h-4 max-md:w-4 max-md:leading-4 md:px-1.5 md:py-0.5 ${
             active ? "bg-white/25 text-white" : "bg-c-coral text-c-coral-ink"
@@ -575,6 +610,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               >
                 <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${showMore ? "" : "-rotate-90"}`} />
                 <span className="hidden flex-1 text-left md:inline">Más</span>
+                {!showMore && enabled.some((m) => m.sec && needs[m.key]) && (
+                  <span
+                    aria-label="Hay algo que necesita que lo veas"
+                    className="h-2 w-2 shrink-0 rounded-full bg-[#F0B429] max-md:absolute max-md:right-2 max-md:top-2"
+                  />
+                )}
               </button>
               {showMore && enabled.filter((m) => m.sec).map(item)}
             </>
