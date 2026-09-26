@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { WHATSAPP } from "./contact";
 import { ArrowRight, Bot, Send, Sparkles, X } from "lucide-react";
 
 type Action =
@@ -174,7 +175,7 @@ export default function AgentWidget() {
                     )}
                     {m.whatsapp && (
                       <a
-                        href={`https://wa.me/59899002835?text=${encodeURIComponent(m.whatsapp)}`}
+                        href={`${WHATSAPP}?text=${encodeURIComponent(m.whatsapp)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 rounded-pill bg-c-green px-4 py-2.5 text-xs font-extrabold text-c-green-ink transition hover:-translate-y-0.5"

@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { INSTAGRAM, INSTAGRAM_HANDLE, PHONE, PHONE_E164, WHATSAPP } from "./contact";
 import {
   ArrowRight,
   Ban,
@@ -34,7 +35,6 @@ import TeardownButton from "./teardown/TeardownButton";
 import { GUARANTEE, MONTHLY, MONTHLY_USD } from "./pricing";
 import { AgentitoAvatar, AgentitoAnimated, type AgentitoLook } from "./app/lib/agentito";
 
-const WHATSAPP = "https://wa.me/59899002835";
 const EMAIL = "mailto:hola@tuagente.uy";
 
 export default function Page() {
@@ -936,7 +936,8 @@ const JSON_LD = {
         "Un agente de IA por empresa, instalado adentro de tu empresa y bautizado por vos, con plugins escritos a medida para el trabajo que te come las horas: WhatsApp fuera de hora, presupuestos, facturas, redes y transcripciones. Contesta solo el WhatsApp y el Instagram, con tus reglas, y tenés un portal para ver todo lo que hace y aprobar lo que te compromete.",
       slogan: "Un agente de IA que trabaja adentro de tu empresa",
       email: "hola@tuagente.uy",
-      telephone: "+59899002835",
+      telephone: PHONE_E164,
+      sameAs: [INSTAGRAM],
       priceRange: `${MONTHLY} por mes, sin costo de alta`,
       address: {
         "@type": "PostalAddress",
@@ -1104,7 +1105,10 @@ function Footer() {
             Blog
           </a>
           <a href={WHATSAPP} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
-            WhatsApp +598 99 002 835
+            WhatsApp {PHONE}
+          </a>
+          <a href={INSTAGRAM} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
+            Instagram {INSTAGRAM_HANDLE}
           </a>
           <a href={EMAIL} className="hover:text-primary">
             hola@tuagente.uy

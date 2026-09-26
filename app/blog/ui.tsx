@@ -3,10 +3,10 @@ import { ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Bot, Clock } from "lucide-react";
 import { POSTS } from "./posts";
 import { GUARANTEE, MONTHLY } from "../pricing";
+import { WHATSAPP } from "../contact";
 
 export const SITE = "https://tuagente.uy";
-export const WHATSAPP = "https://wa.me/59899002835";
-
+export { WHATSAPP };
 export function BlogHeader() {
   return (
     <header className="sticky top-0 z-50 mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">

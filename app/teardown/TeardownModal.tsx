@@ -8,6 +8,7 @@
 // prefers-reduced-motion respected via Tailwind's motion-safe variant.
 
 import { useEffect, useId, useRef, useState } from "react";
+import { WHATSAPP } from "../contact";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle,
@@ -25,7 +26,6 @@ import {
 } from "lucide-react";
 
 // Same number as the rest of the site (page.tsx WHATSAPP / ui.tsx SUPPORT).
-const WHATSAPP = "https://wa.me/59899002835";
 const MAX_WORKFLOW_CHARS = 1500;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
