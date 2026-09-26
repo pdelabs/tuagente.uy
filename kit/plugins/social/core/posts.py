@@ -517,10 +517,19 @@ def flow_of(session_id: str) -> str | None:
     return row["slug"] if row else None
 
 
+SAVE_RETRIES = 4
+
+
 def toolset() -> FunctionToolset:
     ts = FunctionToolset()
 
-    @ts.tool
+    # FOUR TRIES, NOT ONE. Every refusal below is a ModelRetry the creator can
+    # fix without drawing again — a closing slide without the name, an alt too
+    # long, a title too short — and pydantic-ai's default of one retry turned
+    # two of them in a row into a dead delegation with every slide lost:
+    # 2026-09-26, our own agent, twice in one request, ~USD 0.35 of images
+    # each time and nothing in Posteos.
+    @ts.tool(retries=SAVE_RETRIES)
     def save_post(
         ctx: RunContext,
         slug: str,
