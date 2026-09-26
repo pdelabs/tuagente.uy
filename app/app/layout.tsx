@@ -58,10 +58,7 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   // tickets and ONLY those -- the Tablero asks the same endpoint for
   // everything else, so no ticket is on both screens.
   { key: "inbox", path: "/app/inbox", label: "Bandeja", icon: Inbox },
-  { key: "kanban", path: "/app/pipeline", label: "Tablero", icon: Columns3 },
-  { key: "flows", path: "/app/flows", label: "Flujos", icon: Workflow },
-  // Posteos right after Flujos because that is where they come from: a daily
-  // flow writes one every morning and leaves it here. A generic icon and not
+  // Posteos: a daily flow writes one every morning and leaves it here. A generic icon and not
   // lucide's `Instagram`: the module is "what your agent left ready to
   // publish", and naming one network in the nav would promise the portal
   // knows which one it goes to -- it doesn't, and tomorrow the same tab holds
@@ -79,6 +76,12 @@ export const MODULES: { key: string; path: string; label: string; icon: LucideIc
   // grown a tab for every screen we ever built. The log of what the agent did
   // is still one click away and still the proof that it worked; what it is not
   // is a place the client goes every day.
+  // TABLERO AND FLUJOS WENT UNDER "Más" TOO (9/26, Luis): the main nav is what
+  // the owner opens every day — the chat, the people waiting, the posts, her
+  // brand, her yes. The board and the flows are set up once and then run on
+  // their own; a flow that fails still says so, and the chat still creates them.
+  { key: "kanban", path: "/app/pipeline", label: "Tablero", icon: Columns3, sec: true },
+  { key: "flows", path: "/app/flows", label: "Flujos", icon: Workflow, sec: true },
   { key: "activity", path: "/app/activity", label: "Actividad", icon: Activity, sec: true },
   { key: "files", path: "/app/files", label: "Archivos", icon: Folder, sec: true },
   { key: "usage", path: "/app/usage", label: "Uso", icon: BarChart3, sec: true },
