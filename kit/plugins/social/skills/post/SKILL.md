@@ -28,6 +28,12 @@ que los colores los elegiste vos porque todavía no hay una marca escrita.
 
 ## 2. Elegí una idea que no repita la de ayer
 
+**La idea sale de quien lee, no del negocio.** Un momento, un problema o una
+duda de la persona que va a ver el posteo —el sábado que no llegás a contestar,
+el regalo que no sabés qué elegir, la caldera que hace ruido—, y el negocio
+entra como la respuesta. Un posteo cuyo tema es el negocio mismo («somos»,
+«tenemos», «nuestro servicio») es la excepción, no la semana.
+
 `list_files("posteos")` te muestra lo que ya salió. Mirá los últimos cinco y
 elegí otra cosa: otro trabajo, otra punta del mismo tema, otro pilar de los que
 liste la marca. Dos posteos parecidos seguidos se leen como un agente que no
@@ -61,16 +67,30 @@ podrían ir en cualquier orden son cinco afiches, y nadie pasa de un afiche.
 | `numero` | Un dato que sorprende | 1 el número solo · 2 de dónde sale · 3 qué significa para quien lee · cierre |
 
 Cuál usaron los últimos carruseles está al final de tus instrucciones, en «La
-estructura de hoy»: las dos últimas descansan.
+estructura de hoy»: la de ayer descansa.
 
 El número de láminas sale de lo que hay para decir, de 3 a 6: **nunca rellenes**.
 Si la tapa promete tres cosas, adentro hay tres, ni dos ni cuatro.
 
 **c. Escribí el guion: un renglón por lámina, con su trabajo y su oración.**
 
-- **La 1 promete y deja una pregunta.** Se entiende sola —es la que aparece en
-  el feed— y no se cierra sola: «A las 23:40 te preguntaron el precio.» deja
-  la pregunta «¿y qué pasó?»; «Contestar rápido es importante» no deja ninguna.
+- **La 1 pasa la prueba del desconocido.** Alguien que nunca oyó hablar de
+  este negocio la ve sola, en el feed, y entiende de qué se trata y si es para
+  él. **Claro gana a ingenioso, siempre**: una frase linda que no se entiende
+  sin la lámina 2 es una lámina que nadie pasa. Nombra la situación de quien
+  lee, con cosas concretas, y ninguna palabra que sólo use el negocio —el
+  nombre de un servicio, una sigla, un término de adentro— que no se explique
+  ahí mismo.
+- **La 1 promete y deja una pregunta.** Se entiende sola y no se cierra sola:
+  «A las 23:40 te preguntaron el precio.» deja la pregunta «¿y qué pasó?»;
+  «Contestar rápido es importante» no deja ninguna. Formas que funcionan:
+  - una escena con hora y lugar: «Sábado, 11:00, la vidriera llena y el
+    teléfono sonando.»;
+  - a quién le habla: «Si vendés por WhatsApp, esto es para vos.»;
+  - cuántas cosas y de qué: «3 errores al elegir zapatillas para correr.»;
+  - cómo lograr algo sin el dolor: «Cómo tener el pan caliente sin
+    madrugar.»;
+  - un error común: «Dejá de guardar el pan en la heladera.»
 - **Cada lámina contesta la pregunta que dejó la anterior y abre la que sigue.**
   Por eso el orden no se puede cambiar.
 - **Lo más fuerte va en la 2 o la 3.** Cada lámina pierde lectores: lo mejor no
@@ -84,7 +104,9 @@ Si la tapa promete tres cosas, adentro hay tres, ni dos ni cuatro.
   resume a las anteriores**: si hace falta juntar lo que quedó, eso es la
   anteúltima. Sin el nombre, `save_post` no guarda el carrusel.
 - **Concreto gana a general, siempre.** Una hora, un rubro, un objeto, una
-  cifra que esté en la marca. «Una ferretería, un martes, 23:40» se lee;
+  cifra que esté en la marca, o un número de escena que se lee como escena y no
+  como estadística («un sábado te escriben 14 personas»; nunca un porcentaje
+  inventado). «Una ferretería, un martes, 23:40» se lee;
   «las empresas chicas, a veces, de noche» no.
 - **Cada posteo lleva al menos un dato de ESTE negocio**, sacado de «El
   negocio» o de tu memoria: un producto con su nombre, la calle o el barrio, el
@@ -107,7 +129,9 @@ corrido, como un párrafo. Tiene que pasar las ocho:
 4. Ninguna dice lo mismo que otra con otras palabras.
 5. **Cada lámina hace el trabajo que la tabla le da a su lugar.** Un `mito` sin
    el mito dicho en la 1, como lo dice la gente, no es un mito: es otra
-   estructura mal nombrada. Si la idea no entra en la que elegiste, cambiá de
+   estructura mal nombrada. **Y un mito es algo que la gente de verdad cree y
+   dice**; uno inventado para llenar la estructura («si X hace tal cosa, lo
+   hace solo») no lo cree nadie y la lámina 1 no se entiende. Si la idea no entra en la que elegiste, cambiá de
    estructura, no le cambies el nombre.
 6. **El pedido del cierre se puede cumplir con lo que el carrusel dio.** Si
    pedís que lo guarden, tiene que haber una lámina que valga guardar: los
@@ -168,8 +192,8 @@ Y cómo suena:
 - Nada de palabras infladas (revolucionario, potenciá, el futuro es hoy), ni
   emojis, ni signos de exclamación en el gancho. Una pregunta abre con «¿»:
   sin el de apertura no es español.
-- Cuando muestres lo que el agente hace, mostrá también lo que **nunca** hace.
-  Es lo que hace creíble la promesa.
+- Si la marca pide decir lo que algo **nunca** hace, va en una línea o en una
+  lámina, no es el tema del posteo: el tema es el problema de quien lee.
 
 De cada lámina vas a escribir también su **texto alternativo**: qué se ve en
 esa imagen, en una oración, para quien no la ve.

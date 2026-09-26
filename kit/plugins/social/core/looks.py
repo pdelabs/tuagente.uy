@@ -125,9 +125,11 @@ mejor le queda al tema y usá su bloque palabra por palabra en todas las slides.
 
 
 # The same rotation for HOW THE STORY IS BUILT, which the creator declares to
-# `save_post`. The last two rest: six structures, and a week that is three
-# lists and two myths reads like a template however different it looks.
-STRUCTURES_REST = 2
+# `save_post`. Yesterday's rests: a week that is five lists reads like a
+# template. Only ONE rests (it was two until 9/26/2026): with two resting,
+# `historia` — the structure that opens on the reader's moment — came up once
+# a week, and the week filled with invented myths.
+STRUCTURES_REST = 1
 
 STORY = """\
 ## La estructura de hoy

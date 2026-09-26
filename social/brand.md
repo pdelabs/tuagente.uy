@@ -20,6 +20,13 @@ company without the client's ok.
 Everything we post is a facet of that idea. If a post does not connect back
 to it, it does not go out.
 
+**But a post is about the READER'S problem, not about the agent.** The owner
+scrolling at 11pm does not know tuagente.uy exists and does not care what an
+agent is. They care about the WhatsApp they did not answer, the quote that went
+cold, the invoices in a box. The post opens on that moment; the agent enters
+on slide 2 or 3 as the answer. A post whose subject is the agent itself (its
+name, its limits, its portal) is the exception, not the week.
+
 ## Voice
 
 - **Plain and concrete.** Name the job, not the technology: "los turnos que
@@ -29,12 +36,37 @@ to it, it does not go out.
 - **Rioplatense, `vos`, spoken register.** "Le ponés nombre", "sin vueltas",
   "al toque". No neutral-Spanish marketing voice ("descubre", "optimiza").
 - **Short sentences. One idea per slide.** A slide is read in two seconds.
-- **The limit makes the promise believable.** Whenever we show a job, we show
-  its "nunca". This is the single most distinctive thing in our copy.
+- **The limit is a supporting line, never the topic.** When a job is shown, its
+  "nunca" can go in ONE slide or ONE caption line, so the promise is believable.
+  A post built around what the agent does NOT do reads defensive: the week of
+  9/21-9/26 was five posts of «nunca», «espera tu ok», «no le da autoridad»,
+  and none of them said what problem it solves.
 - **No hype words:** revolucionario, potenciá, transformá, el futuro es hoy,
   IA de última generación. No exclamation marks in headlines.
 - **No emojis.** Not in images, not in captions. Icons and the agentito do
   that work. Hashtags only at the end of the caption.
+
+## Slide 1: the stranger test
+
+Before anything else: **someone who has never heard of tuagente.uy reads slide 1
+alone, in the feed, and knows what it is about and whether it is for them.**
+Clear beats clever, always. Slide 1 names the reader's situation, concretely:
+
+- Good: «Son las 23:40 y te preguntaron el precio por WhatsApp.» · «Si
+  contestás WhatsApp de noche, esto es para vos.» · «3 trabajos que tu empresa
+  puede dejar de hacer a mano.» · «Cómo no perder un presupuesto por contestar
+  tarde.»
+- Bad (all real, 9/2026): «Le elegís nombre y cara. ¿Qué cambia?» (what
+  does?) · «Si el agente arma un presupuesto, lo manda solo» (which agent? a
+  myth nobody believes) · «¿Qué pasa con una factura de proveedor antes de que
+  la veas?» (from whose point of view?).
+- Never on slide 1: «el agente», «tu ok», «plugin», «portal», «bautismo»,
+  «proceso escrito» — our words, not the reader's. They can appear from slide 2
+  on, once the reader knows what we are talking about.
+
+**Numbers make it real.** A scene may carry a number that reads as a scene and
+not as a statistic: «un sábado te escriben 14 personas», «las 40 facturas del
+mes». Never a percentage, a multiplier or a count of clients.
 
 ## Claims we can make (and only these)
 
@@ -67,20 +99,23 @@ screenshots of real client data.
 
 Each one with its "nunca". Reuse verbatim or tighten, never soften the limit.
 
-| Job | Nunca |
-|---|---|
-| Los turnos que perdés de noche (WhatsApp fuera de hora) | inventa un precio ni una fecha; si no lo tiene escrito, avisa que lo confirmás vos |
-| Presupuestos y seguimiento | manda un presupuesto sin tu ok, ni cierra un precio ni promete una entrega |
-| Facturas de proveedores | factura, paga ni presenta nada; mira, ordena y avisa |
-| Instagram sin escribir los domingos | publica nada sin tu aprobación |
-| Audios y reuniones, en texto | manda para afuera nada de lo que escuchó |
+The first column is the READER'S moment — what slide 1 is about. The job is
+the answer; the "nunca" is one line, if any.
+
+| The reader's moment | Job | Nunca |
+|---|---|---|
+| Te escriben a las 23:40 y contestás a la mañana, cuando ya compraron en otro lado | WhatsApp e Instagram fuera de hora | inventa un precio ni una fecha; si no lo tiene escrito, te lo deja a vos |
+| Mandaste un presupuesto hace una semana y nadie volvió a preguntar | Presupuestos y seguimiento | manda un presupuesto sin tu ok |
+| Las facturas del mes están en el mail, en WhatsApp y en una caja | Facturas de proveedores | factura, paga ni presenta nada |
+| Es domingo y todavía no sabés qué subir a Instagram | Posteos | publica nada sin tu aprobación |
+| Saliste de una reunión y nadie anotó lo que se decidió | Audios y reuniones, en texto | manda para afuera nada de lo que escuchó |
 
 ## Content pillars (rotate; never two of the same in a row)
 
 1. **Qué le pedís** — one job per post, with its "nunca". Formats: `job`,
    carousel of jobs, `chat` showing the job happening.
-2. **Quién manda** — control, portal, approvals, pause button. Formats:
-   `statement`, `chat` (owner asks, agent reports), `list` carousel.
+2. **Quién manda** — control, portal, approvals, pause button. At most one
+   post in seven: it answers an objection, it is not what we sell.
 3. **Sin humo** — education from the blog: agente vs chatbot, qué es un
    agente, cuánto cuesta, por qué la gente normal no usa agentes. Formats:
    `list` carousel, `stat`, `statement` with a quote.
@@ -285,8 +320,9 @@ Cierre con una sola acción: "Escribinos" / "Link en la bio" / "tuagente.uy".
 - 400 to 900 characters. First line is the only one shown before "más".
 - Alt text per slide (`alt` in `post.json`): what is on the image, in
   Spanish, one sentence. Instagram accepts it; we always ship it.
-- CTA per pillar: jobs and control → "Escribinos y te decimos si ya lo
-  tenemos escrito"; sin humo → "El artículo completo está en el blog, link en
+- CTA per pillar: jobs and control → "Escribinos por WhatsApp y te contamos
+  cómo sería en tu negocio" (never "si ya lo tenemos escrito": the reader does
+  not know what is written); sin humo → "El artículo completo está en el blog, link en
   la bio"; bautismo and own-client → "tuagente.uy".
 - The price (USD 90 por mes, sin alta, WhatsApp e Instagram incluidos) may
   appear in the caption of a CTA post, never on the image unless the post is
