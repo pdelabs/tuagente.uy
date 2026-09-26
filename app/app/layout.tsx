@@ -42,7 +42,8 @@ import {
 //
 // `skills` since 9/26/2026 (Luis): the agent's instruction files, read-only,
 // with names only we understand — nothing a client can act on. The page stays
-// at /app/skills for us.
+// at /app/skills for us. `usage` too, the same day: what the agent costs is
+// ours to watch — she pays a flat monthly — and the page stays at /app/usage.
 //
 // `usage` sat here from 8/16 to 8/19/2026, because the
 // number it showed was FALSE, and false in the worst direction: it only saw
@@ -51,7 +52,7 @@ import {
 // It came back once the number stopped being ours: it now comes from the
 // agent's own OpenRouter account (`/portal/usage`), which is what they were
 // actually charged.
-export const HIDDEN_MODULES = new Set<string>(["skills"]);
+export const HIDDEN_MODULES = new Set<string>(["skills", "usage"]);
 
 export const MODULES: { key: string; path: string; label: string; icon: LucideIcon; sec?: boolean }[] = [
   { key: "home", path: "/app/home", label: "Inicio", icon: Home },
