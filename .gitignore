@@ -20,3 +20,4 @@ engine/workspace/
 engine/instances/*/secrets.env
 engine/instances/*/state/
 engine/instances/*/workspace/
+engine/tests/plans/

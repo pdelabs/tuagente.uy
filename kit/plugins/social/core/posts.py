@@ -422,6 +422,21 @@ UNSIGNED = (
 # (`save_post` refuses an edit as a slide of a new post); a fix's new slide is
 # edited, which keeps everything else the client already saw.
 REDRAW = "rehacé esa lámina con ese texto."
+# A CLOSING BRIEF WITH NO TEXT BETWEEN « » IS NOT A CLOSING WITHOUT A NAME.
+# 2026-09-26, our own agent: redoing its last slide, the creator wrote «No
+# quotation marks, guillemets or other extra text» and put the headline bare —
+# «Guardá la lista para comparar. tuagente.uy» —, so nothing was quoted, the
+# name looked missing, and the refusal told it four times to add a name that was
+# already there, with an example that came out empty («« tuagente.uy»»). Four
+# refusals, eleven images, nothing saved. The sentence for THAT case says what
+# is actually wrong.
+UNQUOTED = (
+    "en el brief de la lámina {number} no hay ningún texto entre « », y así es "
+    "como sé qué dice cada lámina. Escribí el texto de la lámina entero entre « » "
+    "en el brief —«Headline: «…»»—, con el nombre del negocio, «{name}», adentro. "
+    "Las comillas no se dibujan: el brief ya le dice al modelo de imagen que el "
+    "texto es lo de adentro. {how} No guardé nada."
+)
 REEDIT = (
     "editá la imagen nueva con `generate_image(\"el texto «{text}» pasa a "
     "decir «{signed}»\", format=\"feed\", reference=\"{image}\")` y pasame en "
@@ -442,6 +457,10 @@ def check_slide(number: int, brief: str, closing: bool, image: str | None = None
             "No guardé nada."
         )
     name = company()
+    if closing and name and not voseo.quoted(brief):
+        how = ("Rehacé esa lámina con ese brief." if image is None
+               else "Editá la imagen con ese brief.")
+        raise ModelRetry(UNQUOTED.format(number=number, name=name, how=how))
     if closing and name and not signed(brief, name):
         text = " ".join(voseo.quoted(brief)).strip()
         # The name as a sentence of its own: joined with a bare space the wt4

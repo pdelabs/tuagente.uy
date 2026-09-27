@@ -91,7 +91,7 @@ CREATORS_OWN = "replace_slide"
 KEPT = 200
 
 # What the answer has to say so the client knows which image was touched.
-NAMES_IT = (f"slide {SLIDE}", f"imagen {SLIDE}", "segunda")
+NAMES_IT = (f"lámina {SLIDE}", f"slide {SLIDE}", f"imagen {SLIDE}", "segunda")
 
 # The client's words have to reach `reason` through the face and the creator,
 # which is what puts them next to the old picture in Posteos. Not the whole
